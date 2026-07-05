@@ -1,0 +1,9 @@
+{
+  "name": "AdventureForge AI",
+  "description": "A comprehensive AI-powered text adventure creator featuring voice interaction, image editing, video generation, and real-time grounding.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
