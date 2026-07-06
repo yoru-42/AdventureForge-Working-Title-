@@ -1,40 +1,75 @@
-# 🌌 Universal KI-RPG & Story-Engine (Sandbox Edition)
+AdventureForge (Working Title)
 
-Eine hochmodulare, visuelle Sandbox-Engine für textbasierte Rollenspiele (RPGs) und interaktive Romane, angetrieben von **Google Gemini**. 
+Forge your own adventures with AI.
 
-Dieses Framework löst die größten Probleme herkömmlicher KI-Chatbots (wie Gedächtnisverlust, mangelndes Balancing und willkürliche Kämpfe) und verwandelt reine Text-Chats in ein vollwertiges Videospiel-Erlebnis – **komplett ohne Programmieraufwand für den Welten-Ersteller (Creator).**
+AdventureForge is an experimental AI-powered storytelling and RPG engine that allows players to create and experience interactive adventures in any world.
 
----
+Unlike a traditional AI chat, AdventureForge is designed to build a persistent world. Characters, locations, factions, relationships, inventory, and lore are continuously created and updated as the story progresses.
 
-## 🚀 Kern-Features & Innovationen
+The long-term goal is to make the AI feel less like a chatbot and more like a true Game Master that remembers the world and lets it evolve naturally.
 
-### 1. ⚔️ Taktisches Kombinations-Kampfsystem
-* **Geladene Kombinationen:** Spieler können Fähigkeiten, Verwandlungen und Haltungen zu einem mächtigen Kombinations-Manöver verketten und mit freiem Text ausführen.
-* **Defensive Stellungen:** Ein dediziertes Menü für universelle Abwehraktionen (Blocken, Ausweichen, Parieren, Kontern), das der KI klare erzählerische Leitplanken für die Kampfrunde gibt.
-* **Fester mathematischer Unterbau:** Jede Fähigkeit besitzt ein "Tier" (Stufe 1 bis 4). Der Schaden und die Kosten werden im Hintergrund anhand globaler Regel-Matrizen exakt berechnet, bevor die KI die Roman-Szene schreibt.
+Features
+📖 Interactive AI Storytelling
 
-### 2. 📊 Dynamisches HUD & Ressourcen-Tracking
-* Ein anpassbares Interface spiegelt den Live-Zustand der Welt wider.
-* Verfolge dynamisch Attribute, Währungen, Orte, Zeiten, Ausdauer-Pools und spezifische Zustände (wie "Brandwunde am Arm") per **Structured JSON Output** direkt im Chat-Fenster.
+Create your own adventures in fantasy, sci-fi, anime-inspired worlds, or completely original settings.
 
-### 3. 🔒 3-Stufen-Wissenslogik (Geheimnis-Management)
-Verhindert das typische KI-Schummeln durch die Trennung von Meta-Wissen und NPC-Wissen:
-* **Stufe 1 (Öffentlich):** Was die Welt weiß.
-* **Stufe 2 (Indizien & Verdacht):** Wonach NPCs ermitteln dürfen.
-* **Stufe 3 (Absolutes Geheimnis):** Eine Blackbox für NPCs (z. B. "Der männliche Hauptcharakter ist heimlich das gesuchte Magical Girl"). NPCs können das Geheimnis erst ansprechen, wenn der Spieler es lüftet oder ein Story-Trigger auslöst.
+🌍 Persistent Lore Database
 
-### 4. 🗂️ Globales Preset- & Progressions-System
-* **4 Lern-Kacheln:** Steuere das Wachstum von Fähigkeiten und Radar-Parametern über EP (Kampf), Training & Übung, Meilensteine (Story) oder Statische Werte.
-* **Modi-Kopplung:** Kombiniere die Progression mit einem klassischen RPG-Modus (Zahlenbasiert) oder einem Beherrschungs-Modus (Ränge von Ungeübt bis Meisterhaft).
-* **Smart Fill (KI-Assistenz):** Der Ersteller wirft Freitext in den Editor (z. B. eine Charakter-Biografie oder eine Schwert-Beschreibung). Die Engine analysiert die Daten, skaliert sie passend zum Genre/Power-Level der Welt und befüllt riesige Formulare vollautomatisch als valides JSON.
+Characters, locations, organizations, items, and world information are stored and continuously expanded during gameplay.
 
----
+👤 Character Management
 
-## 🛠️ Architektur & Funktionsweise
+Create fully customizable player characters and NPCs with flexible attributes and growth systems.
 
-Die Engine trennt **Erzählung** und **Mechanik** strikt voneinander:
-1. **Das UI & Code-Backend** übernimmt das harte, mathematische Balancing (Formeln, Leisten-Abzüge, Würfelwürfe, Flag-Trigger).
-2. **Google Gemini** agiert als der ultimative Game Master. Sie erhält die exakten mathematischen Ergebnisse im Hintergrund-Prompt und übersetzt sie live in immersive, packende Romantexte, die sich streng an den zeitlichen Kontext und das Lore-Setting halten.
+📊 Flexible RPG System
+
+Build your own attribute system using customizable radar charts instead of fixed RPG statistics.
+
+⚔️ Modular Combat System (Work in Progress)
+
+Combat is being designed to support different universes and rule sets instead of forcing one specific RPG system.
+
+🎒 Inventory System (Work in Progress)
+
+Items, equipment, and important story objects are stored and can influence future events.
+
+🤝 Dynamic Relationships
+
+Characters remember previous interactions, allowing friendships, rivalries, trust, or hatred to evolve naturally.
+
+🧠 Knowledge & Timeline System
+
+The AI is intended to understand what each character knows, remember important events, and respect the timeline of the chosen world.
+
+Current Development Status
+Finished
+AI Story Chat
+Character Editor
+Lore Database
+World Configuration
+Custom Attribute System
+Currently in Development
+Inventory System
+Combat Balancing
+Relationship System
+Knowledge Management
+Timeline Consistency
+Improved AI Memory
+Vision
+
+The goal is not simply to create another AI chatbot.
+
+The goal is to build an AI-powered adventure engine where every story becomes a living world that grows together with the player.
+
+Technologies
+React
+TypeScript
+Google Gemini API
+Project Status
+
+⚠️ AdventureForge is currently an experimental hobby project and under active development. Features, systems, and even the project name may change over time.
+
+Feedback, ideas, and contributions are always welcome.
 
 View your app in AI Studio: https://ai.studio/apps/9751ace7-c725-4cb4-9a2b-550876b20f0a
 
