@@ -1257,7 +1257,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onCancel, initialData, mode,
     setIsGeneratingPrologue(true);
     setError(null);
     try {
-      const text = await GeminiService.generatePrologue(world, player);
+      const text = await GeminiService.generatePrologue(world, player, selectedTags, loreDatabase);
       setPrologue(text);
     } catch (err: any) {
       console.error(err);
@@ -1271,7 +1271,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onCancel, initialData, mode,
     setIsGeneratingFirstMsg(true);
     setError(null);
     try {
-      const msg = await GeminiService.generateFirstMessage(world, player, npcs, prologue);
+      const msg = await GeminiService.generateFirstMessage(world, player, npcs, prologue, selectedTags, loreDatabase);
       setFirstMessage(msg);
     } catch (err: any) {
       console.error(err);
@@ -1420,7 +1420,10 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onCancel, initialData, mode,
       statusElements,
       initialPlayer: JSON.parse(JSON.stringify(player)),
       initialStatusElements: JSON.parse(JSON.stringify(statusElements)),
-      initialStructuredInventory: structuredInventory ? JSON.parse(JSON.stringify(structuredInventory)) : undefined
+      initialStructuredInventory: structuredInventory ? JSON.parse(JSON.stringify(structuredInventory)) : undefined,
+      initialLoreDatabase: loreDatabase ? JSON.parse(JSON.stringify(loreDatabase)) : [],
+      initialNpcs: finalNpcs ? JSON.parse(JSON.stringify(finalNpcs)) : [],
+      initialInventory: initialData?.inventory ?? ['Starterpaket']
     };
     onSave(finalAdventure);
   };

@@ -52,6 +52,89 @@ const calculateCombatPower = (char?: any) => {
 };
 
 
+const isNameMatch = (existingName: string | undefined, existingNickname: string | undefined, incomingName: string | undefined) => {
+  if (!existingName || !incomingName) return false;
+  
+  const clean = (s: string) => s.trim().toLowerCase()
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/^(sir|mr\.|mr|ms\.|ms|captain|kapitän|admiral|vizeadmiral|vize-admiral|yonko|kaiser|shichibukai|samurai)\s+/i, '');
+    
+  const extClean = clean(existingName);
+  const incClean = clean(incomingName);
+  if (!extClean || !incClean) return false;
+  
+  if (extClean === incClean) return true;
+  
+  if (existingNickname) {
+    const nickClean = clean(existingNickname);
+    if (nickClean === incClean) return true;
+    
+    const nicknamesList = existingNickname.split(/[,/;|]+/).map(n => clean(n)).filter(Boolean);
+    if (nicknamesList.includes(incClean)) return true;
+  }
+  
+  const ALIAS_GROUPS = [
+    ['sakazuki', 'akainu', 'roter hund', 'red dog'],
+    ['kuzan', 'aokiji', 'blauer fasan', 'blue pheasant'],
+    ['borsalino', 'kizaru', 'gelber affe', 'yellow monkey'],
+    ['issho', 'fujitora', 'lila tiger', 'wisteria tiger'],
+    ['aramaki', 'ryokugyu', 'grüner stier', 'green bull'],
+    ['luffy', 'ruffy', 'monkey d. luffy', 'monkey d ruffy', 'strohhut', 'mugiwara', 'straw hat'],
+    ['zoro', 'zorro', 'roronoa zoro', 'roronoa zorro', 'piratenjäger', 'pirate hunter'],
+    ['usopp', 'lysop', 'sogeking', 'gott usopp', 'god usopp'],
+    ['sanji', 'vinsmoke sanji', 'schwarzfuß', 'black leg'],
+    ['robin', 'nico robin', 'teufelsmädchen', 'devil child'],
+    ['chopper', 'tony tony chopper', 'candy lover'],
+    ['brook', 'soul king'],
+    ['jinbe', 'jimbei', 'ritter des meeres', 'knight of the sea'],
+    ['teach', 'marshall d. teach', 'marshall d teach', 'blackbeard', 'schwarzbart'],
+    ['newgate', 'edward newgate', 'whitebeard', 'weißbart', 'shirohige'],
+    ['doflamingo', 'donquixote doflamingo', 'joker', 'mingo'],
+    ['mihawk', 'dracule mihawk', 'falkenauge', 'hawkeye'],
+    ['hancock', 'boa hancock', 'piratenkaiserin', 'snake princess'],
+    ['kuma', 'bartholomew kuma', 'tyrann'],
+    ['moria', 'gecko moria'],
+    ['linlin', 'charlotte linlin', 'big mom', 'bigmom'],
+    ['law', 'trafalgar law', 'trafalgar d. water law', 'trafalgar d water law', 'tora-o', 'surgeon of death'],
+    ['kid', 'kidd', 'eustass kid', 'eustass kidd'],
+    ['rayleigh', 'silvers rayleigh', 'dunkler könig', 'dark king'],
+    ['obito', 'tobi', 'obito uchiha'],
+    ['madara', 'madara uchiha'],
+    ['kakashi', 'kakashi hatake', 'kopier-ninja'],
+    ['naruto', 'naruto uzumaki'],
+    ['sasuke', 'sasuke uchiha'],
+    ['minato', 'minato namikaze', 'gelber blitz'],
+    ['jiraiya', 'kröten-eremit', 'ero-sennin'],
+    ['tsunade', 'fünfter hokage', 'prinzessin tsunade']
+  ];
+
+  for (const group of ALIAS_GROUPS) {
+    const matchesExt = group.some(alias => 
+      extClean.includes(alias) || alias.includes(extClean) ||
+      (existingNickname && clean(existingNickname).includes(alias))
+    );
+    const matchesInc = group.some(alias => 
+      incClean.includes(alias) || alias.includes(incClean)
+    );
+    if (matchesExt && matchesInc) {
+      return true;
+    }
+  }
+
+  const ignoreWords = ['d.', 'd', 'von', 'der', 'die', 'das', 'the', 'of', 'sir', 'mr', 'captain', 'kapitän', 'don'];
+  const w1 = extClean.split(/\s+/).filter(w => !ignoreWords.includes(w) && w.length > 2);
+  const w2 = incClean.split(/\s+/).filter(w => !ignoreWords.includes(w) && w.length > 2);
+  
+  for (const p1 of w1) {
+    for (const p2 of w2) {
+      if (p1 === p2 || p1.includes(p2) || p2.includes(p1)) return true;
+    }
+  }
+
+  return false;
+};
+
+
 interface Props {
   adventure: Adventure;
   onViewChange: (mode: GameViewMode) => void;
@@ -64,6 +147,30 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   useEffect(() => {
     adventureRef.current = adventure;
   }, [adventure]);
+
+  // Back-populate initial values for legacy/existing adventures if they are missing
+  useEffect(() => {
+    if (adventure) {
+      const needsInitialPlayer = !adventure.initialPlayer;
+      const needsInitialStatusElements = !adventure.initialStatusElements;
+      const needsInitialStructuredInventory = !adventure.initialStructuredInventory && adventure.structuredInventory;
+      const needsInitialLoreDatabase = !adventure.initialLoreDatabase;
+      const needsInitialNpcs = !adventure.initialNpcs;
+      const needsInitialInventory = !adventure.initialInventory;
+
+      if (needsInitialPlayer || needsInitialStatusElements || needsInitialStructuredInventory || needsInitialLoreDatabase || needsInitialNpcs || needsInitialInventory) {
+        onUpdateAdventure({
+          ...adventure,
+          initialPlayer: adventure.initialPlayer || JSON.parse(JSON.stringify(adventure.player)),
+          initialStatusElements: adventure.initialStatusElements || JSON.parse(JSON.stringify(adventure.statusElements || [])),
+          initialStructuredInventory: adventure.initialStructuredInventory || (adventure.structuredInventory ? JSON.parse(JSON.stringify(adventure.structuredInventory)) : undefined),
+          initialLoreDatabase: adventure.initialLoreDatabase || JSON.parse(JSON.stringify(adventure.loreDatabase || [])),
+          initialNpcs: adventure.initialNpcs || JSON.parse(JSON.stringify(adventure.npcs || [])),
+          initialInventory: adventure.initialInventory || JSON.parse(JSON.stringify(adventure.inventory || []))
+        });
+      }
+    }
+  }, [adventure, onUpdateAdventure]);
 
   const getPowerLevel = (name?: string) => {
     if (!name) return null;
@@ -85,40 +192,81 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     if (adventure.world.dramaLevel === 'Hoch') npcMaxHp = 150;
     else if (adventure.world.dramaLevel === 'Niedrig') npcMaxHp = 75;
 
-    const levels = npc.campaignPowerLevels || (npc as any).details?.campaignPowerLevels || {};
+    const levels = npc.campaignPowerLevels || (npc as any).details?.campaignPowerLevels || (npc as any).details?.campaignPowerSettings || {};
 
+    let sumVal = 0;
     if (healthPowerNames.length > 0) {
-      let sumVal = 0;
       healthPowerNames.forEach(name => {
         const level = levels[name] || Object.entries(levels).find(([k]) => k.toLowerCase().trim() === name.toLowerCase().trim())?.[1];
         if (level && (level as any).value !== undefined) {
           sumVal += (level as any).value;
         } else {
-          // Fallback to setting definition min
+          // Fallback to setting definition
           const setting = settings[name] || Object.entries(settings).find(([k]) => k.toLowerCase().trim() === name.toLowerCase().trim())?.[1];
           if (setting) {
-            sumVal += (setting as any).min !== undefined ? (setting as any).min : 50;
+            const minVal = (setting as any).min !== undefined ? (setting as any).min : 50;
+            const maxVal = (setting as any).max !== undefined ? (setting as any).max : 150;
+            sumVal += Math.floor((minVal + maxVal) / 2);
           } else {
-            sumVal += 50;
+            sumVal += 100;
           }
         }
       });
-      if (sumVal > 0) {
-        npcMaxHp = sumVal;
-      }
     } else if (healthPowerName) {
       const level = levels[healthPowerName] || Object.entries(levels).find(([k]) => k.toLowerCase().trim() === healthPowerName.toLowerCase().trim())?.[1];
       if (level && (level as any).value !== undefined) {
-        npcMaxHp = (level as any).value;
+        sumVal = (level as any).value;
       } else {
-        // Fallback to setting definition min
         const setting = settings[healthPowerName] || Object.entries(settings).find(([k]) => k.toLowerCase().trim() === healthPowerName.toLowerCase().trim())?.[1];
         if (setting) {
-          npcMaxHp = (setting as any).min !== undefined ? (setting as any).min : npcMaxHp;
+          const minVal = (setting as any).min !== undefined ? (setting as any).min : 100;
+          const maxVal = (setting as any).max !== undefined ? (setting as any).max : 200;
+          sumVal = Math.floor((minVal + maxVal) / 2);
+        } else {
+          sumVal = 100;
         }
       }
     }
-    return npcMaxHp;
+
+    if (sumVal > 0) {
+      npcMaxHp = sumVal;
+    }
+
+    // Now, apply an elegant and epic scale modifier based on the NPC's reputation/role/isHostile/renown!
+    const nameLower = (npc.name || '').toLowerCase();
+    const roleLower = (npc.role || '').toLowerCase();
+    let multiplier = 1.0;
+
+    const isBoss = nameLower.includes('boss') || 
+                   roleLower.includes('boss') || 
+                   roleLower.includes('admiral') || 
+                   roleLower.includes('kaiser') || 
+                   roleLower.includes('yonko') || 
+                   roleLower.includes('hokage') || 
+                   roleLower.includes('god') || 
+                   roleLower.includes('gott') || 
+                   roleLower.includes('leiter') || 
+                   roleLower.includes('legend') ||
+                   ['akainu', 'sakazuki', 'kaido', 'big mom', 'shanks', 'teach', 'blackbeard', 'whitebeard', 'madara', 'freezer', 'frieza', 'cell', 'beerus', 'luffy', 'ruffy'].includes(nameLower);
+
+    const isElite = nameLower.includes('vize') || 
+                    roleLower.includes('elite') || 
+                    roleLower.includes('kommandant') || 
+                    roleLower.includes('captain') || 
+                    roleLower.includes('kapitän') || 
+                    roleLower.includes('meister') || 
+                    roleLower.includes('vizeadmiral') || 
+                    ['zoro', 'zorro', 'sanji', 'law', 'kid', 'kidd', 'itachi', 'pain', 'vegeta'].includes(nameLower);
+
+    if (isBoss) {
+      multiplier = 3.5;
+    } else if (isElite) {
+      multiplier = 1.8;
+    } else if ((npc as any).isHostile || (npc as any).details?.isHostile) {
+      multiplier = 1.2;
+    }
+
+    return Math.round(npcMaxHp * multiplier);
   };
 
   const getFavoriteTechniques = () => {
@@ -147,21 +295,21 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const searchName = name || (id && id !== 'custom' ? id : '');
     if (searchName) {
       const dbNpcs = adventureRef.current?.npcs || adventure.npcs || [];
-      const found = dbNpcs.find(n => n.name.toLowerCase().trim() === searchName.toLowerCase().trim());
+      const found = dbNpcs.find(n => isNameMatch(n.name, n.nickname || (n as any).rufName, searchName));
       if (found) return found;
       
       const dbLore = adventureRef.current?.loreDatabase || adventure.loreDatabase;
       if (dbLore) {
         const foundLore = dbLore.find(item => 
-          item.category === 'Charaktere' && 
-          item.title.toLowerCase().trim() === searchName.toLowerCase().trim()
+          (item.category === 'Charaktere' || item.category === 'Gegner') && 
+          isNameMatch(item.title, item.details?.nickname || item.details?.rufName, searchName)
         );
         if (foundLore) {
           return {
             id: foundLore.id,
             name: foundLore.title,
             role: foundLore.details?.role || 'Charakter',
-            campaignPowerLevels: foundLore.details?.campaignPowerLevels,
+            campaignPowerLevels: foundLore.details?.campaignPowerLevels || foundLore.details?.campaignPowerSettings,
             appearance: foundLore.details?.appearance
           };
         }
@@ -676,7 +824,10 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     };
 
-    const regex = new RegExp(`\\b${escapeRegExp(npc.name)}\\b`, 'i');
+    const aliases = [npc.name, npc.nickname, npc.rufName, (npc as any).details?.nickname, (npc as any).details?.rufName]
+      .filter(Boolean)
+      .map(n => escapeRegExp(n!));
+    const regex = new RegExp(`\\b(?:${aliases.join('|')})\\b`, 'i');
 
     // Check if the NPC is mentioned in the recent chat history
     if (!messages || messages.length === 0) {
@@ -719,12 +870,15 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     codexChars.forEach(char => {
       const lowerTitle = char.title.toLowerCase();
       // Exclude player name
-      if (adventure.player?.name && lowerTitle === adventure.player.name.toLowerCase()) return;
+      if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, char.title)) return;
 
-      const regex = new RegExp(`\\b${escapeRegExp(char.title)}\\b`, 'i');
+      const aliases = [char.title, char.details?.nickname, char.details?.rufName]
+        .filter(Boolean)
+        .map(n => escapeRegExp(n!));
+      const regex = new RegExp(`\\b(?:${aliases.join('|')})\\b`, 'i');
       if (regex.test(originalCombinedText)) {
         // Find corresponding NPC in adventure.npcs
-        const npc = (adventure.npcs || []).find(n => n.name.toLowerCase() === lowerTitle);
+        const npc = (adventure.npcs || []).find(n => isNameMatch(n.name, n.nickname || (n as any).rufName, char.title));
         presentList.push({
           id: char.id || npc?.id || `detected-char-${lowerTitle}`,
           name: char.title,
@@ -1019,6 +1173,30 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       return c1 === c2 || c1.includes(c2) || c2.includes(c1);
     };
 
+    const isNameAlreadyExists = (incomingName: string): boolean => {
+      const incClean = incomingName.trim().toLowerCase().replace(/^(sir|mr\.|mr|ms\.|ms|captain|kapitän|admiral|vizeadmiral|vize-admiral|yonko|kaiser|shichibukai|samurai)\s+/i, '');
+      if (!incClean) return false;
+
+      if (adventure.player?.name) {
+        const pName = adventure.player.name.trim().toLowerCase();
+        if (pName === incClean || pName.includes(incClean) || incClean.includes(pName)) return true;
+        if (adventure.player.nickname) {
+          const pNick = adventure.player.nickname.trim().toLowerCase();
+          if (pNick === incClean || pNick.includes(incClean) || incClean.includes(pNick)) return true;
+        }
+      }
+
+      return updatedLore.some(e => {
+        if (e.category !== 'Charaktere' && e.category !== 'Gegner') return false;
+        
+        if (isNameMatch(e.title, e.details?.nickname || e.details?.rufName, incomingName)) {
+          return true;
+        }
+        
+        return isSimilarTitle(e.title, incomingName);
+      });
+    };
+
     // Helper zur Bereinigung von überlangen gematchen Namen (Satzenden oder Pronomen ausschließen)
     const cleanMatchedName = (fullName: string): string => {
       const parts = fullName.split(/\s+/);
@@ -1088,7 +1266,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
             const name = key.replace(/_hp$/i, '').replace(/_/g, ' ').trim();
             const lowerName = name.toLowerCase();
             if (name && lowerName !== 'spieler' && lowerName !== 'gegner' && name.length >= 3) {
-              const exists = updatedLore.some(e => e.category === 'Charaktere' && isSimilarTitle(e.title, name));
+              const exists = isNameAlreadyExists(name);
               if (!exists) {
                 const newId = 'dyn-char-' + lowerName.replace(/\s+/g, '-');
                 updatedLore.push({
@@ -1199,7 +1377,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       const isPlayer = adventure.player?.name && lowerName === adventure.player.name.toLowerCase();
       
       if (name && name.length >= 3 && !isPlayer) {
-        const exists = updatedLore.some(e => e.category === 'Charaktere' && isSimilarTitle(e.title, name));
+        const exists = isNameAlreadyExists(name);
         if (!exists) {
           const newId = 'dyn-char-' + lowerName.replace(/\s+/g, '-');
           updatedLore.push({
@@ -1261,7 +1439,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         if (!isPlayer) {
           const boundaryRegex = new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i');
           if (boundaryRegex.test(combinedText)) {
-            const exists = updatedLore.some(e => e.category === 'Charaktere' && isSimilarTitle(e.title, name));
+            const exists = isNameAlreadyExists(name);
             if (!exists) {
               const newId = 'dyn-char-' + lowerName.replace(/\s+/g, '-');
               updatedLore.push({
@@ -1322,7 +1500,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         if (!isPlayer) {
           const boundaryRegex = new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i');
           if (boundaryRegex.test(combinedText)) {
-            const exists = updatedLore.some(e => e.category === 'Charaktere' && isSimilarTitle(e.title, name));
+            const exists = isNameAlreadyExists(name);
             if (!exists) {
               const newId = 'dyn-char-' + lowerName;
               updatedLore.push({
@@ -1381,7 +1559,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         if (!isPlayer) {
           const boundaryRegex = new RegExp(`\\b${escapeRegExp(name)}\\b`, 'i');
           if (boundaryRegex.test(combinedText)) {
-            const exists = updatedLore.some(e => e.category === 'Charaktere' && isSimilarTitle(e.title, name));
+            const exists = isNameAlreadyExists(name);
             if (!exists) {
               const newId = 'dyn-char-' + lowerName;
               updatedLore.push({
@@ -1522,93 +1700,6 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       : { armor: {}, accessories: {}, weapons: [], generalItems: [], money: 0, currencyLabel: 'Goldstücke' };
     let cleanedText = text;
     let notifications: any[] = [];
-
-    const isNameMatch = (existingName: string | undefined, existingNickname: string | undefined, incomingName: string | undefined) => {
-      if (!existingName || !incomingName) return false;
-      
-      // Clean function to remove titles, parentheses, extra spaces, and common honorifics/prefixes
-      const clean = (s: string) => s.trim().toLowerCase()
-        .replace(/\s*\([^)]*\)/g, '') // remove anything in parentheses
-        .replace(/^(sir|mr\.|mr|ms\.|ms|captain|kapitän|admiral|vizeadmiral|vize-admiral|yonko|kaiser|shichibukai|samurai)\s+/i, ''); // remove common prefixes
-        
-      const extClean = clean(existingName);
-      const incClean = clean(incomingName);
-      if (!extClean || !incClean) return false;
-      
-      if (extClean === incClean) return true;
-      
-      // 1. Check direct nickname list if available
-      if (existingNickname) {
-        const nickClean = clean(existingNickname);
-        if (nickClean === incClean) return true;
-        
-        // Also support comma/slash/semicolon/pipe separated nicknames
-        const nicknamesList = existingNickname.split(/[,/;|]+/).map(n => clean(n)).filter(Boolean);
-        if (nicknamesList.includes(incClean)) return true;
-      }
-      
-      // 2. Look up in predefined high-fidelity alias dictionary (bi-directional mapping)
-      const ALIAS_GROUPS = [
-        ['sakazuki', 'akainu', 'roter hund', 'red dog'],
-        ['kuzan', 'aokiji', 'blauer fasan', 'blue pheasant'],
-        ['borsalino', 'kizaru', 'gelber affe', 'yellow monkey'],
-        ['issho', 'fujitora', 'lila tiger', 'wisteria tiger'],
-        ['aramaki', 'ryokugyu', 'grüner stier', 'green bull'],
-        ['luffy', 'ruffy', 'monkey d. luffy', 'monkey d ruffy', 'strohhut', 'mugiwara', 'straw hat'],
-        ['zoro', 'zorro', 'roronoa zoro', 'roronoa zorro', 'piratenjäger', 'pirate hunter'],
-        ['usopp', 'lysop', 'sogeking', 'gott usopp', 'god usopp'],
-        ['sanji', 'vinsmoke sanji', 'schwarzfuß', 'black leg'],
-        ['robin', 'nico robin', 'teufelsmädchen', 'devil child'],
-        ['chopper', 'tony tony chopper', 'candy lover'],
-        ['brook', 'soul king'],
-        ['jinbe', 'jimbei', 'ritter des meeres', 'knight of the sea'],
-        ['teach', 'marshall d. teach', 'marshall d teach', 'blackbeard', 'schwarzbart'],
-        ['newgate', 'edward newgate', 'whitebeard', 'weißbart', 'shirohige'],
-        ['doflamingo', 'donquixote doflamingo', 'joker', 'mingo'],
-        ['mihawk', 'dracule mihawk', 'falkenauge', 'hawkeye'],
-        ['hancock', 'boa hancock', 'piratenkaiserin', 'snake princess'],
-        ['kuma', 'bartholomew kuma', 'tyrann'],
-        ['moria', 'gecko moria'],
-        ['linlin', 'charlotte linlin', 'big mom', 'bigmom'],
-        ['law', 'trafalgar law', 'trafalgar d. water law', 'trafalgar d water law', 'tora-o', 'surgeon of death'],
-        ['kid', 'kidd', 'eustass kid', 'eustass kidd'],
-        ['rayleigh', 'silvers rayleigh', 'dunkler könig', 'dark king'],
-        ['obito', 'tobi', 'obito uchiha'],
-        ['madara', 'madara uchiha'],
-        ['kakashi', 'kakashi hatake', 'kopier-ninja'],
-        ['naruto', 'naruto uzumaki'],
-        ['sasuke', 'sasuke uchiha'],
-        ['minato', 'minato namikaze', 'gelber blitz'],
-        ['jiraiya', 'kröten-eremit', 'ero-sennin'],
-        ['tsunade', 'fünfter hokage', 'prinzessin tsunade']
-      ];
-
-      for (const group of ALIAS_GROUPS) {
-        const matchesExt = group.some(alias => 
-          extClean.includes(alias) || alias.includes(extClean) ||
-          (existingNickname && clean(existingNickname).includes(alias))
-        );
-        const matchesInc = group.some(alias => 
-          incClean.includes(alias) || alias.includes(incClean)
-        );
-        if (matchesExt && matchesInc) {
-          return true;
-        }
-      }
-
-      // 3. Smart fallback: if one is a non-trivial substring of another (e.g. "Doflamingo" in "Donquixote Doflamingo")
-      const ignoreWords = ['d.', 'd', 'von', 'der', 'die', 'das', 'the', 'of', 'sir', 'mr', 'captain', 'kapitän', 'don'];
-      const extWords = extClean.split(/\s+/).filter(w => w.length > 2 && !ignoreWords.includes(w));
-      const incWords = incClean.split(/\s+/).filter(w => w.length > 2 && !ignoreWords.includes(w));
-      
-      for (const extW of extWords) {
-        for (const incW of incWords) {
-          if (extW === incW) return true;
-        }
-      }
-
-      return false;
-    };
 
     const isPlayerMatch = (incomingName: string | undefined) => {
       if (!incomingName) return false;
@@ -3482,6 +3573,12 @@ FORMELN NACH KATEGORIEN:
     setEnemyHp(100);
     setEnemyMaxHp(100);
     setCombatSubMenu('start');
+
+    // Reset other HUD & dynamic state variables
+    setScannedOpponents({});
+    setQueuedCombatActions([]);
+    setPendingCombatAction(null);
+    setLoreNotifications([]);
     
     // Restore status elements back to starting values
     const resetStatus = adventure.initialStatusElements 
@@ -3497,13 +3594,35 @@ FORMELN NACH KATEGORIEN:
       ? JSON.parse(JSON.stringify(adventure.initialStructuredInventory)) 
       : undefined;
 
+    // Restore general inventory list back to starting values
+    const resetInventory = adventure.initialInventory 
+      ? JSON.parse(JSON.stringify(adventure.initialInventory)) 
+      : (adventure.inventory || []);
+
+    // Restore lore database (Codex) back to starting values
+    const resetLoreDatabase = adventure.initialLoreDatabase 
+      ? JSON.parse(JSON.stringify(adventure.initialLoreDatabase)) 
+      : (adventure.loreDatabase || []).filter((e: any) => !e.id?.startsWith('dyn-')).map((e: any) => ({
+          ...e,
+          isUnlocked: e.isUnlocked
+        }));
+
+    // Restore npcs back to starting values (removing dynamic npcs, reverting changes)
+    const resetNpcs = adventure.initialNpcs 
+      ? JSON.parse(JSON.stringify(adventure.initialNpcs)) 
+      : (adventure.npcs || []).filter((n: any) => !n.id?.startsWith('dyn-'));
+
     onUpdateAdventure({ 
       ...adventureRef.current, 
       chatHistory: resetMsgs,
       player: resetPlayer,
+      npcs: resetNpcs,
+      loreDatabase: resetLoreDatabase,
+      inventory: resetInventory,
       statusElements: resetStatus,
       structuredInventory: resetStructuredInventory,
-      combatState: undefined
+      combatState: undefined,
+      summaryLog: ""
     });
     
     setShowResetConfirm(false);

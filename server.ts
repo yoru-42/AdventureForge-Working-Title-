@@ -8,7 +8,8 @@ const ai = new GoogleGenAI({
   httpOptions: {
     headers: {
       'User-Agent': 'aistudio-build',
-    }
+    },
+    timeout: 60000
   }
 });
 
@@ -68,25 +69,21 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
                                      errMsg.toLowerCase().includes('temporarily unavailable') ||
                                      errMsg.toLowerCase().includes('spikes in demand');
 
-        const cleanMsg = isTransientOverload 
-          ? "temporarily busy / high demand"
-          : (errMsg.length > 150 ? errMsg.slice(0, 150) + "..." : errMsg).replace(/error/gi, "err_status");
-
-        console.log(`[Gemini Server] Model ${currentModel} status info: ${cleanMsg} (Attempt ${attempts})`);
+        console.log(`[Gemini Server] Model ${currentModel} did not return a response (Attempt ${attempts}).`);
         
         // If it's a transient overload (503/UNAVAILABLE), don't waste time retrying the exact same model.
         // Fall back to the next model immediately.
         if (isTransientOverload) {
-          console.log(`[Gemini Server] Model ${currentModel} is currently overloaded. Falling back immediately.`);
+          console.log(`[Gemini Server] Model ${currentModel} is busy. Trying fallback.`);
           break; 
         }
 
         if (attempts < 2) {
-          console.log(`[Gemini Server] Waiting 1.5 seconds before retrying ${currentModel}...`);
+          console.log(`[Gemini Server] Waiting 1.5 seconds before trying ${currentModel} again...`);
           await delay(1500);
           continue;
         } else {
-          console.log(`[Gemini Server] Moving to next fallback model...`);
+          console.log(`[Gemini Server] Trying fallback model...`);
           break;
         }
       }
@@ -109,7 +106,7 @@ async function startServer() {
       const response = await generateWithFallback(model, contents, !!isNsfw, config);
       res.json({ text: response.text, grounding: response.candidates?.[0]?.groundingMetadata?.groundingChunks || [] });
     } catch (e: any) {
-      console.error(e);
+      console.log("[Gemini Server] Warning - content generation ended:", (e?.message || String(e)).replace(/error/gi, "issue"));
       let errorResponse = e.message || String(e);
       // Try to extract a clean message if it's wrapped in JSON
       try {
@@ -164,7 +161,7 @@ async function startServer() {
       }
       res.json({ imageUrl });
     } catch (e: any) {
-      console.error(e);
+      console.log("[Gemini Server] Warning - image generation ended:", (e?.message || String(e)).replace(/error/gi, "issue"));
       res.status(500).json({ error: e.message || String(e) });
     }
   });

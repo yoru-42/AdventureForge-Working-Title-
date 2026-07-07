@@ -204,6 +204,19 @@ export interface WorldSetting {
 
 export type LoreCategory = 'Charaktere' | 'Orte' | 'Fraktionen' | 'Gegenstände' | 'Fähigkeiten' | 'Events' | 'Weltregeln' | 'Gegner';
 
+export interface EventStep {
+  id: string;
+  title?: string;
+  description: string;
+  status: 'happened' | 'pending';
+  branch?: 'main' | 'side';
+  unlockConditions?: string;
+  chatInstruction?: string;
+  travelPath?: string; // Geografische Stationen / Reise-Pfad
+  travelDurationDays?: number; // Reise-Dauer in Tagen
+  timeOfDay?: string; // Uhrzeit
+}
+
 export interface LoreEntry {
   id: string;
   category: LoreCategory;
@@ -212,7 +225,10 @@ export interface LoreEntry {
   isUnlocked: boolean; // false until discovered, or true if it's general lore
   order?: number; // useful for chronological events
   image?: string;
-  details?: Record<string, any>;
+  details?: {
+    eventSteps?: EventStep[];
+    [key: string]: any;
+  };
   secretsStage1?: string; // Stufe 1: Öffentliches Wissen
   secretsStage2?: string; // Stufe 2: Indizien & Verdacht
   secretsStage3?: string; // Stufe 3: Absolutes Geheimnis
@@ -282,6 +298,9 @@ export interface Adventure {
   initialPlayer?: Character;
   initialStatusElements?: StatusElement[];
   initialStructuredInventory?: StructuredInventory;
+  initialLoreDatabase?: LoreEntry[];
+  initialNpcs?: NPC[];
+  initialInventory?: string[];
 }
 
 export interface ChatMessage {

@@ -1131,6 +1131,25 @@ const App: React.FC = () => {
                   const currencyLabel = structuredInv.currencyLabel ?? defaultCurrency;
                   const moneyValue = structuredInv.money ?? 100;
 
+                  const playerName = currentAdventure.player?.name || '';
+                  const playerCodexItems = (currentAdventure.loreDatabase || []).filter(entry => 
+                    entry.category === 'Gegenstände' && 
+                    entry.details?.owner &&
+                    playerName &&
+                    entry.details.owner.trim().toLowerCase() === playerName.trim().toLowerCase()
+                  );
+
+                  const codexWeapons = playerCodexItems.filter(entry => {
+                    const type = (entry.details?.itemType || '').trim().toLowerCase();
+                    return type.includes('waffe') || type.includes('weapon') || type.includes('schwert') || type.includes('bogen') || type.includes('dolch') || type.includes('axt') || type.includes('pistole') || type.includes('gewehr') || type.includes('bewaffnung');
+                  });
+
+                  const codexGeneralItems = playerCodexItems.filter(entry => {
+                    const type = (entry.details?.itemType || '').trim().toLowerCase();
+                    const isWeapon = type.includes('waffe') || type.includes('weapon') || type.includes('schwert') || type.includes('bogen') || type.includes('dolch') || type.includes('axt') || type.includes('pistole') || type.includes('gewehr') || type.includes('bewaffnung');
+                    return !isWeapon;
+                  });
+
                   const updateInventoryField = (field: string, value: any) => {
                     const oldInv = currentAdventure.structuredInventory || {};
                     const newInv = {
@@ -1399,12 +1418,23 @@ const App: React.FC = () => {
                           <i className="fa-solid fa-hand-fist"></i> Waffen / Bewaffnung
                         </h5>
 
-                        {weapons.length > 0 ? (
+                        {weapons.length > 0 || codexWeapons.length > 0 ? (
                           <div className="flex flex-wrap gap-2 pt-1">
                             {weapons.map((wpn, idx) => (
                               <span key={`weapon-${idx}`} className="px-3 py-1.5 bg-slate-900/60 border border-slate-850 rounded-xl text-xs text-slate-200 flex items-center gap-2">
                                 <i className="fa-solid fa-shield-halved text-sky-500 text-[10px]"></i>
                                 {wpn}
+                              </span>
+                            ))}
+                            {codexWeapons.map((entry) => (
+                              <span 
+                                key={`codex-weapon-${entry.id}`} 
+                                className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-slate-200 flex items-center gap-2"
+                                title={`${entry.title}: ${entry.description}`}
+                              >
+                                <i className="fa-solid fa-shield-halved text-amber-500 text-[10px]"></i>
+                                {entry.title}
+                                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[8px] font-bold rounded uppercase tracking-wider">Codex</span>
                               </span>
                             ))}
                           </div>
@@ -1419,12 +1449,23 @@ const App: React.FC = () => {
                           <i className="fa-solid fa-box-open"></i> Sonstige Gegenstände (Tasche)
                         </h5>
 
-                        {generalItems.length > 0 ? (
+                        {generalItems.length > 0 || codexGeneralItems.length > 0 ? (
                           <div className="flex flex-wrap gap-2 pt-1">
                             {generalItems.map((itm, idx) => (
                               <span key={`item-${idx}`} className="px-3 py-1.5 bg-slate-900/60 border border-slate-850 rounded-xl text-xs text-slate-200 flex items-center gap-2">
                                 <i className="fa-solid fa-briefcase text-emerald-500 text-[10px]"></i>
                                 {itm}
+                              </span>
+                            ))}
+                            {codexGeneralItems.map((entry) => (
+                              <span 
+                                key={`codex-item-${entry.id}`} 
+                                className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-slate-200 flex items-center gap-2"
+                                title={`${entry.title}: ${entry.description}`}
+                              >
+                                <i className="fa-solid fa-briefcase text-amber-500 text-[10px]"></i>
+                                {entry.title}
+                                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[8px] font-bold rounded uppercase tracking-wider">Codex</span>
                               </span>
                             ))}
                           </div>

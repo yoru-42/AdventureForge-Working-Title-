@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { jsonrepair } from "jsonrepair";
-import { ChatMessage, WorldSetting, Character, NPC, UserProfile } from "../types";
+import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry } from "../types";
 
 export const audioUtils = {
   encode: (bytes: Uint8Array): string => {
@@ -255,9 +255,7 @@ export class GeminiService {
       }
       return null;
     });
-  }
-
-  static async generatePrologue(world: WorldSetting, player?: Character): Promise<string> {
+  }  static async generatePrologue(world: WorldSetting, player?: Character, tags?: string[], loreDatabase?: LoreEntry[]): Promise<string> {
     return this.callWithRetry(async () => {
       const ai = this.getAI();
       let playerContext = "";
@@ -271,19 +269,46 @@ Der Hauptcharakter (Spieler) ist:
 `;
       }
 
+      let tagsContext = "";
+      if (tags && tags.length > 0) {
+        tagsContext = `\n- Genre / Tags / Themen: ${tags.join(', ')}`;
+      }
+
+      let storyContext = "";
+      if (loreDatabase && loreDatabase.length > 0) {
+        const events = loreDatabase.filter(l => l.category === 'Events');
+        if (events.length > 0) {
+          storyContext = "\n\n### GEPLANTE STORY & ROTER FADEN DER KAMPAGNE (Zwingend zu beachten):\n";
+          events.forEach((evt, idx) => {
+            storyContext += `Kampagnen-Abschnitt #${idx + 1}: ${evt.title || 'Geschichte & Roter Faden'}\n`;
+            storyContext += `Beschreibung des Handlungsfadens: ${evt.description || 'Keine nähere Beschreibung.'}\n`;
+            if (evt.details?.eventSteps && Array.isArray(evt.details.eventSteps)) {
+              storyContext += "Geplante chronologische Story-Schritte (Timeline):\n";
+              evt.details.eventSteps.forEach((step: any, sIdx: number) => {
+                storyContext += `  Schritt ${sIdx + 1}: [${step.title || 'Unbenannt'}] ${step.description || ''}\n`;
+                if (step.unlockConditions) {
+                  storyContext += `    Freischaltbedingungen: ${step.unlockConditions}\n`;
+                }
+              });
+            }
+          });
+          storyContext += "\nACHTUNG: Der Prolog MUSS inhaltlich, thematisch und atmosphärisch exakt auf diese geplante Story und diesen Roten Faden abgestimmt sein! Leite die Weltbeschreibung und den Prolog so her, dass sie reibungslos in den ersten geplanten Story-Schritt übergehen.\n";
+        }
+      }
+
       const contextPrompt = `### WELTBESCHREIBUNG ODER ZEITLINIEN-PROMPT (Kontext für die Erstellung):
 Achte STRENGSTENS auf den folgenden Welt- und Zeitlinienkontext für deine Generierung:
 - Weltenname/Thema: "${world.title || ''}"
 - Ära/Zeitpunkt der Story: "${world.era || ''}"
 - Ton/Stimmung: "${world.tone || ''}"
-- Welten-Beschreibung/Regeln: "${world.description || ''}"
+- Welten-Beschreibung/Regeln: "${world.description || ''}"${tagsContext}${storyContext}
 Falls in der Welten-Beschreibung oder Ära spezielle Zeitpunkte genannt werden (wie z.B. "One Piece vor Thriller Bark Arc" oder "Nach dem Weltkrieg"), MUSS der Prolog historisch und inhaltlich exakt zu DIESEM Zeitpunkt passen! Beziehe dich bei der Generierung exakt auf diesen Story-Stand und diese Gegebenheiten.
 
 ${playerContext}
 
 Aufgabe:
 Generiere einen fesselnden, atmosphärischen und packenden Prolog für das Abenteuer auf DEUTSCH.
-Der Prolog soll die Welt, den aktuellen Stand der Dinge zum angegebenen Zeitpunkt, die Atmosphäre und das Setting beschreiben, um den Spieler perfekt einzustimmen. Er sollte etwa 2-4 Absätze lang sein und im Präteritum oder Präsens verfasst werden. Verwende einen literarischen und ansprechenden Stil, der zum Ton/Stimmung der Welt passt.
+Der Prolog soll die Welt, den aktuellen Stand der Dinge zum angegebenen Zeitpunkt, die Atmosphäre, das Genre und das Setting beschreiben, um den Spieler perfekt einzustimmen. Er muss den ersten Schritt des "Roten Fadens der Kampagne" (falls oben angegeben) elegant einleiten, so dass der Spielstart nahtlos daran anknüpfen kann. Er sollte etwa 2-4 Absätze lang sein und im Präteritum oder Präsens verfasst werden. Verwende einen literarischen und ansprechenden Stil, der zum Ton/Stimmung der Welt passt.
 
 WICHTIG:
 - Du darfst NIEMALS beschreiben, was der Spieler/sein Charakter fühlt, denkt, spürt, empfindet oder wie sein Körper unwillkürlich reagiert.
@@ -302,7 +327,14 @@ WICHTIG: Antworte NUR mit dem generierten Prologtext. Keinen JSON-Wrapper, kein 
     });
   }
 
-  static async generateFirstMessage(world: WorldSetting, player: Character, npcs: NPC[], prologue: string): Promise<string> {
+  static async generateFirstMessage(
+    world: WorldSetting,
+    player: Character,
+    npcs: NPC[],
+    prologue: string,
+    tags?: string[],
+    loreDatabase?: LoreEntry[]
+  ): Promise<string> {
     return this.callWithRetry(async () => {
       const ai = this.getAI();
       
@@ -318,9 +350,33 @@ WICHTIG: Antworte NUR mit dem generierten Prologtext. Keinen JSON-Wrapper, kein 
         campaignPowerInstruction = `KAMPAGNEN-GRUNDWERTE (Kräftedifferenz):\n${powerDetails}\n`;
       }
 
+      let tagsContext = "";
+      if (tags && tags.length > 0) {
+        tagsContext = `GENRE / TAGS / THEMEN:\n${tags.join(', ')}\n\n`;
+      }
+
+      let storyContext = "";
+      if (loreDatabase && loreDatabase.length > 0) {
+        const events = loreDatabase.filter(l => l.category === 'Events');
+        if (events.length > 0) {
+          storyContext = "GEPLANTE STORY & ROTER FADEN DER KAMPAGNE:\n";
+          events.forEach((evt, idx) => {
+            storyContext += `Handlungsfaden: ${evt.title || 'Geschichte & Roter Faden'}\n`;
+            storyContext += `Beschreibung: ${evt.description || ''}\n`;
+            if (evt.details?.eventSteps && Array.isArray(evt.details.eventSteps)) {
+              storyContext += "Geplante Story-Schritte:\n";
+              evt.details.eventSteps.forEach((step: any, sIdx: number) => {
+                storyContext += `  Schritt ${sIdx + 1}: [${step.title || 'Unbenannt'}] ${step.description || ''}\n`;
+              });
+            }
+          });
+          storyContext += "\nACHTUNG: Die erste Interaktion/Szene MUSS den Spieler direkt in die Situation des ALLERERSTEN Story-Schrittes (bzw. des Beginns des Roten Fadens) versetzen! Sorge dafür, dass der Spielstart, die erste Szene, die Umgebung, NPCs und die Handlungsoptionen perfekt mit diesem ersten Schritt der Kampagne und den angegebenen Genre-Tags harmonieren.\n\n";
+        }
+      }
+
       const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${world.title}".
 ${campaignPowerInstruction}WELT: ${world.description}
-
+${tagsContext}${storyContext}
 Schreibe die ERSTE Interaktion / Szene für den Spielercharakter (${player.name}).
 Der Prolog war: ${prologue}
 
@@ -814,7 +870,10 @@ ANWEISUNGEN:
            Schreibe niemals Sätze wie: "lässt dein Herz einen Schlag aussetzen", "Deine Hände umklammern fester das Lehrbuch", "deine Knöchel werden weiß", "du spürst, wie die Farbe aus deinem Gesicht weicht", "du spürst, wie sich eine eisige Kälte in deiner Brust ausbreitet", "Du musst jetzt reagieren".
            Der Spieler hat die absolute und alleinige Hoheit über seine Gedanken, inneren Reaktionen, Gefühle, unwillkürlichen Reflexe und Taten! Beschreibe nur die äußere Umwelt, die Atmosphäre und das Verhalten von NPCs.
       5. Generiere "firstMessage", die allererste KI-Antwort nach dem Prolog, die den Spieler anredet oder eine erste direkte Interaktionsmöglichkeit in der Szene bietet (als Game Master geschrieben). Sie muss sich ebenfalls strikt an das Verbot der Fremdbestimmung von Gefühlen und unwillkürlichen Körperreaktionen halten!
+         - WICHTIG: Stimme den "prologue" und die "firstMessage" zwingend exakt auf das Thema, die angegebenen Tags/Genre, die Welten-Beschreibung und vor allem auf die in "loreDatabase" generierte Geschichte & den Roten Faden der Kampagne (Kategorie 'Events' / eventSteps) ab! Der Prolog muss den allerersten geplanten Story-Schritt (eventSteps) des Roten Fadens atmosphärisch vorbereiten, und die "firstMessage" muss den Spieler direkt in die Situation dieses ersten Story-Schritts versetzen, damit der Spielstart und der Rote Faden perfekt zusammenpassen.
       6. Befülle die "loreDatabase" (Lore-Datenbank) mit mindestens 6-10 Einträgen für diese Welt. EXTRAHIERE ZWINGEND ALLE in der Beschreibung genannten Charaktere (AUSSER dem Hauptcharakter "player"!), Orte, Fraktionen, Gegenstände und Konzepte als detaillierte Einträge. Jeder erwähnte Charakter (AUSSER dem Hauptcharakter "player") MUSS in der Lore-Datenbank als Kategorie "Charaktere" landen! Die Kategorien müssen exakt einer der vordefinierten Werte sein.
+         - WICHTIG: Erstelle bei der Weltengenerierung zwingend auch einen prägnanten, informativen Eintrag in der Kategorie 'Weltregeln', der genau beschreibt, wie Gegenstände, Waffen, Magie/Technologie und deren Funktionsweise in dieser Welt geregelt sind und wie sie hergestellt/geschmiedet werden.
+         - WICHTIG FÜR GEGENSTÄNDE: Für alle Gegenstände in der Datenbank gilt: Der Fokus liegt ausschließlich auf dem Gegenstand selbst. Es dürfen absolut keine zukünftigen Abenteuer oder Story-Ereignisse gespoilert oder erwähnt werden! Es darf lediglich beschrieben werden, wer den Gegenstand in der Vergangenheit geschmiedet oder getragen hat. Gegenstände müssen sich streng an das Genre und die Welten-Beschreibung anpassen. Nur weil die schmiedende Person besondere Kräfte (wie Teufelskräfte oder Magie) besaß, bedeutet das nicht, dass der Gegenstand diese Kräfte automatisch erbt. Wenn z.B. jemand mit Teufelskräften ein Schwert schmiedet, ist es dennoch ein normales Schwert ohne Teufelskräfte, es sei denn, es wird explizit und logisch ein magischer Transfer begründet.
          WICHTIG: Wenn du Charaktere (im player-Feld, npcs-Feld oder in der loreDatabase unter der Kategorie 'Charaktere') erstellst, weise ihnen für das Feld 'faction' zwingend den exakten Namen einer der Fraktionen zu, die du in der 'loreDatabase' unter der Kategorie 'Fraktionen' erstellst! Dadurch werden sie sofort Mitglied dieser Fraktion.
       7. ZEITLICHE TRENNUNG (CODEX IST VERGANGENHEIT, WELTBESCHREIBUNG IST GEGENWART):
          - Der Codex (loreDatabase) sowie die 'npcs'-Liste beschreiben AUSSCHLIESSLICH die Vergangenheit (die Vorgeschichte vor Beginn des Spiels).
@@ -1151,6 +1210,7 @@ Falls es sich bei der Person um einen bekannten fiktiven/Franchise-Charakter han
 - STRUKTURIERTE BEZIEHUNGEN & RÄNGE (relationships): Achte peinlichst genau darauf, wer wem weisungsbefugt oder überlegen ist! Garp ist ein Vizeadmiral (Vice Admiral) und Sakazuki (Akainu) als Admiral bzw. Großadmiral (Fleet Admiral) im Rang UNTERGEBEN. Garp ist also ein respektierter Kollege oder Untergebener, NIEMALS ein Vorgesetzter von Sakazuki! Mihawk ist ein Pirat und Shichibukai (Samurai der Meere) und steht absolut außerhalb der Marine-Hierarchie, er ist auf keinen Fall ein Vorgesetzter von Sakazuki oder der Marine! Überprüfe deine gesamte Wissensdatenbank zu dem jeweiligen Franchise, um extrem authentische, kanonisch korrekte Beziehungen zu erzeugen!
 
 Erfinde spannende Fähigkeiten & Kräfte (skills), Herkunft der Kraft (powerSource) und Kosten/Limitierung (powerCost).
+Achte penibel darauf, Fähigkeiten & Kräfte (skills) und Kosten/Verbrauch sowie Kraftquelle stimmig an das Setting anzupassen. Falls bereits passende Fähigkeiten existieren, ERWEITERE und ergänze diese, anstatt neue, redundante hinzuzufügen. Es reicht völlig, eine Kraft/Fähigkeit nur einmal hinzuzufügen und auszubauen, anstatt mehrere Kopien zu erstellen.
 
 ### WICHTIG FÜR TRANSFORMATIONEN & VERWANDLUNGEN (z.B. Gears, Super-Saiyajin, Bestien-Formen, Dämonen-Formen, Vampir-Metamorphosen):
 Falls ein Charakter die Fähigkeit besitzt, sich zu verwandeln, seine Gestalt zu ändern oder eine temporäre Transformation zu aktivieren (wie z.B. Ruffy's Gears, Son Goku's Super-Saiyajin, Choppers Points, Narutos Kyuubi-Formen, Vampir-Fledermaus/Bestien-Gestalten, Werwolf-Transformationen, etc.) ODER falls der Eingabetext eine Formänderung, Verwandlung oder einen Power-Up-Zustand beschreibt:
@@ -1188,6 +1248,12 @@ WICHTIG: Achte zwingend darauf, für das Feld 'faction' (unter 'appearance') ein
       if (existingCharacter) {
         contextPrompt += `\n\n### BESTEHENDE DATEN (Ergänzungs-Modus aktiv):
 Es existieren bereits Charakter-Daten. Integriere/behalte diese Werte weitestgehend bei und ergänze/erweitere sie um die neuen Informationen aus dem Text. Überschreibe KEINE bestehenden, ausgefüllten und sinnvollen Werte (z.B. Bio, Rolle, Name, Aussehen, Kräfte), außer der neue Freitext verlangt dies explizit. Führe bestehende und neue Informationen (wie neue Techniken oder neue Details in der Bio) elegant auf Deutsch zusammen!
+
+WICHTIGSTE ZUSAMMENFÜHRUNGS-REGELN (GEGEN DUPLIKATE & AN DIE WELT ANGEPASST):
+1. ABSOLUTES VERBOT VON DOPPELTEN ABSÄTZEN IN DER BIO: Lies die bestehende "Bio" (Biografie) sorgfältig durch. Füge auf KEINEN Fall denselben Text, dieselbe Formulierung oder bereits genannte Sätze (auch nicht leicht abgewandelt als "[Zusatz]: ...") noch einmal hinzu! Wenn die Information bereits vorhanden ist, darf sie NICHT erneut angehängt werden. Ergänze NUR wirklich neue, zusätzliche Details und verschmilz sie elegant zu einem einzigen, flüssigen Text ohne Redundanzen.
+2. KEINE DUPLIZIERTEN FÄHIGKEITEN/KRÄFTE: Erstelle keine doppelten oder redundant benannten Fähigkeiten wie "Kraft / Fähigkeit #1", "Kraft / Fähigkeit #2", "Kraft / Fähigkeit #3" mit identischem oder ähnlichem Inhalt. Wenn bereits eine Fähigkeit oder Technik existiert, erweitere/ergänze sie lieber direkt in ihrem bestehenden Eintrag, anstatt eine weitere identische Fähigkeit hinzuzufügen, es sei denn, sie besitzt eine völlig andere Kraftquelle (powerSource). Es reicht vollkommen, eine Fähigkeit nur einmal aufzuführen und sie auszubauen.
+3. STRENGE BALANCIERUNG VON MACHT & WERTEN: Leite die Macht-Werte (campaignPowerLevels) und Stärken absolut streng passend zur Welten-Beschreibung, zum Ton/Genre und zum genauen Zeitpunkt/Ära her! Gib keine willkürlichen Höchstwerte an, sondern passe sie exakt an das Niveau des Charakters zu diesem Zeitpunkt an.
+
 Aktuelle Werte:
 - Name: "${existingCharacter.name || ''}"
 - Rolle: "${existingCharacter.role || ''}"
@@ -1282,6 +1348,12 @@ Falls in der Welten-Beschreibung oder Ära spezielle Zeitpunkte genannt werden (
       if (existingEntry) {
         contextPrompt += `\n\n### BESTEHENDE DATEN (Ergänzungs-Modus aktiv):
 Es existiert bereits ein Lore-Eintrag mit folgenden Werten. Integriere/behalte diese Werte weitestgehend bei und ergänze/erweitere sie um die neuen Informationen aus dem Text. Überschreibe KEINE bestehenden, sinnvollen und ausgefüllten Werte, außer der neue Freitext verlangt dies explizit. Führe bestehende und neue Informationen elegant auf Deutsch zusammen!
+
+WICHTIGSTE ZUSAMMENFÜHRUNGS-REGELN (GEGEN DUPLIKATE & AN DIE WELT ANGEPASST):
+1. ABSOLUTES VERBOT VON DOPPELTEN ABSÄTZEN: Lies den bestehenden Wert von "Beschreibung (description)" oder "Biografie" sorgfältig durch. Füge auf KEINEN Fall denselben Text, dieselbe Formulierung oder bereits genannte Sätze (auch nicht leicht abgewandelt als "[Zusatz]: ...") noch einmal hinzu! Wenn die Information bereits vorhanden ist, darf sie NICHT erneut angehängt werden. Ergänze NUR wirklich neue, zusätzliche Details und verschmilz sie elegant zu einem einzigen, flüssigen Text ohne Redundanzen.
+2. KEINE DUPLIZIERTEN FÄHIGKEITEN/KRÄFTE: Erstelle keine doppelten oder redundant benannten Fähigkeiten wie "Kraft / Fähigkeit #1", "Kraft / Fähigkeit #2", "Kraft / Fähigkeit #3" mit identischem oder ähnlichem Inhalt. Wenn bereits eine Fähigkeit oder Technik existiert, erweitere/ergänze sie lieber direkt in ihrem bestehenden Eintrag, anstatt eine weitere identische Fähigkeit hinzuzufügen, es sei denn, sie besitzt eine völlig andere Kraftquelle (powerSource). Es reicht vollkommen, eine Fähigkeit nur einmal aufzuführen und sie auszubauen.
+3. STRENGE BALANCIERUNG VON MACHT & WERTEN: Leite die Macht-Werte (campaignPowerLevels) und Stärken absolut streng passend zur Welten-Beschreibung, zum Ton/Genre und zum genauen Zeitpunkt/Ära her! Gib keine willkürlichen Höchstwerte an, sondern passe sie exakt an das Niveau des Charakters zu diesem Zeitpunkt an.
+
 Aktuelle Werte:
 - Titel (title): "${existingEntry.title || ''}"
 - Beschreibung (description): "${existingEntry.description || ''}"`;
@@ -1340,7 +1412,19 @@ Für Charaktere:
 Für Events/Kapitel:
 - Zerlege den Story-Ablauf in chronologische Teilschritte (Stationen) im Array 'eventSteps'.
 - Jede Station MUSS einen prägnanten Titel ("title") und eine genaue Beschreibung des Ablaufs ("description") haben.
-- Setze den Status ("status") jeder Station auf 'planned'.`;
+- Setze den Status ("status") jeder Station auf 'planned'.
+- Weise jeder Station einen Strang ("branch") zu: entweder 'main' (Hauptstory) oder 'side' (Nebenquest).
+- Formuliere passende Freischalt-Bedingungen ("unlockConditions") auf Deutsch (z. B. 'Nach Abschluss von Station X', 'Spieler besitzt geheimes Amulett', 'Ort: Tempelruine erreicht').
+- Beschreibe im Feld "chatInstruction" auf Deutsch, was genau in diesem Schritt im Chat/Abenteuer passieren soll (z. B. 'Der Dieb lockt die Helden in eine Falle', 'Der Hehler verlangt 50 Goldstücke für Informationen', 'Ein Drache greift die Stadt an und das Kampfsystem startet').
+- Befülle ebenfalls den Reise-Pfad/Geografische Stationen ("travelPath", z. B. 'Von Eldoria durch den Flüsterwald nach Silberhafen'), die Reise-Dauer in Tagen ("travelDurationDays", als ganze Zahl, z. B. 3), und die Uhrzeit ("timeOfDay", z. B. '14:00 Uhr', 'Dämmerung' oder 'Mitternacht') für jede Station. Leite diese Werte logisch und stimmig aus der Welten-Beschreibung, den Tags und dem Genre ab und halte dich dabei streng an die Geografie und die Gegebenheiten der Weltvorlage!`;
+      } else if (category === 'Gegenstände') {
+        contextPrompt += `
+Für Gegenstände / Items:
+- FOKUS AUF DEN GEGENSTAND SELBST: Der gesamte Eintrag muss sich vollkommen auf den physischen oder magischen Gegenstand selbst fokussieren. Beschreibe ausschließlich seine Form, Beschaffenheit, Funktion, Historie und Eigenschaften.
+- KEINE ZUKÜNFTIGEN EREIGNISSE ODER PLOT-DETAILS: Es darf absolut kein Inhalt über Dinge eingebaut werden, die noch gar nicht passiert sind (wie z.B. spätere Ereignisse in der Geschichte, der Rote Faden der Kampagne, Hauptquests oder sonstige geplante Abenteuer). Der Eintrag repräsentiert reines historisches oder gegenwärtiges Zustandswissen des Gegenstands.
+- EXKLUSIVE AUSNAHME - HERSTELLER / SCHMIED: Es darf erwähnt werden, wer den Gegenstand in der Vergangenheit hergestellt, geschmiedet oder gefunden hat, da dies ein Teil seiner Entstehungsgeschichte ist.
+- STRIKTE ANPASSUNG AN WELTEN-BESCHREIBUNG & GENRE-TAGS: Der Gegenstand, seine Funktionsweise, seine Seltenheit und seine Effekte müssen sich streng an der Welten-Beschreibung (worldContext) und den Genre-Tags orientieren. Nutze gegebenenfalls die in den Weltregeln festgelegte Magie- und Item-Logik.
+- KEINE AUTOMATISCHE MAGIE-ÜBERTRAGUNG (TEUFELSKRÄFTE-BEISPIEL): Nur weil ein Charakter mit besonderen Kräften (z.B. Teufelskräften, göttlicher Magie, etc.) diesen Gegenstand hergestellt oder benutzt hat, besitzt der Gegenstand diese übernatürlichen Kräfte NICHT automatisch selbst! Wenn beispielsweise jemand mit Teufelskräften ein Schwert schmiedet, ist es ohne einen explizit beschriebenen, logischen Magie-Verschmelzungs-Transfer ein völlig gewöhnliches Stahlschwert ohne magische Effekte oder Teufelskräfte. Erfinde keine unlogischen magischen Attribute.`;
       }
 
       contextPrompt += `\n\nText: "${text}"\n`;
@@ -1466,9 +1550,15 @@ Für Events/Kapitel:
                 id: { type: Type.STRING },
                 title: { type: Type.STRING, description: "Kurzer, prägnanter Name dieses Meilensteins/Ablaufs." },
                 description: { type: Type.STRING, description: "Detaillierte Beschreibung dieses Ereignisses." },
-                status: { type: Type.STRING, description: "Muss 'planned' sein." }
+                status: { type: Type.STRING, description: "Muss 'planned' sein." },
+                branch: { type: Type.STRING, enum: ["main", "side"], description: "Zugehöriger Handlungsstrang: 'main' (Hauptstory) oder 'side' (Nebenquest)." },
+                unlockConditions: { type: Type.STRING, description: "Bedingungen, unter denen dieser Schritt im Spiel freigeschaltet wird." },
+                chatInstruction: { type: Type.STRING, description: "Anweisung/Beschreibung, was im Chat passieren soll, wenn dieser Schritt aktiv wird." },
+                travelPath: { type: Type.STRING, description: "Geografische Stationen / Der Reise-Pfad (z. B. 'Von Eldoria durch den Flüsterwald nach Silberhafen')." },
+                travelDurationDays: { type: Type.INTEGER, description: "Reise-Dauer in Tagen (z. B. 3)." },
+                timeOfDay: { type: Type.STRING, description: "Uhrzeit der Ankunft oder des Geschehens (z. B. '14:00 Uhr', 'Dämmerung', 'Mitternacht')." }
               },
-              required: ["title", "description", "status"]
+              required: ["title", "description", "status", "branch", "unlockConditions", "chatInstruction"]
             },
             description: "Chronologische Liste von Storybook-Abläufen."
           }

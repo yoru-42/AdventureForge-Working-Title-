@@ -23,6 +23,15 @@ const GENDER_OPTIONS = ["Männlich", "Weiblich", "Divers", "Nicht-Binär", "Andr
 const BUILD_OPTIONS = ["Schlank", "Sportlich", "Muskulös", "Kräftig", "Zierlich", "Drahtig", "Kurvig", "Stämmig", "Hager", "Unbekannt"];
 const CUP_SIZE_OPTIONS = ["-", "AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"];
 
+const ITEM_TYPE_OPTIONS = [
+  "Verbrauchsgüter",
+  "Waffen",
+  "Rüstung / Kleidung",
+  "Artefakte / Zubehör",
+  "Werkzeuge & Alltags-Gegenstände",
+  "Questgegenstände / Story-Objekte"
+];
+
 const DEFAULT_POWER_SOURCES = ["Mana", "Chakra", "Ausdauer", "Aura", "Zorn", "Glaube", "Blutmagie", "Technologie", "Göttlich", "Keine"];
 const DEFAULT_POWER_COSTS = ["MP (Magiepunkte)", "SP (Spezialpunkte)", "HP (Lebenspunkte)", "Ausdauer", "Chakra", "Energie", "Fokus", "Keine"];
 
@@ -38,33 +47,105 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
   const formTopRef = useRef<HTMLDivElement>(null);
 
   const [newEventStepText, setNewEventStepText] = useState('');
+  const [newEventStepTitle, setNewEventStepTitle] = useState('');
+  const [newEventStepBranch, setNewEventStepBranch] = useState<'main' | 'side'>('main');
+  const [newEventStepConditions, setNewEventStepConditions] = useState('');
+  const [newEventStepChatInstruction, setNewEventStepChatInstruction] = useState('');
+  const [newEventStepTravelPath, setNewEventStepTravelPath] = useState('');
+  const [newEventStepTravelDurationDays, setNewEventStepTravelDurationDays] = useState<number | ''>('');
+  const [newEventStepTimeOfDay, setNewEventStepTimeOfDay] = useState('');
+  const [editingStepId, setEditingStepId] = useState<string | null>(null);
 
   const handleAddManualStep = () => {
     if (!newEventStepText.trim()) return;
     const steps = [...(editForm.details?.eventSteps || [])];
-    const newStep = {
-      id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 4),
-      title: `Station #${steps.length + 1}`,
-      description: newEventStepText.trim(),
-      status: 'planned' as const
-    };
-    const updatedSteps = [...steps, newStep];
-    updateAndSyncSteps(updatedSteps);
+    
+    if (editingStepId) {
+      // Edit mode
+      const updatedSteps = steps.map(s => s.id === editingStepId ? {
+        ...s,
+        title: newEventStepTitle.trim() || s.title || `Station #${steps.indexOf(s) + 1}`,
+        description: newEventStepText.trim(),
+        branch: newEventStepBranch,
+        unlockConditions: newEventStepConditions.trim() || 'Keine',
+        chatInstruction: newEventStepChatInstruction.trim(),
+        travelPath: newEventStepTravelPath.trim(),
+        travelDurationDays: newEventStepTravelDurationDays !== '' ? Number(newEventStepTravelDurationDays) : undefined,
+        timeOfDay: newEventStepTimeOfDay.trim()
+      } : s);
+      updateAndSyncSteps(updatedSteps);
+      setEditingStepId(null);
+    } else {
+      // Add mode
+      const newStep = {
+        id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 4),
+        title: newEventStepTitle.trim() || `Station #${steps.length + 1}`,
+        description: newEventStepText.trim(),
+        status: 'planned' as const,
+        branch: newEventStepBranch,
+        unlockConditions: newEventStepConditions.trim() || 'Keine',
+        chatInstruction: newEventStepChatInstruction.trim(),
+        travelPath: newEventStepTravelPath.trim(),
+        travelDurationDays: newEventStepTravelDurationDays !== '' ? Number(newEventStepTravelDurationDays) : undefined,
+        timeOfDay: newEventStepTimeOfDay.trim()
+      };
+      const updatedSteps = [...steps, newStep];
+      updateAndSyncSteps(updatedSteps);
+    }
+    
+    // Clear inputs
     setNewEventStepText('');
+    setNewEventStepTitle('');
+    setNewEventStepBranch('main');
+    setNewEventStepConditions('');
+    setNewEventStepChatInstruction('');
+    setNewEventStepTravelPath('');
+    setNewEventStepTravelDurationDays('');
+    setNewEventStepTimeOfDay('');
+  };
+
+  const handleStartEditStep = (step: any) => {
+    setEditingStepId(step.id);
+    setNewEventStepTitle(step.title || '');
+    setNewEventStepText(step.description || '');
+    setNewEventStepBranch(step.branch || 'main');
+    setNewEventStepConditions(step.unlockConditions || '');
+    setNewEventStepChatInstruction(step.chatInstruction || '');
+    setNewEventStepTravelPath(step.travelPath || '');
+    setNewEventStepTravelDurationDays(step.travelDurationDays !== undefined ? step.travelDurationDays : '');
+    setNewEventStepTimeOfDay(step.timeOfDay || '');
+  };
+
+  const handleCancelEditStep = () => {
+    setEditingStepId(null);
+    setNewEventStepText('');
+    setNewEventStepTitle('');
+    setNewEventStepBranch('main');
+    setNewEventStepConditions('');
+    setNewEventStepChatInstruction('');
+    setNewEventStepTravelPath('');
+    setNewEventStepTravelDurationDays('');
+    setNewEventStepTimeOfDay('');
   };
 
   const updateAndSyncSteps = (updatedSteps: any[]) => {
-    setEditForm(prev => {
-      const details = { ...(prev.details || {}), eventSteps: updatedSteps };
-      const description = updatedSteps.map((s, idx) => `${idx + 1}. [${s.title}] ${s.description}`).join('\n');
-      const title = prev.title && prev.title !== 'Ereignis-Timeline' ? prev.title : (updatedSteps[0] ? `Ereignis-Timeline (${updatedSteps[0].description.slice(0, 20)}...)` : 'Ereignis-Timeline');
-      return {
-        ...prev,
-        title,
-        description,
-        details
-      };
-    });
+    const prev = editForm;
+    const details = { ...(prev.details || {}), eventSteps: updatedSteps };
+    const description = updatedSteps.map((s, idx) => `${idx + 1}. [${s.title}] ${s.description}`).join('\n');
+    const title = prev.title && prev.title !== 'Ereignis-Timeline' ? prev.title : (updatedSteps[0] ? `Ereignis-Timeline (${updatedSteps[0].description.slice(0, 20)}...)` : 'Ereignis-Timeline');
+    const updatedEntry = {
+      ...prev,
+      title,
+      description,
+      details
+    } as LoreEntry;
+
+    setEditForm(updatedEntry);
+
+    // Automatically persist to the lore database
+    if (prev.id) {
+      onUpdateLore(lore.map(l => l.id === prev.id ? updatedEntry : l));
+    }
   };
 
   const handleUpdateStepText = (id: string, text: string) => {
@@ -86,23 +167,57 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
     steps[fromIdx] = steps[toIdx];
     steps[toIdx] = temp;
     
-    // Also update titles to reflect new order (Station #1, #2, etc)
-    const resortedSteps = steps.map((s, idx) => ({ ...s, title: `Station #${idx + 1}` }));
+    // Also update titles to reflect new order if it's a default title, otherwise keep custom title!
+    const resortedSteps = steps.map((s, idx) => ({ 
+      ...s, 
+      title: s.title && !s.title.startsWith('Station #') ? s.title : `Station #${idx + 1}` 
+    }));
     updateAndSyncSteps(resortedSteps);
   };
 
   const handleDeleteStep = (id: string) => {
     const steps = [...(editForm.details?.eventSteps || [])];
     const updatedBeforeResort = steps.filter(s => s.id !== id);
-    const updated = updatedBeforeResort.map((s, idx) => ({ ...s, title: `Station #${idx + 1}` }));
+    const updated = updatedBeforeResort.map((s, idx) => ({ 
+      ...s, 
+      title: s.title && !s.title.startsWith('Station #') ? s.title : `Station #${idx + 1}` 
+    }));
     updateAndSyncSteps(updated);
+    if (editingStepId === id) {
+      handleCancelEditStep();
+    }
   };
 
   useEffect(() => {
-    if (!isEditing) {
-      setEditForm({ category: activeCategory });
+    if (activeCategory === 'Events') {
+      const eventEntry = lore.find(l => l.category === 'Events');
+      if (eventEntry) {
+        setIsEditing(eventEntry.id);
+        setEditForm(eventEntry);
+      } else {
+        const newEventEntry: LoreEntry = {
+          id: 'single-story-events-timeline',
+          category: 'Events',
+          title: 'Ereignis-Timeline',
+          description: 'Chronologischer Ablauf der Geschichte',
+          isUnlocked: true,
+          details: {
+            eventSteps: []
+          }
+        };
+        onUpdateLore([...lore, newEventEntry]);
+        setIsEditing(newEventEntry.id);
+        setEditForm(newEventEntry);
+      }
+    } else {
+      if (isEditing && lore.find(l => l.id === isEditing)?.category === 'Events') {
+        setIsEditing(null);
+        setEditForm({ category: activeCategory });
+      } else if (!isEditing) {
+        setEditForm({ category: activeCategory });
+      }
     }
-  }, [activeCategory, isEditing]);
+  }, [activeCategory]);
 
   const handleSave = () => {
     if (!editForm.title || !editForm.description) return;
@@ -156,148 +271,159 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
         world,
         existingFactions
       );
-      setEditForm(prev => {
-        let generatedAbilities = prev.details?.abilities;
-        if ((cat === 'Charaktere' || cat === 'Gegner') && (data.details?.skills || data.details?.powerSource)) {
-          const newAbil = {
-            id: Date.now().toString(),
-            source: data.details.powerSource || '',
-            cost: data.details.powerCost || '',
-            description: data.details.skills || '',
-            techniques: data.details.techniques || '',
-            techniqueList: (data.details.techniqueList && Array.isArray(data.details.techniqueList))
-              ? data.details.techniqueList.filter((t: any) => t && t.name).map((t: any, index: number) => ({ 
-                  id: `${Date.now()}-${index}`, 
-                  name: t.name.trim(), 
-                  description: t.description ? t.description.trim() : '',
-                  type: t.type || 'Angriff',
-                  subtype: t.subtype || 'Einzelschuss',
-                  level: t.level || 1,
-                  maxLevel: t.maxLevel || 10,
-                  xp: t.xp || 0,
-                  xpNeeded: t.xpNeeded || 100
-                }))
-              : (data.details.techniques 
-                  ? data.details.techniques.split(/[,\n;]/).map((s: string) => s.trim()).filter(Boolean).map((name: string, index: number) => ({ 
-                      id: `${Date.now()}-${index}`, 
-                      name, 
-                      description: '',
-                      type: 'Angriff',
-                      subtype: 'Einzelschuss',
-                      level: 1,
-                      maxLevel: 10,
-                      xp: 0,
-                      xpNeeded: 100
-                    }))
-                  : []
-                )
-          };
-          if (keepExistingLoreDetails && prev.details?.abilities && prev.details.abilities.length > 0) {
-            generatedAbilities = [...prev.details.abilities, newAbil];
-          } else {
-            generatedAbilities = [newAbil];
-          }
-        }
-        let processedDetails = { ...data.details };
-        if (cat === 'Charaktere' || cat === 'Gegner') {
-          // Normalize Gender
-          if (processedDetails.gender) {
-            const g = processedDetails.gender.trim().toLowerCase();
-            if (g === 'male' || g.startsWith('männ')) processedDetails.gender = 'Männlich';
-            else if (g === 'female' || g.startsWith('weib')) processedDetails.gender = 'Weiblich';
-            else if (g === 'divers') processedDetails.gender = 'Divers';
-            else if (g.includes('nicht') || g.includes('non') || g.includes('binär')) processedDetails.gender = 'Nicht-Binär';
-            else if (g.startsWith('andro')) processedDetails.gender = 'Androgyn';
-            else processedDetails.gender = 'Unbekannt';
-          } else {
-            processedDetails.gender = 'Unbekannt';
-          }
-
-          // Normalize Build
-          if (processedDetails.build) {
-            const b = processedDetails.build.trim().toLowerCase();
-            if (b.startsWith('schlan')) processedDetails.build = 'Schlank';
-            else if (b.startsWith('sport')) processedDetails.build = 'Sportlich';
-            else if (b.startsWith('musk')) processedDetails.build = 'Muskulös';
-            else if (b.startsWith('kräf')) processedDetails.build = 'Kräftig';
-            else if (b.startsWith('zier')) processedDetails.build = 'Zierlich';
-            else if (b.startsWith('drah')) processedDetails.build = 'Drahtig';
-            else if (b.startsWith('kurv')) processedDetails.build = 'Kurvig';
-            else if (b.startsWith('stämm')) processedDetails.build = 'Stämmig';
-            else if (b.startsWith('hage')) processedDetails.build = 'Hager';
-            else processedDetails.build = 'Unbekannt';
-          } else {
-            processedDetails.build = 'Unbekannt';
-          }
-
-          // Normalize Cup Size
-          if (processedDetails.cupSize) {
-            const c = processedDetails.cupSize.trim().toUpperCase();
-            if (["AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"].includes(c)) {
-              processedDetails.cupSize = c;
-            } else {
-              processedDetails.cupSize = '-';
-            }
-          }
-
-          // Trigger auto calculation for character appearance so measurements etc. are beautifully populated
-          processedDetails = autoCalculateAppearance(processedDetails, 'build', false);
-        }
-        
-        let mergedRelationships = processedDetails.relationships || [];
-        if (keepExistingLoreDetails && prev.details?.relationships && prev.details.relationships.length > 0) {
-          const currentRels = [...prev.details.relationships];
-          if (Array.isArray(mergedRelationships)) {
-            mergedRelationships.forEach((newRel: any) => {
-              const existingIdx = currentRels.findIndex((r: any) => r.targetCharacter?.toLowerCase() === newRel.targetCharacter?.toLowerCase());
-              if (existingIdx >= 0) {
-                currentRels[existingIdx] = { ...currentRels[existingIdx], ...newRel };
-              } else {
-                currentRels.push(newRel);
-              }
-            });
-          }
-          mergedRelationships = currentRels;
-        }
-
-        let finalTitle = data.title || prev.title;
-        let finalDescription = (keepExistingLoreDetails && prev.description && data.description && prev.description !== data.description)
-          ? `${prev.description}\n\n[Zusatz]: ${data.description}`
-          : (data.description || prev.description);
-        
-        if (cat === 'Events') {
-          if (processedDetails.eventSteps) {
-            processedDetails.eventSteps = processedDetails.eventSteps.map((step: any, idx: number) => ({
-              ...step,
-              id: step.id || `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
-              title: step.title || `Station #${idx + 1}`,
-              status: step.status || 'planned'
-            }));
-            finalDescription = processedDetails.eventSteps.map((s: any, idx: number) => `${idx + 1}. [${s.title}] ${s.description || ''}`).join('\n');
-            if (!finalTitle || finalTitle === 'Events' || finalTitle === 'Event') {
-              finalTitle = processedDetails.eventSteps[0]?.title || 'Ereignis-Timeline';
-            }
-          } else {
-            processedDetails.eventSteps = [];
-          }
-        }
-
-        return {
-          ...prev,
-          title: finalTitle,
-          description: finalDescription,
-          secretsStage1: data.secretsStage1 !== undefined ? data.secretsStage1 : prev.secretsStage1,
-          secretsStage2: data.secretsStage2 !== undefined ? data.secretsStage2 : prev.secretsStage2,
-          secretsStage3: data.secretsStage3 !== undefined ? data.secretsStage3 : prev.secretsStage3,
-          details: {
-            ...prev.details,
-            ...processedDetails,
-            relationships: mergedRelationships,
-            abilities: generatedAbilities,
-            campaignPowerLevels: data.details?.campaignPowerLevels || prev.details?.campaignPowerLevels
-          }
+      const prev = editForm;
+      let generatedAbilities = prev.details?.abilities;
+      if ((cat === 'Charaktere' || cat === 'Gegner') && (data.details?.skills || data.details?.powerSource)) {
+        const newAbil = {
+          id: Date.now().toString(),
+          source: data.details.powerSource || '',
+          cost: data.details.powerCost || '',
+          description: data.details.skills || '',
+          techniques: data.details.techniques || '',
+          techniqueList: (data.details.techniqueList && Array.isArray(data.details.techniqueList))
+            ? data.details.techniqueList.filter((t: any) => t && t.name).map((t: any, index: number) => ({ 
+                id: `${Date.now()}-${index}`, 
+                name: t.name.trim(), 
+                description: t.description ? t.description.trim() : '',
+                type: t.type || 'Angriff',
+                subtype: t.subtype || 'Einzelschuss',
+                level: t.level || 1,
+                maxLevel: t.maxLevel || 10,
+                xp: t.xp || 0,
+                xpNeeded: t.xpNeeded || 100
+              }))
+            : (data.details.techniques 
+                ? data.details.techniques.split(/[,\n;]/).map((s: string) => s.trim()).filter(Boolean).map((name: string, index: number) => ({ 
+                    id: `${Date.now()}-${index}`, 
+                    name, 
+                    description: '',
+                    type: 'Angriff',
+                    subtype: 'Einzelschuss',
+                    level: 1,
+                    maxLevel: 10,
+                    xp: 0,
+                    xpNeeded: 100
+                  }))
+                : []
+              )
         };
-      });
+        if (keepExistingLoreDetails && prev.details?.abilities && prev.details.abilities.length > 0) {
+          generatedAbilities = [...prev.details.abilities, newAbil];
+        } else {
+          generatedAbilities = [newAbil];
+        }
+      }
+      let processedDetails = { ...data.details };
+      if (cat === 'Charaktere' || cat === 'Gegner') {
+        // Normalize Gender
+        if (processedDetails.gender) {
+          const g = processedDetails.gender.trim().toLowerCase();
+          if (g === 'male' || g.startsWith('männ')) processedDetails.gender = 'Männlich';
+          else if (g === 'female' || g.startsWith('weib')) processedDetails.gender = 'Weiblich';
+          else if (g === 'divers') processedDetails.gender = 'Divers';
+          else if (g.includes('nicht') || g.includes('non') || g.includes('binär')) processedDetails.gender = 'Nicht-Binär';
+          else if (g.startsWith('andro')) processedDetails.gender = 'Androgyn';
+          else processedDetails.gender = 'Unbekannt';
+        } else {
+          processedDetails.gender = 'Unbekannt';
+        }
+
+        // Normalize Build
+        if (processedDetails.build) {
+          const b = processedDetails.build.trim().toLowerCase();
+          if (b.startsWith('schlan')) processedDetails.build = 'Schlank';
+          else if (b.startsWith('sport')) processedDetails.build = 'Sportlich';
+          else if (b.startsWith('musk')) processedDetails.build = 'Muskulös';
+          else if (b.startsWith('kräf')) processedDetails.build = 'Kräftig';
+          else if (b.startsWith('zier')) processedDetails.build = 'Zierlich';
+          else if (b.startsWith('drah')) processedDetails.build = 'Drahtig';
+          else if (b.startsWith('kurv')) processedDetails.build = 'Kurvig';
+          else if (b.startsWith('stämm')) processedDetails.build = 'Stämmig';
+          else if (b.startsWith('hage')) processedDetails.build = 'Hager';
+          else processedDetails.build = 'Unbekannt';
+        } else {
+          processedDetails.build = 'Unbekannt';
+        }
+
+        // Normalize Cup Size
+        if (processedDetails.cupSize) {
+          const c = processedDetails.cupSize.trim().toUpperCase();
+          if (["AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"].includes(c)) {
+            processedDetails.cupSize = c;
+          } else {
+            processedDetails.cupSize = '-';
+          }
+        }
+
+        // Trigger auto calculation for character appearance so measurements etc. are beautifully populated
+        processedDetails = autoCalculateAppearance(processedDetails, 'build', false);
+      }
+      
+      let mergedRelationships = processedDetails.relationships || [];
+      if (keepExistingLoreDetails && prev.details?.relationships && prev.details.relationships.length > 0) {
+        const currentRels = [...prev.details.relationships];
+        if (Array.isArray(mergedRelationships)) {
+          mergedRelationships.forEach((newRel: any) => {
+            const existingIdx = currentRels.findIndex((r: any) => r.targetCharacter?.toLowerCase() === newRel.targetCharacter?.toLowerCase());
+            if (existingIdx >= 0) {
+              currentRels[existingIdx] = { ...currentRels[existingIdx], ...newRel };
+            } else {
+              currentRels.push(newRel);
+            }
+          });
+        }
+        mergedRelationships = currentRels;
+      }
+
+      let finalTitle = data.title || prev.title;
+      let finalDescription = (keepExistingLoreDetails && prev.description && data.description && prev.description !== data.description)
+        ? `${prev.description}\n\n[Zusatz]: ${data.description}`
+        : (data.description || prev.description);
+      
+      if (cat === 'Events') {
+        if (processedDetails.eventSteps) {
+          processedDetails.eventSteps = processedDetails.eventSteps.map((step: any, idx: number) => ({
+            ...step,
+            id: step.id || `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+            title: step.title || `Station #${idx + 1}`,
+            status: step.status || 'planned',
+            branch: step.branch || 'main',
+            unlockConditions: step.unlockConditions || 'Keine',
+            chatInstruction: step.chatInstruction || '',
+            travelPath: step.travelPath || '',
+            travelDurationDays: step.travelDurationDays !== undefined ? Number(step.travelDurationDays) : undefined,
+            timeOfDay: step.timeOfDay || ''
+          }));
+          finalDescription = processedDetails.eventSteps.map((s: any, idx: number) => `${idx + 1}. [${s.title}] ${s.description || ''}`).join('\n');
+          if (!finalTitle || finalTitle === 'Events' || finalTitle === 'Event') {
+            finalTitle = processedDetails.eventSteps[0]?.title || 'Ereignis-Timeline';
+          }
+        } else {
+          processedDetails.eventSteps = [];
+        }
+      }
+
+      const updatedEntry = {
+        ...prev,
+        title: finalTitle,
+        description: finalDescription,
+        secretsStage1: data.secretsStage1 !== undefined ? data.secretsStage1 : prev.secretsStage1,
+        secretsStage2: data.secretsStage2 !== undefined ? data.secretsStage2 : prev.secretsStage2,
+        secretsStage3: data.secretsStage3 !== undefined ? data.secretsStage3 : prev.secretsStage3,
+        details: {
+          ...prev.details,
+          ...processedDetails,
+          relationships: mergedRelationships,
+          abilities: generatedAbilities,
+          campaignPowerLevels: data.details?.campaignPowerLevels || prev.details?.campaignPowerLevels
+        }
+      } as LoreEntry;
+
+      setEditForm(updatedEntry);
+
+      if (cat === 'Events' && prev.id) {
+        onUpdateLore(lore.map(l => l.id === prev.id ? updatedEntry : l));
+      }
       setLoreSmartFill('');
     } catch (err: any) {
       console.error(err);
@@ -428,7 +554,10 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
             {c === 'Weltregeln' && <i className="fa-solid fa-scale-balanced mr-2 opacity-70"></i>}
             {c}
             <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${activeCategory === c ? 'bg-black/20' : 'bg-slate-800'}`}>
-              {lore.filter(l => l.category === c).length}
+              {c === 'Events' 
+                ? (lore.find(l => l.category === 'Events')?.details?.eventSteps?.length || 0) 
+                : lore.filter(l => l.category === c).length
+              }
             </span>
           </button>
         ))}
@@ -440,8 +569,17 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
           <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-amber-600 to-indigo-600 left-0"></div>
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <i className={`fa-solid ${isEditing ? 'fa-pen text-indigo-400' : 'fa-plus text-amber-500'}`}></i>
-              {isEditing ? `"${editForm.title}" bearbeiten` : `Neuen Eintrag in ${activeCategory}`}
+              {activeCategory === 'Events' ? (
+                <>
+                  <i className="fa-solid fa-route text-amber-500"></i>
+                  <span>Geschichte & Roter Faden der Kampagne</span>
+                </>
+              ) : (
+                <>
+                  <i className={`fa-solid ${isEditing ? 'fa-pen text-indigo-400' : 'fa-plus text-amber-500'}`}></i>
+                  <span>{isEditing ? `"${editForm.title}" bearbeiten` : `Neuen Eintrag in ${activeCategory}`}</span>
+                </>
+              )}
             </h2>
           </div>
 
@@ -493,33 +631,7 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
               </div>
             )}
 
-            {['Orte', 'Gegenstände'].includes(currentCategory) && (
-              <div className="flex flex-col gap-2 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50 items-center justify-center">
-                {editForm.image ? (
-                  <div className="relative group rounded-xl overflow-hidden w-full max-w-[200px] border border-amber-500/30">
-                    <img src={editForm.image} alt={editForm.title} className="w-full aspect-square object-cover" />
-                    <button 
-                      onClick={() => setEditForm(prev => ({ ...prev, image: undefined }))}
-                      className="absolute top-2 right-2 p-1.5 bg-red-500/80 hover:bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <i className="fa-solid fa-trash"></i>
-                    </button>
-                  </div>
-                ) : (
-                  <button 
-                    onClick={handleGenerateImage}
-                    disabled={isGeneratingImg || !editForm.title || (currentCategory !== 'Orte' && !editForm.description)}
-                    className="p-4 border border-dashed border-slate-700 hover:border-amber-500/50 rounded-xl text-slate-400 hover:text-amber-500 transition-colors w-full max-w-[200px] aspect-square flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group"
-                  >
-                    <i className={`fa-solid ${isGeneratingImg ? 'fa-spinner animate-spin text-amber-500' : 'fa-image text-2xl group-hover:scale-110 transition-transform'}`}></i>
-                    <span className="text-xs font-bold text-center">
-                      {isGeneratingImg ? 'Generiere...' : 'KI Bild generieren'}
-                    </span>
-                  </button>
-                )}
-                <p className="text-[10px] text-slate-500 text-center max-w-sm mt-1">Fülle Titel und Beschreibung (oder Details) aus, bevor du ein Bild generierst.</p>
-              </div>
-            )}
+
 
             {(currentCategory === 'Charaktere' || currentCategory === 'Gegner') && (
               <div className="flex flex-col gap-5 bg-slate-900/40 p-5 rounded-2xl border border-slate-800/80">
@@ -1619,7 +1731,67 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-slate-400 font-bold uppercase">Typ</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.itemType || ''} onChange={e => updateDetail('itemType', e.target.value)} placeholder="z.B. Waffe, Relikt, Trank" />
+                  {(() => {
+                    const currentType = editForm.details?.itemType || '';
+                    const isCustom = editForm.details?._itemTypeIsCustom || (currentType && !ITEM_TYPE_OPTIONS.includes(currentType));
+                    
+                    return !isCustom ? (
+                      <div className="flex gap-1.5 w-full">
+                        <select
+                          value={currentType}
+                          onChange={e => {
+                            const val = e.target.value;
+                            if (val === '__custom__') {
+                              updateDetail('itemType', '');
+                              updateDetail('_itemTypeIsCustom', true);
+                            } else {
+                              updateDetail('itemType', val);
+                              updateDetail('_itemTypeIsCustom', false);
+                            }
+                          }}
+                          className="flex-1 bg-slate-950 border border-slate-800 text-white rounded p-2 text-sm w-full outline-none focus:border-amber-500 cursor-pointer h-[38px]"
+                        >
+                          <option value="">-- Typ wählen / Unbekannt --</option>
+                          {ITEM_TYPE_OPTIONS.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                          <option value="__custom__">✍️ Freitext...</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateDetail('itemType', '');
+                            updateDetail('_itemTypeIsCustom', true);
+                          }}
+                          title="Freitext eingeben"
+                          className="px-2.5 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white border border-slate-800 rounded transition-all flex items-center h-[38px]"
+                        >
+                          <i className="fa-solid fa-pen text-[9px]"></i>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-1.5 w-full">
+                        <input
+                          type="text"
+                          placeholder="z.B. Trank, Relikt..."
+                          value={currentType}
+                          onChange={e => updateDetail('itemType', e.target.value)}
+                          className="flex-1 bg-slate-950 border border-slate-800 text-white rounded p-2.5 text-sm w-full outline-none focus:border-amber-500 h-[38px]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateDetail('itemType', '');
+                            updateDetail('_itemTypeIsCustom', false);
+                          }}
+                          title="Zurück zur Auswahl"
+                          className="px-2.5 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white border border-slate-800 rounded transition-all flex items-center h-[38px]"
+                        >
+                          <i className="fa-solid fa-rotate-left text-[9px]"></i>
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-xs text-slate-400 font-bold uppercase">Seltenheit</label>
@@ -1731,7 +1903,15 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
                     type="text"
                     className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-amber-500 outline-none w-full text-sm font-semibold"
                     value={editForm.title || ''}
-                    onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                    onChange={e => {
+                      const newTitle = e.target.value;
+                      const prev = editForm;
+                      const updated = { ...prev, title: newTitle } as LoreEntry;
+                      setEditForm(updated);
+                      if (prev.id) {
+                        onUpdateLore(lore.map(l => l.id === prev.id ? updated : l));
+                      }
+                    }}
                     placeholder="z.B. Kapitel 1: Das Erwachen der Gilde"
                   />
                   <p className="text-[10px] text-slate-500">Gib dem Ereignisverlauf einen Namen, unter dem er im Codex aufgeführt wird.</p>
@@ -1769,133 +1949,370 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
                   />
                 </div>
 
-                {/* Input field to add manual steps sequence */}
-                <div className="flex flex-col gap-2.5 bg-slate-800/10 border border-slate-800 rounded-xl p-4">
-                  <label className="text-xs text-slate-300 font-bold uppercase flex items-center gap-1.5">
-                    <i className="fa-solid fa-plus-circle text-indigo-400"></i>
-                    Neuen Schritt / Meilenstein hinzufügen
-                  </label>
-                  <p className="text-[10px] text-slate-400">Gib einfach einen Meilenstein der Geschichte ein. Er wird automatisch am Ende der Liste als neuester Schritt sortiert.</p>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text"
-                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-3 text-white text-sm outline-none focus:border-amber-500 placeholder-slate-600"
-                      placeholder="z.B. Sie suchen den Informanten auf..."
-                      value={newEventStepText}
-                      onChange={e => setNewEventStepText(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleAddManualStep();
-                        }
-                      }}
-                    />
+                {/* Input field to add / edit manual steps sequence */}
+                <div className="flex flex-col gap-4 bg-slate-800/10 border border-slate-800 rounded-xl p-5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-slate-300 font-bold uppercase flex items-center gap-1.5">
+                      <i className="fa-solid fa-plus-circle text-indigo-400"></i>
+                      {editingStepId ? 'Station bearbeiten' : 'Neue Station / Meilenstein manuell hinzufügen'}
+                    </label>
+                    {editingStepId && (
+                      <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-bold animate-pulse">
+                        Bearbeitungsmodus aktiv
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400">Trage hier die Einzelheiten der Station ein. Sie wird der Timeline hinzugefügt oder aktualisiert.</p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Step Title Input */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Titel der Station (optional)</label>
+                      <input 
+                        type="text"
+                        className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
+                        placeholder="z.B. Das Geheimnis des Hehlers"
+                        value={newEventStepTitle}
+                        onChange={e => setNewEventStepTitle(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Step Branch Selector */}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Story-Strang</label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewEventStepBranch('main')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
+                            newEventStepBranch === 'main'
+                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/40'
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                          }`}
+                        >
+                          <i className="fa-solid fa-crown text-[10px] mr-1.5"></i> Hauptstory
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewEventStepBranch('side')}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
+                            newEventStepBranch === 'side'
+                              ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40'
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                          }`}
+                        >
+                          <i className="fa-solid fa-compass text-[10px] mr-1.5"></i> Nebenquest
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Step Unlock Conditions */}
+                    <div className="flex flex-col gap-1 md:col-span-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Freischalt-Bedingungen (optional)</label>
+                      <input 
+                        type="text"
+                        className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
+                        placeholder="z.B. Kapitel 1 abgeschlossen ODER Hehler befragt"
+                        value={newEventStepConditions}
+                        onChange={e => setNewEventStepConditions(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Step Chat Instruction */}
+                    <div className="flex flex-col gap-1 md:col-span-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Dungeon Master Chat-Anweisung</label>
+                      <input 
+                        type="text"
+                        className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
+                        placeholder="z.B. Hinterhalt von 2 Spinnen im Chat starten"
+                        value={newEventStepChatInstruction}
+                        onChange={e => setNewEventStepChatInstruction(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Step Description/Text */}
+                    <div className="flex flex-col gap-1 md:col-span-2">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Beschreibung des Ablaufs <span className="text-red-500">*</span></label>
+                      <AutoExpandingTextarea 
+                        className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700 min-h-[64px]"
+                        placeholder="Beschreibe im Detail, was in dieser Station passieren soll..."
+                        value={newEventStepText}
+                        onChange={e => setNewEventStepText(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Reise- & Zeitdetails */}
+                    <div className="md:col-span-2 border-t border-slate-800/60 pt-3 mt-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Travel Path */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-amber-500/80 font-bold uppercase flex items-center gap-1">
+                          <i className="fa-solid fa-route text-[9px]"></i> Der Reise-Pfad / Stationen
+                        </label>
+                        <input 
+                          type="text"
+                          className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
+                          placeholder="z.B. Von Eldoria nach Silberhafen"
+                          value={newEventStepTravelPath}
+                          onChange={e => setNewEventStepTravelPath(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Travel Duration Days */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-amber-500/80 font-bold uppercase flex items-center gap-1">
+                          <i className="fa-solid fa-hourglass-half text-[9px]"></i> Reise-Dauer (in Tagen)
+                        </label>
+                        <input 
+                          type="number"
+                          min="0"
+                          className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
+                          placeholder="z.B. 3"
+                          value={newEventStepTravelDurationDays}
+                          onChange={e => setNewEventStepTravelDurationDays(e.target.value === '' ? '' : Number(e.target.value))}
+                        />
+                      </div>
+
+                      {/* Time of Day */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-amber-500/80 font-bold uppercase flex items-center gap-1">
+                          <i className="fa-solid fa-clock text-[9px]"></i> Uhrzeit
+                        </label>
+                        <input 
+                          type="text"
+                          className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
+                          placeholder="z.B. 14:00 Uhr oder Dämmerung"
+                          value={newEventStepTimeOfDay}
+                          onChange={e => setNewEventStepTimeOfDay(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 justify-end mt-2">
+                    {editingStepId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelEditStep}
+                        className="px-4 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-bold transition-all"
+                      >
+                        Abbrechen
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={handleAddManualStep}
                       disabled={!newEventStepText.trim()}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0"
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                        editingStepId
+                          ? 'bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white'
+                          : 'bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white'
+                      }`}
                     >
-                      <i className="fa-solid fa-plus"></i> Hinzufügen
+                      {editingStepId ? (
+                        <>
+                          <i className="fa-solid fa-floppy-disk"></i> Station aktualisieren
+                        </>
+                      ) : (
+                        <>
+                          <i className="fa-solid fa-plus"></i> Station hinzufügen
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
 
-                {/* Sorted list of steps */}
+                {/* Flowchart Section */}
                 <div className="flex flex-col gap-3">
                   <h4 className="text-xs text-slate-350 font-bold uppercase tracking-wider flex items-center justify-between">
-                    <span>Meilensteine / Roter Faden der Geschichte (Geordnete Liste)</span>
+                    <span>Dynamisches Flussdiagramm (Hauptstory & Nebenquests)</span>
                     {editForm.details?.eventSteps && editForm.details.eventSteps.length > 0 && (
                       <span className="text-[10px] text-slate-500 font-mono normal-case">{editForm.details.eventSteps.length} Stationen</span>
                     )}
                   </h4>
 
                   {editForm.details?.eventSteps && editForm.details.eventSteps.length > 0 ? (
-                    <div className="flex flex-col gap-2.5">
-                      {editForm.details.eventSteps.map((step: any, idx: number) => (
-                        <div key={step.id || `ev-step-edit-${idx}`} className="flex items-start gap-3 p-4 bg-slate-950/60 border border-slate-800/80 hover:border-slate-700 rounded-xl group relative transition-colors">
-                          <div className="h-6 w-6 rounded-full bg-amber-500/10 border border-amber-500/25 flex items-center justify-center text-[10px] font-mono font-extrabold text-amber-500 shrink-0 select-none mt-0.5">
-                            {idx + 1}
-                          </div>
-                          
-                          <div className="flex-1 min-w-0">
-                            {/* Editable text of this step inline */}
-                            <textarea
-                              rows={1}
-                              className="w-full bg-transparent border-none text-slate-200 text-sm p-0 focus:ring-0 outline-none resize-none font-medium h-auto leading-relaxed"
-                              value={step.description || ''}
-                              onChange={e => handleUpdateStepText(step.id, e.target.value)}
-                              placeholder="Beschreibung dieser Station..."
-                              style={{ height: 'auto' }}
-                              onInput={(e: any) => {
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                              }}
-                            />
-                            
-                            {/* Step Controls */}
-                            <div className="flex gap-2.5 mt-2 items-center">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleStepStatus(step.id)}
-                                className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md border flex items-center gap-1 transition-all ${
+                    <div className="relative border border-slate-800/80 bg-slate-950/40 rounded-2xl p-4 md:p-6 overflow-hidden">
+                      {/* Flowchart vertical line */}
+                      <div className="absolute top-0 bottom-0 left-[21px] md:left-1/2 w-0.5 bg-gradient-to-b from-amber-500/80 via-indigo-500/50 to-slate-800/20 pointer-events-none"></div>
+                      
+                      <div className="space-y-8 relative">
+                        {editForm.details.eventSteps.map((step: any, idx: number) => {
+                          const isMain = step.branch !== 'side';
+                          return (
+                            <div key={step.id || `flow-${idx}`} className={`flex flex-col md:flex-row items-stretch md:items-center ${isMain ? 'md:justify-start' : 'md:justify-end'} relative group`}>
+                              
+                              {/* Connector Bullet */}
+                              <div className="absolute left-[10px] md:left-1/2 md:-ml-3.5 top-3.5 md:top-1/2 md:-translate-y-1/2 z-10">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleStepStatus(step.id)}
+                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shadow-lg ${
+                                    step.status === 'happened'
+                                      ? 'bg-emerald-500 border-emerald-400 text-white hover:bg-emerald-600 scale-110 shadow-emerald-500/20'
+                                      : isMain
+                                      ? 'bg-slate-950 border-amber-500 text-amber-500 hover:border-amber-400 hover:text-amber-400'
+                                      : 'bg-slate-950 border-cyan-500 text-cyan-500 hover:border-cyan-400 hover:text-cyan-400'
+                                  }`}
+                                  title={step.status === 'happened' ? 'Erledigt (Zum Zurücksetzen klicken)' : 'Ausstehend (Als erledigt markieren)'}
+                                >
+                                  {step.status === 'happened' ? (
+                                    <i className="fa-solid fa-check text-[9px]"></i>
+                                  ) : (
+                                    <span className="text-[9px] font-bold font-mono">{idx + 1}</span>
+                                  )}
+                                </button>
+                              </div>
+
+                              {/* Card body */}
+                              <div className={`w-full md:w-[calc(50%-20px)] pl-10 md:pl-0 ${isMain ? 'md:pr-6' : 'md:pl-6'} transition-all`}>
+                                <div className={`p-4 rounded-xl border transition-all ${
                                   step.status === 'happened'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                  : 'bg-slate-950 text-amber-500/80 border-slate-800 hover:bg-slate-800'
-                                }`}
-                              >
-                                {step.status === 'happened' ? (
-                                  <>
-                                    <i className="fa-solid fa-circle-check text-emerald-400"></i>
-                                    Eintretend / Erledigt
-                                  </>
-                                ) : (
-                                  <>
-                                    <i className="fa-solid fa-hourglass-half text-amber-500/60"></i>
-                                    Ausstehend / Geplant
-                                  </>
-                                )}
-                              </button>
+                                    ? 'bg-emerald-950/15 border-emerald-800/40 hover:border-emerald-700/60 shadow-md shadow-emerald-950/10'
+                                    : isMain
+                                    ? 'bg-slate-900/90 border-amber-500/20 hover:border-amber-500/40 shadow-sm shadow-amber-950/5'
+                                    : 'bg-slate-900/90 border-cyan-500/20 hover:border-cyan-500/40 shadow-sm shadow-cyan-950/5'
+                                }`}>
+                                  {/* Header with Title and Branch Badge */}
+                                  <div className="flex items-center justify-between gap-2 border-b border-slate-800/50 pb-2 mb-2.5">
+                                    <span className="font-bold text-sm text-slate-100 font-sans tracking-tight truncate max-w-[150px] md:max-w-[180px]">
+                                      {step.title || `Station #${idx + 1}`}
+                                    </span>
+                                    
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                                        isMain
+                                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                          : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
+                                      }`}>
+                                        {isMain ? 'Hauptstory' : 'Nebenquest'}
+                                      </span>
+                                      <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                                        step.status === 'happened'
+                                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                          : 'bg-slate-950 text-slate-400 border border-slate-800'
+                                      }`}>
+                                        {step.status === 'happened' ? 'Erledigt' : 'Geplant'}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Description (Full read text as requested) */}
+                                  <p className="text-xs text-slate-300 leading-relaxed font-sans whitespace-pre-wrap mb-3 select-text">
+                                    {step.description}
+                                  </p>
+
+                                  {/* Travel & Time Details */}
+                                  {(step.travelPath || step.travelDurationDays !== undefined || step.timeOfDay) && (
+                                    <div className="bg-amber-950/10 border border-amber-500/10 rounded-lg p-2.5 mb-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
+                                      {step.travelPath && (
+                                        <div className="sm:col-span-3 flex items-start gap-1.5 border-b border-amber-500/5 pb-1.5 mb-0.5">
+                                          <i className="fa-solid fa-route text-amber-500 text-[10px] mt-1"></i>
+                                          <div className="flex-1 min-w-0">
+                                            <span className="text-[9px] text-amber-500/80 font-bold block uppercase tracking-wider leading-none mb-0.5">Reise-Pfad / Stationen</span>
+                                            <span className="text-[11px] text-slate-300 font-medium leading-tight">{step.travelPath}</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {step.travelDurationDays !== undefined && (
+                                        <div className="flex items-start gap-1.5">
+                                          <i className="fa-solid fa-hourglass-half text-amber-500 text-[10px] mt-1"></i>
+                                          <div>
+                                            <span className="text-[9px] text-amber-500/80 font-bold block uppercase tracking-wider leading-none mb-0.5">Reise-Dauer</span>
+                                            <span className="text-[11px] text-slate-300 font-medium font-mono">{step.travelDurationDays} {step.travelDurationDays === 1 ? 'Tag' : 'Tage'}</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                      {step.timeOfDay && (
+                                        <div className="flex items-start gap-1.5 sm:col-span-2">
+                                          <i className="fa-solid fa-clock text-amber-500 text-[10px] mt-1"></i>
+                                          <div>
+                                            <span className="text-[9px] text-amber-500/80 font-bold block uppercase tracking-wider leading-none mb-0.5">Uhrzeit / Tageszeit</span>
+                                            <span className="text-[11px] text-slate-300 font-medium">{step.timeOfDay}</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Unlock Conditions */}
+                                  {step.unlockConditions && step.unlockConditions !== 'Keine' && (
+                                    <div className="bg-slate-950/50 border border-slate-800/60 rounded-lg p-2.5 mb-2 flex items-start gap-2">
+                                      <i className="fa-solid fa-key text-yellow-500 text-[10px] mt-0.5"></i>
+                                      <div className="flex-1 min-w-0">
+                                        <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider leading-none mb-1">Freischalt-Bedingung</span>
+                                        <span className="text-[11px] text-slate-300 leading-normal">{step.unlockConditions}</span>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Chat instruction for Dungeon Master */}
+                                  {step.chatInstruction && (
+                                    <div className="bg-indigo-950/15 border border-indigo-500/15 rounded-lg p-2.5 mb-2 flex items-start gap-2">
+                                      <i className="fa-solid fa-message-bot text-indigo-400 text-[10px] mt-0.5"></i>
+                                      <div className="flex-1 min-w-0">
+                                        <span className="text-[10px] text-indigo-400 font-bold block uppercase tracking-wider leading-none mb-1">Chat-Anweisung (Dungeon Master)</span>
+                                        <span className="text-[11px] text-indigo-300 leading-normal">{step.chatInstruction}</span>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Controls */}
+                                  <div className="flex items-center justify-between gap-2 border-t border-slate-800/40 pt-2 mt-2">
+                                    <div className="flex gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={idx === 0}
+                                        onClick={() => handleMoveStep(idx, idx - 1)}
+                                        className="w-6 h-6 flex items-center justify-center rounded bg-slate-950 border border-slate-800 text-slate-400 hover:text-white disabled:opacity-10 transition-all text-[9px]"
+                                        title="Nach oben verschieben"
+                                      >
+                                        <i className="fa-solid fa-arrow-up"></i>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={idx === editForm.details.eventSteps.length - 1}
+                                        onClick={() => handleMoveStep(idx, idx + 1)}
+                                        className="w-6 h-6 flex items-center justify-center rounded bg-slate-950 border border-slate-800 text-slate-400 hover:text-white disabled:opacity-10 transition-all text-[9px]"
+                                        title="Nach unten verschieben"
+                                      >
+                                        <i className="fa-solid fa-arrow-down"></i>
+                                      </button>
+                                    </div>
+
+                                    <div className="flex gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditStep(step)}
+                                        className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 transition-all ${
+                                          editingStepId === step.id
+                                            ? 'bg-amber-600 text-white'
+                                            : 'bg-slate-950 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900'
+                                        }`}
+                                      >
+                                        <i className="fa-solid fa-pen text-[8px]"></i> Bearbeiten
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteStep(step.id)}
+                                        className="px-2 py-1 text-[10px] font-bold rounded bg-slate-950 border border-slate-800 text-red-400 hover:bg-red-500/10 hover:border-red-500/20 transition-all flex items-center gap-1"
+                                      >
+                                        <i className="fa-solid fa-trash text-[8px]"></i> Löschen
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          
-                          {/* Reordering and deleting buttons, nicely placed on hover */}
-                          <div className="flex gap-1 shrink-0 opacity-40 group-hover:opacity-100 transition-opacity">
-                            <button
-                              type="button"
-                              disabled={idx === 0}
-                              onClick={() => handleMoveStep(idx, idx - 1)}
-                              className="w-6 h-6 flex items-center justify-center rounded bg-slate-900 border border-slate-850 text-slate-400 hover:text-white disabled:opacity-10"
-                              title="Nach oben verschieben"
-                            >
-                              <i className="fa-solid fa-arrow-up text-[8px]"></i>
-                            </button>
-                            <button
-                              type="button"
-                              disabled={idx === editForm.details.eventSteps.length - 1}
-                              onClick={() => handleMoveStep(idx, idx + 1)}
-                              className="w-6 h-6 flex items-center justify-center rounded bg-slate-900 border border-slate-850 text-slate-400 hover:text-white disabled:opacity-10"
-                              title="Nach unten verschieben"
-                            >
-                              <i className="fa-solid fa-arrow-down text-[8px]"></i>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStep(step.id)}
-                              className="w-6 h-6 flex items-center justify-center rounded bg-slate-900 border border-slate-850 text-red-400 hover:bg-red-500/10"
-                              title="Löschen"
-                            >
-                              <i className="fa-solid fa-trash-can text-[8px]"></i>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                          );
+                        })}
+                      </div>
                     </div>
                   ) : (
                     <div className="text-center p-8 border border-dashed border-slate-800 rounded-2xl text-slate-500 text-xs bg-slate-950/20">
                       <i className="fa-solid fa-route text-2xl mb-2 text-slate-700"></i>
                       <p>Noch keine Schritte vorhanden.</p>
-                      <p className="text-[10px] text-slate-600 mt-1">Verwende das obige Smart Fill oder füge einen Schritt manuell hinzu.</p>
+                      <p className="text-[10px] text-slate-600 mt-1">Verwende das obige Smart Fill oder füge eine Station manuell hinzu.</p>
                     </div>
                   )}
                 </div>
@@ -1915,89 +2332,81 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
             )}
 
             {/* Geheimnisse & Verborgenes Wissen (3-Stufen-Logik) */}
-            <div className="mt-4 p-5 bg-slate-950/60 border border-slate-800/80 rounded-2xl space-y-4">
-              <div className="flex items-center gap-2.5 border-b border-slate-800 pb-2.5">
-                <i className="fa-solid fa-user-shield text-amber-500 text-base"></i>
-                <div>
-                  <h4 className="text-xs text-slate-200 font-extrabold uppercase tracking-wider">Geheimnisse & Verborgenes Wissen (3-Stufen-Logik)</h4>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Verwalte hier das Metawissen der KI. Die Stufen steuern, wie tief das Wissen im Chat verborgen bleibt.</p>
+            {!['Events', 'Gegenstände'].includes(currentCategory) && (
+              <div className="mt-4 p-5 bg-slate-950/60 border border-slate-800/80 rounded-2xl space-y-4">
+                <div className="flex items-center gap-2.5 border-b border-slate-800 pb-2.5">
+                  <i className="fa-solid fa-user-shield text-amber-500 text-base"></i>
+                  <div>
+                    <h4 className="text-xs text-slate-200 font-extrabold uppercase tracking-wider">Geheimnisse & Verborgenes Wissen (3-Stufen-Logik)</h4>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Verwalte hier das Metawissen der KI. Die Stufen steuern, wie tief das Wissen im Chat verborgen bleibt.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5">
+                  {/* Stufe 1 */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Stufe 1: Öffentliches Wissen
+                    </label>
+                    <p className="text-[9px] text-slate-500 leading-tight mb-1">Für alle NPCs und Charaktere von Anfang an bekannt.</p>
+                    <AutoExpandingTextarea 
+                      className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
+                      placeholder="z.B. Er ist ein registrierter Abenteurer, besitzt ein blaues Schwert..."
+                      value={editForm.secretsStage1 || ''}
+                      onChange={e => setEditForm(prev => ({ ...prev, secretsStage1: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Stufe 2 */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-purple-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Stufe 2: Indizien & Verdacht
+                    </label>
+                    <p className="text-[9px] text-slate-500 leading-tight mb-1">NPCs wissen es nicht direkt, dürfen aber vorsichtig nachforschen.</p>
+                    <AutoExpandingTextarea 
+                      className="w-full bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
+                      placeholder="z.B. Er schaut oft nervös auf seine Taschenuhr, wenn das Wort 'Zeit' fällt..."
+                      value={editForm.secretsStage2 || ''}
+                      onChange={e => setEditForm(prev => ({ ...prev, secretsStage2: e.target.value }))}
+                    />
+                  </div>
+
+                  {/* Stufe 3 */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] text-red-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span> Stufe 3: Absolutes Geheimnis
+                    </label>
+                    <p className="text-[9px] text-slate-500 leading-tight mb-1">Absolute Blackbox. Für NPCs streng tabu, bis es bewiesen wird.</p>
+                    <AutoExpandingTextarea 
+                      className="w-full bg-slate-900 border border-slate-800 focus:border-red-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
+                      placeholder="z.B. Er ist in Wahrheit der gesuchte Schattenmagier, der vor 5 Jahren floh..."
+                      value={editForm.secretsStage3 || ''}
+                      onChange={e => setEditForm(prev => ({ ...prev, secretsStage3: e.target.value }))}
+                    />
+                  </div>
                 </div>
               </div>
+            )}
 
-              <div className="grid grid-cols-1 gap-5">
-                {/* Stufe 1 */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Stufe 1: Öffentliches Wissen
+            {activeCategory !== 'Events' && (
+              <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-800/50">
+                <div className="flex items-center gap-3">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={editForm.isUnlocked !== false}
+                      onChange={e => setEditForm(prev => ({ ...prev, isUnlocked: e.target.checked }))}
+                    />
+                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 peer-checked:after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
                   </label>
-                  <p className="text-[9px] text-slate-500 leading-tight mb-1">Für alle NPCs und Charaktere von Anfang an bekannt.</p>
-                  <AutoExpandingTextarea 
-                    className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
-                    placeholder="z.B. Er ist ein registrierter Abenteurer, besitzt ein blaues Schwert..."
-                    value={editForm.secretsStage1 || ''}
-                    onChange={e => setEditForm(prev => ({ ...prev, secretsStage1: e.target.value }))}
-                  />
-                </div>
-
-                {/* Stufe 2 */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-purple-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Stufe 2: Indizien & Verdacht
-                  </label>
-                  <p className="text-[9px] text-slate-500 leading-tight mb-1">NPCs wissen es nicht direkt, dürfen aber vorsichtig nachforschen.</p>
-                  <AutoExpandingTextarea 
-                    className="w-full bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
-                    placeholder="z.B. Er schaut oft nervös auf seine Taschenuhr, wenn das Wort 'Zeit' fällt..."
-                    value={editForm.secretsStage2 || ''}
-                    onChange={e => setEditForm(prev => ({ ...prev, secretsStage2: e.target.value }))}
-                  />
-                </div>
-
-                {/* Stufe 3 */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-red-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span> Stufe 3: Absolutes Geheimnis
-                  </label>
-                  <p className="text-[9px] text-slate-500 leading-tight mb-1">Absolute Blackbox. Für NPCs streng tabu, bis es bewiesen wird.</p>
-                  <AutoExpandingTextarea 
-                    className="w-full bg-slate-900 border border-slate-800 focus:border-red-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
-                    placeholder="z.B. Er ist in Wahrheit der gesuchte Schattenmagier, der vor 5 Jahren floh..."
-                    value={editForm.secretsStage3 || ''}
-                    onChange={e => setEditForm(prev => ({ ...prev, secretsStage3: e.target.value }))}
-                  />
+                  <div>
+                    <div className="text-sm text-slate-200 font-medium">Sofort verfügbar</div>
+                    <div className="text-[10px] text-slate-500">Ist dies dem Spieler zu Beginn bereits bekannt?</div>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-800/50">
-              <div className="flex items-center gap-3">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    className="sr-only peer"
-                    checked={editForm.isUnlocked !== false}
-                    onChange={e => setEditForm(prev => ({ ...prev, isUnlocked: e.target.checked }))}
-                  />
-                  <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 peer-checked:after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
-                </label>
-                <div>
-                  <div className="text-sm text-slate-200 font-medium">Sofort verfügbar</div>
-                  <div className="text-[10px] text-slate-500">Ist dies dem Spieler zu Beginn bereits bekannt?</div>
-                </div>
-              </div>
-
-              {currentCategory === 'Events' && (
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Chronologie-Nummer</label>
-                  <input 
-                    type="number"
-                    className="bg-slate-950 border border-slate-800 rounded p-2 w-20 text-white text-center"
-                    value={editForm.order || 0}
-                    onChange={e => setEditForm(prev => ({ ...prev, order: parseInt(e.target.value) || 0 }))}
-                  />
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           {/* Dynamic Duplicate Warning */}
@@ -2035,121 +2444,112 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
             return null;
           })()}
 
-          <div className="flex gap-4 justify-end mt-4">
-            {isEditing && (
+          {activeCategory !== 'Events' && (
+            <div className="flex gap-4 justify-end mt-4">
+              {isEditing && (
+                <button 
+                  onClick={() => { setIsEditing(null); setEditForm({ category: activeCategory }); }}
+                  className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-bold transition-colors"
+                >
+                  Abbrechen
+                </button>
+              )}
               <button 
-                onClick={() => { setIsEditing(null); setEditForm({ category: activeCategory }); }}
-                className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-bold transition-colors"
+                onClick={handleSave}
+                className={`px-8 py-2 rounded-xl text-sm font-bold transition-all shadow-lg text-white ${!editForm.title || !editForm.description ? 'bg-amber-600/50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-500 active:scale-95'}`}
               >
-                Abbrechen
+                {isEditing ? 'Änderungen Speichern' : `${activeCategory} Hinzufügen`}
               </button>
-            )}
-            <button 
-              onClick={handleSave}
-              className={`px-8 py-2 rounded-xl text-sm font-bold transition-all shadow-lg text-white ${!editForm.title || !editForm.description ? 'bg-amber-600/50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-500 active:scale-95'}`}
-            >
-              {isEditing ? 'Änderungen Speichern' : `${activeCategory} Hinzufügen`}
-            </button>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Database List */}
-        <div className="flex flex-col gap-4 mt-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-             <h3 className="text-xl font-bold text-slate-100">Bestehende {activeCategory}</h3>
-          </div>
-          
-          <div className="relative">
-            <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
-            <input
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl py-3 pl-11 pr-4 text-sm text-white focus:border-amber-500 outline-none transition-colors shadow-sm"
-              placeholder={`Suche in ${activeCategory}...`}
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-          </div>
+        {activeCategory !== 'Events' && (
+          <div className="flex flex-col gap-4 mt-6">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+               <h3 className="text-xl font-bold text-slate-100">Bestehende {activeCategory}</h3>
+            </div>
+            
+            <div className="relative">
+              <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+              <input
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl py-3 pl-11 pr-4 text-sm text-white focus:border-amber-500 outline-none transition-colors shadow-sm"
+                placeholder={`Suche in ${activeCategory}...`}
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
+            </div>
 
-          <div className="space-y-3">
-            {filteredLore.length === 0 ? (
-              <div className="text-center p-12 bg-slate-900/50 rounded-2xl border border-slate-800 border-dashed text-slate-500 flex flex-col items-center gap-3">
-                <div className="w-16 h-16 bg-slate-800/50 rounded-full flex items-center justify-center">
-                  <i className="fa-solid fa-book-open text-2xl opacity-50"></i>
+            <div className="space-y-3">
+              {filteredLore.length === 0 ? (
+                <div className="text-center p-12 bg-slate-900/50 rounded-2xl border border-slate-800 border-dashed text-slate-500 flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 bg-slate-800/50 rounded-full flex items-center justify-center">
+                    <i className="fa-solid fa-book-open text-2xl opacity-50"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-slate-300 font-medium mb-1">Keine Einträge gefunden</h4>
+                    <p className="text-xs">Füge neue Elemente über das Formular hinzu.</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-slate-300 font-medium mb-1">Keine Einträge gefunden</h4>
-                  <p className="text-xs">Füge neue Elemente über das Formular hinzu.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {filteredLore.map((entry, idx) => (
-                  <div key={entry.id || `lore-${idx}`} onClick={() => handleEdit(entry)} className={`p-3 rounded-lg border transition-all flex items-center justify-between cursor-pointer hover:border-amber-500/50 ${
-                    entry.isUnlocked ? 'bg-slate-800/80 border-slate-700 shadow-sm' : 'bg-slate-900/50 border-slate-800 opacity-70'
-                  }`}>
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      {!entry.isUnlocked ? (
-                        <i className="fa-solid fa-lock text-slate-500 text-xs shrink-0" title="Noch geheim"></i>
-                      ) : (
-                        <i className="fa-solid fa-book text-amber-500/50 text-xs shrink-0"></i>
-                      )}
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {filteredLore.map((entry, idx) => (
+                    <div key={entry.id || `lore-${idx}`} onClick={() => handleEdit(entry)} className={`p-3 rounded-lg border transition-all flex items-center justify-between cursor-pointer hover:border-amber-500/50 ${
+                      entry.isUnlocked ? 'bg-slate-800/80 border-slate-700 shadow-sm' : 'bg-slate-900/50 border-slate-800 opacity-70'
+                    }`}>
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        {!entry.isUnlocked ? (
+                          <i className="fa-solid fa-lock text-slate-500 text-xs shrink-0" title="Noch geheim"></i>
+                        ) : (
+                          <i className="fa-solid fa-book text-amber-500/50 text-xs shrink-0"></i>
+                        )}
+                        
+                        <div className="flex items-center gap-2 truncate">
+                          <h3 className="text-sm font-bold text-amber-500 truncate">{entry.title}</h3>
+                          {(activeCategory === 'Charaktere' || activeCategory === 'Gegner') && entry.details?.role && (
+                            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full border border-indigo-500/30 truncate shrink-0">{entry.details.role}</span>
+                          )}
+                          {(activeCategory === 'Charaktere' || activeCategory === 'Gegner') && entry.details?.rufName && (
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 truncate shrink-0 font-medium">Rufname: {entry.details.rufName}</span>
+                          )}
+                          {activeCategory === 'Fraktionen' && (() => {
+                            const count = lore.filter(l => 
+                              (l.category === 'Charaktere' || l.category === 'Gegner') && 
+                              l.details?.faction && 
+                              l.details.faction.trim().toLowerCase() === entry.title.trim().toLowerCase()
+                            ).length;
+                            return count > 0 ? (
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-500/30 shrink-0 font-medium">
+                                {count} {count === 1 ? 'Mitglied' : 'Mitglieder'}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded-full border border-slate-800 shrink-0 font-medium font-mono">
+                                0 Mitglieder
+                              </span>
+                            );
+                          })()}
+                          {activeCategory === 'Gegenstände' && entry.details?.owner && (
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 truncate shrink-0 font-medium flex items-center gap-1">
+                              <i className="fa-solid fa-user text-[9px] text-amber-400"></i>
+                              Besitzer: {entry.details.owner}
+                            </span>
+                          )}
+
+                        </div>
+                      </div>
                       
-                      <div className="flex items-center gap-2 truncate">
-                        <h3 className="text-sm font-bold text-amber-500 truncate">{entry.title}</h3>
-                        {activeCategory === 'Events' && entry.order !== undefined && (
-                          <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300 font-mono shrink-0">#{entry.order}</span>
-                        )}
-                        {activeCategory === 'Events' && entry.details?.eventSteps && entry.details.eventSteps.length > 0 && (() => {
-                          const steps = entry.details.eventSteps;
-                          const doneCount = steps.filter((s: any) => s.status === 'happened').length;
-                          return (
-                            <span className="text-[10px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded-full border border-indigo-500/30 shrink-0 font-medium flex items-center gap-1.5 shadow-sm">
-                              <i className="fa-solid fa-route text-[9px] text-amber-500/80"></i>
-                              {doneCount}/{steps.length} Stationen
-                            </span>
-                          );
-                        })()}
-                        {(activeCategory === 'Charaktere' || activeCategory === 'Gegner') && entry.details?.role && (
-                          <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full border border-indigo-500/30 truncate shrink-0">{entry.details.role}</span>
-                        )}
-                        {(activeCategory === 'Charaktere' || activeCategory === 'Gegner') && entry.details?.rufName && (
-                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 truncate shrink-0 font-medium">Rufname: {entry.details.rufName}</span>
-                        )}
-                        {activeCategory === 'Fraktionen' && (() => {
-                          const count = lore.filter(l => 
-                            (l.category === 'Charaktere' || l.category === 'Gegner') && 
-                            l.details?.faction && 
-                            l.details.faction.trim().toLowerCase() === entry.title.trim().toLowerCase()
-                          ).length;
-                          return count > 0 ? (
-                            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-500/30 shrink-0 font-medium">
-                              {count} {count === 1 ? 'Mitglied' : 'Mitglieder'}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded-full border border-slate-800 shrink-0 font-medium font-mono">
-                              0 Mitglieder
-                            </span>
-                          );
-                        })()}
-                        {activeCategory === 'Gegenstände' && entry.details?.owner && (
-                          <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 truncate shrink-0 font-medium flex items-center gap-1">
-                            <i className="fa-solid fa-user text-[9px] text-amber-400"></i>
-                            Besitzer: {entry.details.owner}
-                          </span>
-                        )}
-
+                      <div className="flex gap-1 shrink-0 bg-slate-900/50 rounded-lg border border-slate-800 p-1 ml-2">
+                        <button onClick={(e) => { e.stopPropagation(); handleEdit(entry); }} className="p-1 w-7 h-7 flex items-center justify-center text-indigo-400 hover:bg-slate-800 hover:text-indigo-300 rounded transition-colors" title="Bearbeiten / Details ansehen"><i className="fa-solid fa-pen text-xs"></i></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }} className="p-1 w-7 h-7 flex items-center justify-center text-red-400 hover:bg-slate-800 hover:text-red-300 rounded transition-colors" title="Löschen"><i className="fa-solid fa-trash text-xs"></i></button>
                       </div>
                     </div>
-                    
-                    <div className="flex gap-1 shrink-0 bg-slate-900/50 rounded-lg border border-slate-800 p-1 ml-2">
-                      <button onClick={(e) => { e.stopPropagation(); handleEdit(entry); }} className="p-1 w-7 h-7 flex items-center justify-center text-indigo-400 hover:bg-slate-800 hover:text-indigo-300 rounded transition-colors" title="Bearbeiten / Details ansehen"><i className="fa-solid fa-pen text-xs"></i></button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }} className="p-1 w-7 h-7 flex items-center justify-center text-red-400 hover:bg-slate-800 hover:text-red-300 rounded transition-colors" title="Löschen"><i className="fa-solid fa-trash text-xs"></i></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
