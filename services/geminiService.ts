@@ -825,7 +825,21 @@ ANWEISUNGEN:
         powerCost: { type: Type.STRING, description: "Kosten oder Limitierungen der Kraft, z.B. Ausdauer, MP, Lebensenergie, Nebenwirkungen." },
         skills: { type: Type.STRING, description: "Die eigentliche Spezialfähigkeit oder Kraft detailliert beschrieben." },
         profession: { type: Type.STRING, description: "Hauptberuf oder Spezialisierung des Charakters." },
-        jobTitle: { type: Type.STRING, description: "Gilde, Organisation, Titel oder Rang des Charakters." },
+        professionLevel: { type: Type.STRING, description: "Berufslevel oder Ausbildungsgrad (z.B. Lehrling, Geselle, Experte, Meister, Großmeister, Autodidakt)." },
+        secondaryProfessions: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              profession: { type: Type.STRING, description: "Nebenberuf oder Zweitausbildung." },
+              professionLevel: { type: Type.STRING, description: "Ausbildungsgrad im Nebenberuf (z.B. Geselle, Autodidakt, Anfänger)." },
+              jobTitle: { type: Type.STRING, description: "Position, Titel oder Rang im Nebenberuf." },
+              description: { type: Type.STRING, description: "Aufgaben und Fähigkeiten im Nebenberuf." }
+            }
+          },
+          description: "Liste weiterer Nebenberufe und Nebenqualifikationen des Charakters."
+        },
+        jobTitle: { type: Type.STRING, description: "Gilde, Organisation, Position, Titel oder Rang des Charakters." },
         professionDescription: { type: Type.STRING, description: "Beschreibung der beruflichen Pflichten, Tätigkeiten und Arbeitsalltag." },
         craftingSkills: { type: Type.STRING, description: "Handwerk, Fertigung & Nebenberufe (z.B. Schmieden, Trankbrauen, Kochen)." },
         talents: { type: Type.STRING, description: "Spezielle Talente und Fachwissen (z.B. Schlösser knacken, Feilschen, Kartografie)." },

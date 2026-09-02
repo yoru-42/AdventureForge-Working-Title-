@@ -460,6 +460,18 @@ export interface CharacterConduct {
   behavior: string;
 }
 
+export interface SecondaryProfession {
+  id: string;
+  profession: string;
+  professionLevel?: string;
+  jobTitle?: string;
+  description?: string;
+  proficiencyScore?: number;
+  experiencePoints?: number;
+  experienceText?: string;
+  promotionConditions?: string;
+}
+
 export interface Character {
   name: string;
   nickname?: string;
@@ -478,11 +490,19 @@ export interface Character {
   expressions?: Record<string, string>;
   skills?: string;
   profession?: string;
+  professionLevel?: string;
+  secondaryProfessions?: SecondaryProfession[];
   jobTitle?: string;
   professionDescription?: string;
+  professionProficiencyScore?: number;
+  professionExperiencePoints?: number;
+  professionExperienceText?: string;
+  professionPromotionConditions?: string;
   craftingSkills?: string;
   talents?: string;
   everydaySkills?: string;
+  everydaySkillsProficiencyScore?: number;
+  everydaySkillsExperienceText?: string;
   toolsAndEquipment?: string;
   powerName?: string;
   powerDescription?: string;

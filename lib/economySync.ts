@@ -458,8 +458,214 @@ export const syncEconomyWithWorld = (
     }
   }
 
+  // 4. Synchronize faction & lore members into key personnel / roles for each holding
+  updatedHoldings = updatedHoldings.map(h => {
+    const { updatedRoles, changed: rolesChanged } = syncHoldingRolesFromLoreMembers(h, loreDatabase);
+    if (rolesChanged) {
+      changed = true;
+      return { ...h, roles: updatedRoles };
+    }
+    return h;
+  });
+
   return { 
     updatedEconomy: changed ? { ...economy, holdings: updatedHoldings } : economy, 
     changed 
   };
+};
+
+/**
+ * Synchronizes faction and lore database members into key personnel roles for a specific holding.
+ */
+export const syncHoldingRolesFromLoreMembers = (
+  holding: EconomyHolding,
+  loreDatabase: LoreEntry[]
+): { updatedRoles: EconomyRole[]; changed: boolean } => {
+  let changed = false;
+  const currentRoles: EconomyRole[] = [...(holding.roles || [])];
+
+  // 1. Find matching direct lore entry for this holding
+  const directLore = loreDatabase.find(l => 
+    l.id === holding.loreEntryId || 
+    l.title.trim().toLowerCase() === holding.name.trim().toLowerCase()
+  );
+
+  // 2. Find matching faction lore entry
+  const factionName = holding.ownerFactionName || holding.controlledByFactionName || directLore?.details?.faction || directLore?.details?.factionName;
+  const factionId = holding.ownerFactionId || holding.controlledByFactionId || directLore?.details?.ownerFactionId || directLore?.details?.controlledByFactionId;
+
+  const factionLore = loreDatabase.find(l => 
+    l.category === 'Fraktionen' && (
+      (factionId && l.id === factionId) ||
+      (factionName && l.title?.trim().toLowerCase() === factionName.trim().toLowerCase())
+    )
+  );
+
+  // Collect raw members from direct lore entry AND faction lore entry
+  const rawMembers: Array<{
+    id?: string;
+    name: string;
+    job?: string;
+    tasks?: string;
+    characterId?: string;
+  }> = [];
+
+  // Direct lore entry members
+  if (directLore?.details?.members && Array.isArray(directLore.details.members)) {
+    directLore.details.members.forEach((m: any) => {
+      if (m.name && m.name.trim()) {
+        rawMembers.push({
+          id: m.id,
+          name: m.name.trim(),
+          job: m.job || m.role,
+          tasks: m.tasks || m.duties,
+          characterId: m.characterId
+        });
+      }
+    });
+  }
+
+  // Faction lore entry members
+  if (factionLore?.details?.members && Array.isArray(factionLore.details.members)) {
+    factionLore.details.members.forEach((m: any) => {
+      if (m.name && m.name.trim()) {
+        rawMembers.push({
+          id: m.id,
+          name: m.name.trim(),
+          job: m.job || m.role,
+          tasks: m.tasks || m.duties,
+          characterId: m.characterId
+        });
+      }
+    });
+  }
+
+  // Codex Characters matching this faction or location
+  const holdingTitleLower = holding.name.trim().toLowerCase();
+  const factionTitleLower = factionLore?.title?.trim().toLowerCase() || (factionName ? factionName.trim().toLowerCase() : '');
+
+  loreDatabase.forEach(l => {
+    if (l.category === 'Charaktere' || l.category === 'Gegner') {
+      const charName = l.title?.trim();
+      if (!charName) return;
+
+      const d = l.details || {};
+      const cFaction = (d.faction || d.appearance?.faction || d.organization || d.guild || (l as any).faction || '').trim().toLowerCase();
+      const cLocation = (d.location || d.locationName || d.currentSituation || '').trim().toLowerCase();
+
+      const matchesFaction = factionTitleLower && cFaction && (cFaction === factionTitleLower || cFaction.includes(factionTitleLower));
+      const matchesLocation = holdingTitleLower && cLocation && (cLocation === holdingTitleLower || cLocation.includes(holdingTitleLower));
+
+      if (matchesFaction || matchesLocation) {
+        const charJob = d.profession || d.jobTitle || d.role || d.appearance?.role || d.job || 'Mitglied';
+        const charTasks = d.professionDescription || d.craftingSkills || d.talents || d.notes || '';
+        rawMembers.push({
+          id: `codex-${l.id}`,
+          name: charName,
+          job: charJob,
+          tasks: charTasks,
+          characterId: l.id
+        });
+      }
+    }
+  });
+
+  // Deduplicate rawMembers by normalized name
+  const memberMap = new Map<string, {
+    id?: string;
+    name: string;
+    job?: string;
+    tasks?: string;
+    characterId?: string;
+  }>();
+
+  rawMembers.forEach(m => {
+    const key = m.name.toLowerCase();
+    const existing = memberMap.get(key);
+    if (!existing) {
+      memberMap.set(key, m);
+    } else {
+      memberMap.set(key, {
+        id: existing.id || m.id,
+        name: existing.name,
+        job: (existing.job && existing.job !== 'Mitglied' && existing.job !== 'Mitarbeiter') ? existing.job : (m.job || existing.job),
+        tasks: existing.tasks || m.tasks,
+        characterId: existing.characterId || m.characterId
+      });
+    }
+  });
+
+  // Sync unique members into currentRoles
+  const updatedRoles = [...currentRoles];
+
+  memberMap.forEach(m => {
+    const normName = m.name.toLowerCase();
+    const existingRoleIndex = updatedRoles.findIndex(r => 
+      (r.assignedToName && r.assignedToName.trim().toLowerCase() === normName) ||
+      (m.characterId && r.assignedCharacterId === m.characterId)
+    );
+
+    const jobTitle = m.job && m.job.trim() ? m.job.trim() : 'Mitarbeiter';
+    const taskList = m.tasks && m.tasks.trim() ? [m.tasks.trim()] : [`Tätigkeiten als ${jobTitle}`];
+
+    if (existingRoleIndex !== -1) {
+      const existing = updatedRoles[existingRoleIndex];
+      let roleChanged = false;
+
+      if (existing.name !== jobTitle && jobTitle !== 'Mitarbeiter' && jobTitle !== 'Mitglied') {
+        existing.name = jobTitle;
+        roleChanged = true;
+      }
+
+      if (m.characterId && existing.assignedCharacterId !== m.characterId) {
+        existing.assignedCharacterId = m.characterId;
+        roleChanged = true;
+      }
+
+      if (m.tasks && (!existing.responsibilities || existing.responsibilities.length === 0 || existing.responsibilities[0] === `Tätigkeiten als ${existing.name}`)) {
+        existing.responsibilities = taskList;
+        roleChanged = true;
+      }
+
+      if (roleChanged) {
+        updatedRoles[existingRoleIndex] = { ...existing };
+        changed = true;
+      }
+    } else {
+      const jobLower = jobTitle.toLowerCase();
+      let defaultSalary = 15;
+      if (jobLower.includes('wirt') || jobLower.includes('verwalter') || jobLower.includes('besitzer') || jobLower.includes('leiter') || jobLower.includes('führung') || jobLower.includes('inhaber')) {
+        defaultSalary = 25;
+      } else if (jobLower.includes('hilfe') || jobLower.includes('diener') || jobLower.includes('magd')) {
+        defaultSalary = 8;
+      }
+
+      let area = 'Betriebsgelände';
+      if (jobLower.includes('koch') || jobLower.includes('küche')) area = 'Küche';
+      else if (jobLower.includes('wirt') || jobLower.includes('tresen') || jobLower.includes('schank')) area = 'Schankraum / Tresen';
+      else if (jobLower.includes('kurtisane') || jobLower.includes('unterhaltung') || jobLower.includes('tanz') || jobLower.includes('salon')) area = 'Salon / Empfang';
+      else if (jobLower.includes('wache') || jobLower.includes('schutz') || jobLower.includes('sicherheit')) area = 'Eingang & Sicherheit';
+
+      const authorities = ['Aufgaben & Pflichten delegieren'];
+      if (jobLower.includes('wirt') || jobLower.includes('verwalter') || jobLower.includes('leiter') || jobLower.includes('inhaber')) {
+        authorities.push('Tagesgeschäft leiten', 'Lagerbestände & Einkauf verwalten');
+      }
+
+      const newRole: EconomyRole = {
+        id: `role-mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        name: jobTitle,
+        assignedToName: m.name,
+        assignedCharacterId: m.characterId,
+        authorities,
+        responsibilities: taskList,
+        salary: defaultSalary,
+        workplaceArea: area
+      };
+
+      updatedRoles.push(newRole);
+      changed = true;
+    }
+  });
+
+  return { updatedRoles, changed };
 };

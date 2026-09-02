@@ -15,6 +15,8 @@ import { LocationSelector } from './LocationSelector';
 import { PersonalityTraitsEditor } from './PersonalityTraitsEditor';
 import { RelationshipDetailEditor } from './RelationshipDetailEditor';
 import CharacterPowerRadar from './CharacterPowerRadar';
+import ProfessionSelect from './ProfessionSelect';
+import CompetenceProfileEditor from './CompetenceProfileEditor';
 import { GeminiService } from '../services/geminiService';
 import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArchetypesData';
 import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore } from '../lib/relationshipHelper';
@@ -1099,12 +1101,15 @@ export const CharacterLoreForm: React.FC<Props> = ({
                 <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
                   Rolle / Beruf
                 </label>
-                <input 
-                  type="text" 
+                <ProfessionSelect
                   value={getDetail('role', '')} 
-                  onChange={e => updateDetail('role', e.target.value)}
-                  placeholder="z.B. Schattenmagierin, Waldläufer" 
-                  className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
+                  onChange={val => {
+                    updateDetail('role', val);
+                    if (!getDetail('profession', '')) {
+                      updateDetail('profession', val);
+                    }
+                  }}
+                  placeholder="Beruf wählen oder eintragen..." 
                 />
               </div>
             </div>
@@ -2738,100 +2743,41 @@ export const CharacterLoreForm: React.FC<Props> = ({
               <h4 className="text-sm font-bold text-slate-300">Berufe, Talente & Alltagskompetenzen</h4>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Hauptberuf */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                  Hauptberuf / Spezialisierung
-                </label>
-                <input 
-                  type="text" 
-                  value={getDetail('profession', getDetail('role', ''))} 
-                  onChange={e => updateDetail('profession', e.target.value)}
-                  placeholder="z.B. Schmiedemeister, Kräuterkundlerin, Händler" 
-                  className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
-                />
-              </div>
-
-              {/* Berufsbezeichnung / Rang */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                  Gilde / Organisation / Rang
-                </label>
-                <input 
-                  type="text" 
-                  value={getDetail('jobTitle', '')} 
-                  onChange={e => updateDetail('jobTitle', e.target.value)}
-                  placeholder="z.B. Obermeister der Händlergilde, Geselle, Freiberufler" 
-                  className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
-                />
-              </div>
-            </div>
-
-            {/* Tätigkeitsbeschreibung & Aufgaben */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                Tätigkeitsbeschreibung & Arbeitsalltag
-              </label>
-              <AutoExpandingTextarea 
-                value={getDetail('professionDescription', '')} 
-                onChange={e => updateDetail('professionDescription', e.target.value)}
-                placeholder="Beschreibung der täglichen beruflichen Pflichten, Tätigkeiten und Verantwortungsbereiche" 
-                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-              />
-            </div>
-
-            {/* Handwerk & Nebengewerbe */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                Handwerk, Fertigung & Nebenberufe
-              </label>
-              <AutoExpandingTextarea 
-                value={getDetail('craftingSkills', '')} 
-                onChange={e => updateDetail('craftingSkills', e.target.value)}
-                placeholder="z.B. Trankbrauen, Waffenschmieden, Lederverarbeitung, Schneidern, Kochen" 
-                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-              />
-            </div>
-
-            {/* Besondere Talente & Spezialwissen */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                Spezielle Talente & Wissen
-              </label>
-              <AutoExpandingTextarea 
-                value={getDetail('talents', '')} 
-                onChange={e => updateDetail('talents', e.target.value)}
-                placeholder="z.B. Lesen alter Glyphen, Feilschen, Schlösser knacken, Kartografie, Pflanzenkunde" 
-                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-              />
-            </div>
-
-            {/* Alltagskompetenzen & Fertigkeiten */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                Alltagskompetenzen & Praktische Fertigkeiten
-              </label>
-              <AutoExpandingTextarea 
-                value={getDetail('everydaySkills', '')} 
-                onChange={e => updateDetail('everydaySkills', e.target.value)}
-                placeholder="z.B. Reiten, Schwimmen, Musizieren, Instrumentenpflege, Orientierung im Gelände" 
-                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-              />
-            </div>
-
-            {/* Werkzeuge & Ausrüstung */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                Berufswerkzeuge, Lizenzen & Ausrüstung
-              </label>
-              <AutoExpandingTextarea 
-                value={getDetail('toolsAndEquipment', '')} 
-                onChange={e => updateDetail('toolsAndEquipment', e.target.value)}
-                placeholder="z.B. Meisterbrief, Alchemieset, Diebeswerkzeug, Kartografierbesteck, Handelslizenz" 
-                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-              />
-            </div>
+            <CompetenceProfileEditor
+              profession={getDetail('profession', getDetail('role', ''))}
+              onProfessionChange={val => {
+                updateDetail('profession', val);
+                updateDetail('role', val);
+              }}
+              professionLevel={getDetail('professionLevel', '')}
+              onProfessionLevelChange={val => updateDetail('professionLevel', val)}
+              professionProficiencyScore={getDetail('professionProficiencyScore', 0)}
+              onProfessionProficiencyScoreChange={val => updateDetail('professionProficiencyScore', val)}
+              professionExperiencePoints={getDetail('professionExperiencePoints', 0)}
+              onProfessionExperiencePointsChange={val => updateDetail('professionExperiencePoints', val)}
+              professionExperienceText={getDetail('professionExperienceText', '')}
+              onProfessionExperienceTextChange={val => updateDetail('professionExperienceText', val)}
+              professionPromotionConditions={getDetail('professionPromotionConditions', '')}
+              onProfessionPromotionConditionsChange={val => updateDetail('professionPromotionConditions', val)}
+              craftingSkills={getDetail('craftingSkills', '')}
+              onCraftingSkillsChange={val => updateDetail('craftingSkills', val)}
+              jobTitle={getDetail('jobTitle', '')}
+              onJobTitleChange={val => updateDetail('jobTitle', val)}
+              professionDescription={getDetail('professionDescription', '')}
+              onProfessionDescriptionChange={val => updateDetail('professionDescription', val)}
+              secondaryProfessions={getDetail('secondaryProfessions', [])}
+              onSecondaryProfessionsChange={val => updateDetail('secondaryProfessions', val)}
+              talents={getDetail('talents', '')}
+              onTalentsChange={val => updateDetail('talents', val)}
+              everydaySkills={getDetail('everydaySkills', '')}
+              onEverydaySkillsChange={val => updateDetail('everydaySkills', val)}
+              everydaySkillsProficiencyScore={getDetail('everydaySkillsProficiencyScore', 0)}
+              onEverydaySkillsProficiencyScoreChange={val => updateDetail('everydaySkillsProficiencyScore', val)}
+              everydaySkillsExperienceText={getDetail('everydaySkillsExperienceText', '')}
+              onEverydaySkillsExperienceTextChange={val => updateDetail('everydaySkillsExperienceText', val)}
+              toolsAndEquipment={getDetail('toolsAndEquipment', '')}
+              onToolsAndEquipmentChange={val => updateDetail('toolsAndEquipment', val)}
+            />
           </div>
         </div>
       )}

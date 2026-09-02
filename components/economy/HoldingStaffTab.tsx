@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { EconomyHolding, EconomyRole, EconomyStaffGroup, LoreEntry, NPC, WorldSetting } from '../../types';
 import { STANDARD_AUTHORITIES } from './EconomyPresets';
 import AutoExpandingTextarea from '../AutoExpandingTextarea';
+import ProfessionSelect from '../ProfessionSelect';
+import CharacterAssigneeSelect from '../CharacterAssigneeSelect';
 import { upgradeNamelessStaffToCharacter } from '../../services/geminiService';
+import { syncHoldingRolesFromLoreMembers } from '../../lib/economySync';
 
 interface HoldingStaffTabProps {
   holding: EconomyHolding;
@@ -28,6 +31,11 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
   const [promotionResult, setPromotionResult] = useState<any | null>(null);
 
   // --- Handlers for Roles ---
+  const handleSyncRolesFromFaction = () => {
+    const { updatedRoles } = syncHoldingRolesFromLoreMembers(holding, loreDatabase);
+    onUpdateHolding(holding.id, { roles: updatedRoles });
+  };
+
   const handleAddRole = () => {
     const newRole: EconomyRole = {
       id: `role-${Date.now()}`,
@@ -188,101 +196,134 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
           <h5 className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
             <i className="fa-solid fa-user-tie"></i> 1. Namentliche Positionen & Führungskräfte ({roles.length})
           </h5>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSyncRolesFromFaction}
+              className="px-2.5 py-1 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Mitglieder aus Fraktion/Codex in Führungskräfte übernehmen"
+            >
+              <i className="fa-solid fa-rotate text-[11px]"></i>
+              <span>Aus Fraktion/Codex synchronisieren</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleAddRole}
+              className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+            >
+              <i className="fa-solid fa-plus text-[11px]"></i>
+              <span>Führungskraft</span>
+            </button>
+          </div>
         </div>
+
+        {/* Datalist with Codex & Faction Member names for suggestions */}
+        <datalist id={`holding-members-${holding.id}`}>
+          {loreDatabase
+            .filter(l => l.category === 'Charaktere' || l.category === 'Gegner' || l.category === 'Fraktionen')
+            .map(l => (
+              <option key={l.id} value={l.title} />
+            ))}
+        </datalist>
 
         {roles.length === 0 ? (
           <div className="p-6 text-center bg-slate-950/40 border border-slate-800 rounded-2xl text-xs text-slate-400">
             Keine Einzelpositionen oder Führungskräfte eingetragen.
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {roles.map((role, idx) => (
               <div key={role.id || idx} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3 relative">
-                <div className="flex justify-between items-start gap-2">
-                  <div className="grid grid-cols-2 gap-2 flex-1">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Rolle / Titel</label>
-                      <input
-                        type="text"
-                        value={role.name || ''}
-                        onChange={e => handleUpdateRole(idx, { name: e.target.value })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-amber-500"
-                        placeholder="z.B. Majordomus"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Besetzt durch</label>
-                      <input
-                        type="text"
-                        value={role.assignedToName || ''}
-                        onChange={e => handleUpdateRole(idx, { assignedToName: e.target.value })}
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs font-semibold text-amber-300 outline-none focus:border-amber-500"
-                        placeholder="Name oder 'Spieler'"
-                      />
-                    </div>
-                  </div>
-
+                <div className="flex justify-between items-center border-b border-slate-900 pb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                    Position #{idx + 1}
+                  </span>
                   <button
                     type="button"
                     onClick={() => handleRemoveRole(idx)}
-                    className="p-2 text-red-400 hover:text-red-300 bg-slate-900 rounded-xl text-xs cursor-pointer shrink-0"
+                    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg text-xs cursor-pointer shrink-0 transition flex items-center gap-1"
                     title="Position löschen"
                   >
-                    <i className="fa-solid fa-trash"></i>
+                    <i className="fa-solid fa-trash"></i> Löschen
                   </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="space-y-3">
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Arbeitsbereich</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Rolle / Titel</label>
+                    <ProfessionSelect
+                      value={role.name || ''}
+                      onChange={val => handleUpdateRole(idx, { name: val })}
+                      placeholder="Rolle / Titel wählen..."
+                      selectClassName="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-amber-500 transition"
+                      inputClassName="w-full mt-1.5 bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-amber-500 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Besetzt durch</label>
+                    <CharacterAssigneeSelect
+                      value={role.assignedToName || ''}
+                      onChange={val => handleUpdateRole(idx, { assignedToName: val })}
+                      loreDatabase={loreDatabase}
+                      npcs={npcs}
+                      holding={holding}
+                      placeholder="Besetzt durch wählen..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Arbeitsbereich</label>
                     <input
                       type="text"
                       value={role.workplaceArea || ''}
                       onChange={e => handleUpdateRole(idx, { workplaceArea: e.target.value })}
-                      placeholder="z.B. Weinkeller"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                      placeholder="z.B. Weinkeller, Herrenhaus"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500"
                     />
                   </div>
+
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Vorgesetzter</label>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Vorgesetzter</label>
                     <input
                       type="text"
                       value={role.superiorRole || ''}
                       onChange={e => handleUpdateRole(idx, { superiorRole: e.target.value })}
-                      placeholder="z.B. Wirt"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                      placeholder="z.B. Wirt, Verwalter"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500"
                     />
                   </div>
+
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Gehalt (Gold)</label>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Gehalt (Gold)</label>
                     <input
                       type="number"
                       value={role.salary || 0}
                       onChange={e => handleUpdateRole(idx, { salary: parseInt(e.target.value) || 0 })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs font-mono font-bold text-amber-300 text-center outline-none"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-mono font-bold text-amber-300 outline-none focus:border-amber-500"
                     />
                   </div>
-                </div>
 
-                {/* Authorities selector */}
-                <div className="space-y-1 pt-2 border-t border-slate-900">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Befugnisse:</span>
-                  <div className="flex flex-wrap gap-1">
-                    {STANDARD_AUTHORITIES.slice(0, 6).map(auth => {
-                      const has = (role.authorities || []).includes(auth);
-                      return (
-                        <button
-                          key={auth}
-                          type="button"
-                          onClick={() => handleToggleRoleAuthority(idx, auth)}
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all cursor-pointer ${
-                            has ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-900 text-slate-500 border-slate-850 hover:text-slate-300'
-                          }`}
-                        >
-                          {has ? '✓ ' : '+ '} {auth}
-                        </button>
-                      );
-                    })}
+                  {/* Authorities selector */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-900">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Befugnisse:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {STANDARD_AUTHORITIES.slice(0, 6).map(auth => {
+                        const has = (role.authorities || []).includes(auth);
+                        return (
+                          <button
+                            key={auth}
+                            type="button"
+                            onClick={() => handleToggleRoleAuthority(idx, auth)}
+                            className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-all cursor-pointer ${
+                              has ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+                            }`}
+                          >
+                            {has ? '✓ ' : '+ '} {auth}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -316,34 +357,18 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {staffGroups.map(group => (
-              <div key={group.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex items-center gap-2 flex-1">
-                    <input
-                      type="number"
-                      min={1}
-                      max={999}
-                      value={group.count ?? 1}
-                      onChange={e => handleUpdateStaffGroup(group.id, { count: parseInt(e.target.value) || 1 })}
-                      className="w-16 bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs font-extrabold font-mono text-center text-amber-300 outline-none focus:border-amber-500"
-                      title="Anzahl Personen"
-                    />
-                    <input
-                      type="text"
-                      value={group.roleName || ''}
-                      onChange={e => handleUpdateStaffGroup(group.id, { roleName: e.target.value })}
-                      className="flex-1 bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs font-bold text-white outline-none focus:border-amber-500"
-                      placeholder="z.B. Mägde & Zofen, Wachen, Stallburschen"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {staffGroups.map((group, idx) => (
+              <div key={group.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3 relative">
+                <div className="flex justify-between items-center border-b border-slate-900 pb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                    Personalgruppe #{idx + 1}
+                  </span>
+                  <div className="flex items-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => handleStartUpgrade(group)}
-                      className="px-2.5 py-1.5 bg-gradient-to-r from-amber-600/30 to-indigo-600/30 hover:from-amber-600/50 hover:to-indigo-600/50 text-amber-200 border border-amber-500/40 rounded-xl text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
+                      className="px-2.5 py-1 bg-gradient-to-r from-amber-600/30 to-indigo-600/30 hover:from-amber-600/50 hover:to-indigo-600/50 text-amber-200 border border-amber-500/40 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1"
                       title="Einen Mitarbeiter dieser Gruppe zu einem vollen Codex-NSC aufwerten"
                     >
                       <i className="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Aufwerten
@@ -351,7 +376,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                     <button
                       type="button"
                       onClick={() => handleRemoveStaffGroup(group.id)}
-                      className="p-2 text-red-400 hover:text-red-300 bg-slate-900 rounded-xl text-xs cursor-pointer"
+                      className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-950/40 rounded-lg text-xs cursor-pointer transition"
                       title="Gruppe entfernen"
                     >
                       <i className="fa-solid fa-trash"></i>
@@ -359,48 +384,74 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="space-y-3">
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Arbeitsbereich</label>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Anzahl Personen</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={999}
+                      value={group.count ?? 1}
+                      onChange={e => handleUpdateStaffGroup(group.id, { count: parseInt(e.target.value) || 1 })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-extrabold font-mono text-amber-300 outline-none focus:border-amber-500"
+                      title="Anzahl Personen"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Beruf / Rolle der Gruppe</label>
+                    <ProfessionSelect
+                      value={group.roleName || ''}
+                      onChange={val => handleUpdateStaffGroup(group.id, { roleName: val })}
+                      placeholder="Beruf / Rolle der Gruppe wählen..."
+                      selectClassName="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-amber-500 transition"
+                      inputClassName="w-full mt-1.5 bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-amber-500 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Arbeitsbereich</label>
                     <input
                       type="text"
                       value={group.workplaceArea || ''}
                       onChange={e => handleUpdateStaffGroup(group.id, { workplaceArea: e.target.value })}
-                      placeholder="z.B. Großküche"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                      placeholder="z.B. Großküche, Stall, Außenbereich"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500"
                     />
                   </div>
+
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Zuständiger Leiter</label>
-                    <input
-                      type="text"
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Zuständiger Leiter</label>
+                    <CharacterAssigneeSelect
                       value={group.assignedLeaderOrManager || ''}
-                      onChange={e => handleUpdateStaffGroup(group.id, { assignedLeaderOrManager: e.target.value })}
-                      placeholder="z.B. Haushälterin"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                      onChange={val => handleUpdateStaffGroup(group.id, { assignedLeaderOrManager: val })}
+                      loreDatabase={loreDatabase}
+                      npcs={npcs}
+                      holding={holding}
+                      placeholder="Leiter wählen oder eintragen..."
                     />
                   </div>
+
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Kosten / Tag / Kopf</label>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Kosten / Tag / Kopf (Gold)</label>
                     <input
                       type="number"
                       value={group.dailyCostPerUnit || 2}
                       onChange={e => handleUpdateStaffGroup(group.id, { dailyCostPerUnit: parseInt(e.target.value) || 0 })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs font-mono font-bold text-amber-300 text-center outline-none"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-mono font-bold text-amber-300 outline-none focus:border-amber-500"
                     />
                   </div>
-                </div>
 
-                {/* Duties list */}
-                <div>
-                  <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Hauptaufgaben & Pflichten (kommagetrennt)</label>
-                  <input
-                    type="text"
-                    value={(group.duties || []).join(', ')}
-                    onChange={e => handleUpdateStaffGroup(group.id, { duties: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                    placeholder="z.B. Tische säubern, Frühstück servieren, Botengänge"
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none"
-                  />
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Hauptaufgaben & Pflichten (kommagetrennt)</label>
+                    <input
+                      type="text"
+                      value={(group.duties || []).join(', ')}
+                      onChange={e => handleUpdateStaffGroup(group.id, { duties: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                      placeholder="z.B. Tische säubern, Frühstück servieren, Botengänge"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                    />
+                  </div>
                 </div>
               </div>
             ))}

@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits } from '../types';
 import { GeminiService } from '../services/geminiService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import ProfessionSelect from './ProfessionSelect';
+import CompetenceProfileEditor from './CompetenceProfileEditor';
 import * as LucideIcons from 'lucide-react';
 import RelationshipDetailEditor from './RelationshipDetailEditor';
 import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore } from '../lib/relationshipHelper';
@@ -4024,11 +4026,15 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                       <span className="text-amber-500">◆</span> {activeTransformation ? 'Rolle im transformierten Zustand' : 'Rolle / Beruf'}
                     </label>
-                    <AutoExpandingTextarea 
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all"
-                      placeholder={activeTransformation ? `Rolle im transformierten Zustand` : "z.B. Navigatorin, Kampfsportler..."} 
+                    <ProfessionSelect
                       value={getPlayerRole()} 
-                      onChange={e => updatePlayerRole(e.target.value)} 
+                      onChange={val => {
+                        updatePlayerRole(val);
+                        if (!player.profession) {
+                          setPlayer(prev => ({ ...prev, profession: val }));
+                        }
+                      }}
+                      placeholder="Beruf wählen oder eintragen..." 
                     />
                   </div>
                 </div>
@@ -6316,100 +6322,38 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       <h4 className="text-sm font-bold text-slate-300">Berufe, Talente & Alltagskompetenzen</h4>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Hauptberuf */}
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Hauptberuf / Spezialisierung
-                        </label>
-                        <input 
-                          type="text" 
-                          value={player.profession || player.role || ''} 
-                          onChange={e => setPlayer({ ...player, profession: e.target.value })}
-                          placeholder="z.B. Schmiedemeister, Kräuterkundlerin, Händler" 
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-medium"
-                        />
-                      </div>
-
-                      {/* Gilde / Rang */}
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Gilde / Organisation / Rang
-                        </label>
-                        <input 
-                          type="text" 
-                          value={player.jobTitle || ''} 
-                          onChange={e => setPlayer({ ...player, jobTitle: e.target.value })}
-                          placeholder="z.B. Obermeister der Händlergilde, Geselle, Freiberufler" 
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-medium"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Tätigkeitsbeschreibung */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                        Tätigkeitsbeschreibung & Arbeitsalltag
-                      </label>
-                      <AutoExpandingTextarea 
-                        value={player.professionDescription || ''} 
-                        onChange={e => setPlayer({ ...player, professionDescription: e.target.value })}
-                        placeholder="Beschreibung der täglichen beruflichen Pflichten, Tätigkeiten und Verantwortungsbereiche" 
-                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-                      />
-                    </div>
-
-                    {/* Handwerk & Nebengewerbe */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                        Handwerk, Fertigung & Nebenberufe
-                      </label>
-                      <AutoExpandingTextarea 
-                        value={player.craftingSkills || ''} 
-                        onChange={e => setPlayer({ ...player, craftingSkills: e.target.value })}
-                        placeholder="z.B. Trankbrauen, Waffenschmieden, Lederverarbeitung, Schneidern, Kochen" 
-                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-                      />
-                    </div>
-
-                    {/* Besondere Talente & Spezialwissen */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                        Spezielle Talente & Wissen
-                      </label>
-                      <AutoExpandingTextarea 
-                        value={player.talents || ''} 
-                        onChange={e => setPlayer({ ...player, talents: e.target.value })}
-                        placeholder="z.B. Lesen alter Glyphen, Feilschen, Schlösser knacken, Kartografie, Pflanzenkunde" 
-                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-                      />
-                    </div>
-
-                    {/* Alltagskompetenzen */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                        Alltagskompetenzen & Praktische Fertigkeiten
-                      </label>
-                      <AutoExpandingTextarea 
-                        value={player.everydaySkills || ''} 
-                        onChange={e => setPlayer({ ...player, everydaySkills: e.target.value })}
-                        placeholder="z.B. Reiten, Schwimmen, Musizieren, Instrumentenpflege, Orientierung im Gelände" 
-                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-                      />
-                    </div>
-
-                    {/* Werkzeuge & Ausrüstung */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                        Berufswerkzeuge, Lizenzen & Ausrüstung
-                      </label>
-                      <AutoExpandingTextarea 
-                        value={player.toolsAndEquipment || ''} 
-                        onChange={e => setPlayer({ ...player, toolsAndEquipment: e.target.value })}
-                        placeholder="z.B. Meisterbrief, Alchemieset, Diebeswerkzeug, Kartografierbesteck, Handelslizenz" 
-                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
-                      />
-                    </div>
+                    <CompetenceProfileEditor
+                      profession={player.profession || player.role || ''}
+                      onProfessionChange={val => setPlayer({ ...player, profession: val, role: player.role || val })}
+                      professionLevel={player.professionLevel || ''}
+                      onProfessionLevelChange={val => setPlayer({ ...player, professionLevel: val })}
+                      professionProficiencyScore={player.professionProficiencyScore || 0}
+                      onProfessionProficiencyScoreChange={val => setPlayer({ ...player, professionProficiencyScore: val })}
+                      professionExperiencePoints={player.professionExperiencePoints || 0}
+                      onProfessionExperiencePointsChange={val => setPlayer({ ...player, professionExperiencePoints: val })}
+                      professionExperienceText={player.professionExperienceText || ''}
+                      onProfessionExperienceTextChange={val => setPlayer({ ...player, professionExperienceText: val })}
+                      professionPromotionConditions={player.professionPromotionConditions || ''}
+                      onProfessionPromotionConditionsChange={val => setPlayer({ ...player, professionPromotionConditions: val })}
+                      craftingSkills={player.craftingSkills || ''}
+                      onCraftingSkillsChange={val => setPlayer({ ...player, craftingSkills: val })}
+                      jobTitle={player.jobTitle || ''}
+                      onJobTitleChange={val => setPlayer({ ...player, jobTitle: val })}
+                      professionDescription={player.professionDescription || ''}
+                      onProfessionDescriptionChange={val => setPlayer({ ...player, professionDescription: val })}
+                      secondaryProfessions={player.secondaryProfessions || []}
+                      onSecondaryProfessionsChange={val => setPlayer({ ...player, secondaryProfessions: val })}
+                      talents={player.talents || ''}
+                      onTalentsChange={val => setPlayer({ ...player, talents: val })}
+                      everydaySkills={player.everydaySkills || ''}
+                      onEverydaySkillsChange={val => setPlayer({ ...player, everydaySkills: val })}
+                      everydaySkillsProficiencyScore={player.everydaySkillsProficiencyScore || 0}
+                      onEverydaySkillsProficiencyScoreChange={val => setPlayer({ ...player, everydaySkillsProficiencyScore: val })}
+                      everydaySkillsExperienceText={player.everydaySkillsExperienceText || ''}
+                      onEverydaySkillsExperienceTextChange={val => setPlayer({ ...player, everydaySkillsExperienceText: val })}
+                      toolsAndEquipment={player.toolsAndEquipment || ''}
+                      onToolsAndEquipmentChange={val => setPlayer({ ...player, toolsAndEquipment: val })}
+                    />
                   </div>
                 </div>
               )}
