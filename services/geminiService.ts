@@ -597,7 +597,9 @@ ANWEISUNGEN:
 - STRENGSTES VERBOT DER BEHERRSCHUNG/VORSCHREIBUNG VON GEFÜHLEN ODER REAKTIONEN DES NUTZERS:
   Du darfst NIEMALS beschreiben oder diktieren, was der Spieler/sein Charakter fühlt, denkt, spürt, empfindet oder wie sein Körper unwillkürlich reagiert (kein "kühles Prickeln unter deiner Haut", kein "Eis in deinen Adern"). 
   Es ist absolut verboten zu schreiben: "Du spürst eine eisige Kälte", "dein Herz setzt einen Schlag aus", "deine Knöchel werden weiß", "deine Hände umklammern fester", "du spürst, wie die Farbe weicht", "deine Kräfte brechen heraus" oder Ähnliches.
-  Beschreibe nur die äußere, objektive Welt und das Verhalten von NPCs. Der Spieler hat die absolute und alleinige Hoheit über seine Gedanken, unwillkürlichen Körperreaktionen, Gefühle, Mächte und Taten!`;
+  Beschreibe nur die äußere, objektive Welt und das Verhalten von NPCs. Der Spieler hat die absolute und alleinige Hoheit über seine Gedanken, unwillkürlichen Körperreaktionen, Gefühle, Mächte und Taten!
+- ABSOLUTES ZITIERVERBOT DES NUTZERS:
+  Du als Erzähler darfst NIEMALS wörtliche Zitate oder Aussagen des Spielers/Nutzers in deiner Beschreibung oder Narration wiederholen oder nachplappern. NPCs dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich darauf beziehen.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -822,6 +824,13 @@ ANWEISUNGEN:
         powerSource: { type: Type.STRING, description: "Herkunft der Kraft, z.B. Teufelsfrucht, Mana, Chakra, Technologie." },
         powerCost: { type: Type.STRING, description: "Kosten oder Limitierungen der Kraft, z.B. Ausdauer, MP, Lebensenergie, Nebenwirkungen." },
         skills: { type: Type.STRING, description: "Die eigentliche Spezialfähigkeit oder Kraft detailliert beschrieben." },
+        profession: { type: Type.STRING, description: "Hauptberuf oder Spezialisierung des Charakters." },
+        jobTitle: { type: Type.STRING, description: "Gilde, Organisation, Titel oder Rang des Charakters." },
+        professionDescription: { type: Type.STRING, description: "Beschreibung der beruflichen Pflichten, Tätigkeiten und Arbeitsalltag." },
+        craftingSkills: { type: Type.STRING, description: "Handwerk, Fertigung & Nebenberufe (z.B. Schmieden, Trankbrauen, Kochen)." },
+        talents: { type: Type.STRING, description: "Spezielle Talente und Fachwissen (z.B. Schlösser knacken, Feilschen, Kartografie)." },
+        everydaySkills: { type: Type.STRING, description: "Alltagskompetenzen und praktische Fertigkeiten (z.B. Reiten, Schwimmen, Musizieren)." },
+        toolsAndEquipment: { type: Type.STRING, description: "Berufswerkzeuge, Lizenzen und Ausrüstung." },
         techniques: { type: Type.STRING, description: "Konkrete Techniken, Attacken oder Jutsus as kommagetrennte Liste." },
         techniqueList: {
           type: Type.ARRAY,
@@ -2127,7 +2136,7 @@ Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.
         }
       }
 
-      const loreLocations = (loreEntries || []).filter(l => l.category === 'Orte');
+      const loreLocations = (loreEntries || []).filter(l => (l.category as string) === 'Orte' || (l.category as string) === 'Weltkarte');
 
       const subTerritoryListStr = subTerritories.map((st: any) => {
         const typeLabel = st.type || 'Region';
@@ -3987,17 +3996,36 @@ Aktuelle Werte:
         });
       }
 
+      if (worldContext) {
+        const worldLocations = this.extractWorldLocations(worldContext, (worldContext.loreDatabase || []));
+        if (worldLocations.length > 0) {
+          contextPrompt += `\n\n### BEKANNTE SCHAUPLÄTZE & ORTE DER WELT (FÜR ORTSKONSISTENZ):
+${worldLocations.slice(0, 15).map(loc => `- ${loc}`).join('\n')}
+WICHTIG: Richte alle Ortsangaben, Treffpunkte und Herkunftsorte an diesen Schauplätzen aus!`;
+        }
+      }
+
       if (existingCodexCharacters && existingCodexCharacters.length > 0) {
         contextPrompt += `\n\n### BEREITS EXISTIERENDE CHARAKTERE IM CODEX / NPCs (WICHTIG FÜR BEZIEHUNGEN & VERGANGENHEIT):
 Es gibt bereits registrierte Charaktere/NPCs in dieser Welt. Analysiere diese sorgfältig!
-Falls einer dieser Charaktere als Familie des Spielers deklariert ist (z.B. im Feld "family" steht sowas wie "Mutter von [Name]" oder im Name/Beschreibung steht eine Verwandtschaft wie "Mutter") ODER falls du aus dem neuen Eingabetext ("${text}") eine Verwandtschaft oder Beziehung erkennst:
-- Integriere diese Verwandten (z.B. Mutter, Vater, Schwester, etc.) zwingend und detailreich in die Vergangenheit/Vorgeschichte (Feld "bio") des Spielers. Erwähne, wer diese Person ist, wie das Verhältnis war und welchen Einfluss sie hatte.
-- Erstelle IMMER einen ausgefüllten Eintrag für diese Charaktere in den Feldern "relationship" (Beziehungen zu anderen) und "conduct" (Verhalten zu anderen). Beschreibe konkret, wie das Verhältnis zu ihnen ist (z.B. liebevoll, distanziert, respektvoll, feindselig).
-- BEZIEHUNGEN BEI TRANSFORMATIONEN / KÖRPERLICHEN VERÄNDERUNGEN: Falls einer der Charaktere eine Transformation oder körperliche Mutation/Verwandlung durchgemacht hat, dokumentiere zwingend, welche Beziehung sie VOR der Verwandlung hatten (z.B. wie sie zusammen lebten) UND wie sich die Beziehung durch die Verwandlung verändert hat (z. B. ob sie ihn in der neuen Gestalt erkennen, für tot halten, Angst vor ihm haben oder ihm helfen wollen).
-- Verwende die Namen der bestehenden Codex-Charaktere exakt so, wie sie hier gelistet sind.
+
+### ZWINGENDE ALTERS- & ZEITLINIEN-LOGIK FÜR BEZIEHUNGEN (STRENGSTE DIRECTIVE):
+- Beachte das Alter der beteiligten Charaktere!
+- GROSSER ALTERSUNTERSCHIED (z. B. 17 Jahre vs. 35 Jahre = 18 Jahre Differenz):
+  * Eine "Gemeinsame Kindheit" (z. B. "Gemeinsame Kindheit in der Wüste", "zusammen als Kinder aufgewachsen", "Sandkastenfreunde") ist bei großem Altersunterschied BIOLOGISCH UNMÖGLICH und STRENGSTENS VERBOTEN!
+  * Als der jüngere Charakter ein Kind (z. B. 5 Jahre) war, war der ältere bereits erwachsen (z. B. 23 Jahre).
+  * Solche Beziehungen dürfen NUR als Mentor/Schüler, älterer Beschützer, Lehrmeister, Aufpasser oder als spätere Begegnung im Leben formuliert werden — NIEMALS als Kindheitsfreunde!
+  * Nur bei annähernd gleichem Alter (Differenz 0 bis max. 4 Jahre) ist eine echte gemeinsame Kindheit oder Jugend plausibel.
+
+### ZWINGENDE ORTS- & SCHAUPLATZ-KONSISTENZ:
+- Achte peinlichst genau auf etablierte Treffpunkte und Herkunftsorte!
+- Wenn im Kontext oder im Freitext bereits ein Treffpunkt oder Ort etabliert ist (z. B. erstes Treffen in einer Taverne, Herkunft aus einer bestimmten Hafenstadt), muss das erste Kennenlernen in 'relationships', 'sharedPast' und 'bio' genau an DIESEM Ort stattfinden.
+- Erfinde NIEMALS unpassende, widersprüchliche Orte (wie "in den Sanddünen der Wüste"), wenn dieser Ort nicht zur etablierten Biografie oder Weltgeografie passt!
 
 Hier sind die bestehenden Charaktere:
 ${existingCodexCharacters.map(c => `- Name: "${c.name}"
+  * Alter: "${c.age || 'Unbekannt'}"
+  * Herkunft / Standort: "${c.origin || c.location || 'Unbekannt'}"
   * RPG-Rolle: "${c.role || 'Unbekannt'}"
   * Familie/Zugehörigkeit: "${c.family || 'Keine'}"
   * Beziehung/Verhalten/Details: "${c.relation || c.description || 'Keine Angabe'}"`).join('\n')}`;
@@ -4517,9 +4545,21 @@ ${CHARACTER_BIO_7_QUESTIONS_PROMPT}
   Wenn der eingegebene Text beschreibt, dass dieser neue Charakter mit "${playerName}" verwandt ist (z. B. "er ist der Großvater von ${playerName}", "mein Vater", "mein Großvater", etc.) oder ein Freund von ihm ist, darf der Name "${playerName}" NIEMALS als Name ('title') dieses neuen Eintrags verwendet werden!
   Bestimme den Namen der anderen Person (z.B. des Großvaters/Freundes), die den eigentlichen Inhalt dieser neuen Karte darstellt. Falls im Text kein Name für diese andere Person genannt wird, ERFINDE einen passenden RPG-Vornamen (z.B. 'Albus', 'Garrick', 'Valerius' oder 'Sariel') für diese Person und verwende ihn als 'title'.
   
-- WICHTIG FÜR STRUKTURIERTE BEZIEHUNGEN (relationships):
+- WICHTIG FÜR STRUKTURIERTE BEZIEHUNGEN (relationships) & ALTERS-/ORTS-LOGIK:
   Falls im Text Beziehungen beschrieben werden (z.B. "Mutter von ${playerName}" oder "Mutter vom Nutzer"), erstelle zwingend einen Eintrag im Array 'relationships'.
-  Setze 'targetCharacter' auf den exakten Namen des Hauptcharakters ("${playerName}") oder des anderen Charakters, 'type' auf die Beziehungsart (z.B. 'Mutter'), 'behavior' auf das Verhalten (z.B. 'Liebevoll, beschützerisch') und 'sharedPast' auf die gemeinsame Vergangenheit (z.B. 'Hat ihn von Geburt an beschützt und ihm die Magie beigebracht', 'Zusammen in der verbotenen Höhle ein Relikt geborgen'). Erfinde hierbei stimmige Details, falls nichts im Text steht!`;
+  Setze 'targetCharacter' auf den exakten Namen des Hauptcharakters ("${playerName}") oder des anderen Charakters, 'type' auf die Beziehungsart (z.B. 'Mutter'), 'behavior' auf das Verhalten (z.B. 'Liebevoll, beschützerisch') und 'sharedPast' auf die gemeinsame Vergangenheit.
+  
+  ### ZWINGENDE ALTERS- & ZEITLINIEN-LOGIK:
+  - Beachte das Alter beider Personen!
+  - GROSSER ALTERSUNTERSCHIED (z. B. 17 Jahre vs. 35 Jahre):
+    * Eine "Gemeinsame Kindheit" (z. B. "Gemeinsame Kindheit in der Wüste", "zusammen als Kinder aufgewachsen") ist bei großem Altersunterschied BIOLOGISCH UNMÖGLICH und STRENGSTENS VERBOTEN!
+    * Solche Beziehungen dürfen NUR als Mentor/Schüler, älterer Beschützer, Lehrmeister, Aufpasser oder als spätere Begegnung im Leben formuliert werden — NIEMALS als Kindheitsfreunde!
+    * Nur bei annähernd gleichem Alter (Differenz 0 bis max. 4 Jahre) ist eine echte gemeinsame Kindheit oder Jugend plausibel.
+  
+  ### ZWINGENDE ORTS- & SCHAUPLATZ-KONSISTENZ:
+  - Achte peinlichst genau auf etablierte Treffpunkte und Herkunftsorte!
+  - Wenn im Kontext oder im Freitext bereits ein Treffpunkt oder Ort etabliert ist (z. B. erstes Treffen in einer Taverne, Herkunft aus einer bestimmten Hafenstadt), muss das erste Kennenlernen in 'relationships', 'sharedPast' und 'bio' genau an DIESEM Ort stattfinden.
+  - Erfinde NIEMALS unpassende, widersprüchliche Orte (wie "in den Sanddünen der Wüste"), wenn dieser Ort nicht zur etablierten Biografie oder Weltgeografie passt!`;
         }
 
         if (existingNames && existingNames.length > 0) {
@@ -5701,17 +5741,17 @@ Schreibe die aktualisierte Chronik als zusammenhängenden, packenden Text auf De
       
       const existingTitles = existingLore.map(l => `${l.category}: ${l.title}`).join('\n');
       const existingPlacesInfo = existingLore
-        .filter(l => l.category === 'Orte')
+        .filter(l => (l.category as string) === 'Orte' || (l.category as string) === 'Weltkarte')
         .map(p => `- Ort: "${p.title}" | Ebene: ${p.details?.mapLevel || 'Unbekannt'} | Parent: "${p.details?.parentPlaceId || ''}" | Koordinaten: x=${p.details?.coordinates?.x || 0}, y=${p.details?.coordinates?.y || 0}`)
         .join('\n');
       
-      const prompt = `Analysiere die folgenden jüngsten Chat-Nachrichten eines Rollenspiels und vergleiche die darin erwähnten Elemente (Charaktere, Orte, Fraktionen, Gegenstände, Verbotenes Wissen, Gegner, Weltregeln) mit der Liste der bereits existierenden Einträge im Codex.
+      const prompt = `Analysiere die folgenden jüngsten Chat-Nachrichten eines Rollenspiels und vergleiche die darin erwähnten Elemente (Charaktere, Orte/Gebiete, Fraktionen, Gegenstände, Verbotenes Wissen, Gegner, Weltregeln) mit der Liste der bereits existierenden Einträge im Codex.
       
 Falls neue Elemente eingeführt, erwähnt oder benannt wurden, die NICHT in der Liste der existierenden Titel stehen (oder eine Variante davon sind), erstelle für jedes neue Element einen passenden Eintrag für unsere Lore-Datenbank (Codex).
-Gegenstände, die der Spieler erhält oder besitzt, sollten der Kategorie 'Gegenstände' zugeordnet werden. Orte, die besucht oder erwähnt werden, der Kategorie 'Orte'. Neue wichtige Personen der Kategorie 'Charaktere'. Monster oder Feinde der Kategorie 'Gegner'. Fraktionen der Kategorie 'Fraktionen'. Geheimnisse, verbotene Wahrheiten oder Spoiler der Kategorie 'Verbotenes Wissen'.
+Gegenstände, die der Spieler erhält oder besitzt, sollten der Kategorie 'Gegenstände' zugeordnet werden. Neue wichtige Gebiete, Städte, Inseln oder Orte der Kategorie 'Weltkarte'. Neue wichtige Personen der Kategorie 'Charaktere'. Monster oder Feinde der Kategorie 'Gegner'. Fraktionen der Kategorie 'Fraktionen'. Geheimnisse, verbotene Wahrheiten oder Spoiler der Kategorie 'Verbotenes Wissen'.
 
-### WICHTIG FÜR NEUE ORTE (KATEGORIE 'Orte'):
-Wenn du einen neuen Ort erstellst, musst du im Feld "details" zwingend vollständige Kartendetails mitsenden, damit dieser Ort sofort korrekt auf der grafischen interaktiven Node-Map angezeigt wird:
+### WICHTIG FÜR NEUE ORTE & GEBIETE (KATEGORIE 'Weltkarte'):
+Wenn du einen neuen Ort erstellst, musst du im Feld "details" zwingend vollständige Kartendetails mitsenden, damit dieses Gebiet sofort korrekt auf der Weltkarte verzeichnet wird:
 1. "mapLevel": Die Zoom-Ebene. Muss exakt "macro" (Königreich/Ozean/Weltkarte), "meso" (Stadt/Region/Wald/Dungeon) oder "micro" (Taverne/Gilde/Shop innerhalb einer Stadt) sein.
 2. "parentPlaceId": Der Name (Titel) des übergeordneten Ortes (z.B. "Eldoria" als Meso-Stadt für eine Micro-Taverne). Bei "macro" leer lassen ("").
 3. "coordinates": Ein Objekt {"x": Zahl, "y": Zahl}. Beide Werte müssen Ganzzahlen zwischen 0 und 100 sein. Wähle die Koordinaten so, dass sie thematisch passen, aber NICHT exakt auf existierenden Orten liegen (mindestens 5-10 Einheiten Abstand!).
@@ -5749,11 +5789,11 @@ ${recentMessages.map(m => `${m.role === 'user' ? 'Spieler' : 'DM'}: ${m.text}`).
 Gib das Ergebnis als ein valides JSON-Array von Objekten aus. Jedes Objekt muss folgende Struktur haben:
 [
   {
-    "category": "Charaktere" | "Orte" | "Fraktionen" | "Gegenstände" | "Verbotenes Wissen" | "Story & Quests" | "Weltregeln" | "Gegner" | "Zeitlinie",
+    "category": "Charaktere" | "Weltkarte" | "Fraktionen" | "Gegenstände" | "Verbotenes Wissen" | "Story & Quests" | "Weltregeln" | "Gegner" | "Zeitlinie",
     "title": "Name des Elements",
     "description": "Eine passende, kurze, atmosphärische Beschreibung auf Deutsch basierend auf dem Chat-Kontext",
     "details": {
-      // Nur befüllen, wenn category === "Orte". Bei anderen Kategorien {} oder weglassen.
+      // Nur befüllen, wenn category === "Weltkarte" oder "Orte". Bei anderen Kategorien {} oder weglassen.
       "mapLevel": "macro" | "meso" | "micro",
       "parentPlaceId": "Titel des übergeordneten Ortes",
       "coordinates": { "x": 50, "y": 45 },
@@ -5975,6 +6015,12 @@ E. ENTITY RESOLUTION & VERKNÜPFUNG:
      * Karin = LoreEntry (category: 'Charaktere', role: 'Wirtin')
      * Zum Seebären = EconomyHolding (type: 'taverne', territoryId: [Silberhafen-ID], assignedCharacterId: [Karin-ID], locationName: 'Silberhafen')
 
+F. FRAKTIONEN-SYNCHRONISATION (WICHTIG!):
+   - Wenn eine Fraktion (z.B. Gilde, Kult, Königreich) involviert ist, MUSS sie über alle 3 Systeme synchron sein:
+     1. CODEX (upsertLoreEntries): Erstelle/Update einen Eintrag mit category 'Fraktionen'. Setze in "details" Felder wie "currentGoal", "headquarters", "members" (Array von Mitgliedern).
+     2. WELTKARTE (upsertTerritories): Setze bei zugehörigen Gebieten unbedingt "controlledByFactionId" auf die Fraktions-ID und "faction" auf den Fraktionsnamen.
+     3. WIRTSCHAFT & MANAGEMENT (upsertHoldings): Setze bei fraktionseigenen Betrieben "ownerType" auf "faction", "ownerFactionId" auf die Fraktions-ID und "ownerFactionName" auf den Fraktionsnamen. Setze "controlledByFactionId" und "controlledByFactionName", falls eine andere Fraktion die Kontrolle ausübt.
+
 NUTZER-ANWEISUNG / PROMPT:
 "${params.userPrompt}"
 
@@ -6072,6 +6118,10 @@ Gib ausschließlich valides JSON mit folgenden vier Listen zurück:
      "description": "Kurze Beschreibung des Betriebs (20-40 Wörter)...",
      "level": 1,
      "ownerType": "Eines aus: ['user', 'character', 'faction']",
+     "ownerFactionId": "Fraktions-ID (falls ownerType = faction)",
+     "ownerFactionName": "Fraktionsname (falls ownerType = faction)",
+     "controlledByFactionId": "ID der kontrollierenden Fraktion",
+     "controlledByFactionName": "Name der kontrollierenden Fraktion",
      "assignedCharacterName": "Name des Verwalters/Besitzers",
      "assignedCharacterId": "Zugehörige NPC ID oder temp-ID",
      "incomePerInterval": 250,

@@ -100,7 +100,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
   playerName,
   world
 }) => {
-  const [charTab, setCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten'>('profil');
+  const [charTab, setCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente'>('profil');
   const [activeTransformationId, setActiveTransformationId] = useState<string>('standard');
   const [activePowerSourceIdx, setActivePowerSourceIdx] = useState<number>(0);
   const [activeAbilityTab, setActiveAbilityTab] = useState<string>('Techniken');
@@ -378,9 +378,13 @@ export const CharacterLoreForm: React.FC<Props> = ({
         .map(l => ({
           name: l.title + (l.details?.nickname ? ` (${l.details.nickname})` : ''),
           role: l.details?.role || '',
+          age: l.details?.age || l.details?.appearance?.age || '',
+          origin: l.details?.origin || l.details?.appearance?.origin || '',
+          location: l.details?.currentSituation || l.details?.location || '',
           family: l.details?.family || '',
           relation: l.details?.relationship || l.details?.conduct || '',
-          description: l.description || ''
+          description: l.description || '',
+          relationships: l.details?.relationships || []
         }));
 
       const existingCharForMerge = keepExistingDetails ? {
@@ -888,6 +892,19 @@ export const CharacterLoreForm: React.FC<Props> = ({
           <i className="fa-solid fa-bolt"></i>
           <span>3. Kampffähigkeiten</span>
         </button>
+
+        <button
+          type="button"
+          onClick={() => setCharTab('beruf_talente')}
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            charTab === 'beruf_talente'
+              ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+          }`}
+        >
+          <i className="fa-solid fa-briefcase"></i>
+          <span>4. Berufe & Talente</span>
+        </button>
       </div>
 
       {/* Smart Fill Section */}
@@ -910,7 +927,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
         <AutoExpandingTextarea 
           className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
-          placeholder="Beschreibe deinen Charakter, seine Transformationen/Körperveränderungen (was er davor war, seine alten Beziehungen & seine neue Gestalt), Kontakte oder Kampffähigkeiten. Die KI füllt alle Felder in allen Tabs (Profil, Beziehungen & Kampffähigkeiten) perfekt aus." 
+          placeholder="Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus." 
           value={smartFillText} 
           onChange={e => setSmartFillText(e.target.value)} 
         />
@@ -1468,8 +1485,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
                 <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold flex justify-between">
                   <span>Aktueller Standort (Weltkarte)</span>
                   {(() => {
-                    const createdOrte = Array.from(new Set(lore.filter(l => l.category === 'Orte').map(l => l.title).filter(Boolean)));
-                    return createdOrte.length > 0 ? <span className="text-[9px] text-sky-400 font-normal"><i className="fa-solid fa-earth-americas mr-1"></i>Weltkarte aktiv</span> : null;
+                    const createdOrte = Array.from(new Set([...(world?.territories || []).map((t: any) => t.name), ...(world?.regionMarkers || []).map((m: any) => m.name)].filter(Boolean)));
+                    return createdOrte.length > 0 ? <span className="text-[9px] text-sky-400 font-normal"><i className="fa-solid fa-earth-americas mr-1"></i>Weltkarte aktiv ({createdOrte.length} Orte)</span> : null;
                   })()}
                 </label>
                 <LocationSelector
@@ -2708,6 +2725,112 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: BERUFE & TALENTE */}
+      {charTab === 'beruf_talente' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <h4 className="text-sm font-bold text-slate-300">Berufe, Talente & Alltagskompetenzen</h4>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Hauptberuf */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                  Hauptberuf / Spezialisierung
+                </label>
+                <input 
+                  type="text" 
+                  value={getDetail('profession', getDetail('role', ''))} 
+                  onChange={e => updateDetail('profession', e.target.value)}
+                  placeholder="z.B. Schmiedemeister, Kräuterkundlerin, Händler" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
+                />
+              </div>
+
+              {/* Berufsbezeichnung / Rang */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                  Gilde / Organisation / Rang
+                </label>
+                <input 
+                  type="text" 
+                  value={getDetail('jobTitle', '')} 
+                  onChange={e => updateDetail('jobTitle', e.target.value)}
+                  placeholder="z.B. Obermeister der Händlergilde, Geselle, Freiberufler" 
+                  className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
+                />
+              </div>
+            </div>
+
+            {/* Tätigkeitsbeschreibung & Aufgaben */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                Tätigkeitsbeschreibung & Arbeitsalltag
+              </label>
+              <AutoExpandingTextarea 
+                value={getDetail('professionDescription', '')} 
+                onChange={e => updateDetail('professionDescription', e.target.value)}
+                placeholder="Beschreibung der täglichen beruflichen Pflichten, Tätigkeiten und Verantwortungsbereiche" 
+                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+              />
+            </div>
+
+            {/* Handwerk & Nebengewerbe */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                Handwerk, Fertigung & Nebenberufe
+              </label>
+              <AutoExpandingTextarea 
+                value={getDetail('craftingSkills', '')} 
+                onChange={e => updateDetail('craftingSkills', e.target.value)}
+                placeholder="z.B. Trankbrauen, Waffenschmieden, Lederverarbeitung, Schneidern, Kochen" 
+                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+              />
+            </div>
+
+            {/* Besondere Talente & Spezialwissen */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                Spezielle Talente & Wissen
+              </label>
+              <AutoExpandingTextarea 
+                value={getDetail('talents', '')} 
+                onChange={e => updateDetail('talents', e.target.value)}
+                placeholder="z.B. Lesen alter Glyphen, Feilschen, Schlösser knacken, Kartografie, Pflanzenkunde" 
+                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+              />
+            </div>
+
+            {/* Alltagskompetenzen & Fertigkeiten */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                Alltagskompetenzen & Praktische Fertigkeiten
+              </label>
+              <AutoExpandingTextarea 
+                value={getDetail('everydaySkills', '')} 
+                onChange={e => updateDetail('everydaySkills', e.target.value)}
+                placeholder="z.B. Reiten, Schwimmen, Musizieren, Instrumentenpflege, Orientierung im Gelände" 
+                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+              />
+            </div>
+
+            {/* Werkzeuge & Ausrüstung */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                Berufswerkzeuge, Lizenzen & Ausrüstung
+              </label>
+              <AutoExpandingTextarea 
+                value={getDetail('toolsAndEquipment', '')} 
+                onChange={e => updateDetail('toolsAndEquipment', e.target.value)}
+                placeholder="z.B. Meisterbrief, Alchemieset, Diebeswerkzeug, Kartografierbesteck, Handelslizenz" 
+                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+              />
             </div>
           </div>
         </div>

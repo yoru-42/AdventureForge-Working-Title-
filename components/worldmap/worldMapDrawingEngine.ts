@@ -1184,7 +1184,7 @@ export function executeDrawingPlan(
         generatedLore.push({
           id: `lore-poi-${ts}-${actionIdx}`,
           title: action.name,
-          category: 'Orte',
+          category: 'Weltregeln',
           description: action.description || `${action.name} (${action.poiType}) in ${parentEntity?.name || 'der Welt'}.`,
           isUnlocked: true
         });

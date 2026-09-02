@@ -203,6 +203,9 @@ const App: React.FC = () => {
   };
 
   const autoSaveAdventure = (adventure: Adventure) => {
+    // Check if the current view is still EDIT_WORLD, otherwise don't auto-save over an active game
+    if (viewMode !== GameViewMode.EDIT_WORLD) return;
+    
     const exists = adventures.find(a => a.id === adventure.id);
     let newAdventures;
     if (exists) {
@@ -214,7 +217,12 @@ const App: React.FC = () => {
     try {
       setAdventures(newAdventures);
       setCurrentAdventure(adventure);
+      
+      localStorage.setItem('adventures_temp', JSON.stringify(newAdventures));
+      localStorage.removeItem('adventures_temp');
+      localStorage.setItem('adventures', JSON.stringify(newAdventures));
     } catch (e) {
+      console.warn("Auto-save failed to write to localStorage:", e);
     }
   };
 

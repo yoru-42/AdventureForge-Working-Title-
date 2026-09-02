@@ -929,7 +929,7 @@ export const extractLocationTokens = (
 
   // 5. CONNECTED SUB-PLACES / SUB-LOCATIONS
   (loreDatabase || []).forEach(e => {
-    if (e.category === 'Orte' && e.id !== locationEntry.id) {
+    if (((e.category as string) === 'Orte' || (e.category as string) === 'Weltkarte') && e.id !== locationEntry.id) {
       const parent = (e.details?.parentPlaceId || e.details?.parentTerritoryId || e.details?.parent || '').toLowerCase();
       if (parent && (parent === titleLower || parent === locationEntry.id.toLowerCase())) {
         tokens.push({
@@ -2819,7 +2819,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
 
     // 1. Add all loreDatabase 'Orte' entries
     const rawTerritories = worldSetting?.territories || [];
-    (loreDatabase || []).filter(l => l.category === 'Orte').forEach(entry => {
+    (loreDatabase || []).filter(l => (l.category as string) === 'Orte' || (l.category as string) === 'Weltkarte').forEach(entry => {
       if (!entry || !entry.id) return;
       const normalizedTitle = (entry.title || '').trim().toLowerCase();
       if (!idMap.has(entry.id) && (!normalizedTitle || !seenTitles.has(normalizedTitle))) {
@@ -2896,7 +2896,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
 
         const synthEntry: LoreEntry = {
           id: synthId,
-          category: 'Orte',
+          category: 'Weltregeln',
           title: nameStr,
           description: t.description || `Weltkarte-Gebiet (${typeLabel})`,
           isUnlocked: true,
@@ -3147,7 +3147,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
       if (matches.length > 0) return matches;
     }
 
-    const nonOrte = loreDatabase.filter(e => e.category !== 'Orte');
+    const nonOrte = loreDatabase.filter(e => (e.category as string) !== 'Orte' && (e.category as string) !== 'Weltkarte');
     return [...allLocationEntries, ...nonOrte];
   };
 
@@ -3180,7 +3180,12 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
     const grouped: { label: string; category: string; items: LoreEntry[] }[] = [];
 
     categoryOrder.forEach(cat => {
-      const items = entries.filter(e => e.category === cat);
+      const items = entries.filter(e => {
+        if (cat === 'Orte') {
+          return (e.category as string) === 'Orte' || (e.category as string) === 'Weltkarte' || (e.details as any)?.isWeltkarteTerritory;
+        }
+        return e.category === cat;
+      });
       if (items.length > 0) {
         grouped.push({
           label: categoryLabels[cat] || cat,
@@ -3334,7 +3339,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
   // Filtered location entries for buildings & landmarks vs places
   const codexBuildings = useMemo(() => {
     const ortsBuildings = allLocationEntries.filter(e => 
-      e.category === 'Orte' && 
+      ((e.category as string) === 'Orte' || (e.category as string) === 'Weltkarte') && 
       (e.title.toLowerCase().includes('turm') || 
        e.title.toLowerCase().includes('festung') || 
        e.title.toLowerCase().includes('burg') || 
@@ -3369,7 +3374,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
 
   const codexPlaces = useMemo(() => {
     const bldIds = new Set(codexBuildings.map(b => b.id));
-    return allLocationEntries.filter(e => e.category === 'Orte' && !bldIds.has(e.id));
+    return allLocationEntries.filter(e => ((e.category as string) === 'Orte' || (e.category as string) === 'Weltkarte') && !bldIds.has(e.id));
   }, [allLocationEntries, codexBuildings]);
 
   // Get color circle dot style for a token
@@ -5133,7 +5138,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                     const entry = allLocationEntries.find(l => l.id === selectedId) || loreDatabase.find(l => l.id === selectedId);
                     if (entry) {
                       const entryIcon = getIconForLoreEntry(entry);
-                      const entryCategory = activeToken.category || (entry.category === 'Orte' ? 'Marker & Orte' : entry.category);
+                      const entryCategory = activeToken.category || (((entry.category as string) === 'Orte' || (entry.category as string) === 'Weltkarte') ? 'Marker & Orte' : entry.category);
                       const stats = getDefaultStatsForToken(entry.title, entryCategory);
                       setActiveToken({
                         name: entry.title,
@@ -5151,10 +5156,10 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                 <option value="">-- Kein Kodex-Eintrag verknüpft (Standard Token) --</option>
                 {getGroupedLoreEntries(
                   codexDropdownFilter === 'all'
-                    ? [...allLocationEntries, ...loreDatabase.filter(e => e.category !== 'Orte')]
+                    ? [...allLocationEntries, ...loreDatabase.filter(e => (e.category as string) !== 'Orte' && (e.category as string) !== 'Weltkarte')]
                     : codexDropdownFilter === 'auto'
                     ? getContextualLoreEntries(activeToken.category, tokenSubTab)
-                    : codexDropdownFilter === 'Orte'
+                    : (codexDropdownFilter as string) === 'Orte'
                     ? allLocationEntries
                     : loreDatabase.filter(e => e.category === codexDropdownFilter)
                 ).map(group => (

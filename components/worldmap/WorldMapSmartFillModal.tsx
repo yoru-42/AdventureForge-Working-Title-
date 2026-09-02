@@ -997,7 +997,7 @@ export const WorldMapSmartFillModal: React.FC<WorldMapSmartFillModalProps> = ({
         loreEntries.push({
           id: `lore-city-${ts}-${i}`,
           title: cName,
-          category: 'Orte',
+          category: 'Weltregeln',
           description: `Bedeutende Stadt in der Region ${quadrantInfo.name}. ${cDesc}`,
           isUnlocked: true
         });

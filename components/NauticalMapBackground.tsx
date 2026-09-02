@@ -179,7 +179,7 @@ export const NauticalMapBackground: React.FC<NauticalMapBackgroundProps> = ({
   // Extract active locations for the current zoom level to build landmasses around them
   const activePlaces = useMemo(() => {
     return lore.filter(l => {
-      if (l.category !== 'Orte') return false;
+      if ((l.category as string) !== 'Orte' && (l.category as string) !== 'Weltkarte') return false;
       const coords = l.details?.coordinates;
       if (!coords || typeof coords.x !== 'number' || typeof coords.y !== 'number') return false;
       if (coords.x === 0 && coords.y === 0) return false; // filter out uninitialized/placeholder coordinates

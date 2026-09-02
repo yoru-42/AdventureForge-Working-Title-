@@ -3432,7 +3432,7 @@ export const WorldMapEditor: React.FC<WorldMapEditorProps> = ({
                               <div>
                                 <div className="font-bold text-slate-200">{h.name}</div>
                                 <div className="text-[9.5px] text-slate-400">
-                                  {h.type} • Stufe {h.level} {h.assignedCharacterName ? `• Betreiber: ${h.assignedCharacterName}` : ''}
+                                  {h.type} • Stufe {h.level} {h.ownerType === 'faction' && h.ownerFactionName ? `• Besitzer: ${h.ownerFactionName}` : h.assignedCharacterName ? `• Betreiber: ${h.assignedCharacterName}` : ''}
                                 </div>
                               </div>
                               <div className="text-right text-[10px] font-mono text-emerald-400">

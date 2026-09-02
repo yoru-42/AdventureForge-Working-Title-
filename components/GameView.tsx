@@ -397,6 +397,21 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [showToneMenu, setShowToneMenu] = useState(false);
   const [showFavoritesMenu, setShowFavoritesMenu] = useState(false);
 
+  // Selected HUD field for compact detail modal (Step 7)
+  const [selectedHudDetailField, setSelectedHudDetailField] = useState<{
+    id: string;
+    category: string;
+    label: string;
+    value: string;
+    icon: string;
+    colorClass: string;
+    details: { label: string; value: string }[];
+    isEditable?: boolean;
+    elementId?: string;
+    actionType?: 'silhouette' | 'emotion' | 'tone' | 'edit' | 'logbook';
+  } | null>(null);
+  const [hudModalEditValue, setHudModalEditValue] = useState('');
+
   // Item creation modal state
   const [showCreateItemModal, setShowCreateItemModal] = useState(false);
   const [newItemName, setNewItemName] = useState('');
@@ -2982,6 +2997,172 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     }
   }, [messages, adventure.id]);
 
+  const syncLocationToWorldHelper = (targetWorld: any, locTitle: string, locDesc: string, details: any) => {
+    if (!targetWorld) return { coordinates: { x: 50, y: 50 }, mapLevel: 'meso' as const };
+    if (!Array.isArray(targetWorld.territories)) targetWorld.territories = [];
+    if (!Array.isArray(targetWorld.connections)) targetWorld.connections = [];
+
+    const combined = (locTitle + ' ' + locDesc).toLowerCase();
+
+    // 1. Detect Direction
+    let direction = details.direction || '';
+    if (!direction) {
+      if (/südost|süd-ost|southeast/i.test(combined)) direction = 'Südosten';
+      else if (/südwest|süd-west|southwest/i.test(combined)) direction = 'Südwesten';
+      else if (/nordost|nord-ost|northeast/i.test(combined)) direction = 'Nordosten';
+      else if (/nordwest|nord-west|northwest/i.test(combined)) direction = 'Nordwesten';
+      else if (/süden|nach süden|südlich|south/i.test(combined)) direction = 'Süden';
+      else if (/norden|nach norden|nördlich|north/i.test(combined)) direction = 'Norden';
+      else if (/osten|nach osten|östlich|east/i.test(combined)) direction = 'Osten';
+      else if (/westen|nach westen|westlich|west/i.test(combined)) direction = 'Westen';
+    }
+
+    // 2. Detect Travel Time / Duration
+    let travelTime = details.travelTime || '';
+    if (!travelTime) {
+      const travelMatch = locDesc.match(/(?:reisezeit|reise|entfernung|dauer|fußmarsch|marsch|fahrt)\s*:\s*([^,\.\n\|]+)/i) ||
+                          locDesc.match(/(\d+\s*(?:tage|tagen|monate|monaten|wochen|stunden|jahre|tage\s*reise|monate\s*reise))/i);
+      if (travelMatch && travelMatch[1]) {
+        travelTime = travelMatch[1].trim();
+      }
+    }
+
+    // 3. Detect Map Level & Type
+    let mapLevel: 'macro' | 'meso' | 'micro' = details.mapLevel || 'meso';
+    let territoryType: Territory['type'] = 'ort';
+    let shapeType: 'circle' | 'rectangle' | 'polygon' = 'circle';
+    let color = '#3b82f6';
+
+    if (/gilde|taverne|haus|höhle|shop|laden|markt|zimmer|poi|bar|herberge|schrein|ruine|tempel|palast|platz|arena|zuhause|kerker/i.test(combined)) {
+      mapLevel = 'micro';
+      territoryType = 'gebäude';
+      color = '#f59e0b';
+    } else if (/kontinent|welt|reich|königreich|ozean|meer|archipel|insel/i.test(combined)) {
+      mapLevel = 'macro';
+      if (/meer|ozean/i.test(combined)) {
+        territoryType = 'meer';
+        color = '#0284c7';
+      } else if (/kontinent/i.test(combined)) {
+        territoryType = 'kontinent';
+        shapeType = 'polygon';
+        color = '#b91c1c';
+      } else {
+        territoryType = 'insel';
+        shapeType = 'polygon';
+        color = '#0d9488';
+      }
+    } else if (/festung|burg|bastion/i.test(combined)) {
+      territoryType = 'festung';
+      color = '#dc2626';
+    } else if (/stadt|dorf|siedlung|hafen/i.test(combined)) {
+      territoryType = 'stadt';
+      color = '#8b5cf6';
+    }
+
+    // 4. Determine Origin / Parent
+    let refTerritory: any = null;
+    if (targetWorld.territories.length > 0) {
+      refTerritory = targetWorld.territories[targetWorld.territories.length - 1];
+    }
+
+    let baseX = refTerritory ? refTerritory.x : 120;
+    let baseY = refTerritory ? refTerritory.y : 70;
+
+    let stepDistance = 22;
+    if (/stund/i.test(travelTime)) stepDistance = 8;
+    else if (/monat/i.test(travelTime)) stepDistance = 55;
+    else if (/woch/i.test(travelTime)) stepDistance = 35;
+    else if (/tag/i.test(travelTime)) {
+      const num = parseInt(travelTime) || 2;
+      stepDistance = Math.min(45, 14 + num * 5);
+    }
+
+    let dx = 0;
+    let dy = 0;
+    if (direction === 'Süden') { dy = stepDistance; dx = (Math.random() - 0.5) * 8; }
+    else if (direction === 'Norden') { dy = -stepDistance; dx = (Math.random() - 0.5) * 8; }
+    else if (direction === 'Osten') { dx = stepDistance; dy = (Math.random() - 0.5) * 8; }
+    else if (direction === 'Westen') { dx = -stepDistance; dy = (Math.random() - 0.5) * 8; }
+    else if (direction === 'Südosten') { dx = stepDistance * 0.7; dy = stepDistance * 0.7; }
+    else if (direction === 'Südwesten') { dx = -stepDistance * 0.7; dy = stepDistance * 0.7; }
+    else if (direction === 'Nordosten') { dx = stepDistance * 0.7; dy = -stepDistance * 0.7; }
+    else if (direction === 'Nordwesten') { dx = -stepDistance * 0.7; dy = -stepDistance * 0.7; }
+    else {
+      const angle = (targetWorld.territories.length * 1.35) % (Math.PI * 2);
+      dx = Math.cos(angle) * stepDistance;
+      dy = Math.sin(angle) * stepDistance;
+    }
+
+    const finalX = Math.round(Math.max(15, Math.min(225, baseX + dx)));
+    const finalY = Math.round(Math.max(15, Math.min(125, baseY + dy)));
+    const coordinates = { x: finalX, y: finalY };
+
+    // Check existing territory in world
+    const existingTerrIdx = targetWorld.territories.findIndex((t: any) => 
+      t.name.toLowerCase().trim() === locTitle.toLowerCase().trim() ||
+      isSimilarLoreTitle(t.name, locTitle)
+    );
+
+    if (existingTerrIdx === -1) {
+      let polygonPoints: any = undefined;
+      const newRadius = territoryType === 'kontinent' ? 35.0 : territoryType === 'insel' ? 15.0 : 12.0;
+      if (shapeType === 'polygon' || territoryType === 'insel' || territoryType === 'kontinent') {
+        polygonPoints = createOrganicIslandPoints(finalX, finalY, newRadius, targetWorld.territories.length + 5);
+      }
+
+      const newTerr: any = {
+        id: `terr-dyn-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        name: locTitle,
+        type: territoryType,
+        description: locDesc,
+        parentId: refTerritory ? refTerritory.id : null,
+        x: finalX,
+        y: finalY,
+        radius: shapeType === 'circle' ? 1.6 : newRadius,
+        shapeType,
+        points: polygonPoints,
+        color,
+        faction: 'Neutral',
+        dangerLevel: 'Normal',
+        isUnlocked: true,
+        direction: direction || undefined,
+        travelTime: travelTime || undefined,
+        routeFrom: refTerritory ? refTerritory.name : undefined
+      };
+      targetWorld.territories.push(newTerr);
+
+      if (refTerritory) {
+        const newConn = {
+          id: `conn-${refTerritory.id}-${newTerr.id}`,
+          fromId: refTerritory.id,
+          toId: newTerr.id,
+          label: travelTime || (direction ? `Reise (${direction})` : 'Reiseweg'),
+          travelTime: travelTime || undefined,
+          type: (territoryType === 'meer' || refTerritory.type === 'meer') ? 'sea' : 'land',
+          isUnlocked: true
+        };
+        targetWorld.connections.push(newConn);
+      }
+    } else {
+      const existingT = targetWorld.territories[existingTerrIdx];
+      targetWorld.territories[existingTerrIdx] = {
+        ...existingT,
+        description: locDesc || existingT.description,
+        travelTime: travelTime || existingT.travelTime,
+        direction: direction || existingT.direction,
+        isUnlocked: true
+      };
+    }
+
+    return {
+      mapLevel,
+      coordinates,
+      direction: direction || undefined,
+      travelTime: travelTime || undefined,
+      parentPlaceId: refTerritory ? refTerritory.name : undefined
+    };
+  };
+
   const parseLoreAndCharUpdates = (text: string, currentAdventure: Adventure, forceHp?: number, forceMp?: number) => {
     let updatedLore = [...(currentAdventure.loreDatabase || [])];
     let updatedNpcs = [...(currentAdventure.npcs || [])];
@@ -3014,165 +3195,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
     // Helper for adding/updating dynamic territory & travel connection
     const syncLocationToWorld = (locTitle: string, locDesc: string, details: any) => {
-      const combined = (locTitle + ' ' + locDesc).toLowerCase();
-
-      // 1. Detect Direction
-      let direction = details.direction || '';
-      if (!direction) {
-        if (/südost|süd-ost|southeast/i.test(combined)) direction = 'Südosten';
-        else if (/südwest|süd-west|southwest/i.test(combined)) direction = 'Südwesten';
-        else if (/nordost|nord-ost|northeast/i.test(combined)) direction = 'Nordosten';
-        else if (/nordwest|nord-west|northwest/i.test(combined)) direction = 'Nordwesten';
-        else if (/süden|nach süden|südlich|south/i.test(combined)) direction = 'Süden';
-        else if (/norden|nach norden|nördlich|north/i.test(combined)) direction = 'Norden';
-        else if (/osten|nach osten|östlich|east/i.test(combined)) direction = 'Osten';
-        else if (/westen|nach westen|westlich|west/i.test(combined)) direction = 'Westen';
-      }
-
-      // 2. Detect Travel Time / Duration
-      let travelTime = details.travelTime || '';
-      if (!travelTime) {
-        const travelMatch = locDesc.match(/(?:reisezeit|reise|entfernung|dauer|fußmarsch|marsch|fahrt)\s*:\s*([^,\.\n\|]+)/i) ||
-                            locDesc.match(/(\d+\s*(?:tage|tagen|monate|monaten|wochen|stunden|jahre|tage\s*reise|monate\s*reise))/i);
-        if (travelMatch && travelMatch[1]) {
-          travelTime = travelMatch[1].trim();
-        }
-      }
-
-      // 3. Detect Map Level & Type
-      let mapLevel: 'macro' | 'meso' | 'micro' = details.mapLevel || 'meso';
-      let territoryType: Territory['type'] = 'ort';
-      let shapeType: 'circle' | 'rectangle' | 'polygon' = 'circle';
-      let color = '#3b82f6';
-
-      if (/gilde|taverne|haus|höhle|shop|laden|markt|zimmer|poi|bar|herberge|schrein|ruine|tempel|palast|platz|arena|zuhause|kerker/i.test(combined)) {
-        mapLevel = 'micro';
-        territoryType = 'gebäude';
-        color = '#f59e0b';
-      } else if (/kontinent|welt|reich|königreich|ozean|meer|archipel|insel/i.test(combined)) {
-        mapLevel = 'macro';
-        if (/meer|ozean/i.test(combined)) {
-          territoryType = 'meer';
-          color = '#0284c7';
-        } else if (/kontinent/i.test(combined)) {
-          territoryType = 'kontinent';
-          shapeType = 'polygon';
-          color = '#b91c1c';
-        } else {
-          territoryType = 'insel';
-          shapeType = 'polygon';
-          color = '#0d9488';
-        }
-      } else if (/festung|burg|bastion/i.test(combined)) {
-        territoryType = 'festung';
-        color = '#dc2626';
-      } else if (/stadt|dorf|siedlung|hafen/i.test(combined)) {
-        territoryType = 'stadt';
-        color = '#8b5cf6';
-      }
-
-      // 4. Determine Origin / Parent
-      let refTerritory: any = null;
-      if (updatedWorld.territories.length > 0) {
-        refTerritory = updatedWorld.territories[updatedWorld.territories.length - 1];
-      }
-
-      let baseX = refTerritory ? refTerritory.x : 120;
-      let baseY = refTerritory ? refTerritory.y : 70;
-
-      let stepDistance = 22;
-      if (/stund/i.test(travelTime)) stepDistance = 8;
-      else if (/monat/i.test(travelTime)) stepDistance = 55;
-      else if (/woch/i.test(travelTime)) stepDistance = 35;
-      else if (/tag/i.test(travelTime)) {
-        const num = parseInt(travelTime) || 2;
-        stepDistance = Math.min(45, 14 + num * 5);
-      }
-
-      let dx = 0;
-      let dy = 0;
-      if (direction === 'Süden') { dy = stepDistance; dx = (Math.random() - 0.5) * 8; }
-      else if (direction === 'Norden') { dy = -stepDistance; dx = (Math.random() - 0.5) * 8; }
-      else if (direction === 'Osten') { dx = stepDistance; dy = (Math.random() - 0.5) * 8; }
-      else if (direction === 'Westen') { dx = -stepDistance; dy = (Math.random() - 0.5) * 8; }
-      else if (direction === 'Südosten') { dx = stepDistance * 0.7; dy = stepDistance * 0.7; }
-      else if (direction === 'Südwesten') { dx = -stepDistance * 0.7; dy = stepDistance * 0.7; }
-      else if (direction === 'Nordosten') { dx = stepDistance * 0.7; dy = -stepDistance * 0.7; }
-      else if (direction === 'Nordwesten') { dx = -stepDistance * 0.7; dy = -stepDistance * 0.7; }
-      else {
-        const angle = (updatedWorld.territories.length * 1.35) % (Math.PI * 2);
-        dx = Math.cos(angle) * stepDistance;
-        dy = Math.sin(angle) * stepDistance;
-      }
-
-      const finalX = Math.round(Math.max(15, Math.min(225, baseX + dx)));
-      const finalY = Math.round(Math.max(15, Math.min(125, baseY + dy)));
-      const coordinates = { x: finalX, y: finalY };
-
-      // Check existing territory in world
-      const existingTerrIdx = updatedWorld.territories.findIndex((t: any) => 
-        t.name.toLowerCase().trim() === locTitle.toLowerCase().trim() ||
-        isSimilarLoreTitle(t.name, locTitle)
-      );
-
-      if (existingTerrIdx === -1) {
-        let polygonPoints: any = undefined;
-        const newRadius = territoryType === 'kontinent' ? 35.0 : territoryType === 'insel' ? 15.0 : 12.0;
-        if (shapeType === 'polygon' || territoryType === 'insel' || territoryType === 'kontinent') {
-          polygonPoints = createOrganicIslandPoints(finalX, finalY, newRadius, updatedWorld.territories.length + 5);
-        }
-
-        const newTerr: any = {
-          id: `terr-dyn-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          name: locTitle,
-          type: territoryType,
-          description: locDesc,
-          parentId: refTerritory ? refTerritory.id : null,
-          x: finalX,
-          y: finalY,
-          radius: shapeType === 'circle' ? 1.6 : newRadius,
-          shapeType,
-          points: polygonPoints,
-          color,
-          faction: 'Neutral',
-          dangerLevel: 'Normal',
-          isUnlocked: true,
-          direction: direction || undefined,
-          travelTime: travelTime || undefined,
-          routeFrom: refTerritory ? refTerritory.name : undefined
-        };
-        updatedWorld.territories.push(newTerr);
-
-        if (refTerritory) {
-          const newConn = {
-            id: `conn-${refTerritory.id}-${newTerr.id}`,
-            fromId: refTerritory.id,
-            toId: newTerr.id,
-            label: travelTime || (direction ? `Reise (${direction})` : 'Reiseweg'),
-            travelTime: travelTime || undefined,
-            type: (territoryType === 'meer' || refTerritory.type === 'meer') ? 'sea' : 'land',
-            isUnlocked: true
-          };
-          updatedWorld.connections.push(newConn);
-        }
-      } else {
-        const existingT = updatedWorld.territories[existingTerrIdx];
-        updatedWorld.territories[existingTerrIdx] = {
-          ...existingT,
-          description: locDesc || existingT.description,
-          travelTime: travelTime || existingT.travelTime,
-          direction: direction || existingT.direction,
-          isUnlocked: true
-        };
-      }
-
-      return {
-        mapLevel,
-        coordinates,
-        direction: direction || undefined,
-        travelTime: travelTime || undefined,
-        parentPlaceId: refTerritory ? refTerritory.name : undefined
-      };
+      return syncLocationToWorldHelper(updatedWorld, locTitle, locDesc, details);
     };
 
     // Parse LORE_ADD: [[LORE_ADD: Kategorie | Titel | Beschreibung]]
@@ -3186,7 +3209,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
       let category = 'Weltregeln';
       const catLower = rawCategory.toLowerCase();
-      if (catLower.includes('ort')) category = 'Orte';
+      if (catLower.includes('ort') || catLower.includes('weltkarte') || catLower.includes('territor') || catLower.includes('gebiet')) category = 'Weltkarte';
       else if (catLower.includes('gegner') || catLower.includes('feind') || catLower.includes('monster') || catLower.includes('boss')) category = 'Gegner';
       else if (catLower.includes('char') || catLower.includes('person')) category = 'Charaktere';
       else if (catLower.includes('frakt') || catLower.includes('gild') || catLower.includes('bünd')) category = 'Fraktionen';
@@ -3194,6 +3217,17 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       else if (catLower.includes('fähig') || catLower.includes('kraft') || catLower.includes('magie') || catLower.includes('jutsu') || catLower.includes('verbot') || catLower.includes('geheim') || catLower.includes('wiss')) category = 'Verbotenes Wissen';
       else if (catLower.includes('event') || catLower.includes('ereignis') || catLower.includes('quest') || catLower.includes('story')) category = 'Story & Quests';
       else if (catLower.includes('regel') || catLower.includes('gesetz')) category = 'Weltregeln';
+
+      if (category === 'Weltkarte') {
+        const synced = syncLocationToWorld(title, description, {});
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'add',
+          title: synced.travelTime ? `${title} (${synced.travelTime})` : title,
+          category: 'Weltkarte'
+        });
+        continue;
+      }
 
       let existsIdx = -1;
       if (category === 'Charaktere' || category === 'Gegner') {
@@ -3204,19 +3238,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
       if (existsIdx === -1) {
         let details: any = {};
-        if (category === 'Orte') {
-          const synced = syncLocationToWorld(title, description, {});
-          details = {
-            type: synced.mapLevel === 'micro' ? 'Aktivität / POI' : synced.mapLevel === 'macro' ? 'Kontinent / Großregion' : 'Region / Stadt',
-            climate: 'Ausgeglichen',
-            landmarks: 'Kürzlich entdeckt',
-            mapLevel: synced.mapLevel,
-            parentPlaceId: synced.parentPlaceId,
-            coordinates: synced.coordinates,
-            direction: synced.direction,
-            travelTime: synced.travelTime
-          };
-        } else if (category === 'Gegenstände') {
+        if (category === 'Gegenstände') {
           const combined = (title + ' ' + description).toLowerCase();
           let itemType = 'Werkzeuge & Alltags-Gegenstände';
           let rarity = 'Gewöhnlich';
@@ -3311,19 +3333,13 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         notifications.push({
           id: Math.random().toString(),
           type: 'add',
-          title: category === 'Gegenstände' && details?.owner ? `${title} (Besitzer: ${details.owner})` : category === 'Orte' && details?.travelTime ? `${title} (${details.travelTime})` : title,
+          title: category === 'Gegenstände' && details?.owner ? `${title} (Besitzer: ${details.owner})` : title,
           category
         });
       } else {
         const existingEntry = updatedLore[existsIdx];
         let mergedDetails = { ...existingEntry.details };
-        if (category === 'Orte') {
-          const synced = syncLocationToWorld(title, description, mergedDetails);
-          mergedDetails = {
-            ...mergedDetails,
-            ...synced
-          };
-        } else if (category === 'Gegenstände') {
+        if (category === 'Gegenstände') {
           const ownerMatch = description.match(/(?:besitzer|owner|besitz von|in den händen von)\s*:\s*([^,\.\n\|]+)/i);
           if (ownerMatch && ownerMatch[1]) {
             mergedDetails.owner = ownerMatch[1].trim();
@@ -3361,29 +3377,12 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         parentPlaceId: tParent
       });
 
-      const existsIdx = updatedLore.findIndex(e => e.category === 'Orte' && isSimilarLoreTitle(e.title, tName));
-      if (existsIdx === -1) {
-        updatedLore.push({
-          id: 'dyn-terr-' + Math.random().toString(36).substr(2, 9),
-          category: 'Orte',
-          title: tName,
-          description: tDesc,
-          isUnlocked: true,
-          details: {
-            type: tType,
-            mapLevel: synced.mapLevel,
-            parentPlaceId: tParent,
-            travelTime: tTravel,
-            coordinates: synced.coordinates
-          }
-        } as any);
-        notifications.push({
-          id: Math.random().toString(),
-          type: 'add',
-          title: `${tName} (${tTravel})`,
-          category: 'Orte'
-        });
-      }
+      notifications.push({
+        id: Math.random().toString(),
+        type: 'add',
+        title: `${tName} (${tTravel || tType})`,
+        category: 'Weltkarte'
+      });
     }
 
     // Parse LORE_UNLOCK: [[LORE_UNLOCK: Titel]]
@@ -3872,7 +3871,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       }
     }
 
-    return { cleanedText: cleanedText.trim(), updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState };
+    return { cleanedText: cleanedText.trim(), updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld };
   };
 
   const parseStatusUpdates = (text: string, currentStatus: StatusElement[]) => {
@@ -4480,7 +4479,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       - Währung: ${economyConfig.currencyName || 'Goldmünzen'} (${economyConfig.currencyIcon || ''})
       - Abrechnungs-Intervall: ${economyConfig.payoutInterval || 'weekly'} (Passives Einkommen: ${economyConfig.allowPassiveIncome ? 'Aktiv' : 'Inaktiv'})
       - Konfigurierte Betriebe in der Welt:
-      ${economyConfig.holdings.map(h => `  * ${h.icon || ''} "${h.name}" (Stufe ${h.level} ${h.type.toUpperCase()}) | Besitzer: ${h.ownerType === 'user' ? 'Nutzer/Gruppe' : h.assignedCharacterName || 'Charakter/NPC'} | Einnahmen: +${h.incomePerInterval} ${economyConfig.currencyIcon} | Unterhalt: -${h.upkeepPerInterval} ${economyConfig.currencyIcon} | Personal: ${h.staffCount} | Ort: ${h.locationName || 'Unbekannt'} | Status: ${h.status}`).join('\n')}
+      ${economyConfig.holdings.map(h => `  * ${h.icon || ''} "${h.name}" (Stufe ${h.level} ${h.type.toUpperCase()}) | Besitzer: ${h.ownerType === 'user' ? 'Nutzer/Gruppe' : h.ownerType === 'faction' ? (h.ownerFactionName || 'Fraktion') : (h.assignedCharacterName || 'Charakter/NPC')} | Einnahmen: +${h.incomePerInterval} ${economyConfig.currencyIcon} | Unterhalt: -${h.upkeepPerInterval} ${economyConfig.currencyIcon} | Personal: ${h.staffCount} | Ort: ${h.locationName || 'Unbekannt'} | Status: ${h.status}`).join('\n')}
       ` : '';
 
       const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${world.title}".
@@ -4528,6 +4527,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       5. ANTWORTE IMMER AUF DEUTSCH. Gib KEINE Antwortmöglichkeiten (A, B, C) vor. Der Spieler schreibt seine Aktionen frei.
       6. KEINE STANDARD-FRAGEN AM ENDE: Beende deine Nachrichten NIEMALS mit stereotypischen Fragen wie "Was wirst du tun?", "Was tust du?", "Wie reagierst du?", "Wie wirst du reagieren?" oder ähnlichen Fragen. Lass das Ende deiner Antwort atmosphärisch ausklingen, ganz ohne eine abschließende Frage.
       7. KEIN DIKTIEREN DER WAHRNEHMUNG, REAKTION, GEFÜHLE, UNWILLKÜRLICHEN KÖRPERREAKTIONEN ODER DIALOGE DES SPIELERS (ABSOLUTES SPRECH- UND HANDLUNGSVERBOT FÜR DEN NUTZER): Schreibe niemals vor, was der Spieler aktiv tut, denkt, fühlt, bemerkt, empfindet oder wie sein Körper unwillkürlich reagiert. Diktierte Aktionen, Gefühle oder Sätze wie "Du bemerkst, dass dich jemand beobachtet", "Du spürst Angst aufsteigen", "Du blickst dich um", "lässt dein Herz einen Schlag aussetzen", "Deine Hände umklammern fester", "Du spürst eine eisige Kälte in deiner Brust" oder "Du musst jetzt reagieren" sind STRENGSTENS VERBOTEN. Zudem darfst du NIEMALS wörtliche Rede, Dialoge, Gedanken oder aktive Handlungen im Namen des Spielers/seines Charakters formulieren, erfinden oder diktieren (z.B. darfst du ihm niemals Sätze in den Mund legen wie: "Das war's, du hättest mich nie finden dürfen!", rufst du). Der Spieler spricht, fühlt und handelt einzig und allein selbst durch seine Eingaben! Beschreibe stattdessen nur die objektive Umwelt und das Verhalten von NPCs (z.B. "Draußen zieht ein frischer Wind auf und die Blätter rascheln an den Fenstern" anstatt "Du spürst eine Kälte in deiner Brust"). Der Spieler entscheidet ganz allein über seine Wahrnehmung, Gedanken, unwillkürlichen Körperreaktionen, Gefühle, Dialoge und Reaktionen.
+      7b. ABSOLUTES ZITIERVERBOT DES NUTZERS: Du als Erzähler darfst NIEMALS die Eingaben, Worte oder Aussagen des Spielers/Nutzers wörtlich in deiner Narration oder Beschreibung wiederholen, zitieren oder zusammenfassend nachplappern. Wenn der Spieler spricht, ist es bereits gesagt worden. NPCs und andere Charaktere in der Welt dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich auf seine Worte beziehen.
       8. ABSOLUTES VERBOT DES SELBSTSTÄNDIGEN / PASSIVEN LOSGEHENS VON FÄHIGKEITEN & KRÄFTEN DES SPIELERS (SPIELER-KRAFTKONTROLLE & AKTIVIERUNGSMONOPOL):
          - Die Fähigkeiten, Magie, Elementarkräfte (wie Kälte, Eis, Hitze, Feuer, Wind, Schatten, Licht etc.), Teufelskräfte, Transformationen, Auren oder Fertigkeiten des Spielers/Nutzers gehen NIEMALS von alleine los, lecken nicht passiv aus dem Körper heraus, entweichen nicht versehentlich und brechen niemals unkontrolliert aus!
          - Beschreibe NIEMALS, dass sich durch die bloße Anwesenheit, Emotionen oder Gedanken des Spielers von selbst Raureif, Frost, Kälte, Flammen, Hitze, Blitze, Funken oder Auren in der Umgebung (z.B. auf Tischen, Werkbänken, Wänden, Böden, Fenstern oder an Gegenständen) bilden oder absetzen!
@@ -4548,7 +4548,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           - GEGNER-FILTERUNG: Führe nur Gegner ein, die sich auch tatsächlich physisch in unmittelbarer Nähe des Spielers befinden. Verbündete (Gefährten, Freunde, Lehrer) oder politische Fraktionen sind KEINE Gegner und dürfen niemals als Kampfgegner gelistet werden.
           - GEGENSTÄNDE & VERBOTENES WISSEN: Erstelle NIEMALS, absolut NIEMALS Einträge für gewöhnliche, alltägliche Gegenstände (wie Tisch, Lampe, Stift, Schlüssel, Papier). Nur legendäre, magische, plot-tragende Waffen, Ausrüstungsteile und Artefakte mit echtem Story-Impact eintragen! Wenn ein Gegenstand für den Spieler geschmiedet, gefunden oder ihm übergeben wird, MUSS dieser absolut perfekt zur Lore und dem Hintergrund des Settings passen (z.B. in "One Piece" ein Schwarzes Katana vom Rang "Drachenschwert", geschmiedet von dem Großvater des Spielers, der ein berühmter Meisterschmied ist). Denke dir einen epischen, faszinierenden und lore-getreuen Namen aus (z.B. "Kokuto Ryuzan" oder "Kusanagi") und beschreibe den Hintergrund detailreich! Trage den Gegenstand zwingend über [[LORE_ADD: Gegenstände | Name | Detailreiche Beschreibung inklusive Herkunft und Legende auf Deutsch]] in die Lore-Datenbank ein. Füge ihn zudem direkt per [[INVENTORY_SET: weapons+=Name]] oder [[INVENTORY_SET: generalItems+=Name]] dem Inventar des Spielers hinzu!
           - VETO FÜR WELTREGELN & GEHEIMNISSE: Keine Spoiler oder verdeckten Pläne vorzeitig leaken!
-          Nutze dazu das Format [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]] für Gegner oder passende Kategorien wie 'Orte', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Events', 'Weltregeln', 'Charaktere'. Wenn ein bereits existierender, aber bisher geheimer Lore-Fakt enthüllt wird, schalte ihn frei mit [[LORE_UNLOCK: Name]].
+          Nutze dazu das Format [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]] für Gegner oder passende Kategorien wie 'Weltkarte', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Story & Quests', 'Weltregeln', 'Charaktere'. Neue Gebiete oder Städte können auch per [[TERRITORY_ADD: Name | Typ | Übergeordnetes_Gebiet | Reisezeit | Beschreibung]] hinzugefügt werden. Wenn ein bereits existierender, aber bisher geheimer Lore-Fakt enthüllt wird, schalte ihn frei mit [[LORE_UNLOCK: Name]].
       15. ABSOLUTES VERBOT DES VERÄNDERNS ODER ÜBERSCHREIBENS VON VORHANDENEN CHARAKTEREN & BEZIEHUNGEN: Die KI darf während des Chats UNTER KEINEN UMSTÄNDEN Einträge von vorhandenen Charakteren (weder vom Spieler/Nutzer noch von existierenden NPCs oder bestehenden Codex-Charakteren) verändern, mutieren oder überschreiben! Dies gilt ausnahmslos für Charakterbögen, Biografien, Werte, Aussehen und vor allem für bestehende Beziehungen ('relationships') und Verhalten zu anderen ('conduct'). Alle vorhandenen Charakterdaten und Beziehungen wurden vom Nutzer fest vorgegeben und sind absolut UNANTASTBAR!
       16. UMGANGSFORMEN, ETIKETTE & ANREDE: Beachte die sozialen Rollen und Hierarchien strikt. Wenn ein niederrangiger Charakter (z.B. Schüler, Lehrling, Bürger) einen höherrangigen (z.B. Lehrer/Sensei, König, Meister) nicht mit dem gebührenden Respekt oder der korrekten Anrede (z.B. Sensei, Eure Majestät) anspricht, müssen die NPCs darauf passend reagieren. Sie können Tadel aussprechen, Konsequenzen verhängen oder verärgert reagieren. Gleiches gilt für unangemessene Ausdrucksweise oder mangelnde Etikette.
       17. STRENGES ZITIER- & WIEDERHOLUNGSVERBOT: Du darfst NIEMALS die Worte, Sätze, Aktionen, Fragen oder Ausrufe des Spielers zitieren, wiederholen, umformulieren, umschreiben oder kopieren (auch nicht als wörtliche Rede, Gedanken oder Einleitung). Der Spieler hat seine Nachricht bereits selbst geschrieben/gelesen und will sie unter keinen Umständen in deiner Antwort wiederholt sehen. Beginne deine Antwort direkt mit den unmittelbaren Konsequenzen, NPCs-Reaktionen oder dem weiteren physischen/verbalen Verlauf der Szene. Schreibe absolut keine Einleitung, Zusammenfassung oder Rekapitulation des Spielerbeitrags. Wirf den Leser mitten in die darauffolgende Handlung!
@@ -4593,7 +4593,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       const rawText = response.text || '';
       
       const { cleanedText: statusCleaned, newStatus } = parseStatusUpdates(rawText, statusWithTime);
-      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState } = parseLoreAndCharUpdates(statusCleaned, adventure, forceNextHp, forceNextMp);
+      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, forceNextHp, forceNextMp);
 
       if (notifications.length > 0) {
         setLoreNotifications(prev => [...prev, ...notifications]);
@@ -4630,6 +4630,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         ...adventureRef.current, 
         player: updatedPlayer,
         npcs: updatedNpcs,
+        world: updatedWorld,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
         chatHistory: nextChatHistory,
@@ -4648,6 +4649,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           ...adventureRef.current,
           player: updatedPlayer,
           npcs: updatedNpcs,
+          world: updatedWorld,
           statusElements: syncedStatus,
           loreDatabase: updatedLore,
           chatHistory: nextChatHistory,
@@ -4667,16 +4669,29 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       }).then(newEntries => {
         if (newEntries && newEntries.length > 0) {
           const currentAdventureState = adventureRef.current || adventure;
-          const currentLore = [...(currentAdventureState.loreDatabase || [])];
+          const currentLore = [...(currentAdventureState.loreDatabase || [])].filter(l => l.category !== 'Orte' && (l.category as string) !== 'Weltkarte');
           const addedNotifications: any[] = [];
-          const freshlyAddedEntries: any[] = [];
 
           newEntries.forEach((entry: any) => {
             const title = entry.title?.trim();
-            const category = entry.category || 'Weltregeln';
+            const rawCat = (entry.category || 'Weltregeln').trim();
             const description = entry.description?.trim();
             if (!title || !description) return;
 
+            const isMapLocation = rawCat.toLowerCase().includes('ort') || rawCat.toLowerCase().includes('weltkarte') || rawCat.toLowerCase().includes('gebiet');
+
+            if (isMapLocation) {
+              const synced = syncLocationToWorldHelper(updatedWorld, title, description, entry.details || {});
+              addedNotifications.push({
+                id: Math.random().toString(),
+                type: 'add',
+                title: synced.travelTime ? `${title} (${synced.travelTime})` : title,
+                category: 'Weltkarte'
+              });
+              return;
+            }
+
+            const category = rawCat;
             // Check if title already exists in currentLore
             const exists = currentLore.some(e => 
               e.category === category && isSimilarLoreTitle(e.title, title)
@@ -4691,7 +4706,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
                 details: entry.details || {}
               };
               currentLore.push(newEntry as any);
-              freshlyAddedEntries.push(newEntry);
               addedNotifications.push({
                 id: Math.random().toString(),
                 type: 'add',
@@ -4701,12 +4715,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
             }
           });
 
-          if (freshlyAddedEntries.length > 0) {
-            if (addedNotifications.length > 0) {
-              setLoreNotifications(prev => [...prev, ...addedNotifications]);
-            }
+          if (addedNotifications.length > 0) {
+            setLoreNotifications(prev => [...prev, ...addedNotifications]);
             onUpdateAdventure({
               ...adventureRef.current,
+              world: updatedWorld,
               loreDatabase: currentLore
             });
           }
@@ -6227,7 +6240,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       - Währung: ${economyConfig2.currencyName || 'Goldmünzen'} (${economyConfig2.currencyIcon || ''})
       - Abrechnungs-Intervall: ${economyConfig2.payoutInterval || 'weekly'} (Passives Einkommen: ${economyConfig2.allowPassiveIncome ? 'Aktiv' : 'Inaktiv'})
       - Konfigurierte Betriebe in der Welt:
-      ${economyConfig2.holdings.map(h => `  * ${h.icon || ''} "${h.name}" (Stufe ${h.level} ${h.type.toUpperCase()}) | Besitzer: ${h.ownerType === 'user' ? 'Nutzer/Gruppe' : h.assignedCharacterName || 'Charakter/NPC'} | Einnahmen: +${h.incomePerInterval} ${economyConfig2.currencyIcon} | Unterhalt: -${h.upkeepPerInterval} ${economyConfig2.currencyIcon} | Personal: ${h.staffCount} | Ort: ${h.locationName || 'Unbekannt'} | Status: ${h.status}`).join('\n')}
+      ${economyConfig2.holdings.map(h => `  * ${h.icon || ''} "${h.name}" (Stufe ${h.level} ${h.type.toUpperCase()}) | Besitzer: ${h.ownerType === 'user' ? 'Nutzer/Gruppe' : h.ownerType === 'faction' ? (h.ownerFactionName || 'Fraktion') : (h.assignedCharacterName || 'Charakter/NPC')} | Einnahmen: +${h.incomePerInterval} ${economyConfig2.currencyIcon} | Unterhalt: -${h.upkeepPerInterval} ${economyConfig2.currencyIcon} | Personal: ${h.staffCount} | Ort: ${h.locationName || 'Unbekannt'} | Status: ${h.status}`).join('\n')}
       ` : '';
 
       const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${world.title}".
@@ -6275,6 +6288,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       5. ANTWORTE IMMER AUF DEUTSCH. Gib KEINE Antwortmöglichkeiten (A, B, C) vor. Der Spieler schreibt seine Aktionen frei.
       6. KEINE STANDARD-FRAGEN AM ENDE: Beende deine Nachrichten NIEMALS mit stereotypischen Fragen wie "Was wirst du tun?", "Was tust du?", "Wie reagierst du?", "Wie wirst du reagieren?" oder ähnlichen Fragen. Lass das Ende deiner Antwort atmosphärisch ausklingen, ganz ohne eine abschließende Frage.
       7. KEIN DIKTIEREN DER WAHRNEHMUNG, REAKTION, GEFÜHLE, UNWILLKÜRLICHEN KÖRPERREAKTIONEN ODER DIALOGE DES SPIELERS (ABSOLUTES SPRECH- UND HANDLUNGSVERBOT FÜR DEN NUTZER): Schreibe niemals vor, was der Spieler aktiv tut, denkt, fühlt, bemerkt, empfindet oder wie sein Körper unwillkürlich reagiert. Diktierte Aktionen, Gefühle oder Sätze wie "Du bemerkst, dass dich jemand beobachtet", "Du spürst Angst aufsteigen", "Du blickst dich um", "lässt dein Herz einen Schlag aussetzen", "Deine Hände umklammern fester", "Du spürst eine eisige Kälte in deiner Brust" oder "Du musst jetzt reagieren" sind STRENGSTENS VERBOTEN. Zudem darfst du NIEMALS wörtliche Rede, Dialoge, Gedanken oder aktive Handlungen im Namen des Spielers/seines Charakters formulieren, erfinden oder diktieren (z.B. darfst du ihm niemals Sätze in den Mund legen wie: "Das war's, du hättest mich nie finden dürfen!", rufst du). Der Spieler spricht, fühlt und handelt einzig und allein selbst durch seine Eingaben! Beschreibe stattdessen nur die objektive Umwelt und das Verhalten von NPCs (z.B. "Draußen zieht ein frischer Wind auf und die Blätter rascheln an den Fenstern" anstatt "Du spürst eine Kälte in deiner Brust"). Der Spieler entscheidet ganz allein über seine Wahrnehmung, Gedanken, unwillkürlichen Körperreaktionen, Gefühle, Dialoge und Reaktionen.
+      7b. ABSOLUTES ZITIERVERBOT DES NUTZERS: Du als Erzähler darfst NIEMALS die Eingaben, Worte oder Aussagen des Spielers/Nutzers wörtlich in deiner Narration oder Beschreibung wiederholen, zitieren oder zusammenfassend nachplappern. Wenn der Spieler spricht, ist es bereits gesagt worden. NPCs und andere Charaktere in der Welt dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich auf seine Worte beziehen.
       8. ABSOLUTES VERBOT DES SELBSTSTÄNDIGEN / PASSIVEN LOSGEHENS VON FÄHIGKEITEN & KRÄFTEN DES SPIELERS (SPIELER-KRAFTKONTROLLE & AKTIVIERUNGSMONOPOL):
          - Die Fähigkeiten, Magie, Elementarkräfte (wie Kälte, Eis, Hitze, Feuer, Wind, Schatten, Licht etc.), Teufelskräfte, Transformationen, Auren oder Fertigkeiten des Spielers/Nutzers gehen NIEMALS von alleine los, lecken nicht passiv aus dem Körper heraus, entweichen nicht versehentlich und brechen niemals unkontrolliert aus!
          - Beschreibe NIEMALS, dass sich durch die bloße Anwesenheit, Emotionen oder Gedanken des Spielers von selbst Raureif, Frost, Kälte, Flammen, Hitze, Blitze, Funken oder Auren in der Umgebung (z.B. auf Tischen, Werkbänken, Wänden, Böden, Fenstern oder an Gegenständen) bilden oder absetzen!
@@ -6293,7 +6307,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           - GEGNER-FILTERUNG: Führe nur Gegner ein, die sich auch tatsächlich physisch in unmittelbarer Nähe des Spielers befinden. Verbündete (Gefährten, Freunde, Lehrer) oder politische Fraktionen sind KEINE Gegner und dürfen niemals als Kampfgegner gelistet werden.
           - GEGENSTÄNDE & VERBOTENES WISSEN: Erstelle NIEMALS, absolut NIEMALS Einträge für gewöhnliche, alltägliche Gegenstände (wie Tisch, Lampe, Stift, Schlüssel, Papier). Nur legendäre, magische, plot-tragende Waffen, Ausrüstungsteile und Artefakte mit echtem Story-Impact eintragen! Wenn ein Gegenstand für den Spieler geschmiedet, gefunden oder ihm übergeben wird (oder einem NPC gehört), MUSS dieser absolut perfekt zur Lore und dem Hintergrund des Settings passen (z.B. in "One Piece" ein Schwarzes Katana vom Rang "Drachenschwert", geschmiedet von dem Großvater des Spielers, der ein Meisterschmied ist). Denke dir einen epischen, faszinierenden und lore-getreuen Namen aus (z.B. "Kokuto Ryuzan" oder "Kusanagi") und beschreibe den Hintergrund detailreich! Trage den Gegenstand zwingend mit Besitzerangabe über [[LORE_ADD: Gegenstände | Name | Besitzer: Spieler | Detailreiche Beschreibung inklusive Herkunft und Legende auf Deutsch]] (oder 'Besitzer: NPC-Name') in die Lore-Datenbank ein. Wenn er dem Spieler gehört, füge ihn zudem direkt per [[INVENTORY_SET: weapons+=Name]] oder [[INVENTORY_SET: generalItems+=Name]] dem Inventar des Spielers hinzu!
           - VETO FÜR WELTREGELN & GEHEIMNISSE: Keine Spoiler oder verdeckten Pläne vorzeitig leaken!
-          Nutze dazu das Format [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]] für Gegner oder passende Kategorien wie 'Orte', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Events', 'Weltregeln', 'Charaktere'. Wenn ein bereits existierender, aber bisher geheimer Lore-Fakt enthüllt wird, schalte ihn frei mit [[LORE_UNLOCK: Name]].
+          Nutze dazu das Format [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]] für Gegner oder passende Kategorien wie 'Weltkarte', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Story & Quests', 'Weltregeln', 'Charaktere'. Neue Gebiete oder Städte können auch per [[TERRITORY_ADD: Name | Typ | Übergeordnetes_Gebiet | Reisezeit | Beschreibung]] hinzugefügt werden. Wenn ein bereits existierender, aber bisher geheimer Lore-Fakt enthüllt wird, schalte ihn frei mit [[LORE_UNLOCK: Name]].
       15. ABSOLUTES VERBOT DES VERÄNDERNS ODER ÜBERSCHREIBENS VON VORHANDENEN CHARAKTEREN & BEZIEHUNGEN: Die KI darf während des Chats UNTER KEINEN UMSTÄNDEN Einträge von vorhandenen Charakteren (weder vom Spieler/Nutzer noch von existierenden NPCs oder bestehenden Codex-Charakteren) verändern, mutieren oder überschreiben! Dies gilt ausnahmslos für Charakterbögen, Biografien, Werte, Aussehen und vor allem für bestehende Beziehungen ('relationships') und Verhalten zu anderen ('conduct'). Alle vorhandenen Charakterdaten und Beziehungen wurden vom Nutzer fest vorgegeben und sind absolut UNANTASTBAR!
       16. UMGANGSFORMEN, ETIKETTE & ANREDE: Beachte die sozialen Rollen und Hierarchien strikt. Wenn ein niederrangiger Charakter (z.B. Schüler, Lehrling, Bürger) einen höherrangigen (z.B. Lehrer/Sensei, König, Meister) nicht mit dem gebührenden Respekt oder der korrekten Anrede (z.B. Sensei, Eure Majestät) anspricht, müssen die NPCs darauf passend reagieren. Sie können Tadel aussprechen, Konsequenzen verhängen oder verärgert reagieren. Gleiches gilt für unangemessene Ausdrucksweise oder mangelnde Etikette.
       17. STRENGES ZITIER- & WIEDERHOLUNGSVERBOT: Du darfst NIEMALS die Worte, Sätze, Aktionen, Fragen oder Ausrufe des Spielers zitieren, wiederholen, umformulieren, umschreiben oder kopieren (auch nicht als wörtliche Rede, Gedanken oder Einleitung). Der Spieler hat seine Nachricht bereits selbst geschrieben/gelesen und will sie unter keinen Umständen in deiner Antwort wiederholt sehen. Beginne deine Antwort direkt mit den unmittelbaren Konsequenzen, NPCs-Reaktionen oder dem weiteren physischen/verbalen Verlauf der Szene. Schreibe absolut keine Einleitung, Zusammenfassung oder Rekapitulation des Spielerbeitrags. Wirf den Leser mitten in die darauffolgende Handlung!
@@ -6340,7 +6354,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       const rawText = response.text || '';
       
       const { cleanedText: statusCleaned, newStatus } = parseStatusUpdates(rawText, statusWithTime);
-      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState } = parseLoreAndCharUpdates(statusCleaned, adventure);
+      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure);
 
       if (notifications.length > 0) {
         setLoreNotifications(prev => [...prev, ...notifications]);
@@ -6377,6 +6391,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         ...adventureRef.current, 
         player: updatedPlayer,
         npcs: updatedNpcs,
+        world: updatedWorld,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
         chatHistory: finalMessages,
@@ -6395,6 +6410,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           ...adventureRef.current,
           player: updatedPlayer,
           npcs: updatedNpcs,
+          world: updatedWorld,
           statusElements: syncedStatus,
           loreDatabase: updatedLore,
           chatHistory: finalMessages,
@@ -6414,16 +6430,29 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       }).then(newEntries => {
         if (newEntries && newEntries.length > 0) {
           const currentAdventureState = adventureRef.current || adventure;
-          const currentLore = [...(currentAdventureState.loreDatabase || [])];
+          const currentLore = [...(currentAdventureState.loreDatabase || [])].filter(l => l.category !== 'Orte' && (l.category as string) !== 'Weltkarte');
           const addedNotifications: any[] = [];
-          const freshlyAddedEntries: any[] = [];
 
           newEntries.forEach((entry: any) => {
             const title = entry.title?.trim();
-            const category = entry.category || 'Weltregeln';
+            const rawCat = (entry.category || 'Weltregeln').trim();
             const description = entry.description?.trim();
             if (!title || !description) return;
 
+            const isMapLocation = rawCat.toLowerCase().includes('ort') || rawCat.toLowerCase().includes('weltkarte') || rawCat.toLowerCase().includes('gebiet');
+
+            if (isMapLocation) {
+              const synced = syncLocationToWorldHelper(updatedWorld, title, description, entry.details || {});
+              addedNotifications.push({
+                id: Math.random().toString(),
+                type: 'add',
+                title: synced.travelTime ? `${title} (${synced.travelTime})` : title,
+                category: 'Weltkarte'
+              });
+              return;
+            }
+
+            const category = rawCat;
             // Check if title already exists in currentLore
             const exists = currentLore.some(e => 
               e.category === category && isSimilarLoreTitle(e.title, title)
@@ -6438,7 +6467,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 details: entry.details || {}
               };
               currentLore.push(newEntry as any);
-              freshlyAddedEntries.push(newEntry);
               addedNotifications.push({
                 id: Math.random().toString(),
                 type: 'add',
@@ -6448,12 +6476,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             }
           });
 
-          if (freshlyAddedEntries.length > 0) {
-            if (addedNotifications.length > 0) {
-              setLoreNotifications(prev => [...prev, ...addedNotifications]);
-            }
+          if (addedNotifications.length > 0) {
+            setLoreNotifications(prev => [...prev, ...addedNotifications]);
             onUpdateAdventure({
               ...adventureRef.current,
+              world: updatedWorld,
               loreDatabase: currentLore
             });
           }
@@ -6693,7 +6720,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         </div>
       </div>
 
-      <div className="z-20 flex flex-wrap gap-2 p-2 px-4 bg-slate-900/50 border-b border-slate-800/50 items-center">
+      {/* Dynamic 2-Column HUD Layout (Step 7: Dynamic HUD & Interface) */}
+      <div className="z-20 p-2.5 px-4 bg-slate-950/80 border-b border-slate-800/80 w-full">
         {(() => {
           const resolvedApp = resolveBodyAppearance(adventure.player);
           const activeConds = resolvedApp.activeConditionList || [];
@@ -6721,465 +6749,521 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             return l.includes('flüche') || l.includes('segen') || l.includes('körperzustand') || l.includes('mutationsgrad') || l.includes('heilfaktor') || l.includes('körpergestalt') || l.includes('zustand') || l.includes('aktive zustände');
           });
 
-          return (
-            <>
-              {/* Standard HUD Badge 1: Verwandlung & Point of No Return (Only if enabled in HUD & Interface) */}
-              {hasVerwandlungOrPNR && (() => {
-                const currentInt = resolvedApp.transformationIntensityVal || 0;
-                const pnrThreshold = transSettings.pnrThreshold;
-                const zeitStep = transSettings.zeitStep;
-                const abklingenStep = transSettings.abklingenStep;
-                const timeUnit = transSettings.timeUnit;
+          const hudItems: React.ReactNode[] = [];
 
-                const isPastPNR = currentInt >= pnrThreshold;
-                const remainingToPNR = Math.max(0, pnrThreshold - currentInt);
-
-                const pnrDurationVal = zeitStep > 0 ? remainingToPNR / zeitStep : Infinity;
-                const zeroDurationVal = abklingenStep > 0 ? currentInt / abklingenStep : Infinity;
-
-                const timeToPNRFormatted = isPastPNR
-                  ? 'Erreicht'
-                  : pnrDurationVal === Infinity
-                  ? 'Unendlich'
-                  : formatDuration(pnrDurationVal, timeUnit);
-
-                const timeToZeroFormatted = isPastPNR
-                  ? 'Irreversibel'
-                  : currentInt === 0
-                  ? `0 ${timeUnit}`
-                  : zeroDurationVal === Infinity
-                  ? 'Unendlich'
-                  : formatDuration(zeroDurationVal, timeUnit);
-
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setShowSilhouetteModal(true)}
-                    className={`flex-shrink-0 border rounded-lg px-3 py-1.5 flex flex-col items-start min-w-[160px] max-w-[240px] shadow-sm transition-all text-left cursor-pointer group ${
-                      isPastPNR
-                        ? 'bg-red-950/90 border-red-500/70 text-red-200 hover:bg-red-900/90'
-                        : 'bg-slate-950/90 border-amber-500/50 text-amber-200 hover:bg-amber-950/80 hover:border-amber-400'
-                    }`}
-                    title={`Verwandlungsstufe: ${resolvedApp.transformationStageName} (${formatNum(currentInt)}%)
-Point of No Return: ${formatNum(pnrThreshold)}%
-Verbleibende Zeit bis PNR: ${isPastPNR ? 'Erreicht' : timeToPNRFormatted} (Klicken zum Öffnen)`}
-                  >
-                    <div className="flex items-center justify-between w-full gap-1.5">
-                      <span className="text-[9px] uppercase font-black tracking-wider text-amber-300 opacity-90 truncate flex items-center gap-1.5">
-                        <i className={`fa-solid ${isPastPNR ? 'fa-flag text-red-400' : 'fa-bolt-lightning text-amber-400'} text-[10px]`}></i>
-                        <span>Verwandlung & PNR</span>
-                      </span>
-                      <span className={`text-[9.5px] font-mono font-black px-1.5 py-0.5 rounded border ${
-                        isPastPNR ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-                      }`}>
-                        {formatNum(currentInt)}%
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between w-full mt-0.5 text-[10px]">
-                      <span className="font-bold text-slate-100 truncate max-w-[90px]">
-                        {resolvedApp.transformationStageName.split(' ')[0] || 'Standard'}
-                      </span>
-                      <span className={`text-[8.5px] font-mono font-semibold shrink-0 px-1 py-0.2 rounded border ${
-                        isPastPNR ? 'bg-red-900/80 text-red-200 border-red-700' : 'bg-slate-900/80 text-orange-300 border-slate-800'
-                      }`}>
-                        {isPastPNR ? 'PNR Erreicht' : `PNR: ${timeToPNRFormatted}`}
-                      </span>
-                    </div>
-                    {/* Mini Progress Bar with PNR Marker */}
-                    <div className="w-full h-1.5 bg-slate-900/90 rounded-full overflow-hidden border border-slate-800 relative mt-1">
-                      <div
-                        className={`h-full transition-all duration-300 ${
-                          isPastPNR
-                            ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-red-600 animate-pulse'
-                            : 'bg-gradient-to-r from-amber-500 to-orange-400'
-                        }`}
-                        style={{ width: `${Math.min(100, Math.max(0, currentInt))}%` }}
-                      />
-                      <div
-                        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 shadow-[0_0_4px_rgba(239,68,68,0.8)]"
-                        style={{ left: `${pnrThreshold}%` }}
-                        title={`Point of No Return: ${formatNum(pnrThreshold)}%`}
-                      />
-                    </div>
-                  </button>
-                );
-              })()}
-
-              {/* Standard HUD Badge 2: Abklingzeit & Dauer bis 0% (Only if enabled in HUD & Interface) */}
-              {hasAbklingzeit && (() => {
-                const currentInt = resolvedApp.transformationIntensityVal || 0;
-                const pnrThreshold = transSettings.pnrThreshold;
-                const abklingenStep = transSettings.abklingenStep;
-                const timeUnit = transSettings.timeUnit;
-
-                const isPastPNR = currentInt >= pnrThreshold;
-                const zeroDurationVal = abklingenStep > 0 ? currentInt / abklingenStep : Infinity;
-
-                const timeToZeroFormatted = isPastPNR
-                  ? 'Irreversibel'
-                  : currentInt === 0
-                  ? `0 ${timeUnit}`
-                  : zeroDurationVal === Infinity
-                  ? 'Unendlich'
-                  : formatDuration(zeroDurationVal, timeUnit);
-
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setShowSilhouetteModal(true)}
-                    className={`flex-shrink-0 border rounded-lg px-3 py-1.5 flex flex-col items-start min-w-[150px] max-w-[220px] shadow-sm transition-all text-left cursor-pointer group ${
-                      isPastPNR
-                        ? 'bg-slate-950/80 border-slate-800 text-slate-500 hover:border-slate-700'
-                        : 'bg-slate-950/90 border-sky-500/50 text-sky-200 hover:bg-sky-950/80 hover:border-sky-400'
-                    }`}
-                    title={`Abklingzeit bis 0%: ${isPastPNR ? 'Nicht möglich (PNR überschritten)' : currentInt === 0 ? '0 ' + timeUnit + ' (Bereits 0%)' : timeToZeroFormatted}
-Rate: -${formatNum(abklingenStep)}% / ${timeUnit} (Klicken zum Öffnen)`}
-                  >
-                    <div className="flex items-center justify-between w-full gap-1.5">
-                      <span className="text-[9px] uppercase font-black tracking-wider text-sky-300 opacity-90 truncate flex items-center gap-1.5">
-                        <i className="fa-solid fa-stopwatch text-sky-400 text-[10px]"></i>
-                        <span>Abklingzeit</span>
-                      </span>
-                      <span className="text-[9.5px] font-mono font-black text-sky-300 bg-sky-500/20 px-1.5 py-0.5 rounded border border-sky-500/40">
-                        -{formatNum(abklingenStep)}%/{timeUnit}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between w-full mt-0.5 text-[10px]">
-                      <span className="font-bold text-slate-100 truncate max-w-[85px]">
-                        Bis 0%:
-                      </span>
-                      <span className={`text-[8.5px] font-mono font-bold shrink-0 px-1 py-0.2 rounded border ${
-                        isPastPNR ? 'bg-red-950/60 text-red-400 border-red-900' : 'bg-slate-900/80 text-sky-300 border-slate-800'
-                      }`}>
-                        {timeToZeroFormatted}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })()}
-
-              {/* Dynamic HUD Badges for Body Conditions (Only if condition tracking enabled in HUD & Interface) */}
-              {hasConditionsHUD && activeConds.map((cond) => {
-                const isCurse = cond.type === 'curse';
-                const isBlessing = cond.type === 'blessing';
-                const isGender = cond.type === 'gender_change';
-                const isRace = cond.type === 'race_change';
-                const isMutation = cond.type === 'magical_mutation';
-
-                const badgeBg = isCurse
-                  ? 'bg-purple-950/70 border-purple-500/50 text-purple-200 hover:bg-purple-900/70'
-                  : isBlessing
-                  ? 'bg-amber-950/70 border-amber-500/50 text-amber-200 hover:bg-amber-900/70'
-                  : isGender
-                  ? 'bg-pink-950/70 border-pink-500/50 text-pink-200 hover:bg-pink-900/70'
-                  : isRace
-                  ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-200 hover:bg-emerald-900/70'
-                  : isMutation
-                  ? 'bg-cyan-950/70 border-cyan-500/50 text-cyan-200 hover:bg-cyan-900/70'
-                  : 'bg-indigo-950/70 border-indigo-500/50 text-indigo-200 hover:bg-indigo-900/70';
-
-                return (
-                  <button
-                    key={cond.id}
-                    type="button"
-                    onClick={() => setShowSilhouetteModal(true)}
-                    className={`flex-shrink-0 border rounded-lg px-3 py-1.5 flex flex-col items-start min-w-[130px] max-w-[200px] shadow-sm transition-all text-left cursor-pointer group ${badgeBg}`}
-                    title={`${cond.name}: ${cond.description} (Klicken zum Verwalten)`}
-                  >
-                    <div className="flex items-center justify-between w-full gap-1">
-                      <span className="text-[9px] uppercase font-extrabold tracking-wider opacity-80 truncate">
-                        {isCurse ? 'Fluch' : isBlessing ? 'Segen' : isGender ? 'Geschlecht' : isRace ? 'Rasse' : isMutation ? 'Mutation' : 'Zustand'}
-                      </span>
-                      {cond.duration && (
-                        <span className="text-[8px] opacity-75 font-mono truncate">{cond.duration}</span>
-                      )}
-                    </div>
-                    <span className="font-bold text-xs truncate w-full flex items-center gap-1 mt-0.5 text-white">
-                      <span>{cond.icon || ''}</span>
-                      <span className="truncate">{cond.name}</span>
-                    </span>
-                  </button>
-                );
-              })}
-
-              {statusList.map((el, idx) => {
-                const labelLower = (el.label || '').toLowerCase();
-                const isTime = labelLower.includes('zeit') || labelLower.includes('uhrzeit');
-                const isLocation = labelLower.includes('standort') || labelLower.includes('ort');
-                const isMoney = labelLower.includes('vermögen') || labelLower.includes('geld') || labelLower.includes('gold') || labelLower.includes('berry') || labelLower.includes('münzen') || labelLower.includes('credits');
-
-                const updateItemValue = (newVal: string) => {
-                  let updatedStatus = [...(adventure.statusElements || statusList)];
-                  const itemIdx = updatedStatus.findIndex(item => (item.id === el.id || item.label === el.label));
-                  if (itemIdx > -1) {
-                    updatedStatus[itemIdx] = { ...updatedStatus[itemIdx], value: newVal };
-                  } else {
-                    updatedStatus.push({ id: el.id || Math.random().toString(36).substr(2, 9), label: el.label, value: newVal });
-                  }
-
-                  let updatedInitialStatus = [...(adventure.initialStatusElements || [])];
-                  const initIdx = updatedInitialStatus.findIndex(item => (item.id === el.id || item.label === el.label));
-                  if (initIdx > -1) {
-                    updatedInitialStatus[initIdx] = { ...updatedInitialStatus[initIdx], value: newVal };
-                  } else if (updatedInitialStatus.length > 0) {
-                    updatedInitialStatus.push({ id: el.id || Math.random().toString(36).substr(2, 9), label: el.label, value: newVal });
-                  }
-
-                  let updatedPlayer = adventure.player;
-                  let updatedLore = adventure.loreDatabase;
-                  let updatedStructuredInventory = adventure.structuredInventory;
-
-                  if (isMoney) {
-                    const numMatch = newVal.match(/\d+/);
-                    const parsedMoney = numMatch ? parseInt(numMatch[0]) : (adventure.structuredInventory?.money ?? 0);
-                    const textMatch = newVal.replace(/\d+/g, '').trim();
-                    updatedStructuredInventory = {
-                      ...(adventure.structuredInventory || {}),
-                      money: parsedMoney,
-                      currencyLabel: textMatch || adventure.structuredInventory?.currencyLabel || 'Goldstücke'
-                    };
-                  }
-
-                  // If updating location, sync player location & lore entry
-                  if (isLocation) {
-                    updatedPlayer = {
-                      ...adventure.player,
-                      appearance: {
-                        ...adventure.player.appearance,
-                        currentLocation: newVal
-                      }
-                    };
-                    if (updatedLore) {
-                      const loreIdx = updatedLore.findIndex(entry => entry.category === 'Charaktere' && entry.title === adventure.player.name);
-                      if (loreIdx > -1) {
-                        updatedLore = [...updatedLore];
-                        updatedLore[loreIdx] = {
-                          ...updatedLore[loreIdx],
-                          details: {
-                            ...(updatedLore[loreIdx].details || {}),
-                            currentLocation: newVal
-                          }
-                        };
-                      }
-                    }
-                  }
-
-                  onUpdateAdventure({
-                    ...adventure,
-                    player: updatedPlayer,
-                    loreDatabase: updatedLore,
-                    statusElements: updatedStatus,
-                    initialStatusElements: updatedInitialStatus.length > 0 ? updatedInitialStatus : updatedStatus,
-                    structuredInventory: updatedStructuredInventory
+          // Category 1: Welt - Uhrzeit
+          statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('zeit') || l.includes('uhrzeit');
+          }).forEach((el, idx) => {
+            const val = el.value || '12:00';
+            hudItems.push(
+              <button
+                key={`hud-time-${el.id || idx}`}
+                type="button"
+                onClick={() => {
+                  setHudModalEditValue(val);
+                  setSelectedHudDetailField({
+                    id: el.id || 'time',
+                    category: 'Welt',
+                    label: el.label,
+                    value: val,
+                    icon: 'fa-clock',
+                    colorClass: 'text-amber-400',
+                    isEditable: true,
+                    elementId: el.id,
+                    details: [
+                      { label: 'Kategorie', value: 'Welt & Tageszeit' },
+                      { label: 'Aktuelle Uhrzeit', value: val },
+                      { label: 'Chronologie', value: 'Echtzeit-Synchronisiert' }
+                    ],
+                    actionType: 'edit'
                   });
-                };
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  {el.label}
+                </span>
+                <span className="font-bold text-amber-400">
+                  {val}
+                </span>
+              </button>
+            );
+          });
 
-                if (isTime) {
-                  return (
-                    <div key={`${el.id || el.label}-${idx}`} className="flex-shrink-0 bg-slate-800/80 border border-slate-700/50 rounded-lg px-4 py-1.5 flex flex-col items-center min-w-[120px] shadow-sm">
-                      <span className="text-xs text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
-                        <i className="fa-regular fa-clock text-amber-400/90"></i> {el.label}
-                      </span>
-                      <input
-                        type="text"
-                        value={el.value || ''}
-                        onChange={(e) => updateItemValue(e.target.value)}
-                        className="bg-transparent text-amber-400 font-bold text-center text-sm w-full max-w-[100px] focus:bg-slate-950/40 rounded border border-transparent focus:border-amber-500/30 px-1 py-0.5 outline-none transition-all placeholder:text-slate-600 font-mono mt-0.5"
-                        placeholder="12:00"
-                      />
-                    </div>
-                  );
-                }
+          // Category 1: Welt - Standort
+          statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('standort') || l.includes('ort');
+          }).forEach((el, idx) => {
+            const rawLoc = el.value || adventure.player.appearance.currentLocation || 'Startgebiet';
+            const cleanLoc = formatDisplayLocationName(rawLoc);
+            hudItems.push(
+              <button
+                key={`hud-loc-${el.id || idx}`}
+                type="button"
+                onClick={() => {
+                  setHudModalEditValue(cleanLoc);
+                  setSelectedHudDetailField({
+                    id: el.id || 'loc',
+                    category: 'Welt',
+                    label: el.label,
+                    value: cleanLoc,
+                    icon: 'fa-map-location-dot',
+                    colorClass: 'text-sky-400',
+                    isEditable: true,
+                    elementId: el.id,
+                    details: [
+                      { label: 'Kategorie', value: 'Welt & Aufenthaltsort' },
+                      { label: 'Aktueller Ort', value: cleanLoc },
+                      { label: 'Vollständiger Pfad', value: rawLoc !== cleanLoc ? rawLoc : cleanLoc }
+                    ],
+                    actionType: 'edit'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  {el.label}
+                </span>
+                <span className="font-bold text-sky-400">
+                  {cleanLoc}
+                </span>
+              </button>
+            );
+          });
 
-                if (isLocation) {
-                  const rawLoc = el.value || adventure.player.appearance.currentLocation || '';
-                  const cleanLoc = formatDisplayLocationName(rawLoc);
-                  return (
-                    <div key={`${el.id || el.label}-${idx}`} className="flex-shrink-0 bg-slate-800/80 border border-slate-700/50 rounded-lg px-4 py-1.5 flex flex-col items-center min-w-[140px] shadow-sm">
-                      <span className="text-xs text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
-                        <i className="fa-solid fa-map-location-dot text-sky-400/90"></i> {el.label}
-                      </span>
-                      <input
-                        type="text"
-                        value={cleanLoc}
-                        title={rawLoc !== cleanLoc ? rawLoc : cleanLoc}
-                        onChange={(e) => updateItemValue(e.target.value)}
-                        className="bg-transparent text-sky-400 font-bold text-center text-sm w-full max-w-[130px] focus:bg-slate-950/40 rounded border border-transparent focus:border-sky-500/30 px-1 py-0.5 outline-none transition-all placeholder:text-slate-600 mt-0.5 truncate"
-                        placeholder="Ort..."
-                      />
-                    </div>
-                  );
-                }
+          // Category 2: Charakter - Körperlicher Zustand
+          statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('körperlicher zustand') || (l.includes('zustand') && !l.includes('verwandlung') && !l.includes('geist') && !l.includes('flüche') && !l.includes('segen'));
+          }).forEach((el, idx) => {
+            const cond = resolvedApp.bodyConditionSummary || { statusText: 'Gesund', detailText: 'Keine Beschwerden', severity: 'healthy' };
+            hudItems.push(
+              <button
+                key={`hud-bodycond-${el.id || idx}`}
+                type="button"
+                onClick={() => {
+                  setSelectedHudDetailField({
+                    id: el.id || 'bodycond',
+                    category: 'Charakter',
+                    label: 'Körperlicher Zustand',
+                    value: `${cond.statusText} (${cond.detailText})`,
+                    icon: 'fa-heart-pulse',
+                    colorClass: cond.severity === 'healthy' ? 'text-emerald-400' : cond.severity === 'minor' ? 'text-amber-400' : 'text-rose-400',
+                    details: [
+                      { label: 'Status', value: cond.statusText },
+                      { label: 'Details', value: cond.detailText },
+                      { label: 'Gesundheitsstufe', value: cond.severity === 'healthy' ? 'Optimal' : cond.severity === 'minor' ? 'Eingeschränkt' : 'Kritisch' },
+                      { label: 'Change Tracker', value: 'Aktiv' }
+                    ],
+                    actionType: 'silhouette'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  Körperlicher Zustand
+                </span>
+                <span className="font-bold text-emerald-400">
+                  {cond.statusText}
+                </span>
+              </button>
+            );
+          });
 
-                if (isMoney) {
-                  const invMoney = adventure.structuredInventory?.money;
-                  const invCurr = adventure.structuredInventory?.currencyLabel || (adventure.world?.title?.toLowerCase().includes('one piece') ? 'Berry' : 'Goldstück');
-                  const displayVal = el.value || (invMoney !== undefined ? `${invMoney} ${invCurr}` : '100 Gold');
-                  return (
-                    <div key={`${el.id || el.label}-${idx}`} className="flex-shrink-0 bg-slate-800/80 border border-slate-700/50 rounded-lg px-4 py-1.5 flex flex-col items-center min-w-[140px] shadow-sm">
-                      <span className="text-xs text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
-                        <i className="fa-solid fa-coins text-yellow-400/90"></i> {el.label}
-                      </span>
-                      <input
-                        type="text"
-                        value={displayVal}
-                        onChange={(e) => updateItemValue(e.target.value)}
-                        className="bg-transparent text-yellow-400 font-bold text-center text-sm w-full max-w-[120px] focus:bg-slate-950/40 rounded border border-transparent focus:border-yellow-500/30 px-1 py-0.5 outline-none transition-all placeholder:text-slate-600 mt-0.5"
-                        placeholder="100 Gold"
-                      />
-                    </div>
-                  );
-                }
+          // Category 2: Charakter - Körperliche Veränderungen
+          statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('körperliche veränderung') || l.includes('körperliche veränderungen') || (l.includes('veränderungen') && !l.includes('klima'));
+          }).forEach((el, idx) => {
+            const summaryText = resolvedApp.compactChangesSummary || el.value || 'Keine';
+            hudItems.push(
+              <button
+                key={`hud-physchange-${el.id || idx}`}
+                type="button"
+                onClick={() => {
+                  setSelectedHudDetailField({
+                    id: el.id || 'physchange',
+                    category: 'Charakter',
+                    label: 'Körperliche Veränderungen',
+                    value: summaryText,
+                    icon: 'fa-dna',
+                    colorClass: 'text-teal-400',
+                    details: [
+                      { label: 'Kategorie', value: 'Charakter & Transformation' },
+                      { label: 'Aktuelle Veränderungen', value: summaryText },
+                      { label: 'Originalprofil', value: 'Unverändert geschützt' },
+                      { label: 'Änderungshistorie', value: 'Logbuch-Aktiv' }
+                    ],
+                    actionType: 'silhouette'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  Körperliche Veränderungen
+                </span>
+                <span className="font-bold text-teal-400">
+                  {summaryText}
+                </span>
+              </button>
+            );
+          });
 
-                const isPnr = labelLower.includes('point of no return') || labelLower.includes('pnr');
-                const isAbkling = labelLower.includes('abklingzeit') || labelLower.includes('cooldown');
-                const isVerwandlung = labelLower.includes('verwandlungsstufe') || labelLower.includes('mutationsgrad') || labelLower.includes('verwandlung');
+          // Category 2: Charakter - Metamorphose & Point of No Return
+          if (hasVerwandlungOrPNR) {
+            const currentInt = resolvedApp.transformationIntensityVal || 0;
+            const pnrThreshold = transSettings.pnrThreshold;
+            const zeitStep = transSettings.zeitStep;
 
-                // Special system elements (Verwandlungsstufe, Point of No Return, Abklingzeit)
-                // are already rendered as high-detail composite badges above. Skip rendering them as duplicate generic boxes.
-                if (isPnr || isVerwandlung || isAbkling) {
-                  return null;
-                }
+            const isPastPNR = currentInt >= pnrThreshold;
+            const remainingToPNR = Math.max(0, pnrThreshold - currentInt);
 
-                // Custom Rich HUD Badges for Physical Condition, Physical Changes, User Emotion & Tone
-                const isBodyCondition = labelLower.includes('körperlicher zustand') || (labelLower.includes('zustand') && !labelLower.includes('verwandlung') && !labelLower.includes('geist'));
-                if (isBodyCondition) {
-                  const cond = resolvedApp.bodyConditionSummary || { statusText: 'Gesund', detailText: 'Keine Beschwerden', severity: 'healthy' };
-                  const statusBg = cond.severity === 'healthy'
-                    ? 'bg-slate-900/90 border-emerald-500/40 text-emerald-300 hover:border-emerald-400'
-                    : cond.severity === 'minor'
-                    ? 'bg-amber-950/80 border-amber-500/50 text-amber-200 hover:border-amber-400'
-                    : 'bg-rose-950/80 border-rose-500/50 text-rose-200 hover:border-rose-400';
+            const pnrDurationVal = zeitStep > 0 ? remainingToPNR / zeitStep : Infinity;
+            const timeToPNRFormatted = isPastPNR
+              ? 'Erreicht'
+              : pnrDurationVal === Infinity
+              ? 'Unendlich'
+              : formatDuration(pnrDurationVal, transSettings.timeUnit);
 
-                  return (
-                    <button
-                      key={`${el.id || el.label}-${idx}`}
-                      type="button"
-                      onClick={() => setShowSilhouetteModal(true)}
-                      className={`flex-shrink-0 border rounded-lg px-3 py-1.5 flex flex-col items-start min-w-[140px] max-w-[220px] shadow-sm transition-all text-left cursor-pointer ${statusBg}`}
-                      title={`${cond.statusText}: ${cond.detailText} (Klicken für Silhouette & Details)`}
-                    >
-                      <span className="text-[9px] uppercase font-bold tracking-wider opacity-80 flex items-center gap-1.5">
-                        <i className="fa-solid fa-heart-pulse text-[10px]"></i> Körperlicher Zustand
-                      </span>
-                      <span className="font-extrabold text-xs truncate w-full mt-0.5">
-                        {cond.statusText} <span className="font-normal text-[10px] opacity-80">({cond.detailText})</span>
-                      </span>
-                    </button>
-                  );
-                }
+            hudItems.push(
+              <button
+                key="hud-trans-pnr"
+                type="button"
+                onClick={() => {
+                  setSelectedHudDetailField({
+                    id: 'trans-pnr',
+                    category: 'Charakter',
+                    label: 'Verwandlungsstufe & PNR',
+                    value: `${resolvedApp.transformationStageName} (${formatNum(currentInt)}%)`,
+                    icon: isPastPNR ? 'fa-flag' : 'fa-bolt-lightning',
+                    colorClass: isPastPNR ? 'text-red-400' : 'text-amber-400',
+                    details: [
+                      { label: 'Verwandlungsstufe', value: resolvedApp.transformationStageName },
+                      { label: 'Intensität', value: `${formatNum(currentInt)}%` },
+                      { label: 'Point of No Return', value: `${formatNum(pnrThreshold)}%` },
+                      { label: 'Verbleibend bis PNR', value: isPastPNR ? 'PNR Erreicht' : timeToPNRFormatted }
+                    ],
+                    actionType: 'silhouette'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  Verwandlungsstufe
+                </span>
+                <span className={`font-mono font-bold ${isPastPNR ? 'text-red-300' : 'text-amber-400'}`}>
+                  {formatNum(currentInt)}% ({isPastPNR ? 'PNR Erreicht' : timeToPNRFormatted})
+                </span>
+              </button>
+            );
+          }
 
-                const isPhysicalChanges = labelLower.includes('körperliche veränderung') || labelLower.includes('körperliche veränderungen') || labelLower.includes('veränderungen');
-                if (isPhysicalChanges) {
-                  const summaryText = resolvedApp.compactChangesSummary || el.value || 'Keine';
-                  return (
-                    <button
-                      key={`${el.id || el.label}-${idx}`}
-                      type="button"
-                      onClick={() => setShowSilhouetteModal(true)}
-                      className="flex-shrink-0 bg-slate-900/90 border border-teal-500/40 text-teal-300 rounded-lg px-3 py-1.5 flex flex-col items-start min-w-[150px] max-w-[240px] shadow-sm transition-all text-left cursor-pointer hover:border-teal-400"
-                      title={`Körperliche Veränderungen: ${summaryText} (Klicken für Details)`}
-                    >
-                      <span className="text-[9px] uppercase font-bold tracking-wider opacity-80 flex items-center gap-1.5 text-teal-400">
-                        <i className="fa-solid fa-dna text-[10px]"></i> Körperliche Veränderungen
-                      </span>
-                      <span className="font-bold text-xs truncate w-full mt-0.5 text-teal-200">
-                        {summaryText}
-                      </span>
-                    </button>
-                  );
-                }
+          // Category 2: Charakter - Abklingzeit
+          if (hasAbklingzeit) {
+            const currentInt = resolvedApp.transformationIntensityVal || 0;
+            const pnrThreshold = transSettings.pnrThreshold;
+            const abklingenStep = transSettings.abklingenStep;
+            const timeUnit = transSettings.timeUnit;
 
-                const isEmotion = labelLower.includes('aktuelle emotion') || labelLower === 'emotion';
-                if (isEmotion) {
-                  const currentEmotion = adventure.player?.emotionState?.emotion || adventure.emotionState?.emotion || el.value || 'Ruhig';
-                  return (
-                    <button
-                      key={`${el.id || el.label}-${idx}`}
-                      type="button"
-                      onClick={() => setShowEmotionMenu(!showEmotionMenu)}
-                      className="flex-shrink-0 bg-slate-900/90 border border-amber-500/40 text-amber-300 rounded-lg px-3 py-1.5 flex flex-col items-start min-w-[130px] max-w-[200px] shadow-sm transition-all text-left cursor-pointer hover:border-amber-400"
-                      title={`Aktuelle Emotion des Nutzers: ${currentEmotion} (Klicken zum Ändern)`}
-                    >
-                      <span className="text-[9px] uppercase font-bold tracking-wider opacity-80 flex items-center gap-1.5 text-amber-400">
-                        <i className="fa-solid fa-face-smile text-[10px]"></i> Aktuelle Emotion
-                      </span>
-                      <span className="font-bold text-xs truncate w-full mt-0.5 text-amber-200 capitalize">
-                        {currentEmotion}
-                      </span>
-                    </button>
-                  );
-                }
+            const isPastPNR = currentInt >= pnrThreshold;
+            const zeroDurationVal = abklingenStep > 0 ? currentInt / abklingenStep : Infinity;
 
-                const isIntensity = labelLower.includes('emotionale intensität') || labelLower.includes('intensität');
-                if (isIntensity) {
-                  const currentIntensity = adventure.player?.emotionState?.intensity || 'Mittel';
-                  return (
-                    <div
-                      key={`${el.id || el.label}-${idx}`}
-                      className="flex-shrink-0 bg-slate-900/90 border border-orange-500/40 text-orange-300 rounded-lg px-3 py-1.5 flex flex-col items-start min-w-[120px] shadow-sm text-left"
-                    >
-                      <span className="text-[9px] uppercase font-bold tracking-wider opacity-80 flex items-center gap-1.5 text-orange-400">
-                        <i className="fa-solid fa-gauge-high text-[10px]"></i> Intensität
-                      </span>
-                      <span className="font-bold text-xs truncate w-full mt-0.5 text-orange-200">
-                        {currentIntensity}
-                      </span>
-                    </div>
-                  );
-                }
+            const timeToZeroFormatted = isPastPNR
+              ? 'Irreversibel'
+              : currentInt === 0
+              ? `0 ${timeUnit}`
+              : zeroDurationVal === Infinity
+              ? 'Unendlich'
+              : formatDuration(zeroDurationVal, timeUnit);
 
-                const isTone = labelLower.includes('tonart') || labelLower.includes('stimme');
-                if (isTone) {
-                  const currentTone = adventure.player?.emotionState?.tone || adventure.emotionState?.tone || el.value || 'Normal';
-                  return (
-                    <button
-                      key={`${el.id || el.label}-${idx}`}
-                      type="button"
-                      onClick={() => setShowToneMenu(!showToneMenu)}
-                      className="flex-shrink-0 bg-slate-900/90 border border-sky-500/40 text-sky-300 rounded-lg px-3 py-1.5 flex flex-col items-start min-w-[130px] max-w-[200px] shadow-sm transition-all text-left cursor-pointer hover:border-sky-400"
-                      title={`Tonart des Nutzers: ${currentTone} (Klicken zum Ändern)`}
-                    >
-                      <span className="text-[9px] uppercase font-bold tracking-wider opacity-80 flex items-center gap-1.5 text-sky-400">
-                        <i className="fa-solid fa-microphone-lines text-[10px]"></i> Tonart
-                      </span>
-                      <span className="font-bold text-xs truncate w-full mt-0.5 text-sky-200 capitalize">
-                        {currentTone}
-                      </span>
-                    </button>
-                  );
-                }
+            hudItems.push(
+              <button
+                key="hud-trans-cooldown"
+                type="button"
+                onClick={() => {
+                  setSelectedHudDetailField({
+                    id: 'trans-cooldown',
+                    category: 'Charakter',
+                    label: 'Abklingzeit & Raten',
+                    value: timeToZeroFormatted,
+                    icon: 'fa-stopwatch',
+                    colorClass: 'text-sky-400',
+                    details: [
+                      { label: 'Abklingrate', value: `-${formatNum(abklingenStep)}% pro ${timeUnit}` },
+                      { label: 'Dauer bis 0%', value: timeToZeroFormatted },
+                      { label: 'PNR Status', value: isPastPNR ? 'Überschritten' : 'Normal' }
+                    ],
+                    actionType: 'silhouette'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  Abklingzeit
+                </span>
+                <span className="font-mono font-bold text-sky-400">
+                  {timeToZeroFormatted}
+                </span>
+              </button>
+            );
+          }
 
-                let finalValue = el.value || '';
-                let isReadonly = false;
-                let colorClass = 'text-amber-400';
+          // Category 2: Charakter - Aktive Zustände / Flüche & Segen
+          if (hasConditionsHUD) {
+            activeConds.forEach((cond) => {
+              const isCurse = cond.type === 'curse';
+              const isBlessing = cond.type === 'blessing';
+              const isGender = cond.type === 'gender_change';
+              const isRace = cond.type === 'race_change';
+              const isMutation = cond.type === 'magical_mutation';
 
-                return (
-                  <div key={`${el.id || el.label}-${idx}`} className="flex-shrink-0 bg-slate-800/80 border border-slate-700/50 rounded-lg px-4 py-1.5 flex flex-col items-center min-w-[120px] shadow-sm">
-                    <span className="text-xs text-slate-400 uppercase font-bold tracking-wider">{el.label}</span>
-                    <div className="flex items-center gap-1.5 mt-0.5 w-full justify-center">
-                      {el.label === 'Ausdauer' && <i className="fa-solid fa-bolt text-[10px] text-amber-500/50 shrink-0"></i>}
-                      {el.label === 'HP' && <i className="fa-solid fa-heart text-[10px] text-red-500/50 shrink-0"></i>}
-                      {el.label === 'MP' && <i className="fa-solid fa-wand-magic-sparkles text-[10px] text-indigo-400/50 shrink-0"></i>}
-                      
-                      {isReadonly ? (
-                         <span className={`bg-transparent font-bold text-center text-sm w-full max-w-[100px] px-1 py-0.5 font-mono ${colorClass}`}>
-                           {finalValue}
-                         </span>
-                      ) : (
-                        <input
-                          type="text"
-                          value={finalValue}
-                          onChange={(e) => updateItemValue(e.target.value)}
-                          className="bg-transparent text-amber-400 font-bold text-center text-sm w-full max-w-[100px] focus:bg-slate-950/40 rounded border border-transparent focus:border-amber-500/30 px-1 py-0.5 outline-none transition-all placeholder:text-slate-600"
-                          placeholder="Wert..."
-                        />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </>
+              const colorClass = isCurse ? 'text-purple-300' : isBlessing ? 'text-amber-300' : isGender ? 'text-pink-300' : isRace ? 'text-emerald-300' : isMutation ? 'text-cyan-300' : 'text-indigo-300';
+
+              hudItems.push(
+                <button
+                  key={`hud-cond-${cond.id}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedHudDetailField({
+                      id: cond.id,
+                      category: 'Charakter',
+                      label: cond.name,
+                      value: cond.description || 'Aktiv',
+                      icon: 'fa-wand-magic-sparkles',
+                      colorClass,
+                      details: [
+                        { label: 'Zustandsart', value: isCurse ? 'Fluch' : isBlessing ? 'Segen' : isGender ? 'Geschlecht' : isRace ? 'Rasse' : isMutation ? 'Mutation' : 'Zustand' },
+                        { label: 'Name', value: cond.name },
+                        { label: 'Dauer', value: cond.duration || 'Dauerhaft' },
+                        { label: 'Wirkung', value: cond.description || 'Aktiv' }
+                      ],
+                      actionType: 'silhouette'
+                    });
+                  }}
+                  className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+                >
+                  <span className="font-semibold text-slate-300">
+                    {cond.name}
+                  </span>
+                  <span className={`font-bold ${colorClass}`}>
+                    {cond.duration || 'Aktiv'}
+                  </span>
+                </button>
+              );
+            });
+          }
+
+          // Category 2: Charakter - Emotion
+          statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('aktuelle emotion') || l === 'emotion';
+          }).forEach((el, idx) => {
+            const currentEmotion = adventure.player?.emotionState?.emotion || adventure.emotionState?.emotion || el.value || 'Ruhig';
+            hudItems.push(
+              <button
+                key={`hud-emotion-${el.id || idx}`}
+                type="button"
+                onClick={() => {
+                  setSelectedHudDetailField({
+                    id: el.id || 'emotion',
+                    category: 'Charakter',
+                    label: 'Aktuelle Emotion',
+                    value: currentEmotion,
+                    icon: 'fa-face-smile',
+                    colorClass: 'text-amber-400',
+                    details: [
+                      { label: 'Kategorie', value: 'Charakter & Emotion' },
+                      { label: 'Gegenwärtige Emotion', value: currentEmotion },
+                      { label: 'Auswirkung auf KI', value: 'Berücksichtigt im Dialog & Verhalten' }
+                    ],
+                    actionType: 'emotion'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  Aktuelle Emotion
+                </span>
+                <span className="font-bold text-amber-400 capitalize">
+                  {currentEmotion}
+                </span>
+              </button>
+            );
+          });
+
+          // Category 2: Charakter - Tonart
+          statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('tonart') || l.includes('stimme');
+          }).forEach((el, idx) => {
+            const currentTone = adventure.player?.emotionState?.tone || adventure.emotionState?.tone || el.value || 'Normal';
+            hudItems.push(
+              <button
+                key={`hud-tone-${el.id || idx}`}
+                type="button"
+                onClick={() => {
+                  setSelectedHudDetailField({
+                    id: el.id || 'tone',
+                    category: 'Charakter',
+                    label: 'Tonart & Ausdruck',
+                    value: currentTone,
+                    icon: 'fa-microphone-lines',
+                    colorClass: 'text-sky-400',
+                    details: [
+                      { label: 'Kategorie', value: 'Charakter & Sprache' },
+                      { label: 'Tonfall', value: currentTone },
+                      { label: 'Auswirkung auf KI', value: 'Steuert Tonart der Dialoge' }
+                    ],
+                    actionType: 'tone'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  Tonart
+                </span>
+                <span className="font-bold text-sky-400 capitalize">
+                  {currentTone}
+                </span>
+              </button>
+            );
+          });
+
+          // Category 3: Wirtschaft - Vermögen
+          statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('vermögen') || l.includes('geld') || l.includes('gold') || l.includes('berry') || l.includes('münzen') || l.includes('credits');
+          }).forEach((el, idx) => {
+            const invMoney = adventure.structuredInventory?.money;
+            const invCurr = adventure.structuredInventory?.currencyLabel || 'Goldstücke';
+            const displayVal = el.value || (invMoney !== undefined ? `${invMoney} ${invCurr}` : '100 Gold');
+            hudItems.push(
+              <button
+                key={`hud-money-${el.id || idx}`}
+                type="button"
+                onClick={() => {
+                  setHudModalEditValue(displayVal);
+                  setSelectedHudDetailField({
+                    id: el.id || 'money',
+                    category: 'Wirtschaft',
+                    label: el.label,
+                    value: displayVal,
+                    icon: 'fa-coins',
+                    colorClass: 'text-yellow-400',
+                    isEditable: true,
+                    elementId: el.id,
+                    details: [
+                      { label: 'Kategorie', value: 'Wirtschaft & Finanzen' },
+                      { label: 'Aktueller Bestand', value: displayVal },
+                      { label: 'Währung', value: invCurr }
+                    ],
+                    actionType: 'edit'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  {el.label}
+                </span>
+                <span className="font-bold text-yellow-400">
+                  {displayVal}
+                </span>
+              </button>
+            );
+          });
+
+          // Remaining Generic HUD Elements
+          statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            const isHandledSpecial = 
+              l.includes('zeit') || l.includes('uhrzeit') ||
+              l.includes('standort') || l.includes('ort') ||
+              l.includes('verwandlungsstufe') || l.includes('point of no return') || l.includes('pnr') || l.includes('verwandlung') ||
+              l.includes('abklingzeit') || l.includes('cooldown') ||
+              l.includes('flüche') || l.includes('segen') || l.includes('körperzustand') || l.includes('mutationsgrad') || l.includes('heilfaktor') || l.includes('körpergestalt') || (l.includes('zustand') && !l.includes('geist')) || l.includes('aktive zustände') ||
+              l.includes('körperliche veränderung') || l.includes('körperliche veränderungen') || l.includes('veränderungen') ||
+              l.includes('aktuelle emotion') || l === 'emotion' ||
+              l.includes('tonart') || l.includes('stimme') ||
+              l.includes('vermögen') || l.includes('geld') || l.includes('gold') || l.includes('berry') || l.includes('münzen') || l.includes('credits');
+            return !isHandledSpecial;
+          }).forEach((el, idx) => {
+            const l = (el.label || '').toLowerCase();
+            let categoryName = 'General';
+            let iconName = 'fa-sliders';
+            let colorClass = 'text-amber-400';
+
+            if (l.includes('ruf') || l.includes('einfluss') || l.includes('titel') || l.includes('bekanntheit') || l.includes('kopfgeld')) {
+              categoryName = 'Sozial';
+              iconName = 'fa-star';
+              colorClass = 'text-amber-300';
+            } else if (l.includes('fraktion') || l.includes('rang') || l.includes('militär') || l.includes('armee') || l.includes('territorium')) {
+              categoryName = 'Macht & Organisation';
+              iconName = 'fa-shield';
+              colorClass = 'text-indigo-400';
+            } else if (l.includes('einkommen') || l.includes('schulden') || l.includes('ressourcen')) {
+              categoryName = 'Wirtschaft';
+              iconName = 'fa-chart-line';
+              colorClass = 'text-emerald-400';
+            } else if (l.includes('hp') || l.includes('ausdauer') || l.includes('mp') || l.includes('mana') || l.includes('hunger') || l.includes('durst') || l.includes('müdigkeit')) {
+              categoryName = 'Charakter';
+              iconName = l.includes('hp') ? 'fa-heart' : l.includes('mp') || l.includes('mana') ? 'fa-wand-magic-sparkles' : 'fa-bolt';
+              colorClass = l.includes('hp') ? 'text-rose-400' : l.includes('mp') ? 'text-indigo-400' : 'text-amber-400';
+            }
+
+            const val = el.value || 'Normal';
+
+            hudItems.push(
+              <button
+                key={`hud-gen-${el.id || idx}`}
+                type="button"
+                onClick={() => {
+                  setHudModalEditValue(val);
+                  setSelectedHudDetailField({
+                    id: el.id || `gen-${idx}`,
+                    category: categoryName,
+                    label: el.label,
+                    value: val,
+                    icon: iconName,
+                    colorClass,
+                    isEditable: true,
+                    elementId: el.id,
+                    details: [
+                      { label: 'Kategorie', value: categoryName },
+                      { label: 'Parameter', value: el.label },
+                      { label: 'Aktueller Wert', value: val }
+                    ],
+                    actionType: 'edit'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  {el.label}
+                </span>
+                <span className={`font-bold ${colorClass}`}>
+                  {val}
+                </span>
+              </button>
+            );
+          });
+
+          // Chunk hudItems into columns of maximum 3 items each
+          const columns: React.ReactNode[][] = [];
+          for (let i = 0; i < hudItems.length; i += 3) {
+            columns.push(hudItems.slice(i, i + 3));
+          }
+
+          return (
+            <div className="flex flex-wrap items-start gap-x-8 gap-y-1 w-full">
+              {columns.map((col, colIdx) => (
+                <div key={colIdx} className="flex flex-col items-start gap-1 shrink-0">
+                  {col}
+                </div>
+              ))}
+            </div>
           );
         })()}
       </div>
@@ -9263,6 +9347,195 @@ Rate: -${formatNum(abklingenStep)}% / ${timeUnit} (Klicken zum Öffnen)`}
                   <span>Zug ausführen</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compact Detail Popup Modal (Step 7: Compact Detail-Popup) */}
+      {selectedHudDetailField && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="p-4 px-5 border-b border-slate-800 bg-slate-950/60 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                  <i className={`fa-solid ${selectedHudDetailField.icon} ${selectedHudDetailField.colorClass}`}></i>
+                </div>
+                <div>
+                  <span className="text-[9px] uppercase font-extrabold tracking-wider text-amber-500 block">
+                    {selectedHudDetailField.category}
+                  </span>
+                  <h4 className="text-sm font-bold text-slate-100">
+                    {selectedHudDetailField.label}
+                  </h4>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedHudDetailField(null)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors flex items-center justify-center"
+              >
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+
+            {/* Modal Content - Structured Key Details */}
+            <div className="p-5 space-y-4">
+              <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                <span className="text-[10px] text-slate-400 uppercase font-extrabold tracking-wider block">
+                  Aktuelle Details
+                </span>
+                <div className="space-y-2 text-xs">
+                  {selectedHudDetailField.details.map((dt, dIdx) => (
+                    <div key={dIdx} className="flex justify-between items-center py-1 border-b border-slate-800/60 last:border-0">
+                      <span className="text-slate-400 font-medium">{dt.label}</span>
+                      <span className="text-slate-200 font-bold font-mono truncate max-w-[200px]">{dt.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Editable input field if applicable */}
+              {selectedHudDetailField.isEditable && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-amber-400 font-extrabold uppercase tracking-wider block">
+                    Wert anpassen
+                  </label>
+                  <AutoExpandingTextarea
+                    value={hudModalEditValue}
+                    onChange={(e) => setHudModalEditValue(e.target.value)}
+                    placeholder="Neuen Wert eingeben..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-slate-100 outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-4 px-5 border-t border-slate-800 bg-slate-950/60 flex items-center justify-end gap-2">
+              {selectedHudDetailField.isEditable && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const elId = selectedHudDetailField.elementId || selectedHudDetailField.id;
+                    const elLabel = selectedHudDetailField.label;
+                    const newVal = hudModalEditValue.trim();
+
+                    let updatedStatus = [...(adventure.statusElements || [])];
+                    const itemIdx = updatedStatus.findIndex(item => (item.id === elId || item.label === elLabel));
+                    if (itemIdx > -1) {
+                      updatedStatus[itemIdx] = { ...updatedStatus[itemIdx], value: newVal };
+                    } else {
+                      updatedStatus.push({ id: elId || Math.random().toString(36).substr(2, 9), label: elLabel, value: newVal });
+                    }
+
+                    let updatedPlayer = adventure.player;
+                    let updatedLore = adventure.loreDatabase;
+                    let updatedStructuredInventory = adventure.structuredInventory;
+
+                    const isMoney = elLabel.toLowerCase().includes('vermögen') || elLabel.toLowerCase().includes('geld') || elLabel.toLowerCase().includes('gold') || elLabel.toLowerCase().includes('berry') || elLabel.toLowerCase().includes('münzen') || elLabel.toLowerCase().includes('credits');
+                    const isLocation = elLabel.toLowerCase().includes('standort') || elLabel.toLowerCase().includes('ort');
+
+                    if (isMoney) {
+                      const numMatch = newVal.match(/\d+/);
+                      const parsedMoney = numMatch ? parseInt(numMatch[0]) : (adventure.structuredInventory?.money ?? 0);
+                      const textMatch = newVal.replace(/\d+/g, '').trim();
+                      updatedStructuredInventory = {
+                        ...(adventure.structuredInventory || {}),
+                        money: parsedMoney,
+                        currencyLabel: textMatch || adventure.structuredInventory?.currencyLabel || 'Goldstücke'
+                      };
+                    }
+
+                    if (isLocation) {
+                      updatedPlayer = {
+                        ...adventure.player,
+                        appearance: {
+                          ...adventure.player.appearance,
+                          currentLocation: newVal
+                        }
+                      };
+                      if (updatedLore) {
+                        const loreIdx = updatedLore.findIndex(entry => entry.category === 'Charaktere' && entry.title === adventure.player.name);
+                        if (loreIdx > -1) {
+                          updatedLore = [...updatedLore];
+                          updatedLore[loreIdx] = {
+                            ...updatedLore[loreIdx],
+                            details: {
+                              ...(updatedLore[loreIdx].details || {}),
+                              currentLocation: newVal
+                            }
+                          };
+                        }
+                      }
+                    }
+
+                    onUpdateAdventure({
+                      ...adventure,
+                      player: updatedPlayer,
+                      loreDatabase: updatedLore,
+                      statusElements: updatedStatus,
+                      structuredInventory: updatedStructuredInventory
+                    });
+
+                    setSelectedHudDetailField(null);
+                  }}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition-all"
+                >
+                  Speichern
+                </button>
+              )}
+
+              {selectedHudDetailField.actionType === 'silhouette' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedHudDetailField(null);
+                    setShowSilhouetteModal(true);
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                >
+                  <i className="fa-solid fa-child-body text-xs"></i>
+                  <span>Silhouette & Details</span>
+                </button>
+              )}
+
+              {selectedHudDetailField.actionType === 'emotion' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedHudDetailField(null);
+                    setShowEmotionMenu(true);
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                >
+                  <i className="fa-solid fa-face-smile text-xs"></i>
+                  <span>Emotion ändern</span>
+                </button>
+              )}
+
+              {selectedHudDetailField.actionType === 'tone' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedHudDetailField(null);
+                    setShowToneMenu(true);
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                >
+                  <i className="fa-solid fa-microphone-lines text-xs"></i>
+                  <span>Tonart ändern</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setSelectedHudDetailField(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all"
+              >
+                Schließen
+              </button>
             </div>
           </div>
         </div>

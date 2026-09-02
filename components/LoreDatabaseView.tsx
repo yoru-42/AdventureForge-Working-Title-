@@ -10,6 +10,7 @@ import { NauticalMapBackground } from './NauticalMapBackground';
 import { CharacterLoreForm } from './CharacterLoreForm';
 import TerritorySpecificFields from './TerritorySpecificFields';
 import WorldKnowledgeManager from './WorldKnowledgeManager';
+import { syncEconomyWithWorld } from '../lib/economySync';
 
 interface Props {
   lore: LoreEntry[];
@@ -270,9 +271,60 @@ const LoreDatabaseView: React.FC<Props> = ({
   onUpdateWorld, 
   playerAttributes = [] 
 }) => {
-  const lore = useMemo(() => (rawLore || []).filter(l => l.category !== 'Orte'), [rawLore]);
+  const lore = useMemo(() => (rawLore || []).filter(l => l.category !== 'Orte' && (l.category as string) !== 'Weltkarte'), [rawLore]);
   const [removedCategories, setRemovedCategories] = useState<string[]>([]);
   const [selectedHoldingToAssign, setSelectedHoldingToAssign] = useState<string>('');
+
+  // Auto-migrate any residual 'Orte' or 'Weltkarte' entries in rawLore into world.territories and purge them from rawLore
+  useEffect(() => {
+    const residualOrte = (rawLore || []).filter(l => l.category === 'Orte' || (l.category as string) === 'Weltkarte');
+    if (residualOrte.length > 0) {
+      if (onUpdateWorld && world) {
+        const existingTerritories = [...(world.territories || [])];
+        let territoriesChanged = false;
+        residualOrte.forEach(entry => {
+          const alreadyExists = existingTerritories.some(t => 
+            (entry.id && t.id === entry.id) || 
+            (entry.id && t.loreEntryId === entry.id) ||
+            t.name.trim().toLowerCase() === entry.title.trim().toLowerCase()
+          );
+          if (!alreadyExists) {
+            const d = entry.details || {};
+            const newTerritory: Territory = {
+              id: entry.id || `terr-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              name: entry.title || 'Unbenannter Ort',
+              type: d.type || d.terrainType || 'ort',
+              description: entry.description || '',
+              parentId: d.parentId ?? null,
+              x: d.x ?? (d.center?.x ?? 50),
+              y: d.y ?? (d.center?.y ?? 50),
+              radius: 12.0,
+              shapeType: 'circle',
+              color: '#3b82f6',
+              faction: d.faction || 'Neutral',
+              dangerLevel: 'Normal',
+              isUnlocked: true,
+              ownerFactionId: d.ownerFactionId || d.faction,
+              ownerCharacterId: d.ownerCharacterId,
+              controlledByFactionId: d.controlledByFactionId,
+              loreEntryId: entry.id
+            };
+            existingTerritories.push(newTerritory);
+            territoriesChanged = true;
+          }
+        });
+        if (territoriesChanged) {
+          onUpdateWorld({
+            ...world,
+            territories: existingTerritories
+          });
+        }
+      }
+
+      const cleanedLore = (rawLore || []).filter(l => l.category !== 'Orte' && (l.category as string) !== 'Weltkarte');
+      onUpdateLore(cleanedLore);
+    }
+  }, [rawLore, world, onUpdateWorld, onUpdateLore]);
 
   const visibleCategories = useMemo(() => {
     const raw = [
@@ -435,6 +487,7 @@ const LoreDatabaseView: React.FC<Props> = ({
   const [weltkarteSmartFill, setWeltkarteSmartFill] = useState('');
   const [isSmartFillingTerritory, setIsSmartFillingTerritory] = useState(false);
   const [isSmartFillComplementMode, setIsSmartFillComplementMode] = useState(true);
+  const [isCustomFactionInput, setIsCustomFactionInput] = useState(false);
 
   const lorePowerSourcesList: CharacterPowerSource[] = editForm.details?.powerSources && editForm.details?.powerSources.length > 0
     ? editForm.details.powerSources
@@ -1376,7 +1429,7 @@ const LoreDatabaseView: React.FC<Props> = ({
         setEditForm(newEventEntry);
       }
     } else {
-      const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory;
+      const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Weltregeln' : activeCategory) as LoreCategory;
       if (isEditing && (lore.find(l => l.id === isEditing)?.category === 'Story & Quests' || (lore.find(l => l.id === isEditing)?.category as string) === 'Events')) {
         setIsEditing(null);
         setEditForm({ category: safeCategory });
@@ -1461,7 +1514,7 @@ const LoreDatabaseView: React.FC<Props> = ({
   const handleSave = () => {
     if (!editForm.title || !editForm.description) return;
     
-    const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory;
+    const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Weltregeln' : activeCategory) as LoreCategory;
     const targetCategory = editForm.category || safeCategory;
 
     let finalForm = { ...editForm };
@@ -1492,13 +1545,44 @@ const LoreDatabaseView: React.FC<Props> = ({
     }
     
     onUpdateLore(newLore);
+    if (onUpdateWorld && world) {
+      const currentEconomy = world.economyConfig || {
+        currencyName: 'Goldmünzen',
+        currencyIcon: '🪙',
+        payoutInterval: 'weekly',
+        allowPassiveIncome: true,
+        enableRandomEvents: true,
+        holdings: []
+      };
+      const { updatedEconomy } = syncEconomyWithWorld(currentEconomy, newLore, world.territories || []);
+      onUpdateWorld({
+        ...world,
+        economyConfig: updatedEconomy
+      });
+    }
     setIsEditing(null);
     setEditForm({ category: safeCategory });
   };
 
   const handleDelete = (id: string) => {
-    const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory;
-    onUpdateLore(lore.filter(l => l.id !== id));
+    const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Weltregeln' : activeCategory) as LoreCategory;
+    const updatedLore = lore.filter(l => l.id !== id);
+    onUpdateLore(updatedLore);
+    if (onUpdateWorld && world) {
+      const currentEconomy = world.economyConfig || {
+        currencyName: 'Goldmünzen',
+        currencyIcon: '🪙',
+        payoutInterval: 'weekly',
+        allowPassiveIncome: true,
+        enableRandomEvents: true,
+        holdings: []
+      };
+      const { updatedEconomy } = syncEconomyWithWorld(currentEconomy, updatedLore, world.territories || []);
+      onUpdateWorld({
+        ...world,
+        economyConfig: updatedEconomy
+      });
+    }
     if (isEditing === id) {
       setIsEditing(null);
       setEditForm({ category: safeCategory });
@@ -1529,13 +1613,25 @@ const LoreDatabaseView: React.FC<Props> = ({
     }
     
     if (onUpdateWorld) {
+      const currentEconomy = world?.economyConfig || {
+        currencyName: 'Goldmünzen',
+        currencyIcon: '🪙',
+        payoutInterval: 'weekly',
+        allowPassiveIncome: true,
+        enableRandomEvents: true,
+        holdings: []
+      };
+      const { updatedEconomy } = syncEconomyWithWorld(currentEconomy, rawLore, updatedTerritories);
+
       onUpdateWorld({
         ...world,
-        territories: updatedTerritories
+        territories: updatedTerritories,
+        economyConfig: updatedEconomy
       });
     }
     
     setIsEditingTerritory(null);
+    setIsCustomFactionInput(false);
     setTerritoryForm({
       name: '',
       type: 'stadt',
@@ -1741,7 +1837,7 @@ const LoreDatabaseView: React.FC<Props> = ({
     if (!loreSmartFill.trim()) return;
     setIsSmartFillingLore(true);
     try {
-      const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory;
+      const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Weltregeln' : activeCategory) as LoreCategory;
       const cat = editForm.category || safeCategory;
       const existingCharacterNames: string[] = [];
       lore.filter(l => l.category === 'Charaktere' || l.category === 'Gegner').forEach(l => {
@@ -4322,13 +4418,62 @@ const LoreDatabaseView: React.FC<Props> = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Fraktion</label>
-                    <input
-                      type="text"
-                      value={territoryForm.faction || ''}
-                      onChange={e => setTerritoryForm(prev => ({ ...prev, faction: e.target.value }))}
-                      placeholder="Zugehörige Fraktion"
-                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
-                    />
+                    {(() => {
+                      const availableFactions = (lore || [])
+                        .filter(l => l.category === 'Fraktionen' && l.title?.trim())
+                        .map(l => ({ id: l.id, title: l.title.trim() }));
+                      const uniqueFactionTitles = Array.from(new Set(availableFactions.map(f => f.title)));
+                      
+                      return (
+                        <>
+                          <select
+                            value={isCustomFactionInput ? '__custom__' : (territoryForm.faction || '')}
+                            onChange={e => {
+                              const val = e.target.value;
+                              if (val === '__custom__') {
+                                setIsCustomFactionInput(true);
+                              } else {
+                                setIsCustomFactionInput(false);
+                                const matchedFaction = availableFactions.find(f => f.title === val);
+                                setTerritoryForm(prev => ({
+                                  ...prev,
+                                  faction: val,
+                                  controlledByFactionId: matchedFaction ? matchedFaction.id : (val ? prev.controlledByFactionId : undefined)
+                                }));
+                              }
+                            }}
+                            className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-sky-500 cursor-pointer"
+                          >
+                            <option value="">Keine Fraktion (Neutral)</option>
+                            {uniqueFactionTitles.map(fTitle => (
+                              <option key={fTitle} value={fTitle}>{fTitle}</option>
+                            ))}
+                            {territoryForm.faction && !uniqueFactionTitles.includes(territoryForm.faction) && !isCustomFactionInput && (
+                              <option value={territoryForm.faction}>{territoryForm.faction}</option>
+                            )}
+                            <option value="__custom__">+ Freitext-Eingabe...</option>
+                          </select>
+                          {isCustomFactionInput && (
+                            <input
+                              type="text"
+                              value={territoryForm.faction || ''}
+                              onChange={e => {
+                                const val = e.target.value;
+                                const matchedFaction = availableFactions.find(f => f.title.trim().toLowerCase() === val.trim().toLowerCase());
+                                setTerritoryForm(prev => ({
+                                  ...prev,
+                                  faction: val,
+                                  controlledByFactionId: matchedFaction ? matchedFaction.id : undefined
+                                }));
+                              }}
+                              placeholder="Fraktionsname eingeben..."
+                              className="w-full mt-1.5 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+                              autoFocus
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
 
                   <div>
@@ -4680,7 +4825,7 @@ const LoreDatabaseView: React.FC<Props> = ({
                       type="button"
                       onClick={() => {
                         setIsEditing(null);
-                        setEditForm({ category: ((activeCategory as string) === 'Verhüllung' ? 'Charaktere' : (activeCategory as string) === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory });
+                        setEditForm({ category: ((activeCategory as string) === 'Verhüllung' ? 'Charaktere' : (activeCategory as string) === 'Weltkarte' ? 'Weltregeln' : activeCategory) as LoreCategory });
                       }}
                       className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl transition-all"
                     >
@@ -5638,7 +5783,7 @@ const LoreDatabaseView: React.FC<Props> = ({
                   type="button"
                   onClick={() => {
                     setIsEditing(null);
-                    setEditForm({ category: ((activeCategory as string) === 'Verhüllung' ? 'Charaktere' : (activeCategory as string) === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory });
+                    setEditForm({ category: ((activeCategory as string) === 'Verhüllung' ? 'Charaktere' : (activeCategory as string) === 'Weltkarte' ? 'Weltregeln' : activeCategory) as LoreCategory });
                   }}
                   className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all"
                 >

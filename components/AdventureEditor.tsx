@@ -565,7 +565,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   };
 
   const [player, setPlayer] = useState<Character>(getDefaultPlayerState());
-  const [playerCharTab, setPlayerCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten'>('profil');
+  const [playerCharTab, setPlayerCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente'>('profil');
 
   const [step4SubTab, setStep4SubTab] = useState<'interactive' | 'worldmap' | 'tactical'>('interactive');
   const [customCombatState, setCustomCombatState] = useState<any>(() => {
@@ -3839,6 +3839,18 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                   <i className="fa-solid fa-wand-magic-sparkles text-sm"></i>
                   <span>3. Kampffähigkeiten</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPlayerCharTab('beruf_talente')}
+                  className={`flex-1 py-3 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    playerCharTab === 'beruf_talente'
+                      ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 shadow-lg font-black scale-[1.01]'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                  }`}
+                >
+                  <i className="fa-solid fa-briefcase text-sm"></i>
+                  <span>4. Berufe & Talente</span>
+                </button>
               </div>
 
               {/* Player Smart Fill */}
@@ -3856,7 +3868,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 </label>
                 <AutoExpandingTextarea 
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
-                  placeholder="Beschreibe deinen Charakter, seine Transformationen/Körperveränderungen (was er davor war, seine alten Beziehungen & seine neue Gestalt), Kontakte oder Kampffähigkeiten. Die KI füllt alle Felder in allen Tabs (Profil, Beziehungen & Kampffähigkeiten) perfekt aus." 
+                  placeholder="Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus." 
                   value={playerSmartFill} 
                   onChange={e => setPlayerSmartFill(e.target.value)} 
                 />
@@ -4325,8 +4337,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold flex justify-between">
                        <span>Aktueller Standort (Weltkarte)</span>
                        {(() => {
-                         const createdOrte = Array.from(new Set(loreDatabase.filter(l => l.category === 'Orte').map(l => l.title).filter(Boolean)));
-                         return createdOrte.length > 0 ? <span className="text-[9px] text-sky-400 font-normal"><i className="fa-solid fa-earth-americas mr-1"></i>Weltkarte aktiv</span> : null;
+                         const createdOrte = Array.from(new Set([...(world?.territories || []).map((t: any) => t.name), ...(world?.regionMarkers || []).map((m: any) => m.name)].filter(Boolean)));
+                         return createdOrte.length > 0 ? <span className="text-[9px] text-sky-400 font-normal"><i className="fa-solid fa-earth-americas mr-1"></i>Weltkarte aktiv ({createdOrte.length} Orte)</span> : null;
                        })()}
                     </label>
                     <LocationSelector
@@ -6296,6 +6308,111 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 )}
               </div>
               )}
+
+              {playerCharTab === 'beruf_talente' && (
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <h4 className="text-sm font-bold text-slate-300">Berufe, Talente & Alltagskompetenzen</h4>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Hauptberuf */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Hauptberuf / Spezialisierung
+                        </label>
+                        <input 
+                          type="text" 
+                          value={player.profession || player.role || ''} 
+                          onChange={e => setPlayer({ ...player, profession: e.target.value })}
+                          placeholder="z.B. Schmiedemeister, Kräuterkundlerin, Händler" 
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-medium"
+                        />
+                      </div>
+
+                      {/* Gilde / Rang */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Gilde / Organisation / Rang
+                        </label>
+                        <input 
+                          type="text" 
+                          value={player.jobTitle || ''} 
+                          onChange={e => setPlayer({ ...player, jobTitle: e.target.value })}
+                          placeholder="z.B. Obermeister der Händlergilde, Geselle, Freiberufler" 
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Tätigkeitsbeschreibung */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        Tätigkeitsbeschreibung & Arbeitsalltag
+                      </label>
+                      <AutoExpandingTextarea 
+                        value={player.professionDescription || ''} 
+                        onChange={e => setPlayer({ ...player, professionDescription: e.target.value })}
+                        placeholder="Beschreibung der täglichen beruflichen Pflichten, Tätigkeiten und Verantwortungsbereiche" 
+                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+                      />
+                    </div>
+
+                    {/* Handwerk & Nebengewerbe */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        Handwerk, Fertigung & Nebenberufe
+                      </label>
+                      <AutoExpandingTextarea 
+                        value={player.craftingSkills || ''} 
+                        onChange={e => setPlayer({ ...player, craftingSkills: e.target.value })}
+                        placeholder="z.B. Trankbrauen, Waffenschmieden, Lederverarbeitung, Schneidern, Kochen" 
+                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+                      />
+                    </div>
+
+                    {/* Besondere Talente & Spezialwissen */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        Spezielle Talente & Wissen
+                      </label>
+                      <AutoExpandingTextarea 
+                        value={player.talents || ''} 
+                        onChange={e => setPlayer({ ...player, talents: e.target.value })}
+                        placeholder="z.B. Lesen alter Glyphen, Feilschen, Schlösser knacken, Kartografie, Pflanzenkunde" 
+                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+                      />
+                    </div>
+
+                    {/* Alltagskompetenzen */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        Alltagskompetenzen & Praktische Fertigkeiten
+                      </label>
+                      <AutoExpandingTextarea 
+                        value={player.everydaySkills || ''} 
+                        onChange={e => setPlayer({ ...player, everydaySkills: e.target.value })}
+                        placeholder="z.B. Reiten, Schwimmen, Musizieren, Instrumentenpflege, Orientierung im Gelände" 
+                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+                      />
+                    </div>
+
+                    {/* Werkzeuge & Ausrüstung */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        Berufswerkzeuge, Lizenzen & Ausrüstung
+                      </label>
+                      <AutoExpandingTextarea 
+                        value={player.toolsAndEquipment || ''} 
+                        onChange={e => setPlayer({ ...player, toolsAndEquipment: e.target.value })}
+                        placeholder="z.B. Meisterbrief, Alchemieset, Diebeswerkzeug, Kartografierbesteck, Handelslizenz" 
+                        className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -6411,7 +6528,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
               {Object.keys(world.campaignPowerSettings || {}).length > 0 && (
                 <div className="space-y-2 bg-slate-900/40 p-3.5 rounded-xl border border-slate-850">
                   <div className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                    <span>🏷️</span> DEINE PARAMETER AUS DEN KAMPAGNEN-EINSTELLUNGEN
+                    <i className="fa-solid fa-tags text-amber-500"></i> DEINE PARAMETER AUS DEN KAMPAGNEN-EINSTELLUNGEN
                   </div>
                   <p className="text-[11px] text-slate-400">
                     Klicke auf einen deiner definierten Parameter, um ihn direkt im HUD als Statuswert zu überwachen (z.B. Ausdauer):

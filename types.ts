@@ -146,7 +146,28 @@ export interface NPCAppearanceObservation {
   noticedChanges?: string[];
 }
 
+export interface HUDDetailDefinition {
+  label: string;
+  value: string | number | boolean;
+}
+
+export interface HUDFieldDefinition {
+  id: string;
+  category: 'Welt' | 'Charakter' | 'Sozial' | 'Wirtschaft' | 'Macht & Organisation' | string;
+  label: string;
+  icon?: string;
+  dataSource: string;
+  value?: string | number | boolean;
+  priority?: number;
+  displayFormat?: string;
+  enabled?: boolean;
+  showInHud?: boolean;
+  details?: HUDDetailDefinition[];
+}
+
 export interface HUDConfiguration {
+  fields?: HUDFieldDefinition[];
+
   // Körperlicher Zustand & Veränderungen
   showBodyCondition?: boolean;
   showPhysicalChanges?: boolean;
@@ -456,6 +477,13 @@ export interface Character {
   image?: string;
   expressions?: Record<string, string>;
   skills?: string;
+  profession?: string;
+  jobTitle?: string;
+  professionDescription?: string;
+  craftingSkills?: string;
+  talents?: string;
+  everydaySkills?: string;
+  toolsAndEquipment?: string;
   powerName?: string;
   powerDescription?: string;
   powerSource?: string;

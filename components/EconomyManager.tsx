@@ -117,6 +117,14 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
     }));
   };
 
+  useEffect(() => {
+    const currentEconomy = world.economyConfig || economy;
+    const { updatedEconomy, changed } = syncEconomyWithWorld(currentEconomy, loreDatabase, world.territories || []);
+    if (changed) {
+      updateEconomyConfig(updatedEconomy);
+    }
+  }, [loreDatabase, world.territories]);
+
   const handleFieldChange = <K extends keyof EconomyConfig>(field: K, value: EconomyConfig[K]) => {
     updateEconomyConfig({
       ...economy,
@@ -216,8 +224,8 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
 
   const handleDeleteAllOrteEntries = () => {
     setIsSyncing(true);
-    const orteEntries = loreDatabase.filter(l => l.category === 'Orte' || l.id?.startsWith('lore-holding-'));
-    const count = orteEntries.length || 12;
+    const orteEntries = loreDatabase.filter(l => l.category === 'Orte' || (l.category as string) === 'Weltkarte' || l.id?.startsWith('lore-holding-'));
+    const count = orteEntries.length || 0;
 
     // Unlink loreEntryId from holdings
     const updatedHoldings = economy.holdings.map(h => ({ ...h, loreEntryId: undefined }));
@@ -231,11 +239,11 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
     } else {
       setWorld(prev => ({
         ...prev,
-        loreDatabase: (prev.loreDatabase || []).filter(l => l.category !== 'Orte' && !l.id?.startsWith('lore-holding-'))
+        loreDatabase: (prev.loreDatabase || []).filter(l => l.category !== 'Orte' && (l.category as string) !== 'Weltkarte' && !l.id?.startsWith('lore-holding-'))
       }));
     }
 
-    setSyncMessage(`Alle Orte-Einträge (${count}) wurden erfolgreich aus dem Codex gelöscht.`);
+    setSyncMessage(`Alle Orte-Reste (${count}) wurden erfolgreich bereinigt.`);
     setTimeout(() => {
       setIsSyncing(false);
       setSyncMessage(null);
@@ -316,7 +324,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
   const isHoldingInCodex = (h: EconomyHolding): boolean => {
     return loreDatabase.some(l => 
       l.id === h.loreEntryId || 
-      (l.category === 'Orte' && l.title.trim().toLowerCase() === (h.name || '').trim().toLowerCase())
+      (l.title.trim().toLowerCase() === (h.name || '').trim().toLowerCase())
     ) || (world.territories || []).some(t => 
       t.id === h.territoryId || 
       t.name.trim().toLowerCase() === (h.name || '').trim().toLowerCase()
@@ -467,10 +475,10 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
             onClick={handleDeleteAllOrteEntries}
             disabled={isSyncing}
             className="px-3 py-1.5 bg-rose-950/60 border border-rose-500/40 text-rose-300 hover:bg-rose-900/60 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Löscht alle 'Orte'-Einträge aus dem Codex"
+            title="Bereinigt alte 'Orte'-Einträge aus dem Codex"
           >
             <LucideIcons.Trash2 className="w-3.5 h-3.5 text-rose-400" />
-            <span>Orte aus Codex löschen ({loreDatabase.filter(l => l.category === 'Orte' || l.id?.startsWith('lore-holding-')).length})</span>
+            <span>Orte-Reste bereinigen ({loreDatabase.filter(l => l.category === 'Orte' || (l.category as string) === 'Weltkarte' || l.id?.startsWith('lore-holding-')).length})</span>
           </button>
 
           <button
@@ -624,7 +632,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                       <div className="flex justify-between items-center text-[9px] text-slate-500 pt-3 border-t border-slate-900">
                         <div className="flex items-center gap-1.5">
                           <LucideIcons.User className="w-3 h-3 text-slate-600" />
-                          <span className="truncate max-w-[80px]">{holding.ownerType === 'user' ? 'Spieler' : holding.assignedCharacterName || 'NPC'}</span>
+                          <span className="truncate max-w-[80px]">{holding.ownerType === 'user' ? 'Spieler' : holding.ownerType === 'faction' ? (holding.ownerFactionName || 'Fraktion') : (holding.assignedCharacterName || 'NSC')}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <LucideIcons.Users className="w-3 h-3 text-slate-600" />
@@ -727,7 +735,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                           {net >= 0 ? '+' : ''}{net} {economy.currencyIcon}
                         </span>
                         <span className="text-[9px] text-slate-500 capitalize block truncate max-w-[65px]">
-                          {holding.ownerType === 'user' ? 'Spieler' : holding.assignedCharacterName || 'NPC'}
+                          {holding.ownerType === 'user' ? 'Spieler' : holding.ownerType === 'faction' ? (holding.ownerFactionName || 'Fraktion') : (holding.assignedCharacterName || 'NSC')}
                         </span>
                       </div>
                     </button>
@@ -1066,7 +1074,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                             <span>{h.name}</span>
                           </td>
                           <td className="p-3 text-slate-400 capitalize">
-                            {h.ownerType === 'user' ? 'Spieler' : h.assignedCharacterName || 'NPC'}
+                            {h.ownerType === 'user' ? 'Spieler' : h.ownerType === 'faction' ? (h.ownerFactionName || 'Fraktion') : (h.assignedCharacterName || 'NSC')}
                           </td>
                           <td className="p-3 text-right font-bold text-emerald-400 font-mono">
                             +{h.incomePerInterval || 0} {economy.currencyIcon}

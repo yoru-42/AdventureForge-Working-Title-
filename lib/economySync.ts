@@ -14,45 +14,62 @@ import { HOLDING_TYPES, getHoldingPresets } from '../components/economy/EconomyP
 export const detectHoldingType = (entry: LoreEntry | Territory): EconomyHolding['type'] | null => {
   const isLore = (entry as any).category !== undefined;
   
-  const typeStr = isLore
-    ? (entry as LoreEntry).details?.type || (entry as LoreEntry).category
-    : (entry as Territory).poiType || (entry as Territory).type;
+  const rawType = isLore
+    ? ((entry as LoreEntry).details?.type || (entry as LoreEntry).category)
+    : ((entry as Territory).poiType || (entry as Territory).type);
   
   const title = isLore ? (entry as LoreEntry).title : (entry as Territory).name;
   const description = entry.description || '';
-  const combined = `${typeStr} ${title} ${description}`.toLowerCase();
+  const factionName = isLore 
+    ? ((entry as LoreEntry).details?.faction || (entry as LoreEntry).details?.factionName) 
+    : (entry as Territory).faction;
+  const combined = `${rawType} ${title} ${description} ${factionName || ''}`.toLowerCase();
 
   // Keyword mapping to EconomyHolding['type']
-  if (combined.includes('taverne') || combined.includes('schänke') || combined.includes('gasthof') || combined.includes('wirtshaus') || combined.includes('spelunke')) return 'taverne';
-  if (combined.includes('schmiede')) return 'schmiede';
-  if (combined.includes('mine') || combined.includes('steinbruch') || combined.includes('grabung')) return 'mine';
-  if (combined.includes('handels') || combined.includes('kontor') || combined.includes('laden') || combined.includes('markt') || combined.includes('haendler') || combined.includes('kaufhaus')) return 'haendler';
-  if (combined.includes('anwesen') || combined.includes('landgut') || combined.includes('villa')) return 'anwesen';
-  if (combined.includes('burg') || combined.includes('festung') || combined.includes('schloss') || combined.includes('fort') || combined.includes('palast') || combined.includes('residenz') || combined.includes('kastell')) return 'burg';
-  if (combined.includes('bauernhof') || combined.includes('farm') || combined.includes('mühle') || combined.includes('plantage') || combined.includes('gutshof')) return 'bauernhof';
-  if (combined.includes('werft') || combined.includes('dock')) return 'werft';
-  if (combined.includes('hafen')) return 'hafenbetrieb';
-  if (combined.includes('bäckerei') || combined.includes('baeckerei')) return 'baeckerei';
-  if (combined.includes('werkstatt') || combined.includes('atelier')) return 'werkstatt';
-  if (combined.includes('gilde') || combined.includes('meisterbund')) return 'gilde';
-  if (combined.includes('gasthaus') || combined.includes('herberge') || combined.includes('hotel')) return 'gasthaus';
-  if (combined.includes('sägewerk') || combined.includes('saegewerk')) return 'saegewerk';
-  if (combined.includes('manufaktur') || combined.includes('weberei')) return 'manufaktur';
-  if (combined.includes('magierladen') || combined.includes('labor')) return 'magierladen';
-  if (combined.includes('adelssitz')) return 'adelssitz';
-  if (combined.includes('koenigreich') || combined.includes('provinz')) return 'koenigreich';
-  if (combined.includes('schiff') || combined.includes('fregatte') || combined.includes('galeone')) return 'schiff';
-  if (combined.includes('fraktion') || combined.includes('orden')) return 'fraktionsgebaeude';
+  if (combined.includes('taverne') || combined.includes('schänke') || combined.includes('gasthof') || combined.includes('wirtshaus') || combined.includes('spelunke') || combined.includes('kneipe')) return 'taverne';
+  if (combined.includes('schmiede') || combined.includes('waffenschmiede')) return 'schmiede';
+  if (combined.includes('mine') || combined.includes('steinbruch') || combined.includes('grabung') || combined.includes('erzmine')) return 'mine';
+  if (combined.includes('handels') || combined.includes('kontor') || combined.includes('laden') || combined.includes('markt') || combined.includes('haendler') || combined.includes('kaufhaus') || combined.includes('geschäft') || combined.includes('krämerei')) return 'haendler';
+  if (combined.includes('anwesen') || combined.includes('landgut') || combined.includes('villa') || combined.includes('gutshof')) return 'anwesen';
+  if (combined.includes('burg') || combined.includes('festung') || combined.includes('schloss') || combined.includes('fort') || combined.includes('palast') || combined.includes('residenz') || combined.includes('kastell') || combined.includes('zitadelle')) return 'burg';
+  if (combined.includes('bauernhof') || combined.includes('farm') || combined.includes('mühle') || combined.includes('plantage')) return 'bauernhof';
+  if (combined.includes('werft') || combined.includes('dock') || combined.includes('trockendock')) return 'werft';
+  if (combined.includes('hafenbetrieb') || combined.includes('zollstation') || combined.includes('hafenamt') || combined.includes('hafen')) return 'hafenbetrieb';
+  if (combined.includes('bäckerei') || combined.includes('baeckerei') || combined.includes('konditorei')) return 'baeckerei';
+  if (combined.includes('werkstatt') || combined.includes('atelier') || combined.includes('gießerei')) return 'werkstatt';
+  if (combined.includes('gilde') || combined.includes('meisterbund') || combined.includes('zunft') || combined.includes('gildenhaus')) return 'gilde';
+  if (combined.includes('gasthaus') || combined.includes('herberge') || combined.includes('hotel') || combined.includes('pension')) return 'gasthaus';
+  if (combined.includes('sägewerk') || combined.includes('saegewerk') || combined.includes('holzlager')) return 'saegewerk';
+  if (combined.includes('manufaktur') || combined.includes('weberei') || combined.includes('spinnerei')) return 'manufaktur';
+  if (combined.includes('magierladen') || combined.includes('labor') || combined.includes('zauberladen') || combined.includes('apotheke') || combined.includes('magiergilde')) return 'magierladen';
+  if (combined.includes('adelssitz') || combined.includes('stadtpalais')) return 'adelssitz';
+  if (combined.includes('koenigreich') || combined.includes('provinz') || combined.includes('reich') || combined.includes('herzogtum')) return 'koenigreich';
+  if (combined.includes('schiff') || combined.includes('fregatte') || combined.includes('galeone') || combined.includes('kutter') || combined.includes('boot')) return 'schiff';
+  if (combined.includes('fraktion') || combined.includes('orden') || combined.includes('hauptquartier') || combined.includes('stützpunkt') || combined.includes('stuetzpunkt') || combined.includes('garnison') || combined.includes('kaserne') || combined.includes('zentrale')) return 'fraktionsgebaeude';
 
-  // Specific check for categories in Lore
-  if (isLore) {
-    const cat = (entry as LoreEntry).category;
-    if (cat === 'Orte') {
-      // If it's a place but didn't match keywords, maybe it's custom
-      // but we only want to auto-sync likely businesses.
+  // Fallbacks for manageable entry types
+  if (!isLore) {
+    const terrType = ((entry as Territory).type || '').toLowerCase();
+    const poiType = ((entry as Territory).poiType || '').toLowerCase();
+    const manageableTypes = ['gebäude', 'gebaeude', 'ort', 'stadt', 'dorf', 'festung', 'burg', 'hafen', 'mine', 'anwesen', 'gilde', 'lager', 'kontor', 'schloss', 'turm', 'tempel', 'ruine', 'residenz', 'zone', 'unabhaengiges_gebiet'];
+    if (manageableTypes.includes(terrType) || poiType) {
+      if (factionName || (entry as Territory).controlledByFactionId || (entry as Territory).ownerFactionId) {
+        return 'fraktionsgebaeude';
+      }
+      if (terrType === 'festung' || terrType === 'burg') return 'burg';
+      if (terrType === 'hafen') return 'hafenbetrieb';
+      if (terrType === 'mine') return 'mine';
+      if (terrType === 'stadt' || terrType === 'dorf') return 'koenigreich';
+      return 'anwesen';
+    }
+  } else {
+    const cat = (entry as LoreEntry).category as string;
+    if (cat === 'Orte' || cat === 'Gebäude' || cat === 'Weltkarte') {
+      if (factionName || (entry as LoreEntry).details?.controlledByFactionId) return 'fraktionsgebaeude';
+      return 'anwesen';
     }
   }
-  
+
   return null;
 };
 
@@ -73,16 +90,56 @@ export const createHoldingFromSource = (
   const id = isLore ? `holding-lore-${source.id}` : `holding-terr-${source.id}`;
   
   const details = isLore ? (source as LoreEntry).details : {};
-  const ownerFactionId = isLore ? details?.ownerFactionId : (source as Territory).ownerFactionId;
-  const ownerCharacterId = isLore ? details?.ownerCharacterId : (source as Territory).ownerCharacterId;
-  const controlledByFactionId = isLore ? details?.controlledByFactionId : (source as Territory).controlledByFactionId;
-  const ownerType = isLore ? details?.ownerType : undefined;
+  
+  // Resolve Faction
+  const rawFactionName = isLore 
+    ? (details?.faction || details?.factionName) 
+    : (source as Territory).faction;
+  let ownerFactionId = isLore ? details?.ownerFactionId : (source as Territory).ownerFactionId;
+  let controlledByFactionId = isLore ? details?.controlledByFactionId : (source as Territory).controlledByFactionId;
+  
+  let ownerFactionName: string | undefined = undefined;
+  let controlledByFactionName: string | undefined = rawFactionName || undefined;
 
-  let controlledByFactionName = undefined;
-  if (controlledByFactionId && loreDatabase) {
-    const faction = loreDatabase.find(f => f.id === controlledByFactionId);
-    if (faction) controlledByFactionName = faction.title;
+  if (loreDatabase) {
+    const matchedFaction = loreDatabase.find(f => f.category === 'Fraktionen' && (
+      (ownerFactionId && f.id === ownerFactionId) ||
+      (controlledByFactionId && f.id === controlledByFactionId) ||
+      (rawFactionName && f.title?.trim().toLowerCase() === rawFactionName.trim().toLowerCase())
+    ));
+
+    if (matchedFaction) {
+      ownerFactionId = matchedFaction.id;
+      controlledByFactionId = matchedFaction.id;
+      ownerFactionName = matchedFaction.title;
+      controlledByFactionName = matchedFaction.title;
+    }
   }
+
+  if (!ownerFactionName && rawFactionName) {
+    ownerFactionName = rawFactionName;
+  }
+
+  const ownerCharacterId = isLore ? details?.ownerCharacterId : (source as Territory).ownerCharacterId;
+  const ownerType = (ownerFactionId || controlledByFactionId || rawFactionName) ? 'faction' : ownerCharacterId ? 'character' : 'user';
+
+  // Resolve Ruler / Manager
+  const ruler = isLore ? (details?.ruler || details?.leader) : ((source as Territory).ruler || (source as Territory).ownerCharacterId);
+  const assignedCharacterName = ruler || (ownerFactionName ? `${ownerFactionName}-Verwalter` : 'Spieler');
+
+  const rawType = isLore ? (details?.type || (source as LoreEntry).category) : ((source as Territory).poiType || (source as Territory).type);
+  const population = isLore ? details?.population : (source as Territory).population;
+
+  const physicalCondition = details?.physicalCondition || 'Gut';
+  const physicalSize = details?.physicalSize || (['stadt', 'burg', 'koenigreich', 'festung'].includes((rawType || '').toLowerCase()) ? 'Groß' : 'Mittel');
+  const physicalUsage = details?.physicalUsage || `${preset.label} (${rawType || 'Gebäude'})`;
+  const physicalCapacity = details?.capacity || (population ? `${population} Kapazität` : 'Standard-Kapazität');
+  const roomsOrAreas = details?.rooms || (rawFactionName 
+    ? `Hauptsaal, Kommandoraum, ${preset.label}-Bereich, Waffen- & Materiallager` 
+    : `Empfang, Hauptraum, Lagerbereich, Verwalterbüro`);
+  const damages = details?.damages || 'Keine bekannten Schäden / Intakt';
+  const accessibility = details?.accessibility || (rawFactionName ? `Zugang für Mitglieder von ${rawFactionName} & Befugte` : 'Öffentlich zugänglich');
+  const residentsOrVisitors = details?.residents || (ruler ? `${ruler} & Gefolge` : rawFactionName ? `Mitglieder & Belegschaft von ${rawFactionName}` : 'Einheimische, Händler & Gäste');
 
   return {
     id,
@@ -91,9 +148,11 @@ export const createHoldingFromSource = (
     icon: preset.icon,
     description: description || preset.description,
     level: 1,
-    ownerType: (ownerType as any) || (ownerFactionId ? 'faction' : ownerCharacterId ? 'character' : 'user'),
+    ownerType: ownerType as any,
     ownerFactionId,
+    ownerFactionName,
     ownerCharacterId,
+    assignedCharacterName,
     controlledByFactionId,
     controlledByFactionName,
     loreEntryId: isLore ? source.id : (source as Territory).loreEntryId,
@@ -103,7 +162,7 @@ export const createHoldingFromSource = (
     staffCount: assets.staffGroups.reduce((acc, g) => acc + (g.count || 0), 0) || 5,
     reputation: 50,
     status: 'active',
-    locationName: isLore ? '' : (source as Territory).name,
+    locationName: isLore ? (details?.locationName || '') : (source as Territory).name,
     budget: preset.defaultIncome * 2,
     storageCapacity: 150,
     upgrades: [
@@ -118,10 +177,14 @@ export const createHoldingFromSource = (
     decisions: assets.decisions.map(d => ({ ...d, id: `dec-${id}-${Math.random().toString(36).substring(2, 7)}` })),
     activityLogs: assets.activityLogs.map(l => ({ ...l, id: `log-${id}-${Math.random().toString(36).substring(2, 7)}` })),
     
-    physicalCondition: 'Gut',
-    physicalSize: 'Mittel',
-    physicalCapacity: 'Standard-Kapazität',
-    physicalUsage: 'Gewerbe & Betrieb',
+    physicalCondition,
+    physicalSize,
+    physicalCapacity,
+    physicalUsage,
+    roomsOrAreas,
+    damages,
+    accessibility,
+    residentsOrVisitors,
     
     useResourcesModule: true,
     useStaffModule: true,
@@ -139,7 +202,8 @@ export const createHoldingFromSource = (
 export const removeAllOrteLoreEntries = (loreDatabase: LoreEntry[]): { updatedLoreDatabase: LoreEntry[]; removedCount: number } => {
   const initialLength = loreDatabase.length;
   const updatedLoreDatabase = loreDatabase.filter(l => 
-    l.category !== 'Orte' && 
+    (l.category as string) !== 'Orte' && 
+    (l.category as string) !== 'Weltkarte' &&
     !l.id?.startsWith('lore-holding-') && 
     !l.details?.holdingId
   );
@@ -158,7 +222,7 @@ export const createLoreEntryFromHolding = (holding: EconomyHolding): LoreEntry =
   
   return {
     id: holding.loreEntryId || `lore-holding-${holding.id}`,
-    category: 'Orte',
+    category: 'Weltregeln',
     title: holding.name,
     description: holding.description || `Ein(e) ${typeLabel} (${holding.locationName ? 'in ' + holding.locationName : 'Wirtschaftsbetrieb'}).`,
     isUnlocked: true,
@@ -189,7 +253,7 @@ export const registerAllHoldingsInCodex = (
   const updatedHoldings = economy.holdings.map(h => {
     const existingLore = loreDatabase.find(l => 
       l.id === h.loreEntryId || 
-      (l.category === 'Orte' && l.title.trim().toLowerCase() === h.name.trim().toLowerCase())
+      (l.title.trim().toLowerCase() === h.name.trim().toLowerCase())
     );
 
     if (existingLore) {
@@ -227,7 +291,7 @@ export const syncEconomyWithWorld = (
 
   // 1. Process Lore Entries (Codex)
   loreDatabase.forEach(entry => {
-    if (entry.category === 'Orte') {
+    if ((entry.category as string) === 'Orte' || (entry.category as string) === 'Weltkarte' || entry.category === 'Weltregeln') {
       const type = detectHoldingType(entry);
       if (type) {
         const existingIndex = updatedHoldings.findIndex(h => 
@@ -286,8 +350,8 @@ export const syncEconomyWithWorld = (
 
   // 2. Process Territories (Map)
   territories.forEach(terr => {
-    const manageableTerrTypes = ['gebäude', 'ort', 'stadt', 'burg', 'hafen', 'festung', 'mine', 'dorf'];
-    if (manageableTerrTypes.includes(terr.type.toLowerCase()) || terr.poiType) {
+    const manageableTerrTypes = ['gebäude', 'gebaeude', 'ort', 'stadt', 'burg', 'hafen', 'festung', 'mine', 'dorf', 'anwesen', 'gilde', 'lager', 'kontor', 'schloss', 'turm', 'tempel', 'ruine', 'residenz', 'zone', 'unabhaengiges_gebiet'];
+    if (manageableTerrTypes.includes((terr.type || '').toLowerCase()) || terr.poiType) {
       const type = detectHoldingType(terr);
       if (type) {
         const existingIndex = updatedHoldings.findIndex(h => 
@@ -296,6 +360,17 @@ export const syncEconomyWithWorld = (
           (terr.loreEntryId && h.loreEntryId === terr.loreEntryId) ||
           h.name.trim().toLowerCase() === terr.name.trim().toLowerCase()
         );
+
+        // Resolve faction for this territory
+        const rawFactionName = terr.faction;
+        let matchedFaction = loreDatabase.find(f => f.category === 'Fraktionen' && (
+          (terr.controlledByFactionId && f.id === terr.controlledByFactionId) ||
+          (terr.ownerFactionId && f.id === terr.ownerFactionId) ||
+          (rawFactionName && f.title?.trim().toLowerCase() === rawFactionName.trim().toLowerCase())
+        ));
+
+        const resolvedFactionId = matchedFaction ? matchedFaction.id : (terr.controlledByFactionId || terr.ownerFactionId);
+        const resolvedFactionName = matchedFaction ? matchedFaction.title : rawFactionName;
         
         if (existingIndex !== -1) {
           const existing = updatedHoldings[existingIndex];
@@ -309,20 +384,44 @@ export const syncEconomyWithWorld = (
             existing.territoryId = terr.id;
             holdingChanged = true;
           }
-          if (terr.ownerFactionId && existing.ownerFactionId !== terr.ownerFactionId) {
-            existing.ownerFactionId = terr.ownerFactionId;
+          if (!existing.locationName || existing.locationName !== terr.name) {
+            existing.locationName = terr.name;
+            holdingChanged = true;
+          }
+
+          if (resolvedFactionId && (existing.controlledByFactionId !== resolvedFactionId || existing.ownerFactionId !== resolvedFactionId)) {
+            existing.controlledByFactionId = resolvedFactionId;
+            existing.ownerFactionId = resolvedFactionId;
+            existing.ownerFactionName = resolvedFactionName;
+            existing.controlledByFactionName = resolvedFactionName;
+            existing.ownerType = 'faction';
+            holdingChanged = true;
+          } else if (resolvedFactionName && existing.controlledByFactionName !== resolvedFactionName) {
+            existing.controlledByFactionName = resolvedFactionName;
+            existing.ownerFactionName = resolvedFactionName;
             existing.ownerType = 'faction';
             holdingChanged = true;
           }
-          if (terr.ownerCharacterId && existing.ownerCharacterId !== terr.ownerCharacterId) {
-            existing.ownerCharacterId = terr.ownerCharacterId;
-            existing.ownerType = 'character';
+
+          if (terr.ruler && existing.assignedCharacterName !== terr.ruler) {
+            existing.assignedCharacterName = terr.ruler;
             holdingChanged = true;
           }
-          if (terr.controlledByFactionId && existing.controlledByFactionId !== terr.controlledByFactionId) {
-            existing.controlledByFactionId = terr.controlledByFactionId;
-            const faction = loreDatabase.find(f => f.id === terr.controlledByFactionId);
-            if (faction) existing.controlledByFactionName = faction.title;
+
+          if (terr.description && existing.description !== terr.description) {
+            existing.description = terr.description;
+            holdingChanged = true;
+          }
+
+          if (resolvedFactionName && (!existing.accessibility || existing.accessibility === 'Öffentlich zugänglich')) {
+            existing.accessibility = `Zugang für Mitglieder von ${resolvedFactionName} & Befugte`;
+            holdingChanged = true;
+          }
+
+          if (resolvedFactionName && (!existing.residentsOrVisitors || existing.residentsOrVisitors.includes('Einheimische'))) {
+            existing.residentsOrVisitors = terr.ruler 
+              ? `${terr.ruler} & Gefolge von ${resolvedFactionName}`
+              : `Mitglieder & Belegschaft von ${resolvedFactionName}`;
             holdingChanged = true;
           }
 

@@ -296,8 +296,8 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'West-Kap Klippen', type: 'Gebirgspass', description: 'Wilde Steilküste am westlichen Ozeanrand.', x: 22, y: 65, color: '#e11d48', hazardLevel: 'Mittel' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Hauptkontinent Pangaea Prime', category: 'Orte', description: 'Das Herzstück der Bekannten Welt, umschlossen von vier charakteristischen Halbinseln.', isUnlocked: true },
-        { id: `lore-st-${ts}-2`, title: 'Nord-Haken & Ost-Spitze', category: 'Orte', description: 'Bedeutende Küstenzungen, die den Zugang zur zentralen Handelssee kontrollieren.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Hauptkontinent Pangaea Prime', category: 'Weltregeln', description: 'Das Herzstück der Bekannten Welt, umschlossen von vier charakteristischen Halbinseln.', isUnlocked: true },
+        { id: `lore-st-${ts}-2`, title: 'Nord-Haken & Ost-Spitze', category: 'Weltregeln', description: 'Bedeutende Küstenzungen, die den Zugang zur zentralen Handelssee kontrollieren.', isUnlocked: true }
       ]
     };
   }
@@ -311,8 +311,8 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Süd-Ringatoll', type: 'Tempel', description: 'Mystische Ringinseln alter Seefahrer-Legenden.', x: 65, y: 68, color: '#f59e0b', hazardLevel: 'Mittel' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Vulkan-Archipel Zentrum', category: 'Orte', description: 'Feurige Vulkanatolle im Zentrum der Archipelwelt.', isUnlocked: true },
-        { id: `lore-st-${ts}-2`, title: 'Korallen-Atolle der Ostsee', category: 'Orte', description: 'Traumhafte Inselketten voller verborgener Korallenriffe und alten Schätzen.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Vulkan-Archipel Zentrum', category: 'Weltregeln', description: 'Feurige Vulkanatolle im Zentrum der Archipelwelt.', isUnlocked: true },
+        { id: `lore-st-${ts}-2`, title: 'Korallen-Atolle der Ostsee', category: 'Weltregeln', description: 'Traumhafte Inselketten voller verborgener Korallenriffe und alten Schätzen.', isUnlocked: true }
       ]
     };
   }
@@ -325,8 +325,8 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Straße von Bifröst', type: 'Gebirgspass', description: 'Strategische Ozeanstraße zwischen den beiden Machtblöcken.', x: 50, y: 50, color: '#0284c7', hazardLevel: 'Hoch' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'West-Kontinent Occidentia', category: 'Orte', description: 'Heimat der alten Reiche und mächtigen Rittergilden.', isUnlocked: true },
-        { id: `lore-st-${ts}-2`, title: 'Ost-Kontinent Orientis', category: 'Orte', description: 'Mystisches Land der Handelswege, Wüstenstädte und Sternenbeobachter.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'West-Kontinent Occidentia', category: 'Weltregeln', description: 'Heimat der alten Reiche und mächtigen Rittergilden.', isUnlocked: true },
+        { id: `lore-st-${ts}-2`, title: 'Ost-Kontinent Orientis', category: 'Weltregeln', description: 'Mystisches Land der Handelswege, Wüstenstädte und Sternenbeobachter.', isUnlocked: true }
       ]
     };
   }
@@ -339,8 +339,8 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Sanctuarium-Insel', type: 'Tempel', description: 'Uralte Insel in der Mitte des Binnenmeers, Sitz der Alten Hüter.', x: 50, y: 50, color: '#eab308', hazardLevel: 'Hoch' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Der Äußerer Ringkontinent', category: 'Orte', description: 'Umschließt das heilige Binnenmeer als gewaltiger natürlicher Wall.', isUnlocked: true },
-        { id: `lore-st-${ts}-2`, title: 'Sanctuarium-Insel', category: 'Orte', description: 'Das sagenumwobene Zentrum der Welt mitten im Binnenmeer.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Der Äußerer Ringkontinent', category: 'Weltregeln', description: 'Umschließt das heilige Binnenmeer als gewaltiger natürlicher Wall.', isUnlocked: true },
+        { id: `lore-st-${ts}-2`, title: 'Sanctuarium-Insel', category: 'Weltregeln', description: 'Das sagenumwobene Zentrum der Welt mitten im Binnenmeer.', isUnlocked: true }
       ]
     };
   }
@@ -352,7 +352,7 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Äußere Schildinseln', type: 'Inselgruppe', description: 'Ketten von Schutzinseln, die den Ozeanstürmen trotzen.', x: 25, y: 72, color: '#0284c7', hazardLevel: 'Mittel' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Skagastöl Fjordland', category: 'Orte', description: 'Tief eingeschnittene Meeresarme prägen diese raue Festlandsregion.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Skagastöl Fjordland', category: 'Weltregeln', description: 'Tief eingeschnittene Meeresarme prägen diese raue Festlandsregion.', isUnlocked: true }
       ]
     };
   }
@@ -364,7 +364,7 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Bogen-Inselkette', type: 'Inselgruppe', description: 'Begleitende Inselkette entlang des Tiefseegrabens.', x: 72, y: 32, color: '#06b6d4', hazardLevel: 'Mittel' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Der Kontinentbogen Koron', category: 'Orte', description: 'Imposanter Landbogen quer durch den Ozean.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Der Kontinentbogen Koron', category: 'Weltregeln', description: 'Imposanter Landbogen quer durch den Ozean.', isUnlocked: true }
       ]
     };
   }
@@ -375,7 +375,7 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Hauptkontinent Aethelgard', type: 'Inselgruppe', description: 'Gewaltige zusammenhängende Hauptlandmasse.', x: 50, y: 50, color: '#16a34a', hazardLevel: 'Mittel' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Aethelgard Hauptkontinent', category: 'Orte', description: 'Das geeinte Festland Aethelgard.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Aethelgard Hauptkontinent', category: 'Weltregeln', description: 'Das geeinte Festland Aethelgard.', isUnlocked: true }
       ]
     };
   }
@@ -387,7 +387,7 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Süd-Kontinent Australis', type: 'Inselgruppe', description: 'Fruchtbarer Südkontinent.', x: 50, y: 75, color: '#d97706', hazardLevel: 'Niedrig' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Borealis & Australis', category: 'Orte', description: 'Die geteilten Zwillingskontinente der Welt.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Borealis & Australis', category: 'Weltregeln', description: 'Die geteilten Zwillingskontinente der Welt.', isUnlocked: true }
       ]
     };
   }
@@ -398,7 +398,7 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Hauptland & Landzunge', type: 'Inselgruppe', description: 'Kontinent mit weit ausladenden Halbinseln.', x: 50, y: 45, color: '#16a34a', hazardLevel: 'Niedrig' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Die Große Halbinsel', category: 'Orte', description: 'Weit vorragende Landmasse ins Meer.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Die Große Halbinsel', category: 'Weltregeln', description: 'Weit vorragende Landmasse ins Meer.', isUnlocked: true }
       ]
     };
   }
@@ -409,7 +409,7 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Das Große Inselmeer', type: 'Inselgruppe', description: 'Weitverzweigtes Archipel im offenen Ozean.', x: 50, y: 50, color: '#06b6d4', hazardLevel: 'Mittel' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Das Große Inselmeer', category: 'Orte', description: 'Unzählige Eilande im tiefen Ozean.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Das Große Inselmeer', category: 'Weltregeln', description: 'Unzählige Eilande im tiefen Ozean.', isUnlocked: true }
       ]
     };
   }
@@ -420,7 +420,7 @@ export function getStencilLandmarksAndLore(stencilId: string): StencilLandmarkDa
         { name: 'Ringkontinent & Binnenmeer', type: 'Inselgruppe', description: 'Ringförmiger Landgürtel um ein Zentralmeer.', x: 50, y: 50, color: '#16a34a', hazardLevel: 'Mittel' }
       ],
       loreEntries: [
-        { id: `lore-st-${ts}-1`, title: 'Ringkontinent & Binnenmeer', category: 'Orte', description: 'Geschützter Ozeanring der Alten Welt.', isUnlocked: true }
+        { id: `lore-st-${ts}-1`, title: 'Ringkontinent & Binnenmeer', category: 'Weltregeln', description: 'Geschützter Ozeanring der Alten Welt.', isUnlocked: true }
       ]
     };
   }

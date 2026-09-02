@@ -808,7 +808,7 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
         if (t.type !== 'welt' && !isDuplicateTitle && !isDuplicateContent) {
           generatedLore.push({
             id: `lore-${t.id}`,
-            category: 'Orte',
+            category: 'Weltregeln',
             title: t.name,
             description: t.description || `Ein bedeutsamer Ort (${t.type}) in der Weltkarte von ${worldTitle}.`,
             isUnlocked: true,
