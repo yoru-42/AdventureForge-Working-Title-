@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { LoreEntry, LoreCategory } from '../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { LoreEntry, LoreCategory, CharacterPowerSource, Territory, FactionMember } from '../types';
 import { GeminiService } from '../services/geminiService';
 import { autoCalculateAppearance } from '../utils/appearance';
 import CharacterPowerRadar from './CharacterPowerRadar';
+import { LocationSelector } from './LocationSelector';
 import { CampaignPowerParameter } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import { NauticalMapBackground } from './NauticalMapBackground';
+import { CharacterLoreForm } from './CharacterLoreForm';
+import TerritorySpecificFields from './TerritorySpecificFields';
+import WorldKnowledgeManager from './WorldKnowledgeManager';
 
 interface Props {
   lore: LoreEntry[];
@@ -14,10 +19,17 @@ interface Props {
   isNsfw?: boolean;
   worldPowerSettings?: Record<string, number | CampaignPowerParameter>;
   playerName?: string;
+  playerRole?: string;
+  playerFaction?: string;
+  player?: any;
   world?: any;
+  excludedCategories?: string[];
+  hideMap?: boolean;
+  onUpdateWorld?: (world: any) => void;
+  playerAttributes?: any[];
 }
 
-const CATEGORIES: LoreCategory[] = ['Charaktere', 'Orte', 'Fraktionen', 'Gegenstände', 'Fähigkeiten', 'Events', 'Weltregeln', 'Gegner'];
+const CATEGORIES: (LoreCategory | 'Verhüllung')[] = ['Charaktere', 'Verhüllung', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Story & Quests', 'Weltregeln', 'Gegner', 'Zeitlinie'];
 
 const GENDER_OPTIONS = ["Männlich", "Weiblich", "Divers", "Nicht-Binär", "Androgyn", "Unbekannt"];
 const BUILD_OPTIONS = ["Schlank", "Sportlich", "Muskulös", "Kräftig", "Zierlich", "Drahtig", "Kurvig", "Stämmig", "Hager", "Unbekannt"];
@@ -32,11 +44,337 @@ const ITEM_TYPE_OPTIONS = [
   "Questgegenstände / Story-Objekte"
 ];
 
-const DEFAULT_POWER_SOURCES = ["Mana", "Chakra", "Ausdauer", "Aura", "Zorn", "Glaube", "Blutmagie", "Technologie", "Göttlich", "Keine"];
-const DEFAULT_POWER_COSTS = ["MP (Magiepunkte)", "SP (Spezialpunkte)", "HP (Lebenspunkte)", "Ausdauer", "Chakra", "Energie", "Fokus", "Keine"];
+export interface TerrainPreset {
+  id: string;
+  name: string;
+  colorClass: string;
+  textColor: string;
+  icon: string;
+  badgeColorClass: string;
+  glowColor: string;
+  description: string;
+}
 
-const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldTitle = '', isNsfw = false, worldPowerSettings, playerName = '', world }) => {
-  const [activeCategory, setActiveCategory] = useState<LoreCategory>('Charaktere');
+export const TERRAIN_PRESETS: TerrainPreset[] = [
+  {
+    id: 'flüssigkeit',
+    name: 'Flüssigkeit (Wasser / Meer / Ozean)',
+    colorClass: 'bg-blue-600 border-blue-400 text-white shadow-blue-500/40',
+    textColor: 'text-blue-400',
+    icon: 'fa-solid fa-droplet',
+    badgeColorClass: 'bg-blue-950 border-blue-800 text-blue-200',
+    glowColor: 'bg-blue-500',
+    description: 'Wasserflächen, Flüsse, Seen, Meere und Ozeane'
+  },
+  {
+    id: 'hitze',
+    name: 'Hitze & Energie (Magma / Feuer / Lava)',
+    colorClass: 'bg-red-600 border-orange-500 text-white shadow-red-500/40',
+    textColor: 'text-red-500',
+    icon: 'fa-solid fa-fire',
+    badgeColorClass: 'bg-red-950 border-red-800 text-red-200',
+    glowColor: 'bg-red-500',
+    description: 'Lavaflüsse, Vulkane, Brandgebiete und magische Feuerherde'
+  },
+  {
+    id: 'kälte',
+    name: 'Kälte (Eis / Schnee / Frost)',
+    colorClass: 'bg-cyan-200 border-white text-slate-950 shadow-cyan-300/40',
+    textColor: 'text-cyan-300',
+    icon: 'fa-solid fa-snowflake',
+    badgeColorClass: 'bg-cyan-950 border-cyan-800 text-cyan-200',
+    glowColor: 'bg-cyan-300',
+    description: 'Schneebedeckte Gipfel, Gletscher, Frostfelder und Eispaläste'
+  },
+  {
+    id: 'natur_dicht',
+    name: 'Natur-Dicht (Wald / Dschungel / Mangroven)',
+    colorClass: 'bg-emerald-800 border-emerald-500 text-white shadow-emerald-700/40',
+    textColor: 'text-emerald-500',
+    icon: 'fa-solid fa-tree',
+    badgeColorClass: 'bg-emerald-950 border-emerald-800 text-emerald-200',
+    glowColor: 'bg-emerald-500',
+    description: 'Urwälder, dichter Dschungel, alte Wälder und Mangrovensümpfe'
+  },
+  {
+    id: 'natur_offen',
+    name: 'Natur-Offen (Gras / Wiese / Ebene)',
+    colorClass: 'bg-green-500 border-lime-400 text-slate-950 shadow-green-500/40',
+    textColor: 'text-green-400',
+    icon: 'fa-solid fa-seedling',
+    badgeColorClass: 'bg-green-950 border-green-850 text-green-200',
+    glowColor: 'bg-green-500',
+    description: 'Grüne Weiden, Blumenwiesen, weite Graslandschaften und Savannen'
+  },
+  {
+    id: 'trockenheit',
+    name: 'Trockenheit (Erde / Sand / Wüste)',
+    colorClass: 'bg-amber-600 border-yellow-500 text-slate-950 shadow-amber-500/40',
+    textColor: 'text-amber-500',
+    icon: 'fa-solid fa-sun-plant-wilt',
+    badgeColorClass: 'bg-amber-950 border-amber-800 text-amber-200',
+    glowColor: 'bg-amber-500',
+    description: 'Sandwüsten, ausgetrocknete Steppen, Ödländer und rissige Erde'
+  },
+  {
+    id: 'fels',
+    name: 'Fels & Barriere (Wände / Klippen / Berge)',
+    colorClass: 'bg-slate-600 border-slate-400 text-white shadow-slate-500/40',
+    textColor: 'text-slate-400',
+    icon: 'fa-solid fa-mountain',
+    badgeColorClass: 'bg-slate-900 border-slate-700 text-slate-300',
+    glowColor: 'bg-slate-400',
+    description: 'Steile Klippen, hohe Gebirgsketten, Steinmauern und unwegsamer Fels'
+  },
+  {
+    id: 'struktur',
+    name: 'Struktur & Urban (Boden / Holzdeck / Asphalt)',
+    colorClass: 'bg-stone-700 border-stone-500 text-white shadow-stone-600/40',
+    textColor: 'text-stone-400',
+    icon: 'fa-solid fa-city',
+    badgeColorClass: 'bg-stone-900 border-stone-800 text-stone-300',
+    glowColor: 'bg-stone-500',
+    description: 'Gepflasterte Straßen, Holzbrücken, Tavernenböden, Asphalt und Marktplätze'
+  },
+  {
+    id: 'untergrund',
+    name: 'Untergrund (Tunnel / Höhle / Korridor)',
+    colorClass: 'bg-purple-900 border-purple-600 text-white shadow-purple-900/40',
+    textColor: 'text-purple-400',
+    icon: 'fa-solid fa-dungeon',
+    badgeColorClass: 'bg-purple-950 border-purple-800 text-purple-200',
+    glowColor: 'bg-purple-500',
+    description: 'Unterirdische Verliese, dunkle Höhlen, Tunnelgänge und geheime Gewölbe'
+  },
+  {
+    id: 'ungewissheit',
+    name: 'Ungewissheit (Nebel / Rauch / Smog)',
+    colorClass: 'bg-zinc-500 border-zinc-300 text-slate-950 shadow-zinc-400/40',
+    textColor: 'text-zinc-400',
+    icon: 'fa-solid fa-smog',
+    badgeColorClass: 'bg-zinc-900 border-zinc-800 text-zinc-300',
+    glowColor: 'bg-zinc-400',
+    description: 'Dichter Bodennebel, Rauchschwaden, Giftgase und unkartierte Gebiete'
+  }
+];
+
+export const WORLD_MAP_CLASSES = [
+  {
+    id: 'deckung',
+    label: 'Deckung',
+    icon: 'fa-solid fa-shield-halved',
+    description: 'Hindernisse und Barrikaden',
+    items: [
+      { name: 'Felswand', icon: 'fa-solid fa-cube', description: 'Massive Felswand, bietet Deckung.' },
+      { name: 'Baumstamm', icon: 'fa-solid fa-tree', description: 'Umgestürzter Baumstamm.' },
+      { name: 'Sandsäcke', icon: 'fa-solid fa-boxes-stacked', description: 'Sandsack-Barrikade.' }
+    ]
+  },
+  {
+    id: 'durchgaenge',
+    label: 'Durchgänge',
+    icon: 'fa-solid fa-door-open',
+    description: 'Tore, Türen und Durchgänge',
+    items: [
+      { name: 'Eisentür', icon: 'fa-solid fa-door-closed', description: 'Schwere verschlossene Eisentür.' },
+      { name: 'Spinnennetz', icon: 'fa-solid fa-spider', description: 'Dichtes klebriges Spinnennetz.' },
+      { name: 'Fallgatter', icon: 'fa-solid fa-bars', description: 'Ein herabgelassenes Eisengatter.' }
+    ]
+  },
+  {
+    id: 'gefahren',
+    label: 'Gefahren',
+    icon: 'fa-solid fa-triangle-exclamation',
+    description: 'Fallen und Umweltgefahren',
+    items: [
+      { name: 'Lavariß', icon: 'fa-solid fa-fire', description: 'Magma- oder Hitzeriss.' },
+      { name: 'Speer-Falle', icon: 'fa-solid fa-circle-exclamation', description: 'Versteckte Fallgrube.' },
+      { name: 'Säurepfütze', icon: 'fa-solid fa-vial', description: 'Ätzende Flüssigkeit am Boden.' }
+    ]
+  },
+  {
+    id: 'schaetze',
+    label: 'Schätze',
+    icon: 'fa-solid fa-gem',
+    description: 'Behälter, Truhen und Schätze',
+    items: [
+      { name: 'Schatztruhe', icon: 'fa-solid fa-box-archive', description: 'Verschlossene Truhe mit Wertgegenständen.' },
+      { name: 'Antike Urne', icon: 'fa-solid fa-jar', description: 'Tonurne mit alten Artefakten.' },
+      { name: 'Waffenkiste', icon: 'fa-solid fa-box', description: 'Behälter mit Ausrüstung.' }
+    ]
+  },
+  {
+    id: 'konsolen',
+    label: 'Konsolen',
+    icon: 'fa-solid fa-sliders',
+    description: 'Hebel, Konsolen und Terminals',
+    items: [
+      { name: 'Hebel', icon: 'fa-solid fa-gear', description: 'Mechanischer Hebel.' },
+      { name: 'Steuerkonsole', icon: 'fa-solid fa-desktop', description: 'Terminal zur Systemsteuerung.' },
+      { name: 'Runenplatte', icon: 'fa-solid fa-circle-nodes', description: 'Bodenplatte mit Symbolen.' }
+    ]
+  },
+  {
+    id: 'fahrzeuge',
+    label: 'Fahrzeuge',
+    icon: 'fa-solid fa-truck',
+    description: 'Fahrzeuge und Transportmittel',
+    items: [
+      { name: 'Holzkarren', icon: 'fa-solid fa-cart-shopping', description: 'Ein einfacher Wagen.' },
+      { name: 'Ruderboot', icon: 'fa-solid fa-sailboat', description: 'Einfaches Holzboot.' },
+      { name: 'Gleitfahrzeug', icon: 'fa-solid fa-plane', description: 'Schnelles Fortbewegungsmittel.' }
+    ]
+  },
+  {
+    id: 'alltagsobjekte',
+    label: 'Alltagsobjekte',
+    icon: 'fa-solid fa-cube',
+    description: 'Alltagsgegenstände und Mobiliar',
+    items: [
+      { name: 'Eichentisch', icon: 'fa-solid fa-table', description: 'Ein schlichter Tisch.' },
+      { name: 'Straßenlaterne', icon: 'fa-solid fa-lightbulb', description: 'Laterne für Beleuchtung.' },
+      { name: 'Staubiges Regal', icon: 'fa-solid fa-book', description: 'Regal voller Bücher und Schriftrollen.' }
+    ]
+  }
+];
+
+export const TRANSPORTS = [
+  { id: 'fuss', name: 'Zu Fuß', icon: 'fa-solid fa-person-walking', speedKmh: 5, speedMs: 1.39, description: 'Normales Gehtempo.' },
+  { id: 'pferd', name: 'Reittier', icon: 'fa-solid fa-horse', speedKmh: 18, speedMs: 5.0, description: 'Schnelles Reisen über Land.' },
+  { id: 'kutsche', name: 'Kutsche / Karren', icon: 'fa-solid fa-caravan', speedKmh: 10, speedMs: 2.78, description: 'Reisen mit Gepäck.' },
+  { id: 'auto', name: 'Gleitfahrzeug', icon: 'fa-solid fa-truck-fast', speedKmh: 46, speedMs: 12.78, description: 'Schneller Gleiter.' },
+  { id: 'pirate_ship', name: 'Segelschiff', icon: 'fa-solid fa-ship', speedKmh: 18, speedMs: 5.0, description: 'Klassisches Hochseeschiff.' },
+  { id: 'marine_ship', name: 'Kriegsschiff', icon: 'fa-solid fa-anchor', speedKmh: 33, speedMs: 9.17, description: 'Gepanzerte Schiffsausführung.' },
+  { id: 'submarine', name: 'Tauchboot / U-Boot', icon: 'fa-solid fa-water', speedKmh: 28, speedMs: 7.78, description: 'Unterwasser-Fortbewegungsmittel.' },
+  { id: 'seaking_ship', name: 'Gezogenes Schiff', icon: 'fa-solid fa-compass', speedKmh: 55, speedMs: 15.28, description: 'Schneller Schiffszug.' },
+  { id: 'schiff', name: 'Handelsschiff', icon: 'fa-solid fa-sailboat', speedKmh: 15, speedMs: 4.17, description: 'Standardmäßiges Handelsschiff.' },
+  { id: 'luftschiff', name: 'Luftschiff', icon: 'fa-solid fa-plane-departure', speedKmh: 150, speedMs: 41.67, description: 'Fliegendes Transportmittel.' },
+  { id: 'raumschiff', name: 'Raumschiff', icon: 'fa-solid fa-rocket', speedKmh: 12000, speedMs: 3333.33, description: 'Extrem hohe Reisegeschwindigkeit.' },
+  { id: 'portal', name: 'Teleportation / Portal', icon: 'fa-solid fa-circle-notch', speedKmh: 9999999, speedMs: 9999999, description: 'Sofortige Übertragung zum Zielort.' }
+];
+
+const LoreDatabaseView: React.FC<Props> = ({ 
+  lore: rawLore, 
+  onUpdateLore, 
+  onClose, 
+  worldTitle = '', 
+  isNsfw = false, 
+  worldPowerSettings, 
+  playerName = '', 
+  playerRole = '',
+  playerFaction = '',
+  player,
+  world, 
+  excludedCategories = [], 
+  hideMap = false, 
+  onUpdateWorld, 
+  playerAttributes = [] 
+}) => {
+  const lore = useMemo(() => (rawLore || []).filter(l => l.category !== 'Orte'), [rawLore]);
+  const [removedCategories, setRemovedCategories] = useState<string[]>([]);
+  const [selectedHoldingToAssign, setSelectedHoldingToAssign] = useState<string>('');
+
+  const visibleCategories = useMemo(() => {
+    const raw = [
+      'Omni-Smart-Fill',
+      ...CATEGORIES.filter(c => !excludedCategories.includes(c)),
+      'Weltkarte',
+      'Kanon & Konsistenz'
+    ].filter(c => !removedCategories.includes(c));
+    return Array.from(new Set(raw)) as (LoreCategory | 'Verhüllung' | 'Weltkarte' | 'Omni-Smart-Fill' | 'Kanon & Konsistenz')[];
+  }, [excludedCategories, removedCategories]);
+
+  const [activeCategory, setActiveCategory] = useState<LoreCategory | 'Verhüllung' | 'Weltkarte' | 'Omni-Smart-Fill' | 'Kanon & Konsistenz'>(() => {
+    return (visibleCategories.find(c => c !== 'Omni-Smart-Fill') || 'Charaktere') as any;
+  });
+
+  const handleDeleteCategoryAndEntries = (categoryToDelete: string) => {
+    if (categoryToDelete === 'Weltkarte') {
+      if (onUpdateWorld) {
+        onUpdateWorld({
+          ...world,
+          territories: [],
+          placeMarkers: [],
+          civilizationMarkers: [],
+          regionMarkers: [],
+          terrains: []
+        });
+      }
+      onUpdateLore(lore.filter(l => l.category !== 'Orte' && (l.category as string) !== 'Weltkarte'));
+    } else {
+      onUpdateLore(lore.filter(l => l.category !== categoryToDelete));
+    }
+
+    const updatedRemoved = Array.from(new Set([...removedCategories, categoryToDelete]));
+    setRemovedCategories(updatedRemoved);
+
+    const remaining = visibleCategories.filter(c => c !== categoryToDelete && c !== 'Omni-Smart-Fill');
+    if (remaining.length > 0) {
+      setActiveCategory(remaining[0]);
+    } else {
+      setActiveCategory('Charaktere');
+    }
+  };
+
+  // Weltkarte Tab states
+  const [weltkarteSearch, setWeltkarteSearch] = useState('');
+  const [weltkarteTypeFilter, setWeltkarteTypeFilter] = useState<string>('all');
+  const [weltkarteParentFilter, setWeltkarteParentFilter] = useState<string>('all');
+  const [weltkarteSortBy, setWeltkarteSortBy] = useState<string>('name-asc');
+
+  const filteredAndSortedTerritories = useMemo(() => {
+    let list = [...(world?.territories || [])];
+
+    // Search term
+    if (weltkarteSearch.trim()) {
+      const q = weltkarteSearch.toLowerCase();
+      list = list.filter(t => 
+        t.name?.toLowerCase().includes(q) || 
+        t.description?.toLowerCase().includes(q) ||
+        t.type?.toLowerCase().includes(q)
+      );
+    }
+
+    // Type filter
+    if (weltkarteTypeFilter !== 'all') {
+      list = list.filter(t => t.type === weltkarteTypeFilter);
+    }
+
+    // Parent filter
+    if (weltkarteParentFilter !== 'all') {
+      list = list.filter(t => t.parentId === weltkarteParentFilter);
+    }
+
+    // Sorting
+    list.sort((a, b) => {
+      if (weltkarteSortBy === 'name-asc') {
+        return (a.name || '').localeCompare(b.name || '');
+      }
+      if (weltkarteSortBy === 'name-desc') {
+        return (b.name || '').localeCompare(a.name || '');
+      }
+      if (weltkarteSortBy === 'type') {
+        return (a.type || '').localeCompare(b.type || '');
+      }
+      if (weltkarteSortBy === 'pos-x') {
+        return (a.x || 0) - (b.x || 0);
+      }
+      if (weltkarteSortBy === 'pos-y') {
+        return (a.y || 0) - (b.y || 0);
+      }
+      return 0;
+    });
+
+    return list;
+  }, [world?.territories, weltkarteSearch, weltkarteTypeFilter, weltkarteParentFilter, weltkarteSortBy]);
+
+  const parentOptions = useMemo(() => {
+    const list = world?.territories || [];
+    const parentIds = new Set(list.map(t => t.parentId).filter(Boolean));
+    return list.filter(t => parentIds.has(t.id));
+  }, [world?.territories]);
+
+  const [selectedActorId, setSelectedActorId] = useState<string>('__player_knowledge__');
   const [loreSmartFill, setLoreSmartFill] = useState<string>('');
   const [isSmartFillingLore, setIsSmartFillingLore] = useState(false);
   const [keepExistingLoreDetails, setKeepExistingLoreDetails] = useState<boolean>(true);
@@ -44,64 +382,795 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<LoreEntry>>({ category: 'Charaktere' });
   const [isGeneratingImg, setIsGeneratingImg] = useState<boolean>(false);
+  const [generatingExpression, setGeneratingExpression] = useState<string | null>(null);
   const formTopRef = useRef<HTMLDivElement>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  // Faction Unified Harmonization States
+  const [isHarmonizingFaction, setIsHarmonizingFaction] = useState<boolean>(false);
+  const [factionHarmonizePrompt, setFactionHarmonizePrompt] = useState<string>('');
+  const [harmonizeSuccessMessage, setHarmonizeSuccessMessage] = useState<string | null>(null);
+
+  // Omni Multi-Smart-Fill States
+  const [omniSmartFillPrompt, setOmniSmartFillPrompt] = useState('');
+  const [isOmniGenerating, setIsOmniGenerating] = useState(false);
+  const [proposedEntries, setProposedEntries] = useState<any[]>([]);
+  const [selectedProposedIds, setSelectedProposedIds] = useState<Set<string>>(new Set());
+  const [omniSuccessMessage, setOmniSuccessMessage] = useState<string | null>(null);
+
+  // Interaktive Node-Map States
+  const [mapZoomLevel, setMapZoomLevel] = useState<'macro' | 'meso' | 'micro' | 'building'>('macro');
+  const [selectedMacroId, setSelectedMacroId] = useState<string | null>(null);
+  const [selectedMesoId, setSelectedMesoId] = useState<string | null>(null);
+  const [selectedMicroId, setSelectedMicroId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [mapViewMode, setMapViewMode] = useState<'map' | 'list'>('map');
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Sub-Tabs, Folder Tree & Effects States
+  const [orteSubTab, setOrteSubTab] = useState<'map' | 'configurator'>('map');
+  const [activeAbilityTab, setActiveAbilityTab] = useState<string>('Techniken');
+  const [activePowerSourceIdx, setActivePowerSourceIdx] = useState<number>(0);
+  const [openApplicationsDropdown, setOpenApplicationsDropdown] = useState<string | null>(null);
+  const [quickAbilityName, setQuickAbilityName] = useState('');
+
+  // Weltkarte Editor States
+  const [isEditingTerritory, setIsEditingTerritory] = useState<string | null>(null);
+  const [territoryForm, setTerritoryForm] = useState<Partial<Territory>>({
+    name: '',
+    type: 'stadt',
+    description: '',
+    parentId: null,
+    population: '',
+    ruler: '',
+    climate: '',
+    culture: '',
+    terrain: '',
+    faction: '',
+    x: 50,
+    y: 50
+  });
+  const [weltkarteSmartFill, setWeltkarteSmartFill] = useState('');
+  const [isSmartFillingTerritory, setIsSmartFillingTerritory] = useState(false);
+  const [isSmartFillComplementMode, setIsSmartFillComplementMode] = useState(true);
+
+  const lorePowerSourcesList: CharacterPowerSource[] = editForm.details?.powerSources && editForm.details?.powerSources.length > 0
+    ? editForm.details.powerSources
+    : [
+        {
+          id: 'default',
+          source: editForm.details?.powerSource || '',
+          cost: editForm.details?.powerCost || '',
+          powerName: editForm.details?.powerName || '',
+          powerDescription: editForm.details?.powerDescription || ''
+        }
+      ];
+
+  const currentLorePowerSourceIdx = Math.min(activePowerSourceIdx, lorePowerSourcesList.length - 1);
+  const activeLorePowerSource = (lorePowerSourcesList[currentLorePowerSourceIdx] || lorePowerSourcesList[0] || {}) as CharacterPowerSource;
+
+  const [newTerrainType, setNewTerrainType] = useState<'Gebirge' | 'Wald' | 'Fluss' | 'See'>('Gebirge');
+  const [newTerrainName, setNewTerrainName] = useState('');
+  const [newTerrainDesc, setNewTerrainDesc] = useState('');
+  const [newTerrainX, setNewTerrainX] = useState(50);
+  const [newTerrainY, setNewTerrainY] = useState(50);
+  
+  const [newConnFrom, setNewConnFrom] = useState('');
+  const [newConnTo, setNewConnTo] = useState('');
+  const [newConnType, setNewConnType] = useState('fuss');
+  const [newConnDuration, setNewConnDuration] = useState('1 Tag');
+  
+  const [aiWorldDescription, setAiWorldDescription] = useState('');
+  const [isGeneratingAiWorld, setIsGeneratingAiWorld] = useState(false);
+
+  const [orteFormTab, setOrteFormTab] = useState<'setting' | 'ebenen'>('setting');
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({ '__unassigned__': true });
+  const [combatEffects, setCombatEffects] = useState<any[]>([
+    { id: '1', type: 'magma', x: 45, y: 50, radius: 12, intensity: 4, description: 'Magma-Eruption' },
+    { id: '2', type: 'eis', x: 55, y: 50, radius: 12, intensity: 4, description: 'Eisiger Froststurm' }
+  ]);
+  const [activePlacingEffect, setActivePlacingEffect] = useState<string | null>(null);
+  const [isCombatDropdownOpen, setIsCombatDropdownOpen] = useState<boolean>(false);
+
+  // RPG Maker style custom grid dimensions
+  const [isCustomizingGrid, setIsCustomizingGrid] = useState<boolean>(false);
+  const [isShowingJSONConnections, setIsShowingJSONConnections] = useState<boolean>(false);
+  const [isMapLevelDropdownOpen, setIsMapLevelDropdownOpen] = useState<boolean>(false);
+  const [isStamperDropdownOpen, setIsStamperDropdownOpen] = useState<boolean>(false);
+  const [orteViewMode, setOrteViewMode] = useState<'list' | 'tree'>('tree');
+  const [mapGridSizes, setMapGridSizes] = useState<{
+    macro: { width: number; height: number };
+    meso: { width: number; height: number };
+    micro: { width: number; height: number };
+    building: { width: number; height: number };
+  }>(() => {
+    const saved = localStorage.getItem('adventureforge_map_grid_sizes');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // ignore
+      }
+    }
+    return {
+      macro: { width: 20, height: 20 },
+      meso: { width: 12, height: 12 },
+      micro: { width: 8, height: 8 },
+      building: { width: 6, height: 6 }
+    };
+  });
+
+  // Map zoom and panning states
+  const [mapScale, setMapScale] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // 7 universal classes stamping states
+  const [activePlacingClassAsset, setActivePlacingClassAsset] = useState<{ name: string; icon: string; className: string } | null>(null);
+  const [keepClassPlacingMode, setKeepClassPlacingMode] = useState<boolean>(false);
+
+  // Mapped tactile elements clash detection
+  const getTacticalClashes = () => {
+    const cellEffects = combatEffects.map(eff => {
+      const colIdx = Math.floor(eff.x / 10);
+      const rowIdx = Math.floor(eff.y / 10);
+      const colName = String.fromCharCode(65 + Math.max(0, Math.min(9, colIdx)));
+      const rowName = String.fromCharCode(49 + Math.max(0, Math.min(9, rowIdx)));
+      return {
+        ...eff,
+        col: Math.max(0, Math.min(9, colIdx)),
+        row: Math.max(0, Math.min(9, rowIdx)),
+        cell: `${colName}${rowName}`
+      };
+    });
+
+    const clashes: { cell: string; col: number; row: number; type: 'steam' | 'electric' | 'explosion'; label: string; desc: string; icon: string }[] = [];
+
+    for (let i = 0; i < cellEffects.length; i++) {
+      for (let j = i + 1; j < cellEffects.length; j++) {
+        const a = cellEffects[i];
+        const b = cellEffects[j];
+        const isAdj = Math.abs(a.col - b.col) <= 1 && Math.abs(a.row - b.row) <= 1;
+        if (isAdj) {
+          const hasMagma = a.type === 'magma' || b.type === 'magma';
+          const hasEis = a.type === 'eis' || b.type === 'eis';
+          const hasLightning = a.type === 'lightning' || b.type === 'lightning' || a.type === 'blitz' || b.type === 'blitz';
+          const hasPoison = a.type === 'poison' || b.type === 'poison' || a.type === 'gift' || b.type === 'gift';
+          const hasFire = a.type === 'magma' || a.type === 'fire' || b.type === 'magma' || b.type === 'fire';
+
+          if (hasMagma && hasEis) {
+            const cellStr = a.cell === b.cell ? a.cell : `${a.cell}/${b.cell}`;
+            if (!clashes.some(c => c.cell === cellStr)) {
+              clashes.push({
+                cell: cellStr,
+                col: Math.round((a.col + b.col) / 2),
+                row: Math.round((a.row + b.row) / 2),
+                type: 'steam',
+                label: 'Dampfexplosion',
+                desc: 'Magma und Eis treffen aufeinander: Heißer Wasserdampf schränkt Sicht und Bewegung ein.',
+                icon: 'fa-solid fa-wind'
+              });
+            }
+          } else if (hasFire && hasPoison) {
+            const cellStr = a.cell === b.cell ? a.cell : `${a.cell}/${b.cell}`;
+            if (!clashes.some(c => c.cell === cellStr)) {
+              clashes.push({
+                cell: cellStr,
+                col: Math.round((a.col + b.col) / 2),
+                row: Math.round((a.row + b.row) / 2),
+                type: 'explosion',
+                label: 'Explosive Verpuffung',
+                desc: 'Gase entzünden sich: Druckwelle und Hitzestrahlung im Umkreis.',
+                icon: 'fa-solid fa-burst'
+              });
+            }
+          }
+        }
+      }
+    }
+    return clashes;
+  };
+
+  // Combat Simulator States
+  const [simSpell, setSimSpell] = useState<'magma' | 'eis' | 'lightning' | 'poison'>('magma');
+  const [simCol, setSimCol] = useState<number>(4);
+  const [simRow, setSimRow] = useState<number>(4);
+
+  // Nested Coordinates System & Travel Duration States
+  const [selectedTransportId, setSelectedTransportId] = useState<string>('fuss');
+  const [travelStartNodeId, setTravelStartNodeId] = useState<string | null>(null);
+  const [travelEndNodeId, setTravelEndNodeId] = useState<string | null>(null);
+  const [manualX1, setManualX1] = useState<number>(20);
+  const [manualY1, setManualY1] = useState<number>(20);
+  const [manualX2, setManualX2] = useState<number>(80);
+  const [manualY2, setManualY2] = useState<number>(80);
+
+  // --- PROCEDURAL RPG-MAKER BACKGROUND GRID GENERATION ---
+  interface BackgroundTile {
+    col: number;
+    row: number;
+    terrainId: string;
+  }
+
+  const seededRandom = (seedStr: string) => {
+    let h = 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      h = Math.imul(31, h) + seedStr.charCodeAt(i) | 0;
+    }
+    return () => {
+      let t = h += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
+  const getTileColor = (terrainId: string): string => {
+    switch (terrainId) {
+      case 'flüssigkeit': return '#0a304e';
+      case 'hitze': return '#3e0a0a';
+      case 'kälte': return '#0f3544';
+      case 'natur_dicht': return '#053225';
+      case 'natur_offen': return '#0f3a1e';
+      case 'trockenheit': return '#3a200a';
+      case 'fels': return '#242c38';
+      case 'struktur': return '#2d2b28';
+      case 'untergrund': return '#2b0e40';
+      case 'ungewissheit': return '#202023';
+      default: return '#10151f';
+    }
+  };
+
+  const { tiles: backgroundTiles, gridWidth: backgroundGridWidth, gridHeight: backgroundGridHeight } = useMemo(() => {
+    const gridWidth = mapGridSizes[mapZoomLevel]?.width || 10;
+    const gridHeight = mapGridSizes[mapZoomLevel]?.height || 10;
+    
+    const titleLower = (world?.title || worldTitle || '').toLowerCase();
+    const descLower = (world?.description || '').toLowerCase();
+    const tagsStr = (world?.tags || []).join(' ').toLowerCase();
+    const fullText = `${titleLower} ${descLower} ${tagsStr}`;
+    
+    let defaultBaseTerrain = 'natur_offen';
+    if (fullText.includes('one piece') || fullText.includes('meer') || fullText.includes('ozean') || fullText.includes('pirat') || fullText.includes('insel') || fullText.includes('ocean') || fullText.includes('sea') || fullText.includes('island')) {
+      defaultBaseTerrain = 'flüssigkeit';
+    } else if (fullText.includes('wüste') || fullText.includes('desert') || fullText.includes('düne') || fullText.includes('sand') || fullText.includes('steppe')) {
+      defaultBaseTerrain = 'trockenheit';
+    } else if (fullText.includes('eis') || fullText.includes('schnee') || fullText.includes('frost') || fullText.includes('gletscher') || fullText.includes('kalt') || fullText.includes('ice') || fullText.includes('snow')) {
+      defaultBaseTerrain = 'kälte';
+    } else if (fullText.includes('höhle') || fullText.includes('cave') || fullText.includes('untergrund') || fullText.includes('dungeon') || fullText.includes('mine') || fullText.includes('katakombe')) {
+      defaultBaseTerrain = 'untergrund';
+    } else if (fullText.includes('wald') || fullText.includes('forest') || fullText.includes('dschungel') || fullText.includes('jungle') || fullText.includes('sumpf')) {
+      defaultBaseTerrain = 'natur_dicht';
+    }
+
+    const currentNodes = lore.filter(l => {
+      if (l.category !== 'Orte') return false;
+      const lvl = l.details?.mapLevel || 'meso';
+      if (mapZoomLevel === 'macro') return lvl === 'macro';
+      if (mapZoomLevel === 'meso') {
+        return lvl === 'meso' && (selectedMacroId ? l.details?.parentPlaceId === selectedMacroId : true);
+      }
+      if (mapZoomLevel === 'micro') {
+        return lvl === 'micro' && (selectedMesoId ? l.details?.parentPlaceId === selectedMesoId : true);
+      }
+      if (mapZoomLevel === 'building') {
+        return lvl === 'building' && (selectedMicroId ? l.details?.parentPlaceId === selectedMicroId : true);
+      }
+      return false;
+    });
+
+    const activeNode = currentNodes.find(n => n.details?.isActiveTarget) || currentNodes.find(n => n.id === selectedNodeId);
+    
+    let overrideBaseTerrain = '';
+    let specialTheme = '';
+    
+    if (activeNode && (mapZoomLevel === 'micro' || mapZoomLevel === 'building')) {
+      const nodeTitle = (activeNode.title || '').toLowerCase();
+      const nodeDesc = (activeNode.description || '').toLowerCase();
+      const nodeText = `${nodeTitle} ${nodeDesc}`;
+      
+      if (nodeText.includes('schmiede') || nodeText.includes('forge') || nodeText.includes('vulkan') || nodeText.includes('schmelze') || nodeText.includes('lava') || nodeText.includes('werkstatt')) {
+        specialTheme = 'schmiede';
+        overrideBaseTerrain = 'hitze';
+      } else if (nodeText.includes('taverne') || nodeText.includes('gasthaus') || nodeText.includes('wirtshaus') || nodeText.includes('gilde') || nodeText.includes('schänke') || nodeText.includes('tavern') || nodeText.includes('inn') || nodeText.includes('shop')) {
+        specialTheme = 'taverne';
+        overrideBaseTerrain = 'struktur';
+      } else if (nodeText.includes('höhle') || nodeText.includes('cave') || nodeText.includes('tunnel') || nodeText.includes('mine') || nodeText.includes('katakomben') || nodeText.includes('verlies') || nodeText.includes('dungeon')) {
+        specialTheme = 'höhle';
+        overrideBaseTerrain = 'untergrund';
+      } else if (nodeText.includes('wald') || nodeText.includes('forest') || nodeText.includes('dschungel') || nodeText.includes('jungle') || nodeText.includes('sumpf') || nodeText.includes('hügel')) {
+        specialTheme = 'wald';
+        overrideBaseTerrain = 'natur_dicht';
+      } else if (activeNode.details?.terrainTile) {
+        overrideBaseTerrain = activeNode.details.terrainTile;
+      }
+    }
+
+    const baseTerrain = overrideBaseTerrain || defaultBaseTerrain;
+    
+    let seedStr = '';
+    if (mapZoomLevel === 'macro') {
+      seedStr = `${titleLower}-macro-global`;
+    } else if (mapZoomLevel === 'meso') {
+      seedStr = `${titleLower}-meso-${selectedMacroId || 'global'}`;
+    } else if (mapZoomLevel === 'micro') {
+      seedStr = `${titleLower}-micro-${selectedMesoId || activeNode?.id || 'none'}`;
+    } else {
+      seedStr = `${titleLower}-building-${selectedMicroId || activeNode?.id || 'none'}`;
+    }
+    
+    const rng = seededRandom(seedStr);
+    const tiles: BackgroundTile[] = [];
+
+    for (let r = 0; r < gridHeight; r++) {
+      for (let c = 0; c < gridWidth; c++) {
+        const cx = gridWidth > 1 ? (c / (gridWidth - 1)) * 100 : 50;
+        const cy = gridHeight > 1 ? (r / (gridHeight - 1)) * 100 : 50;
+        let chosenTerrain = baseTerrain;
+
+        if (specialTheme === 'schmiede') {
+          const val = rng();
+          if (val < 0.25) {
+            chosenTerrain = 'hitze';
+          } else if (val < 0.70) {
+            chosenTerrain = 'struktur';
+          } else {
+            chosenTerrain = 'fels';
+          }
+        } else if (specialTheme === 'taverne') {
+          const val = rng();
+          const innerLeft = Math.floor(gridWidth * 0.2);
+          const innerRight = Math.floor(gridWidth * 0.7);
+          const innerTop = Math.floor(gridHeight * 0.2);
+          const innerBottom = Math.floor(gridHeight * 0.7);
+          if (c >= innerLeft && c <= innerRight && r >= innerTop && r <= innerBottom) {
+            if (val < 0.8) {
+              chosenTerrain = 'struktur';
+            } else {
+              chosenTerrain = 'untergrund';
+            }
+          } else {
+            if (val < 0.6) {
+              chosenTerrain = 'natur_offen';
+            } else if (val < 0.8) {
+              chosenTerrain = 'natur_dicht';
+            } else {
+              chosenTerrain = 'struktur';
+            }
+          }
+        } else if (specialTheme === 'höhle') {
+          const val = rng();
+          if (val < 0.50) {
+            chosenTerrain = 'untergrund';
+          } else if (val < 0.80) {
+            chosenTerrain = 'fels';
+          } else if (val < 0.90) {
+            chosenTerrain = 'ungewissheit';
+          } else {
+            chosenTerrain = 'flüssigkeit';
+          }
+        } else if (specialTheme === 'wald') {
+          const val = rng();
+          if (val < 0.45) {
+            chosenTerrain = 'natur_dicht';
+          } else if (val < 0.85) {
+            chosenTerrain = 'natur_offen';
+          } else if (val < 0.95) {
+            chosenTerrain = 'flüssigkeit';
+          } else {
+            chosenTerrain = 'fels';
+          }
+        } else {
+          let closestNode: any = null;
+          let minDistance = 999999;
+
+          currentNodes.forEach(node => {
+            if (node.details?.coordinates) {
+              const nx = node.details.coordinates.x;
+              const ny = node.details.coordinates.y;
+              const dist = Math.sqrt((cx - nx) ** 2 + (cy - ny) ** 2);
+              if (dist < minDistance) {
+                minDistance = dist;
+                closestNode = node;
+              }
+            }
+          });
+
+          if (closestNode && minDistance < 32) {
+            const nodeTile = closestNode.details?.terrainTile;
+            if (nodeTile) {
+              const influenceChance = 0.85 * (1 - minDistance / 32);
+              if (rng() < influenceChance) {
+                chosenTerrain = nodeTile;
+              } else {
+                const roll = rng();
+                if (nodeTile === 'flüssigkeit') {
+                  chosenTerrain = roll < 0.3 ? 'natur_offen' : 'flüssigkeit';
+                } else if (nodeTile === 'struktur') {
+                  chosenTerrain = roll < 0.4 ? 'natur_offen' : 'struktur';
+                } else if (nodeTile === 'fels') {
+                  chosenTerrain = roll < 0.5 ? 'natur_dicht' : 'fels';
+                } else if (nodeTile === 'hitze') {
+                  chosenTerrain = roll < 0.4 ? 'fels' : 'hitze';
+                } else {
+                  chosenTerrain = baseTerrain;
+                }
+              }
+            }
+          } else {
+            const roll = rng();
+            if (baseTerrain === 'flüssigkeit') {
+              if (roll < 0.08) {
+                chosenTerrain = 'natur_offen';
+              } else if (roll < 0.12) {
+                chosenTerrain = 'trockenheit';
+              } else if (roll < 0.15) {
+                chosenTerrain = 'fels';
+              } else {
+                chosenTerrain = 'flüssigkeit';
+              }
+            } else if (baseTerrain === 'trockenheit') {
+              if (roll < 0.05) {
+                chosenTerrain = 'flüssigkeit';
+              } else if (roll < 0.15) {
+                chosenTerrain = 'natur_offen';
+              } else if (roll < 0.30) {
+                chosenTerrain = 'fels';
+              } else {
+                chosenTerrain = 'trockenheit';
+              }
+            } else if (baseTerrain === 'natur_offen') {
+              if (roll < 0.25) {
+                chosenTerrain = 'natur_dicht';
+              } else if (roll < 0.35) {
+                chosenTerrain = 'fels';
+              } else if (roll < 0.42) {
+                chosenTerrain = 'flüssigkeit';
+              } else if (roll < 0.45) {
+                chosenTerrain = 'struktur';
+              } else {
+                chosenTerrain = 'natur_offen';
+              }
+            }
+          }
+        }
+
+        tiles.push({
+          col: c,
+          row: r,
+          terrainId: chosenTerrain
+        });
+      }
+    }
+
+    return { tiles, gridWidth, gridHeight };
+  }, [lore, mapZoomLevel, world, worldTitle, selectedNodeId, selectedMacroId, selectedMesoId, selectedMicroId, mapGridSizes]);
+
+  const hierarchicalConnectionsJSON = useMemo(() => {
+    const locations = lore.filter(l => l.category === 'Orte');
+    const worlds = locations.filter(l => l.details?.mapLevel === 'macro');
+    const regions = locations.filter(l => l.details?.mapLevel === 'meso');
+    const places = locations.filter(l => l.details?.mapLevel === 'micro' || (!l.details?.mapLevel && !l.details?.parentPlaceId));
+    const buildings = locations.filter(l => l.details?.mapLevel === 'building');
+
+    const tree = worlds.map(w => {
+      const childRegions = regions
+        .filter(r => r.details?.parentPlaceId?.trim().toLowerCase() === w.title.trim().toLowerCase())
+        .map(r => {
+          const childPlaces = places
+            .filter(p => p.details?.parentPlaceId?.trim().toLowerCase() === r.title.trim().toLowerCase())
+            .map(p => {
+              const childBuildings = buildings
+                .filter(b => b.details?.parentPlaceId?.trim().toLowerCase() === p.title.trim().toLowerCase())
+                .map(b => b.title);
+
+              return {
+                ort: p.title,
+                typ: p.details?.type || 'Ort',
+                ...(childBuildings.length > 0 ? { gebäude: childBuildings } : {})
+              };
+            });
+
+          return {
+            region: r.title,
+            typ: r.details?.type || 'Region',
+            ...(childPlaces.length > 0 ? { orte: childPlaces } : {})
+          };
+        });
+
+      return {
+        welt: w.title,
+        typ: w.details?.type || 'Welt',
+        ...(childRegions.length > 0 ? { regionen: childRegions } : {})
+      };
+    });
+
+    return JSON.stringify(tree, null, 2);
+  }, [lore]);
+
+  const handleMapBgPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-node]') || target.closest('button') || target.closest('input') || target.closest('select')) return;
+
+    if (activePlacingEffect && mapContainerRef.current) {
+      const rect = mapContainerRef.current.getBoundingClientRect();
+      const mapWidth = world?.mapConfig?.mapWidth || 100;
+      const mapHeight = world?.mapConfig?.mapHeight || 100;
+      const x = Math.max(0, Math.min(mapWidth, Math.round(((e.clientX - rect.left - panOffset.x) / mapScale / rect.width) * mapWidth)));
+      const y = Math.max(0, Math.min(mapHeight, Math.round(((e.clientY - rect.top - panOffset.y) / mapScale / rect.height) * mapHeight)));
+      
+      const newEffect = {
+        id: Date.now().toString(),
+        type: activePlacingEffect,
+        x,
+        y,
+        radius: 12,
+        intensity: 4,
+        description: `${activePlacingEffect === 'magma' ? 'Magma' : activePlacingEffect === 'eis' ? 'Eis' : activePlacingEffect === 'feuer' ? 'Feuer' : activePlacingEffect === 'blitze' ? 'Blitz' : activePlacingEffect === 'nebel' ? 'Nebel' : 'Gift'}-Aura`
+      };
+      setCombatEffects(prev => [...prev, newEffect]);
+      setActivePlacingEffect(null);
+      return;
+    }
+
+    if (activePlacingClassAsset && mapContainerRef.current) {
+      const rect = mapContainerRef.current.getBoundingClientRect();
+      const mapWidth = world?.mapConfig?.mapWidth || 100;
+      const mapHeight = world?.mapConfig?.mapHeight || 100;
+      const x = Math.max(0, Math.min(mapWidth, Math.round(((e.clientX - rect.left - panOffset.x) / mapScale / rect.width) * mapWidth)));
+      const y = Math.max(0, Math.min(mapHeight, Math.round(((e.clientY - rect.top - panOffset.y) / mapScale / rect.height) * mapHeight)));
+      
+      const defaultWidth = mapZoomLevel === 'macro' ? 500 : mapZoomLevel === 'meso' ? 2 : mapZoomLevel === 'micro' ? 3 : 1;
+      const defaultHeight = mapZoomLevel === 'macro' ? 500 : mapZoomLevel === 'meso' ? 2 : mapZoomLevel === 'micro' ? 3 : 1;
+      const newId = Date.now().toString() + '-' + Math.random().toString(36).substr(2, 4);
+      const newPlace: LoreEntry = {
+        id: newId,
+        category: 'Orte' as LoreCategory,
+        title: activePlacingClassAsset.name,
+        description: `Ein platziertes Objekt (${activePlacingClassAsset.name}) auf der Karte.`,
+        isUnlocked: true,
+        details: {
+          description: `Ein platziertes Objekt (${activePlacingClassAsset.name}) auf der Karte.`,
+          mapLevel: mapZoomLevel,
+          coordinates: { x, y },
+          parentPlaceId: mapZoomLevel === 'meso' ? (selectedMacroId || '') : mapZoomLevel === 'micro' ? (selectedMesoId || '') : mapZoomLevel === 'building' ? (selectedMicroId || '') : '',
+          isActiveTarget: false,
+          icon: activePlacingClassAsset.icon,
+          objectClass: activePlacingClassAsset.className,
+          physicalWidth: defaultWidth,
+          physicalHeight: defaultHeight
+        }
+      };
+
+      onUpdateLore([...lore, newPlace]);
+      
+      if (!keepClassPlacingMode) {
+        setActivePlacingClassAsset(null);
+      }
+      return;
+    }
+
+    setIsPanning(true);
+    setPanStart({
+      x: e.clientX - panOffset.x,
+      y: e.clientY - panOffset.y
+    });
+  };
+
+  const handleMapPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggedNodeId && mapContainerRef.current) {
+      const rect = mapContainerRef.current.getBoundingClientRect();
+      const mapWidth = world?.mapConfig?.mapWidth || 100;
+      const mapHeight = world?.mapConfig?.mapHeight || 100;
+      
+      const adjustedX = (e.clientX - rect.left - panOffset.x) / mapScale;
+      const adjustedY = (e.clientY - rect.top - panOffset.y) / mapScale;
+
+      const x = Math.max(0, Math.min(mapWidth, Math.round(((adjustedX / rect.width) * mapWidth) * 10) / 10));
+      const y = Math.max(0, Math.min(mapHeight, Math.round(((adjustedY / rect.height) * mapHeight) * 10) / 10));
+      
+      onUpdateLore(lore.map(l => l.id === draggedNodeId ? {
+        ...l,
+        details: {
+          ...l.details,
+          coordinates: {
+            x,
+            y
+          }
+        }
+      } : l));
+    } else if (isPanning && mapContainerRef.current) {
+      const rect = mapContainerRef.current.getBoundingClientRect();
+      const containerWidth = rect.width;
+      const containerHeight = rect.height;
+
+      let dx = e.clientX - panStart.x;
+      let dy = e.clientY - panStart.y;
+
+      if (mapScale > 1) {
+        const minX = containerWidth * (1 - mapScale);
+        const maxX = 0;
+        const minY = containerHeight * (1 - mapScale);
+        const maxY = 0;
+
+        dx = Math.max(minX, Math.min(maxX, dx));
+        dy = Math.max(minY, Math.min(maxY, dy));
+      } else {
+        dx = (containerWidth * (1 - mapScale)) / 2;
+        dy = (containerHeight * (1 - mapScale)) / 2;
+      }
+
+      setPanOffset({ x: dx, y: dy });
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      setDraggedNodeId(null);
+      setIsPanning(false);
+    };
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    return () => {
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+    };
+  }, []);
+
+  const handleMapPointerUp = () => {
+    setDraggedNodeId(null);
+    setIsPanning(false);
+  };
 
   const [newEventStepText, setNewEventStepText] = useState('');
   const [newEventStepTitle, setNewEventStepTitle] = useState('');
   const [newEventStepBranch, setNewEventStepBranch] = useState<'main' | 'side'>('main');
+  const [newEventStepType, setNewEventStepType] = useState<'story' | 'quest'>('story');
+  const [newEventQuestOutcome, setNewEventQuestOutcome] = useState<'success' | 'failure' | 'open'>('open');
   const [newEventStepConditions, setNewEventStepConditions] = useState('');
   const [newEventStepChatInstruction, setNewEventStepChatInstruction] = useState('');
   const [newEventStepTravelPath, setNewEventStepTravelPath] = useState('');
   const [newEventStepTravelDurationDays, setNewEventStepTravelDurationDays] = useState<number | ''>('');
   const [newEventStepTimeOfDay, setNewEventStepTimeOfDay] = useState('');
+  const [newEventStepRevealedKnowledge, setNewEventStepRevealedKnowledge] = useState('');
+  const [newEventStepTrigger, setNewEventStepTrigger] = useState('');
+  const [newEventStepCast, setNewEventStepCast] = useState('');
+  const [newEventStepSetting, setNewEventStepSetting] = useState('');
+  const [newEventStepConflict, setNewEventStepConflict] = useState('');
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
+  const [isSyncingMap, setIsSyncingMap] = useState(false);
+  const [activeStepTab, setActiveStepTab] = useState<'story' | 'quest'>('story');
+
+  const [listSearchTerm, setListSearchTerm] = useState('');
+  const [listLevelFilter, setListLevelFilter] = useState<'all' | 'macro' | 'meso' | 'micro'>('all');
+  const [listTypeFilter, setListTypeFilter] = useState<'all' | 'story' | 'checkpoint'>('all');
+
+  const syncMapFromEvents = async (steps: any[], currentLore: LoreEntry[]) => {
+    if (!steps || steps.length === 0) return;
+    setIsSyncingMap(true);
+    try {
+      const response = await GeminiService.generatePlacesFromEvents(
+        steps,
+        currentLore.filter(l => l.category === 'Orte'),
+        world || { title: worldTitle, description: '' }
+      );
+      
+      if (response && Array.isArray(response.places)) {
+        let updatedLore = [...currentLore];
+        
+        response.places.forEach((newPlace: any) => {
+          const existingIdx = updatedLore.findIndex(
+            l => l.category === 'Orte' && (l.id === newPlace.id || l.title.toLowerCase() === newPlace.title.toLowerCase())
+          );
+          
+          const formattedPlace: LoreEntry = {
+            id: newPlace.id || Date.now().toString() + '-' + Math.random().toString(36).substr(2, 4),
+            category: 'Orte',
+            title: newPlace.title,
+            description: newPlace.description,
+            isUnlocked: newPlace.isUnlocked !== false,
+            details: {
+              ...newPlace.details,
+              parentPlaceId: newPlace.details?.parentPlaceId || '',
+              associatedEventStepId: newPlace.details?.associatedEventStepId || ''
+            },
+            secretsStage1: newPlace.secretsStage1 || '',
+            secretsStage2: newPlace.secretsStage2 || '',
+            secretsStage3: newPlace.secretsStage3 || ''
+          };
+          
+          if (existingIdx >= 0) {
+            const existing = updatedLore[existingIdx];
+            updatedLore[existingIdx] = {
+              ...existing,
+              title: formattedPlace.title,
+              description: formattedPlace.description || existing.description,
+              details: {
+                ...existing.details,
+                ...formattedPlace.details,
+                coordinates: existing.details?.coordinates || formattedPlace.details?.coordinates
+              }
+            };
+          } else {
+            updatedLore.push(formattedPlace);
+          }
+        });
+        
+        onUpdateLore(updatedLore);
+      }
+    } catch (err) {
+      console.error("Fehler bei der Karten-Synchronisierung:", err);
+    } finally {
+      setIsSyncingMap(false);
+    }
+  };
 
   const handleAddManualStep = () => {
     if (!newEventStepText.trim()) return;
     const steps = [...(editForm.details?.eventSteps || [])];
     
     if (editingStepId) {
-      // Edit mode
       const updatedSteps = steps.map(s => s.id === editingStepId ? {
         ...s,
         title: newEventStepTitle.trim() || s.title || `Station #${steps.indexOf(s) + 1}`,
         description: newEventStepText.trim(),
         branch: newEventStepBranch,
+        stepType: newEventStepType,
+        questOutcome: newEventStepType === 'quest' ? newEventQuestOutcome : undefined,
         unlockConditions: newEventStepConditions.trim() || 'Keine',
         chatInstruction: newEventStepChatInstruction.trim(),
         travelPath: newEventStepTravelPath.trim(),
         travelDurationDays: newEventStepTravelDurationDays !== '' ? Number(newEventStepTravelDurationDays) : undefined,
-        timeOfDay: newEventStepTimeOfDay.trim()
+        timeOfDay: newEventStepTimeOfDay.trim(),
+        revealedKnowledge: newEventStepRevealedKnowledge.trim() || undefined,
+        trigger: newEventStepTrigger.trim() || undefined,
+        cast: newEventStepCast.trim() || undefined,
+        setting: newEventStepSetting.trim() || undefined,
+        conflict: newEventStepConflict.trim() || undefined
       } : s);
       updateAndSyncSteps(updatedSteps);
       setEditingStepId(null);
     } else {
-      // Add mode
       const newStep = {
         id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 4),
         title: newEventStepTitle.trim() || `Station #${steps.length + 1}`,
         description: newEventStepText.trim(),
         status: 'planned' as const,
         branch: newEventStepBranch,
+        stepType: newEventStepType,
+        questOutcome: newEventStepType === 'quest' ? newEventQuestOutcome : undefined,
         unlockConditions: newEventStepConditions.trim() || 'Keine',
         chatInstruction: newEventStepChatInstruction.trim(),
         travelPath: newEventStepTravelPath.trim(),
         travelDurationDays: newEventStepTravelDurationDays !== '' ? Number(newEventStepTravelDurationDays) : undefined,
-        timeOfDay: newEventStepTimeOfDay.trim()
+        timeOfDay: newEventStepTimeOfDay.trim(),
+        revealedKnowledge: newEventStepRevealedKnowledge.trim() || undefined,
+        trigger: newEventStepTrigger.trim() || undefined,
+        cast: newEventStepCast.trim() || undefined,
+        setting: newEventStepSetting.trim() || undefined,
+        conflict: newEventStepConflict.trim() || undefined
       };
       const updatedSteps = [...steps, newStep];
       updateAndSyncSteps(updatedSteps);
     }
     
-    // Clear inputs
     setNewEventStepText('');
     setNewEventStepTitle('');
     setNewEventStepBranch('main');
+    setNewEventStepType('story');
+    setNewEventQuestOutcome('open');
     setNewEventStepConditions('');
     setNewEventStepChatInstruction('');
     setNewEventStepTravelPath('');
     setNewEventStepTravelDurationDays('');
     setNewEventStepTimeOfDay('');
+    setNewEventStepRevealedKnowledge('');
+    setNewEventStepTrigger('');
+    setNewEventStepCast('');
+    setNewEventStepSetting('');
+    setNewEventStepConflict('');
   };
 
   const handleStartEditStep = (step: any) => {
@@ -109,11 +1178,18 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
     setNewEventStepTitle(step.title || '');
     setNewEventStepText(step.description || '');
     setNewEventStepBranch(step.branch || 'main');
+    setNewEventStepType(step.stepType || 'story');
+    setNewEventQuestOutcome(step.questOutcome || 'open');
     setNewEventStepConditions(step.unlockConditions || '');
     setNewEventStepChatInstruction(step.chatInstruction || '');
     setNewEventStepTravelPath(step.travelPath || '');
     setNewEventStepTravelDurationDays(step.travelDurationDays !== undefined ? step.travelDurationDays : '');
     setNewEventStepTimeOfDay(step.timeOfDay || '');
+    setNewEventStepRevealedKnowledge(step.revealedKnowledge || '');
+    setNewEventStepTrigger(step.trigger || '');
+    setNewEventStepCast(step.cast || '');
+    setNewEventStepSetting(step.setting || '');
+    setNewEventStepConflict(step.conflict || '');
   };
 
   const handleCancelEditStep = () => {
@@ -121,11 +1197,18 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
     setNewEventStepText('');
     setNewEventStepTitle('');
     setNewEventStepBranch('main');
+    setNewEventStepType('story');
+    setNewEventQuestOutcome('open');
     setNewEventStepConditions('');
     setNewEventStepChatInstruction('');
     setNewEventStepTravelPath('');
     setNewEventStepTravelDurationDays('');
     setNewEventStepTimeOfDay('');
+    setNewEventStepRevealedKnowledge('');
+    setNewEventStepTrigger('');
+    setNewEventStepCast('');
+    setNewEventStepSetting('');
+    setNewEventStepConflict('');
   };
 
   const updateAndSyncSteps = (updatedSteps: any[]) => {
@@ -142,9 +1225,10 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
 
     setEditForm(updatedEntry);
 
-    // Automatically persist to the lore database
     if (prev.id) {
-      onUpdateLore(lore.map(l => l.id === prev.id ? updatedEntry : l));
+      const nextLore = lore.map(l => l.id === prev.id ? updatedEntry : l);
+      onUpdateLore(nextLore);
+      syncMapFromEvents(updatedSteps, nextLore);
     }
   };
 
@@ -167,7 +1251,6 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
     steps[fromIdx] = steps[toIdx];
     steps[toIdx] = temp;
     
-    // Also update titles to reflect new order if it's a default title, otherwise keep custom title!
     const resortedSteps = steps.map((s, idx) => ({ 
       ...s, 
       title: s.title && !s.title.startsWith('Station #') ? s.title : `Station #${idx + 1}` 
@@ -188,16 +1271,99 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
     }
   };
 
+  const mapScaleRef = useRef(mapScale);
   useEffect(() => {
-    if (activeCategory === 'Events') {
-      const eventEntry = lore.find(l => l.category === 'Events');
+    mapScaleRef.current = mapScale;
+  }, [mapScale]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (mapContainerRef.current) {
+        const rect = mapContainerRef.current.getBoundingClientRect();
+        const containerWidth = rect.width;
+        const containerHeight = rect.height;
+        const currentScale = mapScaleRef.current;
+        if (containerWidth > 0 && containerHeight > 0) {
+          setPanOffset(prev => {
+            if (currentScale > 1) {
+              const minX = containerWidth * (1 - currentScale);
+              const maxX = 0;
+              const minY = containerHeight * (1 - currentScale);
+              const maxY = 0;
+              return {
+                x: Math.max(minX, Math.min(maxX, prev.x)),
+                y: Math.max(minY, Math.min(maxY, prev.y))
+              };
+            } else {
+              return {
+                x: (containerWidth * (1 - currentScale)) / 2,
+                y: (containerHeight * (1 - currentScale)) / 2
+              };
+            }
+          });
+        }
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const hasEvents = lore.some(l => (l.category as string) === 'Events');
+    if (hasEvents) {
+      const migrated = lore.map(l => {
+        if ((l.category as string) === 'Events') {
+          return { ...l, category: 'Story & Quests' as LoreCategory };
+        }
+        return l;
+      });
+      onUpdateLore(migrated);
+    }
+  }, [lore, onUpdateLore]);
+
+  const handleZoom = (newScale: number) => {
+    if (mapContainerRef.current) {
+      const rect = mapContainerRef.current.getBoundingClientRect();
+      const containerWidth = rect.width;
+      const containerHeight = rect.height;
+      
+      const centerX = containerWidth / 2;
+      const centerY = containerHeight / 2;
+      
+      const logicalX = (centerX - panOffset.x) / mapScale;
+      const logicalY = (centerY - panOffset.y) / mapScale;
+      
+      let newPanX = centerX - logicalX * newScale;
+      let newPanY = centerY - logicalY * newScale;
+      
+      if (newScale > 1) {
+        const minX = containerWidth * (1 - newScale);
+        const minY = containerHeight * (1 - newScale);
+        newPanX = Math.max(minX, Math.min(0, newPanX));
+        newPanY = Math.max(minY, Math.min(0, newPanY));
+      } else {
+        newPanX = (containerWidth * (1 - newScale)) / 2;
+        newPanY = (containerHeight * (1 - newScale)) / 2;
+      }
+      
+      setPanOffset({ x: newPanX, y: newPanY });
+    }
+    setMapScale(newScale);
+  };
+
+  useEffect(() => {
+    if (activeCategory === 'Story & Quests') {
+      const eventEntry = lore.find(l => l.category === 'Story & Quests' || (l.category as string) === 'Events');
       if (eventEntry) {
-        setIsEditing(eventEntry.id);
-        setEditForm(eventEntry);
+        const migratedEntry = { ...eventEntry, category: 'Story & Quests' as LoreCategory };
+        setIsEditing(migratedEntry.id);
+        setEditForm(migratedEntry);
       } else {
         const newEventEntry: LoreEntry = {
           id: 'single-story-events-timeline',
-          category: 'Events',
+          category: 'Story & Quests',
           title: 'Ereignis-Timeline',
           description: 'Chronologischer Ablauf der Geschichte',
           isUnlocked: true,
@@ -210,40 +1376,364 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
         setEditForm(newEventEntry);
       }
     } else {
-      if (isEditing && lore.find(l => l.id === isEditing)?.category === 'Events') {
+      const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory;
+      if (isEditing && (lore.find(l => l.id === isEditing)?.category === 'Story & Quests' || (lore.find(l => l.id === isEditing)?.category as string) === 'Events')) {
         setIsEditing(null);
-        setEditForm({ category: activeCategory });
+        setEditForm({ category: safeCategory });
       } else if (!isEditing) {
-        setEditForm({ category: activeCategory });
+        setEditForm({ category: safeCategory });
       }
     }
   }, [activeCategory]);
 
+  const handleSetActiveDestination = (nodeId: string) => {
+    const updated = lore.map(item => {
+      if (item.category === 'Orte') {
+        return {
+          ...item,
+          details: {
+            ...item.details,
+            isActiveTarget: item.id === nodeId
+          }
+        };
+      }
+      return item;
+    });
+    onUpdateLore(updated);
+  };
+
+  useEffect(() => {
+    if (activeCategory === 'Orte') {
+      let changed = false;
+      const updatedLore = lore.map((entry) => {
+        if (entry.category === 'Orte') {
+          const details = entry.details || {};
+          let needsUpdate = false;
+          let mapLevel = details.mapLevel;
+          let coordinates = details.coordinates;
+          let parentPlaceId = details.parentPlaceId || '';
+
+          if (!mapLevel) {
+            needsUpdate = true;
+            const combined = (entry.title + ' ' + entry.description).toLowerCase();
+            if (/gilde|taverne|haus|höhle|shop|laden|markt|zimmer|poi|bar|herberge|schrein|ruine|tempel|palast|platz|arena|zuhause|kerker/i.test(combined)) {
+              mapLevel = 'micro';
+            } else if (/kontinent|welt|reich|königreich|ozean|meer|insel/i.test(combined)) {
+              mapLevel = 'macro';
+            } else {
+              mapLevel = 'meso';
+            }
+          }
+
+          if (!coordinates || typeof coordinates.x !== 'number' || typeof coordinates.y !== 'number') {
+            needsUpdate = true;
+            let hash = 0;
+            for (let i = 0; i < entry.title.length; i++) {
+              hash = entry.title.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const x = Math.abs((hash * 13) % 70) + 15;
+            const y = Math.abs((hash * 37) % 70) + 15;
+            coordinates = { x, y };
+          }
+
+          if (needsUpdate) {
+            changed = true;
+            return {
+              ...entry,
+              details: {
+                ...details,
+                mapLevel,
+                coordinates,
+                parentPlaceId
+              }
+            };
+          }
+        }
+        return entry;
+      });
+
+      if (changed) {
+        onUpdateLore(updatedLore);
+      }
+    }
+  }, [activeCategory, lore, onUpdateLore]);
+
   const handleSave = () => {
     if (!editForm.title || !editForm.description) return;
     
+    const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory;
+    const targetCategory = editForm.category || safeCategory;
+
+    let finalForm = { ...editForm };
+    if (targetCategory === 'Fraktionen') {
+      const cleanMembers: FactionMember[] = effectiveMembers.map(m => {
+        const { isAutoDetected, codexEntry, ...cleanMember } = m;
+        return cleanMember;
+      });
+      finalForm = {
+        ...finalForm,
+        details: {
+          ...(finalForm.details || {}),
+          members: cleanMembers
+        }
+      };
+    }
+
     let newLore;
     if (isEditing) {
-      newLore = lore.map(l => l.id === isEditing ? { ...l, ...editForm } as LoreEntry : l);
+      newLore = lore.map(l => l.id === isEditing ? { ...l, ...finalForm } as LoreEntry : l);
     } else {
       newLore = [...lore, { 
-        ...editForm, 
+        ...finalForm, 
         id: Date.now().toString(), 
-        category: editForm.category || activeCategory,
-        isUnlocked: editForm.isUnlocked !== false 
+        category: targetCategory,
+        isUnlocked: finalForm.isUnlocked !== false 
       } as LoreEntry];
     }
     
     onUpdateLore(newLore);
     setIsEditing(null);
-    setEditForm({ category: activeCategory });
+    setEditForm({ category: safeCategory });
   };
 
   const handleDelete = (id: string) => {
+    const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory;
     onUpdateLore(lore.filter(l => l.id !== id));
     if (isEditing === id) {
       setIsEditing(null);
-      setEditForm({ category: activeCategory });
+      setEditForm({ category: safeCategory });
+    }
+  };
+
+  const handleSaveTerritory = () => {
+    if (!territoryForm.name || !territoryForm.description) return;
+    
+    const territories = world?.territories || [];
+    let updatedTerritories: Territory[] = [];
+    
+    if (isEditingTerritory) {
+      updatedTerritories = territories.map(t => t.id === isEditingTerritory ? {
+        ...t,
+        ...territoryForm,
+        id: isEditingTerritory
+      } as Territory : t);
+    } else {
+      const newTerritory: Territory = {
+        id: `territory-${Date.now()}`,
+        ...territoryForm,
+        x: territoryForm.x !== undefined ? Number(territoryForm.x) : 50,
+        y: territoryForm.y !== undefined ? Number(territoryForm.y) : 50,
+        isUnlocked: true
+      } as Territory;
+      updatedTerritories = [...territories, newTerritory];
+    }
+    
+    if (onUpdateWorld) {
+      onUpdateWorld({
+        ...world,
+        territories: updatedTerritories
+      });
+    }
+    
+    setIsEditingTerritory(null);
+    setTerritoryForm({
+      name: '',
+      type: 'stadt',
+      description: '',
+      parentId: null,
+      population: '',
+      ruler: '',
+      climate: '',
+      culture: '',
+      terrain: '',
+      faction: '',
+      x: 50,
+      y: 50,
+      biome: '',
+      size: '',
+      borders: '',
+      waters: '',
+      mountains: '',
+      forests: '',
+      races: '',
+      language: '',
+      religion: '',
+      livingStandard: '',
+      allies: '',
+      enemies: '',
+      government: '',
+      resources: '',
+      trade: '',
+      currency: '',
+      exports: '',
+      imports: '',
+      dangerLevel: '',
+      militaryStrength: '',
+      defense: '',
+      landmarks: '',
+      pointsOfInterest: '',
+      dungeons: '',
+      magicPlaces: '',
+      naturalWonders: ''
+    });
+    setWeltkarteSmartFill('');
+  };
+
+  const handleDeleteTerritory = (id: string) => {
+    const territories = world?.territories || [];
+    const updatedTerritories = territories.filter(t => t.id !== id);
+    if (onUpdateWorld) {
+      onUpdateWorld({
+        ...world,
+        territories: updatedTerritories
+      });
+    }
+    if (isEditingTerritory === id) {
+      setIsEditingTerritory(null);
+      setTerritoryForm({
+        name: '',
+        type: 'stadt',
+        description: '',
+        parentId: null,
+        population: '',
+        ruler: '',
+        climate: '',
+        culture: '',
+        terrain: '',
+        faction: '',
+        x: 50,
+        y: 50,
+        biome: '',
+        size: '',
+        borders: '',
+        waters: '',
+        mountains: '',
+        forests: '',
+        races: '',
+        language: '',
+        religion: '',
+        livingStandard: '',
+        allies: '',
+        enemies: '',
+        government: '',
+        resources: '',
+        trade: '',
+        currency: '',
+        exports: '',
+        imports: '',
+        dangerLevel: '',
+        militaryStrength: '',
+        defense: '',
+        landmarks: '',
+        pointsOfInterest: '',
+        dungeons: '',
+        magicPlaces: '',
+        naturalWonders: ''
+      });
+    }
+  };
+
+  const handleTerritorySmartFill = async () => {
+    if (!weltkarteSmartFill.trim()) return;
+    setIsSmartFillingTerritory(true);
+    try {
+      const data = await GeminiService.autofillTerritory(
+        weltkarteSmartFill,
+        territoryForm.type || 'stadt',
+        world,
+        world?.territories,
+        isSmartFillComplementMode ? territoryForm : { name: territoryForm.name, type: territoryForm.type }
+      );
+      
+      setTerritoryForm(prev => {
+        if (isSmartFillComplementMode) {
+          return {
+            ...prev,
+            name: data.name || prev.name,
+            type: data.type || prev.type,
+            description: data.description || prev.description,
+            population: data.population || prev.population,
+            ruler: data.ruler || prev.ruler,
+            climate: data.climate || prev.climate,
+            culture: data.culture || prev.culture,
+            terrain: data.terrain || prev.terrain,
+            faction: data.faction || prev.faction,
+            x: data.x !== undefined ? Number(data.x) : prev.x,
+            y: data.y !== undefined ? Number(data.y) : prev.y,
+            biome: data.biome || prev.biome,
+            size: data.size || prev.size,
+            borders: data.borders || prev.borders,
+            waters: data.waters || prev.waters,
+            mountains: data.mountains || prev.mountains,
+            forests: data.forests || prev.forests,
+            races: data.races || prev.races,
+            language: data.language || prev.language,
+            religion: data.religion || prev.religion,
+            livingStandard: data.livingStandard || prev.livingStandard,
+            allies: data.allies || prev.allies,
+            enemies: data.enemies || prev.enemies,
+            government: data.government || prev.government,
+            resources: data.resources || prev.resources,
+            trade: data.trade || prev.trade,
+            currency: data.currency || prev.currency,
+            exports: data.exports || prev.exports,
+            imports: data.imports || prev.imports,
+            dangerLevel: data.dangerLevel || prev.dangerLevel,
+            militaryStrength: data.militaryStrength || prev.militaryStrength,
+            defense: data.defense || prev.defense,
+            landmarks: data.landmarks || prev.landmarks,
+            pointsOfInterest: data.pointsOfInterest || prev.pointsOfInterest,
+            dungeons: data.dungeons || prev.dungeons,
+            magicPlaces: data.magicPlaces || prev.magicPlaces,
+            naturalWonders: data.naturalWonders || prev.naturalWonders
+          };
+        } else {
+          return {
+            id: prev.id,
+            name: data.name || weltkarteSmartFill,
+            type: data.type || prev.type || 'stadt',
+            description: data.description || '',
+            population: data.population || '',
+            ruler: data.ruler || '',
+            climate: data.climate || '',
+            culture: data.culture || '',
+            terrain: data.terrain || '',
+            faction: data.faction || '',
+            x: data.x !== undefined ? Number(data.x) : (prev.x ?? 50),
+            y: data.y !== undefined ? Number(data.y) : (prev.y ?? 50),
+            biome: data.biome || '',
+            size: data.size || '',
+            borders: data.borders || '',
+            waters: data.waters || '',
+            mountains: data.mountains || '',
+            forests: data.forests || '',
+            races: data.races || '',
+            language: data.language || '',
+            religion: data.religion || '',
+            livingStandard: data.livingStandard || '',
+            allies: data.allies || '',
+            enemies: data.enemies || '',
+            government: data.government || '',
+            resources: data.resources || '',
+            trade: data.trade || '',
+            currency: data.currency || '',
+            exports: data.exports || '',
+            imports: data.imports || '',
+            dangerLevel: data.dangerLevel || '',
+            militaryStrength: data.militaryStrength || '',
+            defense: data.defense || '',
+            landmarks: data.landmarks || '',
+            pointsOfInterest: data.pointsOfInterest || '',
+            dungeons: data.dungeons || '',
+            magicPlaces: data.magicPlaces || '',
+            naturalWonders: data.naturalWonders || ''
+          };
+        }
+      });
+    } catch (error) {
+      console.error("Fehler beim automatischen Ausfüllen des Gebiets:", error);
+    } finally {
+      setIsSmartFillingTerritory(false);
     }
   };
 
@@ -251,7 +1741,8 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
     if (!loreSmartFill.trim()) return;
     setIsSmartFillingLore(true);
     try {
-      const cat = editForm.category || activeCategory;
+      const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory;
+      const cat = editForm.category || safeCategory;
       const existingCharacterNames: string[] = [];
       lore.filter(l => l.category === 'Charaktere' || l.category === 'Gegner').forEach(l => {
         if (l.title) existingCharacterNames.push(l.title);
@@ -267,9 +1758,10 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
         worldPowerSettings, 
         playerName, 
         existingCharacterNames,
-        keepExistingLoreDetails ? editForm : undefined,
+        keepExistingLoreDetails ? editForm : { title: editForm.title, category: editForm.category },
         world,
-        existingFactions
+        existingFactions,
+        lore
       );
       const prev = editForm;
       let generatedAbilities = prev.details?.abilities;
@@ -315,7 +1807,6 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
       }
       let processedDetails = { ...data.details };
       if (cat === 'Charaktere' || cat === 'Gegner') {
-        // Normalize Gender
         if (processedDetails.gender) {
           const g = processedDetails.gender.trim().toLowerCase();
           if (g === 'male' || g.startsWith('männ')) processedDetails.gender = 'Männlich';
@@ -328,7 +1819,6 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
           processedDetails.gender = 'Unbekannt';
         }
 
-        // Normalize Build
         if (processedDetails.build) {
           const b = processedDetails.build.trim().toLowerCase();
           if (b.startsWith('schlan')) processedDetails.build = 'Schlank';
@@ -345,7 +1835,6 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
           processedDetails.build = 'Unbekannt';
         }
 
-        // Normalize Cup Size
         if (processedDetails.cupSize) {
           const c = processedDetails.cupSize.trim().toUpperCase();
           if (["AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"].includes(c)) {
@@ -355,11 +1844,29 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
           }
         }
 
-        // Trigger auto calculation for character appearance so measurements etc. are beautifully populated
         processedDetails = autoCalculateAppearance(processedDetails, 'build', false);
       }
       
-      let mergedRelationships = processedDetails.relationships || [];
+      if (cat === 'Orte') {
+        const currentLvl = processedDetails.mapLevel || prev.details?.mapLevel || mapZoomLevel;
+        const width = processedDetails.physicalWidth !== undefined ? Number(processedDetails.physicalWidth) : undefined;
+        const height = processedDetails.physicalHeight !== undefined ? Number(processedDetails.physicalHeight) : undefined;
+        
+        const defaultWidth = currentLvl === 'macro' ? 500 : currentLvl === 'meso' ? 2 : 3;
+        const defaultHeight = currentLvl === 'macro' ? 500 : currentLvl === 'meso' ? 2 : 3;
+        
+        processedDetails.physicalWidth = (width && width > 0) ? width : defaultWidth;
+        processedDetails.physicalHeight = (height && height > 0) ? height : defaultHeight;
+      }
+      
+      let mergedRelationships = (processedDetails.relationships || []).map((rel: any, idx: number) => ({
+        id: rel.id || `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
+        targetCharacter: rel.targetCharacter || '',
+        type: rel.type || '',
+        behavior: rel.behavior || '',
+        sharedPast: rel.sharedPast || '',
+        _isCustom: rel._isCustom || false
+      }));
       if (keepExistingLoreDetails && prev.details?.relationships && prev.details.relationships.length > 0) {
         const currentRels = [...prev.details.relationships];
         if (Array.isArray(mergedRelationships)) {
@@ -375,12 +1882,10 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
         mergedRelationships = currentRels;
       }
 
-      let finalTitle = data.title || prev.title;
-      let finalDescription = (keepExistingLoreDetails && prev.description && data.description && prev.description !== data.description)
-        ? `${prev.description}\n\n[Zusatz]: ${data.description}`
-        : (data.description || prev.description);
+      let finalTitle = data.title || (keepExistingLoreDetails ? prev.title : loreSmartFill);
+      let finalDescription = data.description || (keepExistingLoreDetails ? prev.description : '');
       
-      if (cat === 'Events') {
+      if (cat === 'Story & Quests' || (cat as string) === 'Events') {
         if (processedDetails.eventSteps) {
           processedDetails.eventSteps = processedDetails.eventSteps.map((step: any, idx: number) => ({
             ...step,
@@ -392,10 +1897,15 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
             chatInstruction: step.chatInstruction || '',
             travelPath: step.travelPath || '',
             travelDurationDays: step.travelDurationDays !== undefined ? Number(step.travelDurationDays) : undefined,
-            timeOfDay: step.timeOfDay || ''
+            timeOfDay: step.timeOfDay || '',
+            trigger: step.trigger || '',
+            cast: step.cast || '',
+            setting: step.setting || '',
+            conflict: step.conflict || '',
+            revealedKnowledge: step.revealedKnowledge || ''
           }));
           finalDescription = processedDetails.eventSteps.map((s: any, idx: number) => `${idx + 1}. [${s.title}] ${s.description || ''}`).join('\n');
-          if (!finalTitle || finalTitle === 'Events' || finalTitle === 'Event') {
+          if (!finalTitle || finalTitle === 'Events' || finalTitle === 'Event' || finalTitle === 'Story & Quests') {
             finalTitle = processedDetails.eventSteps[0]?.title || 'Ereignis-Timeline';
           }
         } else {
@@ -403,40 +1913,546 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
         }
       }
 
+      if (cat === 'Fraktionen') {
+        let parsedMembers: FactionMember[] = [];
+        if (processedDetails.members && Array.isArray(processedDetails.members)) {
+          parsedMembers = processedDetails.members.map((m: any, idx: number) => ({
+            id: m.id || `fm-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 5)}`,
+            name: m.name || 'Unbenanntes Mitglied',
+            characterId: m.characterId || '',
+            job: m.job || 'Mitglied',
+            tasks: m.tasks || 'Aufgaben für das Wirtschafts- & Managementsystem',
+            joinedDate: m.joinedDate || 'Unbekannt',
+            status: m.status || 'Aktiv'
+          }));
+        }
+        if (keepExistingLoreDetails && prev.details?.members && Array.isArray(prev.details.members)) {
+          processedDetails.members = [...prev.details.members, ...parsedMembers];
+        } else {
+          processedDetails.members = parsedMembers;
+        }
+      }
+
+      const nextSecrets1 = data.secretsStage1 !== undefined ? data.secretsStage1 : (keepExistingLoreDetails ? prev.secretsStage1 : '');
+      const nextSecrets2 = data.secretsStage2 !== undefined ? data.secretsStage2 : (keepExistingLoreDetails ? prev.secretsStage2 : '');
+      const nextSecrets3 = data.secretsStage3 !== undefined ? data.secretsStage3 : (keepExistingLoreDetails ? prev.secretsStage3 : '');
+      const nextKnowledge = data.knowledge !== undefined ? data.knowledge : (keepExistingLoreDetails ? prev.knowledge : '');
+
       const updatedEntry = {
         ...prev,
         title: finalTitle,
         description: finalDescription,
-        secretsStage1: data.secretsStage1 !== undefined ? data.secretsStage1 : prev.secretsStage1,
-        secretsStage2: data.secretsStage2 !== undefined ? data.secretsStage2 : prev.secretsStage2,
-        secretsStage3: data.secretsStage3 !== undefined ? data.secretsStage3 : prev.secretsStage3,
-        details: {
+        secretsStage1: nextSecrets1,
+        secretsStage2: nextSecrets2,
+        secretsStage3: nextSecrets3,
+        knowledge: nextKnowledge,
+        details: keepExistingLoreDetails ? {
           ...prev.details,
           ...processedDetails,
           relationships: mergedRelationships,
           abilities: generatedAbilities,
           campaignPowerLevels: data.details?.campaignPowerLevels || prev.details?.campaignPowerLevels
+        } : {
+          ...processedDetails,
+          relationships: mergedRelationships,
+          abilities: generatedAbilities,
+          campaignPowerLevels: data.details?.campaignPowerLevels || {}
         }
       } as LoreEntry;
 
       setEditForm(updatedEntry);
 
-      if (cat === 'Events' && prev.id) {
-        onUpdateLore(lore.map(l => l.id === prev.id ? updatedEntry : l));
+      if ((cat === 'Story & Quests' || (cat as string) === 'Events') && prev.id) {
+        const nextLore = lore.map(l => l.id === prev.id ? updatedEntry : l);
+        onUpdateLore(nextLore);
+        if (processedDetails.eventSteps && processedDetails.eventSteps.length > 0) {
+          syncMapFromEvents(processedDetails.eventSteps, nextLore);
+        }
       }
       setLoreSmartFill('');
     } catch (err: any) {
       console.error(err);
-      alert("Fehler beim Smart Fill Lore");
+      alert("Fehler beim automatischen Ausfüllen des Eintrags.");
     } finally {
       setIsSmartFillingLore(false);
     }
   };
 
+  const handleOmniGenerate = async () => {
+    if (!omniSmartFillPrompt.trim()) return;
+    setIsOmniGenerating(true);
+    setOmniSuccessMessage(null);
+    try {
+      const results = await GeminiService.autofillMultipleLoreEntries(
+        omniSmartFillPrompt,
+        world,
+        lore,
+        worldPowerSettings,
+        playerName,
+        isNsfw
+      );
+
+      const mappedResults = results.map((entry: any, index: number) => {
+        const tempId = `omni-temp-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`;
+        const details = entry.details || {};
+        
+        let abilities = details.abilities || [];
+        if ((entry.category === 'Charaktere' || entry.category === 'Gegner') && (details.skills || details.powerSource)) {
+          abilities = [{
+            id: `abil-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`,
+            source: details.powerSource || '',
+            cost: details.powerCost || '',
+            description: details.skills || '',
+            techniques: details.techniques || '',
+            techniqueList: (details.techniqueList && Array.isArray(details.techniqueList))
+              ? details.techniqueList.map((t: any, idx: number) => ({
+                  id: `tech-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+                  name: t.name || '',
+                  description: t.description || '',
+                  type: t.type || 'Angriff',
+                  subtype: t.subtype || 'Einzelschuss',
+                  level: t.level || 1,
+                  maxLevel: t.maxLevel || 10,
+                  xp: t.xp || 0,
+                  xpNeeded: t.xpNeeded || 100
+                }))
+              : []
+          }];
+        }
+
+        return {
+          ...entry,
+          tempId,
+          details: {
+            ...details,
+            abilities
+          }
+        };
+      });
+
+      setProposedEntries(mappedResults);
+      setSelectedProposedIds(new Set(mappedResults.map(r => r.tempId)));
+    } catch (err) {
+      console.error(err);
+      alert("Fehler bei der Generierung der Multieinträge.");
+    } finally {
+      setIsOmniGenerating(false);
+    }
+  };
+
+  const handleSaveSelectedOmniEntries = () => {
+    const entriesToSave = proposedEntries.filter(entry => selectedProposedIds.has(entry.tempId));
+    if (entriesToSave.length === 0) return;
+
+    let updatedLore = [...lore];
+    let addedTerritories: any[] = [];
+
+    entriesToSave.forEach(entry => {
+      const id = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+      
+      const loreEntry: LoreEntry = {
+        id,
+        category: entry.category,
+        title: entry.title || 'Unbenannt',
+        description: entry.description || '',
+        isUnlocked: true,
+        secretsStage1: entry.secretsStage1 || '',
+        secretsStage2: entry.secretsStage2 || '',
+        secretsStage3: entry.secretsStage3 || '',
+        details: entry.details || {}
+      };
+
+      updatedLore.push(loreEntry);
+
+      if (entry.category === 'Orte') {
+        const coords = entry.details?.coordinates || { x: 50, y: 50 };
+        const newTerritory = {
+          id: `territory-${id}`,
+          name: entry.title || 'Unbenannt',
+          type: entry.details?.type || 'stadt',
+          description: entry.description || '',
+          parentId: entry.details?.parentPlaceId || null,
+          x: coords.x !== undefined ? Number(coords.x) : 50,
+          y: coords.y !== undefined ? Number(coords.y) : 50,
+          population: entry.details?.population || '',
+          ruler: entry.details?.ruler || '',
+          climate: entry.details?.climate || '',
+          culture: entry.details?.culture || '',
+          terrain: entry.details?.terrainTile || '',
+          faction: entry.details?.faction || '',
+          isUnlocked: true
+        };
+        addedTerritories.push(newTerritory);
+      }
+    });
+
+    onUpdateLore(updatedLore);
+
+    if (addedTerritories.length > 0 && onUpdateWorld) {
+      onUpdateWorld({
+        ...world,
+        territories: [...(world?.territories || []), ...addedTerritories]
+      });
+    }
+
+    setOmniSuccessMessage(`Erfolgreich ${entriesToSave.length} Einträge in Codex und Weltkarte gespeichert.`);
+    setProposedEntries([]);
+    setSelectedProposedIds(new Set());
+  };
+
+  const applyPreset = (presetName: 'onepiece' | 'middleearth' | 'westeros') => {
+    if (presetName === 'onepiece') {
+      const updatedWorld = {
+        ...world,
+        title: "One Piece",
+        description: "Die große Ära der Piraten! Die Grand Line ist das gefährlichste Meer, umgeben von zwei Calm Belts und geschnitten von der gigantischen Red Line.",
+        era: "Das große Piratenzeitalter",
+        worldStructure: {
+          worldName: "One Piece Welt",
+          type: "Fantasy / Abenteuer",
+          shape: "Archipel (Inselwelt)",
+          continentsCount: 1,
+          seasCount: 5,
+          islandsCount: 100
+        },
+        terrains: [
+          { type: 'Gebirge', name: 'Reverse Mountain', description: 'Der Eingang zur Grand Line auf dem Schnittpunkt mit der Red Line.', x: 50, y: 50 },
+          { type: 'See', name: 'East Blue', description: 'Ein friedliches Meer im Nordosten.', x: 80, y: 25 },
+          { type: 'See', name: 'West Blue', description: 'Das Meer im Südwesten.', x: 20, y: 75 },
+          { type: 'See', name: 'North Blue', description: 'Das Meer im Nordwesten.', x: 20, y: 25 },
+          { type: 'See', name: 'South Blue', description: 'Das Meer im Südosten.', x: 80, y: 75 },
+          { type: 'See', name: 'Calm Belt Nord', description: 'Streifen ohne Wind voll von Seekönigen.', x: 45, y: 35 },
+          { type: 'See', name: 'Calm Belt Süd', description: 'Streifen ohne Wind voll von Seekönigen.', x: 55, y: 65 }
+        ],
+        connections: [
+          { fromPlace: 'Reverse Mountain', toPlace: 'Water 7', type: 'schiff', duration: '5 Tage' },
+          { fromPlace: 'Water 7', toPlace: 'Wano Kuni', type: 'schiff', duration: '8 Tage' },
+          { fromPlace: 'Wano Kuni', toPlace: 'Egghead', type: 'schiff', duration: '4 Tage' }
+        ]
+      };
+      if (onUpdateWorld) onUpdateWorld(updatedWorld);
+
+      const onepieceRegions: LoreEntry[] = [
+        {
+          id: `op-reg-1`,
+          category: 'Orte',
+          title: 'Reverse Mountain',
+          description: 'Der gewaltige Berg, an dem Strömungen aus allen vier Blues aufeinandertreffen.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Insel', biome: 'Felsig', climate: 'Stürmisch', coordinates: { x: 50, y: 50 } }
+        },
+        {
+          id: `op-reg-2`,
+          category: 'Orte',
+          title: 'Water 7',
+          description: 'Die Stadt des Wassers, berühmt für ihre Schiffsbauer.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Metropole', biome: 'Wasserstadt', climate: 'Gemäßigt', coordinates: { x: 65, y: 45 } }
+        },
+        {
+          id: `op-reg-3`,
+          category: 'Orte',
+          title: 'Wano Kuni',
+          description: 'Das abgeschlossene Land der Samurai.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Königreich', biome: 'Kirschblüten, Berge', climate: 'Vier Jahreszeiten', coordinates: { x: 35, y: 55 } }
+        },
+        {
+          id: `op-reg-4`,
+          category: 'Orte',
+          title: 'Egghead',
+          description: 'Die Insel der Zukunft von Dr. Vegapunk.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Forschungsstation', biome: 'Futuristisch', climate: 'Künstlich reguliert', coordinates: { x: 75, y: 60 } }
+        }
+      ];
+
+      const filtered = lore.filter(l => !(l.category === 'Orte' && l.details?.mapLevel === 'macro'));
+      onUpdateLore([...filtered, ...onepieceRegions]);
+    } else if (presetName === 'middleearth') {
+      const updatedWorld = {
+        ...world,
+        title: "Mittelerde",
+        description: "Eine uralte Fantasy-Welt voller Gefahren, Elben, Zwerge und dem drohenden Schatten Mordors im Osten.",
+        era: "Drittes Zeitalter",
+        worldStructure: {
+          worldName: "Mittelerde",
+          type: "High-Fantasy",
+          shape: "Sprawling Kontinent",
+          continentsCount: 1,
+          seasCount: 1,
+          islandsCount: 5
+        },
+        terrains: [
+          { type: 'Gebirge', name: 'Nebelgebirge', description: 'Gewaltige, schneebedeckte Gipfel, die Mittelerde teilen.', x: 50, y: 40 },
+          { type: 'Wald', name: 'Düsterwald', description: 'Ein riesiger, unheimlicher Wald voller Spinnen und Elbenreiche.', x: 65, y: 35 },
+          { type: 'Fluss', name: 'Anduin', description: 'Der große Strom, der sich durch ganz Mittelerde zieht.', x: 60, y: 50 },
+          { type: 'Gebirge', name: 'Schicksalsberg', description: 'Der glühende Vulkan im Herzen Mordors.', x: 75, y: 75 }
+        ],
+        connections: [
+          { fromPlace: 'Auenland', toPlace: 'Bruchtal', type: 'fuss', duration: '14 Tage' },
+          { fromPlace: 'Bruchtal', toPlace: 'Gondor', type: 'fuss', duration: '10 Tage' },
+          { fromPlace: 'Gondor', toPlace: 'Mordor', type: 'fuss', duration: '3 Tage' }
+        ]
+      };
+      if (onUpdateWorld) onUpdateWorld(updatedWorld);
+
+      const meRegions: LoreEntry[] = [
+        {
+          id: `me-reg-1`,
+          category: 'Orte',
+          title: 'Auenland',
+          description: 'Die friedliche und grüne Heimat der Hobbits.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Siedlung', biome: 'Grasland', climate: 'Mild', coordinates: { x: 30, y: 30 } }
+        },
+        {
+          id: `me-reg-2`,
+          category: 'Orte',
+          title: 'Bruchtal',
+          description: 'Das letzte heimelige Haus östlich des Meeres, Zuflucht der Elben.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Zuflucht', biome: 'Tal, Wasserfälle', climate: 'Ewig feucht-mild', coordinates: { x: 45, y: 35 } }
+        },
+        {
+          id: `me-reg-3`,
+          category: 'Orte',
+          title: 'Gondor',
+          description: 'Das stolze Menschenkönigreich im Süden mit der Weißen Stadt Minas Tirith.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Königreich', biome: 'Hügel, Festung', climate: 'Warm-gemäßigt', coordinates: { x: 55, y: 65 } }
+        },
+        {
+          id: `me-reg-4`,
+          category: 'Orte',
+          title: 'Mordor',
+          description: 'Das aschebedeckte Land des Dunklen Herrschers Sauron.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Imperium', biome: 'Ödland, Vulkanisch', climate: 'Heiß, giftig', coordinates: { x: 75, y: 70 } }
+        }
+      ];
+      const filtered = lore.filter(l => !(l.category === 'Orte' && l.details?.mapLevel === 'macro'));
+      onUpdateLore([...filtered, ...meRegions]);
+    } else if (presetName === 'westeros') {
+      const updatedWorld = {
+        ...world,
+        title: "Westeros",
+        description: "Eine düstere, von Intrigen und Kriegen zerrissene Welt der sieben Königslande, wo der Winter naht.",
+        era: "Ära des Thronfolgekriegs",
+        worldStructure: {
+          worldName: "Westeros",
+          type: "Low-Fantasy / Mittelalterlich",
+          shape: "Schmale Halbinsel",
+          continentsCount: 1,
+          seasCount: 3,
+          islandsCount: 12
+        },
+        terrains: [
+          { type: 'Gebirge', name: 'Die Mauer', description: 'Ein riesiger Eiswall im eisigen Norden.', x: 50, y: 15 },
+          { type: 'Wald', name: 'Der Wolfswald', description: 'Dichte, kalte Nadelwälder um Winterfell.', x: 45, y: 30 },
+          { type: 'Fluss', name: 'Der Tridente', description: 'Der dreigeteilte, strategisch wichtige Fluss.', x: 48, y: 55 }
+        ],
+        connections: [
+          { fromPlace: 'Winterfell', toPlace: 'Drachenstein', type: 'pferd', duration: '12 Tage' },
+          { fromPlace: 'Drachenstein', toPlace: 'Königsmund', type: 'schiff', duration: '2 Tage' }
+        ]
+      };
+      if (onUpdateWorld) onUpdateWorld(updatedWorld);
+
+      const wtRegions: LoreEntry[] = [
+        {
+          id: `wt-reg-1`,
+          category: 'Orte',
+          title: 'Winterfell',
+          description: 'Der uralte Sitz des Hauses Stark im kalten Norden.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Burg', biome: 'Tundra, Wald', climate: 'Kalt', coordinates: { x: 45, y: 32 } }
+        },
+        {
+          id: `wt-reg-2`,
+          category: 'Orte',
+          title: 'Königsmund',
+          description: 'Die Hauptstadt von Westeros mit dem Eisernen Thron.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Hauptstadt', biome: 'Küste', climate: 'Warm', coordinates: { x: 52, y: 68 } }
+        },
+        {
+          id: `wt-reg-3`,
+          category: 'Orte',
+          title: 'Drachenstein',
+          description: 'Die vulkanische Inselfestung am Eingang der Schwarzwasserbucht.',
+          isUnlocked: true,
+          details: { mapLevel: 'macro', type: 'Insel', biome: 'Vulkanisch', climate: 'Rauh, windig', coordinates: { x: 62, y: 62 } }
+        }
+      ];
+      const filtered = lore.filter(l => !(l.category === 'Orte' && l.details?.mapLevel === 'macro'));
+      onUpdateLore([...filtered, ...wtRegions]);
+    }
+  };
+
+  const handleGenerateAiWorld = async () => {
+    if (!aiWorldDescription.trim()) return;
+    setIsGeneratingAiWorld(true);
+    try {
+      const res = await GeminiService.generateWorldMapAndRulesFromSixCreationRules(
+        world?.title || 'Eldoria',
+        aiWorldDescription,
+        [],
+        isNsfw
+      );
+      
+      if (res) {
+        const updatedWorld = {
+          ...world,
+          worldStructure: {
+            worldName: res.worldStructure?.worldName || world?.title || 'Eldoria',
+            type: res.worldStructure?.type || '',
+            shape: res.worldStructure?.shape || 'Kontinent',
+            continentsCount: res.worldStructure?.continentsCount || 0,
+            seasCount: res.worldStructure?.seasCount || 0,
+            islandsCount: res.worldStructure?.islandsCount || 0
+          },
+          relationships: res.relationships || [],
+          terrains: res.terrains || [],
+          connections: res.connections || []
+        };
+        
+        if (onUpdateWorld) onUpdateWorld(updatedWorld);
+
+        const filteredLore = lore.filter(l => !(l.category === 'Orte' && l.details?.mapLevel === 'macro'));
+        const newRegions: LoreEntry[] = (res.regions || []).map((reg: any, index: number) => ({
+          id: `macro-region-${Date.now()}-${index}`,
+          category: 'Orte',
+          title: reg.title,
+          description: reg.description || '',
+          isUnlocked: true,
+          details: {
+            mapLevel: 'macro',
+            type: reg.type || 'Region',
+            biome: reg.biome || '',
+            climate: reg.climate || '',
+            coordinates: { x: reg.x || 50, y: reg.y || 50 }
+          }
+        }));
+
+        onUpdateLore([...filteredLore, ...newRegions]);
+        setAiWorldDescription('');
+        setOrteSubTab('map');
+      }
+    } catch (err: any) {
+      console.error("AI World Generation error", err);
+      alert("Fehler bei der KI-Weltschöpfung: " + err.message);
+    } finally {
+      setIsGeneratingAiWorld(false);
+    }
+  };
+
+  const handleUpdateKnowledge = (actorId: string, targetTitle: string, text: string) => {
+    let actorEntry = lore.find(l => l.id === actorId);
+    
+    if (!actorEntry && actorId === '__player_knowledge__') {
+      actorEntry = {
+        id: '__player_knowledge__',
+        category: 'Charaktere',
+        title: playerName || 'Spieler',
+        description: 'Geteiltes Wissen des Spielers',
+        isUnlocked: true,
+        details: {
+          knowledgeMap: {}
+        },
+        knowledge: ''
+      };
+    }
+    
+    if (!actorEntry) return;
+    
+    const updatedDetails = { ...(actorEntry.details || {}) };
+    const updatedKnowledgeMap = { ...(updatedDetails.knowledgeMap || {}) };
+    
+    if (text.trim() === '') {
+      delete updatedKnowledgeMap[targetTitle];
+    } else {
+      updatedKnowledgeMap[targetTitle] = text;
+    }
+    
+    updatedDetails.knowledgeMap = updatedKnowledgeMap;
+    
+    const lines = Object.entries(updatedKnowledgeMap)
+      .filter(([_, t]) => (t as string).trim().length > 0)
+      .map(([name, t]) => `- Über ${name}: ${(t as string).trim()}`);
+    const knowledgeStr = lines.length > 0 ? lines.join('\n') : '';
+    
+    const updatedEntry = {
+      ...actorEntry,
+      details: updatedDetails,
+      knowledge: knowledgeStr
+    };
+    
+    let updatedLore: LoreEntry[];
+    if (lore.some(l => l.id === actorId)) {
+      updatedLore = lore.map(l => l.id === actorId ? updatedEntry : l);
+    } else {
+      updatedLore = [...lore, updatedEntry];
+    }
+    
+    onUpdateLore(updatedLore);
+  };
+
   const handleEdit = (entry: LoreEntry) => {
     setIsEditing(entry.id);
     setActiveCategory(entry.category);
-    setEditForm(entry);
+
+    let preparedEntry = { ...entry };
+    if (entry.category === 'Fraktionen' && entry.title?.trim()) {
+      const fTitle = entry.title.trim().toLowerCase();
+      const existingMembers: FactionMember[] = entry.details?.members ? [...entry.details.members] : [];
+
+      const matchingCodexChars = lore.filter(item => {
+        if (item.category !== 'Charaktere' && item.category !== 'Gegner') return false;
+        const d = item.details || {};
+        const f1 = d.faction || '';
+        const f2 = d.appearance?.faction || '';
+        const f3 = d.organization || '';
+        const f4 = d.guild || '';
+        const f5 = (item as any).faction || '';
+        const combined = `${f1}, ${f2}, ${f3}, ${f4}, ${f5}`.toLowerCase();
+        if (!combined.trim()) return false;
+        const parts = combined.split(',').map(p => p.trim()).filter(Boolean);
+        return parts.some(p => p === fTitle || (fTitle.length > 2 && (p.includes(fTitle) || fTitle.includes(p))));
+      });
+
+      let hasAdded = false;
+      matchingCodexChars.forEach(char => {
+        const isPresent = existingMembers.some(
+          m => (m.characterId && m.characterId === char.id) || (m.name && m.name.trim().toLowerCase() === char.title.trim().toLowerCase())
+        );
+        if (!isPresent) {
+          const charRole = char.details?.role || char.details?.appearance?.role || char.details?.job || 'Mitglied';
+          existingMembers.push({
+            id: `fm-${char.id}`,
+            name: char.title,
+            characterId: char.id,
+            job: charRole,
+            tasks: char.details?.notes || char.details?.background || 'Automatisch übernommen aus Codex',
+            joinedDate: 'Aus Codex',
+            status: 'Aktiv'
+          });
+          hasAdded = true;
+        }
+      });
+
+      if (hasAdded || !entry.details?.members) {
+        preparedEntry = {
+          ...preparedEntry,
+          details: {
+            ...(preparedEntry.details || {}),
+            members: existingMembers
+          }
+        };
+      }
+    }
+
+    setEditForm(preparedEntry);
     formTopRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -483,24 +2499,157 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
     }
   };
 
-  const filteredLore = lore
-    .filter(l => l.category === activeCategory)
-    .filter(l => {
-      // Verhindere, dass der Hauptcharakter (Spieler) in der "Bestehende Charaktere" Liste angezeigt wird
-      if ((activeCategory === 'Charaktere' || activeCategory === 'Gegner') && playerName && l.title?.trim().toLowerCase() === playerName.trim().toLowerCase()) {
+  const handleGenerateNPCExpression = async (exprKey: string) => {
+    if (!editForm.title) return;
+    setGeneratingExpression(exprKey);
+    try {
+      const artStyle = "Hochwertige digitale Illustration, Fantasy Konzeptkunst, detailliert";
+      
+      let emotionDesc = "neutraler Gesichtsausdruck";
+      if (exprKey === 'happy') emotionDesc = "glücklich lächelnd, fröhlich";
+      if (exprKey === 'sad') emotionDesc = "trauriger Gesichtsausdruck";
+      if (exprKey === 'angry') emotionDesc = "wütender Gesichtsausdruck, entschlossen";
+      if (exprKey === 'surprised') emotionDesc = "überraschter Gesichtsausdruck, erstaunt";
+      if (exprKey === 'blushing') emotionDesc = "leicht errötetes Gesicht, verlegen blickend";
+
+      const prompt = `Portrait-Nahaufnahme für den Charakter "${editForm.title}" in der Welt "${worldTitle}" mit folgendem Ausdruck: ${emotionDesc}.\n` +
+        `- Geschlecht: ${editForm.details?.gender || 'Unbekannt'}\n` +
+        `- Rasse: ${editForm.details?.race || 'Unbekannt'}\n` +
+        `- Rassemerkmale: ${editForm.details?.raceFeatures || 'keine'}\n` +
+        `- Alter: ${editForm.details?.age || 'Unbekannt'}\n` +
+        `- Statur: ${editForm.details?.build || 'Unbekannt'}\n` +
+        `- Haare: ${editForm.details?.hairColor || 'Unbekannt'}\n` +
+        `- Augenfarbe: ${editForm.details?.eyeColor || 'Unbekannt'}\n` +
+        `- Kleidung/Rolle: ${editForm.details?.outfit || editForm.details?.role || 'Unbekannt'}\n` +
+        `${artStyle}. Fokus auf das Gesicht und die Mimik. Keine Schrift im Bild.`;
+
+      const imageUrl = await GeminiService.generateImage(prompt, isNsfw);
+      if (imageUrl) {
+        setEditForm(prev => {
+          const prevExprs = prev.expressions || prev.details?.expressions || {};
+          const expressions = {
+            ...prevExprs,
+            [exprKey]: imageUrl
+          };
+          const updated = {
+            ...prev,
+            expressions,
+            details: {
+              ...(prev.details || {}),
+              expressions
+            }
+          };
+          if (exprKey === 'neutral') {
+            updated.image = imageUrl;
+          }
+          return updated;
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Fehler bei der Generierung des Gesichtsausdrucks");
+    } finally {
+      setGeneratingExpression(null);
+    }
+  };
+
+  const handleUploadNPCExpression = async (exprKey: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const rawBase64 = e.target?.result as string;
+      if (rawBase64) {
+        try {
+          const compressed = await GeminiService.compressImageBase64(rawBase64, 256, 0.7);
+          setEditForm(prev => {
+            const prevExprs = prev.expressions || prev.details?.expressions || {};
+            const expressions = {
+              ...prevExprs,
+              [exprKey]: compressed
+            };
+            const updated = {
+              ...prev,
+              expressions,
+              details: {
+                ...(prev.details || {}),
+                expressions
+              }
+            };
+            if (exprKey === 'neutral') {
+              updated.image = compressed;
+            }
+            return updated;
+          });
+        } catch (err) {
+          console.error(err);
+          alert("Fehler beim Verarbeiten des hochgeladenen Bildes.");
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const getItemFaction = (item: LoreEntry): string => {
+    const f = item.details?.faction || (item as any).faction || '';
+    return typeof f === 'string' ? f.trim() : '';
+  };
+
+  const availableFactions = useMemo(() => {
+    const set = new Set<string>();
+    lore.filter(l => l.category === 'Fraktionen').forEach(f => {
+      if (f.title) set.add(f.title.trim());
+    });
+    lore.forEach(l => {
+      const f = getItemFaction(l);
+      if (f) {
+        f.split(',').forEach(part => {
+          const trimmed = part.trim();
+          if (trimmed) set.add(trimmed);
+        });
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [lore]);
+
+  const filteredLore = useMemo(() => {
+    return lore
+      .filter(l => l.category === activeCategory || (activeCategory === 'Story & Quests' && (l.category as string) === 'Events'))
+      .filter(l => {
+        if ((activeCategory === 'Charaktere' || activeCategory === 'Gegner') && playerName && l.title?.trim().toLowerCase() === playerName.trim().toLowerCase()) {
+          return false;
+        }
+        if (!searchTerm.trim()) return true;
+        const term = searchTerm.toLowerCase();
+        const matchesSearch = l.title.toLowerCase().includes(term) || l.description.toLowerCase().includes(term);
+        if (matchesSearch) return true;
+        if ((activeCategory === 'Story & Quests' || (activeCategory as string) === 'Events') && l.details?.eventSteps) {
+          return l.details.eventSteps.some((s: any) => 
+            (s.title || '').toLowerCase().includes(term) || 
+            (s.description || '').toLowerCase().includes(term)
+          );
+        }
         return false;
-      }
-      const matchesSearch = l.title.toLowerCase().includes(searchTerm.toLowerCase()) || l.description.toLowerCase().includes(searchTerm.toLowerCase());
-      if (matchesSearch) return true;
-      if (activeCategory === 'Events' && l.details?.eventSteps) {
-        return l.details.eventSteps.some((s: any) => 
-          (s.title || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-          (s.description || '').toLowerCase().includes(searchTerm.toLowerCase())
-        );
-      }
-      return false;
-    })
-    .sort((a, b) => (a.order || 0) - (b.order || 0));
+      });
+  }, [lore, activeCategory, playerName, searchTerm]);
+
+  const groupedLore = useMemo(() => {
+    const groups: { [faction: string]: LoreEntry[] } = {};
+    filteredLore.forEach(item => {
+      const rawFaction = getItemFaction(item);
+      const f = rawFaction ? rawFaction : 'Ohne Fraktion';
+      if (!groups[f]) groups[f] = [];
+      groups[f].push(item);
+    });
+
+    Object.keys(groups).forEach(key => {
+      groups[key].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    });
+
+    return Object.entries(groups).sort(([a], [b]) => {
+      if (a === 'Ohne Fraktion') return 1;
+      if (b === 'Ohne Fraktion') return -1;
+      return a.localeCompare(b);
+    });
+  }, [filteredLore]);
 
   const updateDetail = (key: string, value: any) => {
     setEditForm(prev => ({
@@ -510,6 +2659,628 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
         [key]: value
       }
     }));
+  };
+
+  const assignedCodexCharacters = useMemo(() => {
+    if ((currentCategory as string) !== 'Fraktionen' || !editForm.title?.trim()) return [];
+    const factionTitle = editForm.title.trim().toLowerCase();
+    
+    return lore.filter(item => {
+      if (item.category !== 'Charaktere' && item.category !== 'Gegner') return false;
+      const d = item.details || {};
+      const f1 = d.faction || '';
+      const f2 = d.appearance?.faction || '';
+      const f3 = d.organization || '';
+      const f4 = d.guild || '';
+      const f5 = d.workplace || '';
+      const f6 = d.group || '';
+      const f7 = (item as any).faction || '';
+      const combined = `${f1}, ${f2}, ${f3}, ${f4}, ${f5}, ${f6}, ${f7}`.toLowerCase();
+      
+      if (!combined.trim()) return false;
+      const parts = combined.split(',').map(p => p.trim()).filter(Boolean);
+      return parts.some(p => p === factionTitle || (factionTitle.length > 2 && (p.includes(factionTitle) || factionTitle.includes(p))));
+    });
+  }, [lore, currentCategory, editForm.title]);
+
+  const effectivePlayerName = useMemo(() => {
+    return (playerName?.trim() || player?.name?.trim() || world?.player?.name?.trim() || 'Spieler').trim();
+  }, [playerName, player?.name, world?.player?.name]);
+
+  const effectivePlayerRole = useMemo(() => {
+    return (playerRole?.trim() || player?.role?.trim() || player?.details?.role?.trim() || world?.player?.role?.trim() || 'Hauptcharakter').trim();
+  }, [playerRole, player?.role, player?.details?.role, world?.player?.role]);
+
+  const isUserInThisFaction = useMemo(() => {
+    if ((currentCategory as string) !== 'Fraktionen' || !editForm.title?.trim()) return false;
+    const currentFactionTitle = editForm.title.trim().toLowerCase();
+
+    // Check direct player faction prop or player object
+    const candidateFactions: string[] = [
+      playerFaction || '',
+      player?.appearance?.faction || '',
+      player?.faction || '',
+      player?.details?.faction || '',
+      world?.player?.appearance?.faction || '',
+      world?.player?.faction || '',
+      world?.userFaction || '',
+      world?.playerFaction || ''
+    ].filter(Boolean);
+
+    for (const f of candidateFactions) {
+      const parts = f.split(',').map(p => p.trim().toLowerCase()).filter(Boolean);
+      if (parts.some(p => p === currentFactionTitle || (currentFactionTitle.length > 2 && (p.includes(currentFactionTitle) || currentFactionTitle.includes(p))))) {
+        return true;
+      }
+    }
+
+    const pNameLower = effectivePlayerName.toLowerCase();
+    
+    // Check if player is present in lore characters
+    const playerChar = lore.find(l => 
+      (l.category === 'Charaktere' || l.category === 'Gegner') && 
+      l.title?.trim().toLowerCase() === pNameLower
+    );
+    if (playerChar) {
+      const d = playerChar.details || {};
+      const fCombined = `${d.faction || ''}, ${d.appearance?.faction || ''}, ${d.organization || ''}, ${d.guild || ''}, ${d.workplace || ''}`.toLowerCase();
+      if (fCombined.includes(currentFactionTitle) || currentFactionTitle.includes(fCombined)) return true;
+    }
+
+    if (assignedCodexCharacters.some(c => c.title?.trim().toLowerCase() === pNameLower)) {
+      return true;
+    }
+
+    const members: FactionMember[] = editForm.details?.members || [];
+    if (members.some(m => (m.characterId === '__player__' || (m.name && m.name.trim().toLowerCase() === pNameLower)))) {
+      return true;
+    }
+
+    return false;
+  }, [currentCategory, editForm.title, editForm.details?.members, lore, effectivePlayerName, playerFaction, player, world, assignedCodexCharacters]);
+
+  // Unified member list: explicit members + auto-detected codex characters
+  const effectiveMembers = useMemo(() => {
+    if ((currentCategory as string) !== 'Fraktionen') return [];
+    const explicitMembers: FactionMember[] = editForm.details?.members || [];
+    
+    const list: (FactionMember & { isAutoDetected?: boolean; codexEntry?: LoreEntry })[] = explicitMembers.map(m => {
+      const match = lore.find(l => 
+        (m.characterId && l.id === m.characterId) || 
+        (m.name && l.title?.trim().toLowerCase() === m.name.trim().toLowerCase())
+      );
+      return {
+        ...m,
+        isAutoDetected: false,
+        codexEntry: match
+      };
+    });
+
+    assignedCodexCharacters.forEach(char => {
+      const isAlreadyAdded = list.some(
+        m => (m.characterId && m.characterId === char.id) || 
+             (m.name && m.name.trim().toLowerCase() === char.title.trim().toLowerCase())
+      );
+      if (!isAlreadyAdded) {
+        const charRole = char.details?.role || char.details?.appearance?.role || char.details?.job || 'Mitglied';
+        list.push({
+          id: `fm-codex-${char.id}`,
+          name: char.title,
+          characterId: char.id,
+          job: charRole,
+          tasks: char.details?.notes || char.details?.background || 'Automatisch übernommen aus Codex',
+          joinedDate: 'Aus Codex',
+          status: 'Aktiv',
+          isAutoDetected: true,
+          codexEntry: char
+        });
+      }
+    });
+
+    if (isUserInThisFaction) {
+      const pNameLower = effectivePlayerName.toLowerCase();
+      const isPlayerAdded = list.some(m => m.characterId === '__player__' || (m.name && m.name.trim().toLowerCase() === pNameLower));
+      if (!isPlayerAdded) {
+        list.unshift({
+          id: `fm-player-auto`,
+          name: effectivePlayerName,
+          characterId: '__player__',
+          job: effectivePlayerRole,
+          tasks: 'Automatisch übernommen aus Codex',
+          joinedDate: 'Aus Codex',
+          status: 'Aktiv',
+          isAutoDetected: true
+        });
+      }
+    }
+
+    return list;
+  }, [currentCategory, editForm.details?.members, assignedCodexCharacters, isUserInThisFaction, effectivePlayerName, effectivePlayerRole, lore]);
+
+  const handleUpdateMember = (index: number, updatedField: Partial<FactionMember>) => {
+    const nextMembers: FactionMember[] = effectiveMembers.map((m, i) => {
+      const { isAutoDetected, codexEntry, ...cleanMember } = m;
+      if (i === index) {
+        return { ...cleanMember, ...updatedField };
+      }
+      return cleanMember;
+    });
+    updateDetail('members', nextMembers);
+  };
+
+  const handleRemoveMember = (index: number) => {
+    const nextMembers: FactionMember[] = effectiveMembers
+      .filter((_, i) => i !== index)
+      .map(m => {
+        const { isAutoDetected, codexEntry, ...cleanMember } = m;
+        return cleanMember;
+      });
+    updateDetail('members', nextMembers);
+  };
+
+  const handleAddMember = () => {
+    const currentClean: FactionMember[] = effectiveMembers.map(m => {
+      const { isAutoDetected, codexEntry, ...cleanMember } = m;
+      return cleanMember;
+    });
+    const newMember: FactionMember = {
+      id: `fm-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      name: '',
+      job: '',
+      tasks: '',
+      joinedDate: '',
+      status: 'Aktiv'
+    };
+    updateDetail('members', [...currentClean, newMember]);
+  };
+
+  const factionHoldings = useMemo(() => {
+    if ((currentCategory as string) !== 'Fraktionen' || !editForm.title?.trim()) return [];
+    const fTitle = editForm.title.trim().toLowerCase();
+    const fId = editForm.id;
+    const holdings = world?.economyConfig?.holdings || world?.economy?.holdings || [];
+    const members = editForm.details?.members || [];
+    const leaderName = (editForm.details?.leader || '').trim().toLowerCase();
+
+    return holdings.filter((h: any) => {
+      // 1. Direct ID match
+      if (h.ownerFactionId && h.ownerFactionId === fId) return true;
+      if (h.controlledByFactionId && h.controlledByFactionId === fId) return true;
+      if (h.loreEntryId && h.loreEntryId === fId) return true;
+
+      // 2. Direct Name / Title match (exact or substring)
+      if (fTitle) {
+        const ownerFName = (h.ownerFactionName || '').trim().toLowerCase();
+        const ctrlFName = (h.controlledByFactionName || '').trim().toLowerCase();
+        const ownerF = (h.ownerFaction || '').trim().toLowerCase();
+        const hName = (h.name || '').trim().toLowerCase();
+
+        if (ownerFName && ownerFName === fTitle) return true;
+        if (ctrlFName && ctrlFName === fTitle) return true;
+        if (ownerF && ownerF === fTitle) return true;
+
+        if (hName && (hName === fTitle || hName.includes(fTitle) || fTitle.includes(hName))) return true;
+      }
+
+      // 3. Leader or Member assignment match
+      const assignedCharName = (h.assignedCharacterName || h.assignedManagerName || '').trim().toLowerCase();
+      const assignedCharId = h.assignedCharacterId || h.ownerCharacterId || h.assignedManagerId;
+
+      if (assignedCharId && (assignedCharId === fId || members.some((m: any) => m.characterId === assignedCharId || m.id === assignedCharId))) return true;
+      if (assignedCharName && (
+        (leaderName && assignedCharName === leaderName) ||
+        members.some((m: any) => m.name && m.name.trim().toLowerCase() === assignedCharName)
+      )) return true;
+
+      return false;
+    });
+  }, [currentCategory, editForm.title, editForm.id, editForm.details?.members, editForm.details?.leader, world?.economyConfig?.holdings, world?.economy?.holdings]);
+
+  const handleAssignHoldingToFaction = (holdingId: string) => {
+    if (!world || !onUpdateWorld || !editForm.title?.trim() || !holdingId) return;
+    const allHoldings = world?.economyConfig?.holdings || world?.economy?.holdings || [];
+    const updated = allHoldings.map((h: any) => {
+      if (h.id === holdingId) {
+        return {
+          ...h,
+          ownerType: 'faction',
+          ownerFactionId: editForm.id,
+          ownerFactionName: editForm.title,
+          loreEntryId: editForm.id
+        };
+      }
+      return h;
+    });
+    const updatedEconomyConfig = {
+      ...(world.economyConfig || {}),
+      holdings: updated
+    };
+    onUpdateWorld({
+      ...world,
+      economyConfig: updatedEconomyConfig
+    });
+    setSelectedHoldingToAssign('');
+  };
+
+  const handleUnassignHoldingFromFaction = (holdingId: string) => {
+    if (!world || !onUpdateWorld) return;
+    const allHoldings = world?.economyConfig?.holdings || world?.economy?.holdings || [];
+    const updated = allHoldings.map((h: any) => {
+      if (h.id === holdingId) {
+        return {
+          ...h,
+          ownerFactionId: undefined,
+          ownerFactionName: undefined,
+          controlledByFactionId: undefined,
+          controlledByFactionName: undefined,
+          ownerType: 'user'
+        };
+      }
+      return h;
+    });
+    const updatedEconomyConfig = {
+      ...(world.economyConfig || {}),
+      holdings: updated
+    };
+    onUpdateWorld({
+      ...world,
+      economyConfig: updatedEconomyConfig
+    });
+  };
+
+  const handleCreateHoldingForFaction = () => {
+    if (!world || !onUpdateWorld || !editForm.title?.trim()) return;
+    const allHoldings = world?.economyConfig?.holdings || world?.economy?.holdings || [];
+    const newHolding: any = {
+      id: `holding-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: `${editForm.title} - Betrieb`,
+      type: 'taverne',
+      icon: 'Building2',
+      description: `Betrieb / Niederlassung der Fraktion ${editForm.title}`,
+      level: 1,
+      ownerType: 'faction',
+      ownerFactionId: editForm.id,
+      ownerFactionName: editForm.title,
+      loreEntryId: editForm.id,
+      incomePerInterval: 60,
+      upkeepPerInterval: 25,
+      staffCount: 4,
+      status: 'active',
+      roles: [
+        {
+          id: `role-${Date.now()}-1`,
+          name: 'Verwalter / Betriebsleiter',
+          assignedToName: editForm.details?.leader || 'Betriebsleiter',
+          authorities: ['Tagesgeschäft leiten', 'Preise festlegen'],
+          responsibilities: ['Betriebsführung'],
+          salary: 15,
+          workplaceArea: 'Hauptbereich'
+        }
+      ]
+    };
+
+    const updatedEconomyConfig = {
+      ...(world.economyConfig || {}),
+      holdings: [...allHoldings, newHolding]
+    };
+    onUpdateWorld({
+      ...world,
+      economyConfig: updatedEconomyConfig
+    });
+  };
+
+  const handleImportAssignedCharactersToMembers = (charsToImport?: LoreEntry[]) => {
+    const targets = charsToImport || assignedCodexCharacters;
+    const currentMembers: FactionMember[] = editForm.details?.members || [];
+    
+    const newMembers: FactionMember[] = [...currentMembers];
+    let addedCount = 0;
+
+    // Auto-add assigned characters from codex
+    targets.forEach(char => {
+      const isAlreadyAdded = newMembers.some(
+        m => (m.characterId && m.characterId === char.id) || (m.name && m.name.trim().toLowerCase() === char.title.trim().toLowerCase())
+      );
+
+      if (!isAlreadyAdded) {
+        const charRole = char.details?.role || char.details?.appearance?.role || char.details?.job || 'Mitglied';
+        newMembers.push({
+          id: `fm-${char.id}`,
+          name: char.title,
+          characterId: char.id,
+          job: charRole,
+          tasks: char.details?.notes || char.details?.background || 'Automatisch übernommen aus Codex',
+          joinedDate: 'Aus Codex',
+          status: 'Aktiv'
+        });
+        addedCount++;
+      }
+    });
+
+    // Auto-add player if member of this faction
+    if (isUserInThisFaction) {
+      const pNameLower = effectivePlayerName.toLowerCase();
+      const isPlayerAdded = newMembers.some(m => m.characterId === '__player__' || (m.name && m.name.trim().toLowerCase() === pNameLower));
+      if (!isPlayerAdded) {
+        newMembers.unshift({
+          id: `fm-player-${Date.now()}`,
+          name: effectivePlayerName,
+          characterId: '__player__',
+          job: effectivePlayerRole,
+          tasks: 'Automatisch übernommen aus Codex',
+          joinedDate: 'Aus Codex',
+          status: 'Aktiv'
+        });
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      updateDetail('members', newMembers);
+    }
+  };
+
+  const handleHarmonizeFaction = async () => {
+    if (!editForm.title?.trim()) {
+      alert('Bitte gib zuerst einen Namen für die Fraktion ein.');
+      return;
+    }
+    setIsHarmonizingFaction(true);
+    setHarmonizeSuccessMessage(null);
+    try {
+      const leaderName = editForm.details?.leader?.trim() || '';
+      
+      // Determine Leader Profile
+      let leaderProfile: any = null;
+      if (leaderName) {
+        const isPlayerLeader = leaderName.toLowerCase() === effectivePlayerName.toLowerCase();
+        if (isPlayerLeader) {
+          leaderProfile = {
+            name: effectivePlayerName,
+            role: effectivePlayerRole || 'Anführer / Hauptcharakter',
+            personality: player?.personality || player?.details?.personality || '',
+            goal: player?.goal || player?.details?.goal || '',
+            bio: player?.bio || player?.details?.bio || player?.background || '',
+            isPlayer: true
+          };
+        } else {
+          const leaderCodex = lore.find(l => 
+            (l.category === 'Charaktere' || l.category === 'Gegner') && 
+            (l.title?.trim().toLowerCase() === leaderName.toLowerCase() || l.details?.rufName?.trim().toLowerCase() === leaderName.toLowerCase())
+          );
+          if (leaderCodex) {
+            leaderProfile = {
+              name: leaderCodex.title,
+              role: leaderCodex.details?.role || leaderCodex.details?.job || 'Anführer',
+              personality: leaderCodex.details?.personality || leaderCodex.details?.archetype || '',
+              goal: leaderCodex.details?.goal || leaderCodex.details?.motivationCore?.superObjective || '',
+              bio: leaderCodex.description || leaderCodex.details?.bio || '',
+              isPlayer: false
+            };
+          } else {
+            leaderProfile = {
+              name: leaderName,
+              role: 'Anführer',
+              isPlayer: false
+            };
+          }
+        }
+      }
+
+      // Determine Members
+      const membersToHarmonize = effectiveMembers.map(m => {
+        const isPlayer = m.characterId === '__player__' || (m.name && m.name.trim().toLowerCase() === effectivePlayerName.toLowerCase());
+        const codex = lore.find(l => 
+          (l.category === 'Charaktere' || l.category === 'Gegner') && 
+          (l.id === m.characterId || l.title?.trim().toLowerCase() === m.name?.trim().toLowerCase())
+        );
+        return {
+          id: m.id,
+          name: m.name,
+          role: m.job || codex?.details?.role || 'Mitglied',
+          job: m.job || codex?.details?.role || 'Mitglied',
+          characterId: m.characterId || codex?.id || '',
+          bio: codex?.description || codex?.details?.bio || (isPlayer ? (player?.bio || '') : ''),
+          personality: codex?.details?.personality || (isPlayer ? (player?.personality || '') : ''),
+          tasks: m.tasks || '',
+          joinedDate: m.joinedDate || '',
+          status: m.status || 'Aktiv',
+          isPlayer
+        };
+      });
+
+      // Call Gemini Service
+      const result = await GeminiService.harmonizeFactionAndMembers({
+        factionData: {
+          title: editForm.title,
+          description: editForm.description,
+          details: editForm.details
+        },
+        leaderProfile,
+        members: membersToHarmonize,
+        worldContext: {
+          title: worldTitle,
+          era: world?.era,
+          tone: world?.tone,
+          description: world?.description,
+          rules: world
+        },
+        allLoreEntries: lore,
+        userPrompt: factionHarmonizePrompt,
+        keepExistingDetails: keepExistingLoreDetails
+      });
+
+      // 1. Update editForm with faction details
+      setEditForm(prev => ({
+        ...prev,
+        details: {
+          ...(prev.details || {}),
+          ...result.factionDetails
+        }
+      }));
+
+      // 2. Update characters in lore with reciprocal relationships and conduct
+      let updatedLore = [...lore];
+      let updatedCount = 0;
+
+      for (const update of result.characterUpdates) {
+        if (!update.characterName?.trim()) continue;
+        const targetNameLower = update.characterName.trim().toLowerCase();
+
+        // Check if matching codex character
+        const charIdx = updatedLore.findIndex(l => 
+          (l.category === 'Charaktere' || l.category === 'Gegner') && 
+          (l.id === update.characterId || l.title?.trim().toLowerCase() === targetNameLower || l.details?.rufName?.trim().toLowerCase() === targetNameLower)
+        );
+
+        if (charIdx >= 0) {
+          const currentChar = updatedLore[charIdx];
+          const existingRels = currentChar.details?.relationships || [];
+          
+          // Merge relationships: replace matching targets, append new
+          const mergedRels = [...existingRels];
+          for (const newRel of update.relationships) {
+            const relTargetLower = newRel.targetCharacter?.trim().toLowerCase();
+            const existingRelIdx = mergedRels.findIndex(r => r.targetCharacter?.trim().toLowerCase() === relTargetLower);
+            if (existingRelIdx >= 0) {
+              mergedRels[existingRelIdx] = {
+                ...mergedRels[existingRelIdx],
+                ...newRel,
+                id: mergedRels[existingRelIdx].id || newRel.id
+              };
+            } else {
+              mergedRels.push(newRel);
+            }
+          }
+
+          updatedLore[charIdx] = {
+            ...currentChar,
+            details: {
+              ...(currentChar.details || {}),
+              relationship: update.relationshipSummary || currentChar.details?.relationship || '',
+              conduct: update.conductSummary || currentChar.details?.conduct || '',
+              relationships: mergedRels
+            }
+          };
+          updatedCount++;
+        }
+
+        // Check if player
+        if (targetNameLower === effectivePlayerName.toLowerCase() && onUpdateWorld && world) {
+          const existingPlayerRels = world.player?.relationships || player?.relationships || [];
+          const mergedPlayerRels = [...existingPlayerRels];
+          for (const newRel of update.relationships) {
+            const relTargetLower = newRel.targetCharacter?.trim().toLowerCase();
+            const existingRelIdx = mergedPlayerRels.findIndex(r => r.targetCharacter?.trim().toLowerCase() === relTargetLower);
+            if (existingRelIdx >= 0) {
+              mergedPlayerRels[existingRelIdx] = {
+                ...mergedPlayerRels[existingRelIdx],
+                ...newRel,
+                id: mergedPlayerRels[existingRelIdx].id || newRel.id
+              };
+            } else {
+              mergedPlayerRels.push(newRel);
+            }
+          }
+
+          const updatedWorld = {
+            ...world,
+            player: {
+              ...(world.player || player || {}),
+              relationships: mergedPlayerRels,
+              relationship: update.relationshipSummary || (world.player?.relationship || ''),
+              conduct: update.conductSummary || (world.player?.conduct || '')
+            }
+          };
+          onUpdateWorld(updatedWorld);
+        }
+      }
+
+      onUpdateLore(updatedLore);
+
+      // Synchronize associated holdings & economy system
+      if (world && onUpdateWorld) {
+        const allHoldings = world?.economyConfig?.holdings || world?.economy?.holdings || [];
+        let holdingsChanged = false;
+
+        const updatedHoldings = allHoldings.map((h: any) => {
+          const isLinked = factionHoldings.some((fh: any) => fh.id === h.id);
+          if (isLinked) {
+            holdingsChanged = true;
+            return {
+              ...h,
+              ownerType: 'faction',
+              ownerFactionId: editForm.id,
+              ownerFactionName: editForm.title,
+              loreEntryId: editForm.id
+            };
+          }
+          return h;
+        });
+
+        // Import holding staff/managers into faction members if missing
+        const currentMembers: FactionMember[] = editForm.details?.members || [];
+        const newMembers: FactionMember[] = [...currentMembers];
+        let membersAddedFromHoldings = 0;
+
+        factionHoldings.forEach((h: any) => {
+          const roles = h.roles || [];
+          roles.forEach((r: any) => {
+            if (r.assignedToName?.trim()) {
+              const nameTrim = r.assignedToName.trim();
+              const nameLower = nameTrim.toLowerCase();
+              if (nameLower !== 'spieler' && !newMembers.some(m => m.name?.trim().toLowerCase() === nameLower)) {
+                newMembers.push({
+                  id: `fm-hrole-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+                  name: nameTrim,
+                  job: r.name || 'Führungskraft (Betrieb)',
+                  tasks: `Zuständig für ${h.name} (${r.workplaceArea || 'Betrieb'})`,
+                  joinedDate: 'Aus Wirtschaftssystem',
+                  status: 'Aktiv'
+                });
+                membersAddedFromHoldings++;
+              }
+            }
+          });
+        });
+
+        if (membersAddedFromHoldings > 0) {
+          updateDetail('members', newMembers);
+        }
+
+        // Calculate economy totals for summary
+        const totalInc = factionHoldings.reduce((sum: number, h: any) => sum + (h.incomePerInterval || 0), 0);
+        const totalUp = factionHoldings.reduce((sum: number, h: any) => sum + (h.upkeepPerInterval || 0), 0);
+        const netCash = totalInc - totalUp;
+        const totalStaff = factionHoldings.reduce((sum: number, h: any) => sum + (h.staffCount || 0), 0);
+
+        if (factionHoldings.length > 0) {
+          const econSummary = `Betriebe: ${factionHoldings.length} aktive Gewerbe (${totalStaff} Beschäftigte). Passives Einkommen: +${totalInc} Gold/Monat (Unterhalt: -${totalUp} Gold, Netto: ${netCash >= 0 ? '+' : ''}${netCash} Gold/Monat).`;
+          updateDetail('resourceEconomy', econSummary);
+        }
+
+        if (holdingsChanged) {
+          const updatedEconomyConfig = {
+            ...(world.economyConfig || {}),
+            holdings: updatedHoldings
+          };
+          onUpdateWorld({
+            ...world,
+            economyConfig: updatedEconomyConfig
+          });
+        }
+      }
+
+      setHarmonizeSuccessMessage(`Fraktion "${editForm.title}", ${updatedCount} zugehörige Charaktere und ${factionHoldings.length} Betriebe wurden erfolgreich synchronisiert.`);
+      setTimeout(() => {
+        setHarmonizeSuccessMessage(null);
+      }, 6000);
+    } catch (err) {
+      console.error('Fehler bei der Fraktions-Synchronisation:', err);
+      alert('Fehler bei der Synchronisation der Fraktion. Bitte versuche es erneut.');
+    } finally {
+      setIsHarmonizingFaction(false);
+    }
   };
 
   const updateAppearanceDetail = (key: string, value: any) => {
@@ -528,2020 +3299,2452 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
     <div className="w-full flex gap-6 flex-col">
       <div ref={formTopRef} className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-slate-100">Codex (Lore & Wissen)</h3>
-          <p className="text-xs text-slate-400">Verwalte Charaktere, Orte, Fraktionen und Regeln dieser Welt.</p>
+          <h3 className="text-lg font-semibold text-slate-100">Codex (Lore &amp; Wissen)</h3>
+          <p className="text-xs text-slate-400">Verwalte Charaktere, Fraktionen, Gegenstände und Regeln dieser Welt.</p>
         </div>
       </div>
 
       <div className="w-full flex gap-2 overflow-x-auto pb-2 shrink-0 hide-scrollbar">
-        {CATEGORIES.map(c => (
+        {visibleCategories.map(c => (
           <button
             key={c}
             onClick={() => setActiveCategory(c)}
             className={`text-left px-4 py-2 text-sm rounded-xl transition-all whitespace-nowrap font-medium ${
               activeCategory === c 
               ? 'bg-amber-600 shadow-md shadow-amber-900/20 text-white'
-              : 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800'
+              : c === 'Omni-Smart-Fill'
+                ? 'bg-indigo-950/40 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-900/30'
+                : 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800'
             }`}
           >
+            {c === 'Omni-Smart-Fill' && <i className="fa-solid fa-wand-magic-sparkles mr-2 opacity-70 text-amber-400"></i>}
             {c === 'Charaktere' && <i className="fa-solid fa-users mr-2 opacity-70"></i>}
+            {c === 'Verhüllung' && <i className="fa-solid fa-mask mr-2 opacity-70 text-sky-400"></i>}
             {c === 'Gegner' && <i className="fa-solid fa-skull mr-2 opacity-70"></i>}
             {c === 'Orte' && <i className="fa-solid fa-map mr-2 opacity-70"></i>}
+            {c === 'Weltkarte' && <i className="fa-solid fa-earth-americas mr-2 opacity-70 text-sky-400"></i>}
             {c === 'Fraktionen' && <i className="fa-solid fa-flag mr-2 opacity-70"></i>}
             {c === 'Gegenstände' && <i className="fa-solid fa-khanda mr-2 opacity-70"></i>}
-            {c === 'Fähigkeiten' && <i className="fa-solid fa-fire mr-2 opacity-70"></i>}
-            {c === 'Events' && <i className="fa-solid fa-bolt mr-2 opacity-70"></i>}
+            {c === 'Verbotenes Wissen' && <i className="fa-solid fa-eye-slash mr-2 opacity-75 text-red-400"></i>}
+            {(c === 'Story & Quests' || (c as string) === 'Events') && <i className="fa-solid fa-map-route mr-2 opacity-70 text-amber-500"></i>}
             {c === 'Weltregeln' && <i className="fa-solid fa-scale-balanced mr-2 opacity-70"></i>}
-            {c}
+            {c === 'Zeitlinie' && <i className="fa-solid fa-timeline mr-2 opacity-70 text-rose-400"></i>}
+            {c === 'Omni-Smart-Fill' ? 'Multi-Smart-Fill' : c === 'Orte' ? 'Orte' : c === 'Weltkarte' ? 'Weltkarte' : c === 'Verhüllung' ? 'Verhüllung & Wissen' : c === 'Verbotenes Wissen' ? 'Geheimnisse & Verborgenes Wissen' : c === 'Story & Quests' || (c as string) === 'Events' ? 'Story & Quests' : c === 'Zeitlinie' ? 'Chronik & Zeitlinie' : c}
             <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${activeCategory === c ? 'bg-black/20' : 'bg-slate-800'}`}>
-              {c === 'Events' 
-                ? (lore.find(l => l.category === 'Events')?.details?.eventSteps?.length || 0) 
-                : lore.filter(l => l.category === c).length
+              {c === 'Omni-Smart-Fill'
+                ? proposedEntries.length
+                : c === 'Story & Quests' || (c as string) === 'Events' 
+                  ? (lore.find(l => l.category === 'Story & Quests' || (l.category as string) === 'Events')?.details?.eventSteps?.length || 0) 
+                  : c === 'Verhüllung'
+                    ? (lore.filter(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.id !== '__player_knowledge__' && (playerName ? l.title?.trim().toLowerCase() !== playerName.trim().toLowerCase() : true)).length + 1)
+                    : c === 'Weltkarte'
+                      ? (world?.territories?.length || 0)
+                      : lore.filter(l => l.category === c).length
               }
             </span>
           </button>
         ))}
+        {removedCategories.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setRemovedCategories([])}
+            className="px-3 py-2 text-xs bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 shrink-0 cursor-pointer"
+            title="Gelöschte Kategorie-Tags wiederherstellen"
+          >
+            <i className="fa-solid fa-rotate-left text-amber-400"></i>
+            <span>Tags wiederherstellen</span>
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-6">
-        {/* Editor Form (Always Visible) */}
-        <div className="bg-slate-900/80 border border-amber-500/30 p-4 sm:p-6 rounded-2xl flex flex-col gap-6 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-amber-600 to-indigo-600 left-0"></div>
-          <div className="flex justify-between items-center">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              {activeCategory === 'Events' ? (
-                <>
-                  <i className="fa-solid fa-route text-amber-500"></i>
-                  <span>Geschichte & Roter Faden der Kampagne</span>
-                </>
-              ) : (
-                <>
-                  <i className={`fa-solid ${isEditing ? 'fa-pen text-indigo-400' : 'fa-plus text-amber-500'}`}></i>
-                  <span>{isEditing ? `"${editForm.title}" bearbeiten` : `Neuen Eintrag in ${activeCategory}`}</span>
-                </>
-              )}
-            </h2>
-          </div>
+        {activeCategory === 'Omni-Smart-Fill' ? (
+          <div className="flex flex-col gap-6 animate-in fade-in duration-200">
+            <div className="bg-slate-900/80 border border-indigo-500/30 p-6 rounded-2xl flex flex-col gap-4 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-amber-500 left-0"></div>
+              
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i className="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+                    <span>Multi-Smart-Fill: Mehrere Einträge gleichzeitig generieren</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Beschreibe ein Konzept, eine Fraktion oder ein Ereignis. Es werden automatisch verknüpfte Charaktere, Orte, Gegenstände und Geheimnisse erstellt.
+                  </p>
+                </div>
+              </div>
 
-          {/* Lore Smart Fill */}
-          {currentCategory !== 'Events' && (
-            <div className="bg-slate-800/30 border border-amber-500/30 rounded-xl p-4 flex flex-col gap-3">
-              <label className="text-xs text-amber-500 font-bold uppercase flex justify-between items-center">
-                <span>Smart Fill {currentCategory}</span>
-                <button 
-                  onClick={handleLoreSmartFill}
-                  disabled={isSmartFillingLore || !loreSmartFill.trim()}
-                  className="px-2 py-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded text-[10px] transition-all flex items-center gap-2"
-                >
-                  <i className={`fa-solid ${isSmartFillingLore ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
-                  Automatisch Ausfüllen
-                </button>
-              </label>
-              <textarea 
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-amber-500 resize-y" 
-                placeholder={`Beschreibe den/die/das ${currentCategory} ausführlich (z.B. 'Ein 25-jähriger Krieger aus dem Nordland, stark gebaut...'). Die KI füllt dann die Felder darunter passend aus.`}
-                value={loreSmartFill} 
-                onChange={e => setLoreSmartFill(e.target.value)} 
+              <AutoExpandingTextarea 
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-4 text-slate-300 text-sm min-h-[120px] outline-none focus:border-indigo-500 transition-all" 
+                placeholder="Beschreibung für die Multi-Generierung eingeben..."
+                value={omniSmartFillPrompt} 
+                onChange={e => setOmniSmartFillPrompt(e.target.value)} 
+                disabled={isOmniGenerating}
               />
-              <div className="flex items-center gap-2 px-1 select-none">
-                <input 
-                  type="checkbox" 
-                  id="keepExistingLoreDetailsCheckbox"
-                  checked={keepExistingLoreDetails} 
-                  onChange={e => setKeepExistingLoreDetails(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer w-4 h-4 accent-amber-500"
-                />
-                <label htmlFor="keepExistingLoreDetailsCheckbox" className="text-[11px] text-slate-300 font-medium cursor-pointer">
-                  <span className="text-emerald-400 font-bold">Ergänzungs-Modus:</span> Bestehende Daten behalten und neue Informationen hinzufügen
-                </label>
+
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-[10px] text-slate-500">
+                  Erstellt automatische Verknüpfungen zwischen Fraktionen, Charakteren und Standorten.
+                </span>
+                <button 
+                  onClick={handleOmniGenerate}
+                  disabled={isOmniGenerating || !omniSmartFillPrompt.trim()}
+                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-950/40 cursor-pointer"
+                >
+                  {isOmniGenerating ? (
+                    <>
+                      <i className="fa-solid fa-spinner animate-spin"></i>
+                      <span>Generiere Einträge...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-bolt text-amber-300"></i>
+                      <span>Einträge generieren</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
-          )}
-          
-          <div className="grid gap-4">
-            {currentCategory !== 'Events' && currentCategory !== 'Charaktere' && (
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-slate-400 font-bold uppercase">Name / Titel <span className="text-red-500">*</span></label>
-                <AutoExpandingTextarea 
-                  className="bg-slate-950 border border-slate-800 rounded p-3 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px]"
-                  value={editForm.title || ''}
-                  onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="z.B. König Arthur, Die Schwarze Feste..."
-                />
+
+            {omniSuccessMessage && (
+              <div className="bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 p-4 rounded-xl flex items-center gap-3 text-xs animate-in slide-in-from-top-2 duration-200">
+                <i className="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+                <div>
+                  <p className="font-bold">{omniSuccessMessage}</p>
+                </div>
+                <button onClick={() => setOmniSuccessMessage(null)} className="ml-auto text-emerald-400 hover:text-white">
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
               </div>
             )}
 
-
-
-            {(currentCategory === 'Charaktere' || currentCategory === 'Gegner') && (
-              <div className="flex flex-col gap-5 bg-slate-900/40 p-5 rounded-2xl border border-slate-800/80">
-                {/* 1. Name, Rufname, Spitzname & Rolle */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span className="text-amber-500">◆</span> Name des Charakters <span className="text-red-500">*</span>
-                    </label>
-                    <AutoExpandingTextarea 
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all font-semibold"
-                      value={editForm.title || ''}
-                      onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                      placeholder="z.B. Son Goku, Monkey D. Ruffy..."
-                    />
+            {proposedEntries.length > 0 && (
+              <div className="flex flex-col gap-4 animate-in fade-in duration-300">
+                <div className="flex flex-wrap items-center justify-between bg-slate-900/60 p-4 border border-slate-800 rounded-xl gap-3">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Generierte Einträge zur Überprüfung ({proposedEntries.length})</h5>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Passe Namen oder Texte direkt an und wähle aus, welche Einträge du speichern möchtest.</p>
                   </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span className="text-emerald-400">◆</span> Rufname (Kampfanzeige)
-                    </label>
-                    <AutoExpandingTextarea 
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all font-semibold"
-                      value={editForm.details?.rufName || ''}
-                      onChange={e => updateDetail('rufName', e.target.value)}
-                      placeholder="z.B. Goku, Ruffy (Standard: Name)"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span className="text-amber-500">◆</span> Spitzname / Titel / Alias
-                    </label>
-                    <AutoExpandingTextarea 
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all"
-                      value={editForm.details?.nickname || ''}
-                      onChange={e => updateDetail('nickname', e.target.value)}
-                      placeholder="z.B. Akainu, Strohhut..."
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span className="text-amber-500">◆</span> Rolle / Beruf
-                    </label>
-                    <AutoExpandingTextarea 
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all"
-                      value={editForm.details?.role || ''}
-                      onChange={e => updateDetail('role', e.target.value)}
-                      placeholder="z.B. Navigatorin, Kampfsportler..."
-                    />
-                  </div>
-                </div>
-
-                {/* 2. Aussehen Konsole */}
-                <div className="p-5 bg-slate-950/60 rounded-2xl border border-slate-800 space-y-4 shadow-xl">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2 border-b border-slate-800/80 pb-2">
-                    <i className="fa-solid fa-wand-magic-sparkles text-amber-500"></i>
-                    Physisches Profil & Attribute
-                  </h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Geschlecht</label>
-                      <select 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none cursor-pointer focus:border-amber-500/50" 
-                        value={editForm.details?.gender || 'Unbekannt'} 
-                        onChange={e => updateAppearanceDetail('gender', e.target.value)}
-                      >
-                        {GENDER_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Alter</label>
-                      <AutoExpandingTextarea 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                        value={editForm.details?.age || ''} 
-                        onChange={e => updateAppearanceDetail('age', e.target.value)} 
-                        placeholder="z.B. 18 Jahre"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Statur</label>
-                      <select 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none cursor-pointer focus:border-amber-500/50" 
-                        value={editForm.details?.build || 'Unbekannt'} 
-                        onChange={e => updateAppearanceDetail('build', e.target.value)}
-                      >
-                        {BUILD_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Haarfarbe</label>
-                      <AutoExpandingTextarea 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                        placeholder="z.B. Orange" 
-                        value={editForm.details?.hairColor || ''} 
-                        onChange={e => updateAppearanceDetail('hairColor', e.target.value)} 
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Augenfarbe</label>
-                      <AutoExpandingTextarea 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                        placeholder="z.B. Braun" 
-                        value={editForm.details?.eyeColor || ''} 
-                        onChange={e => updateAppearanceDetail('eyeColor', e.target.value)} 
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Körbchengröße</label>
-                      <select 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none cursor-pointer focus:border-amber-500/50" 
-                        value={editForm.details?.cupSize || "-"} 
-                        onChange={e => updateAppearanceDetail('cupSize', e.target.value)}
-                      >
-                        {CUP_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Größe & Körpermaße</label>
-                      <div className="flex gap-2">
-                        <AutoExpandingTextarea 
-                          className="w-1/2 bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                          placeholder="z.B. 170 cm" 
-                          value={editForm.details?.height || ''} 
-                          onChange={e => updateAppearanceDetail('height', e.target.value)} 
-                        />
-                        <AutoExpandingTextarea 
-                          className="w-1/2 bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                          placeholder="z.B. 95-58-88" 
-                          value={editForm.details?.measurements || ''} 
-                          onChange={e => updateAppearanceDetail('measurements', e.target.value)} 
-                        />
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Rasse</label>
-                      <AutoExpandingTextarea 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                        placeholder="z.B. Mensch" 
-                        value={editForm.details?.race || ''} 
-                        onChange={e => updateAppearanceDetail('race', e.target.value)} 
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Herkunft</label>
-                      <AutoExpandingTextarea 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                        placeholder="z.B. East Blue" 
-                        value={editForm.details?.origin || ''} 
-                        onChange={e => updateAppearanceDetail('origin', e.target.value)} 
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Familie</label>
-                      <AutoExpandingTextarea 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                        placeholder="z.B. Unbekannt" 
-                        value={editForm.details?.family || ''} 
-                        onChange={e => updateAppearanceDetail('family', e.target.value)} 
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1 col-span-1">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider flex justify-between">
-                        <span>Fraktion</span>
-                        {(() => {
-                          const createdFactions = Array.from(new Set(lore.filter(l => l.category === 'Fraktionen').map(l => l.title).filter(Boolean)));
-                          return createdFactions.length > 0 ? <span className="text-[9px] text-amber-500 font-normal">Wählen</span> : null;
-                        })()}
-                      </label>
-                      <AutoExpandingTextarea 
-                        aria-label="Charakter-Fraktion"
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500/50" 
-                        placeholder="z.B. Strohhut-Bande" 
-                        value={editForm.details?.faction || ''} 
-                        onChange={e => updateDetail('faction', e.target.value)} 
-                      />
-                      {(() => {
-                        const createdFactions = Array.from(new Set(lore.filter(l => l.category === 'Fraktionen').map(l => l.title).filter(Boolean)));
-                        if (createdFactions.length === 0) return null;
-                        return (
-                          <div className="flex flex-wrap gap-1 mt-1.5">
-                            {createdFactions.map(factionName => (
-                              <button
-                                key={factionName}
-                                type="button"
-                                onClick={() => updateDetail('faction', factionName)}
-                                className={`text-[9.5px] px-2 py-1 rounded transition-all border ${
-                                  editForm.details?.faction?.trim().toLowerCase() === factionName.trim().toLowerCase()
-                                  ? 'bg-amber-600/30 text-amber-400 border-amber-500/50 font-semibold shadow-inner'
-                                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-300'
-                                }`}
-                              >
-                                {factionName}
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    <div className="col-span-2 sm:col-span-3">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Kleidung / Outfit</label>
-                      <AutoExpandingTextarea 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs min-h-[46px] outline-none focus:border-amber-500/50" 
-                        placeholder="z.B. Gestreiftes T-Shirt, brauner Rock..." 
-                        value={editForm.details?.outfit || ''} 
-                        onChange={e => updateAppearanceDetail('outfit', e.target.value)} 
-                      />
-                    </div>
-                    <div className="col-span-2 sm:col-span-3">
-                      <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider block mb-1">Rassemerkmale (Abweichungen von der menschlichen Norm)</label>
-                      <AutoExpandingTextarea 
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-white text-xs min-h-[46px] outline-none focus:border-amber-500/50" 
-                        placeholder="z.B. Katzenohren, Schweif, Krallen, geschlitzte Augen, Fell (Farbe/Muster/Verteilung), Flügel, Hörner etc. oder 'keine'" 
-                        value={editForm.details?.raceFeatures || ''} 
-                        onChange={e => updateAppearanceDetail('raceFeatures', e.target.value)} 
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Persönliche Geschichte, Bestrebungen & Verhalten */}
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span className="text-amber-500">◆</span> Persönlichkeit
-                    </label>
-                    <AutoExpandingTextarea 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white min-h-[72px] text-sm outline-none focus:ring-1 focus:ring-amber-500/50" 
-                      placeholder="Beschreibung der Charaktereigenschaften..." 
-                      value={editForm.details?.personality || ''} 
-                      onChange={e => updateDetail('personality', e.target.value)} 
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span className="text-amber-500">◆</span> Vergangenheit / Biografie <span className="text-red-500">*</span>
-                    </label>
-                    <AutoExpandingTextarea 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white min-h-[120px] text-sm outline-none focus:ring-1 focus:ring-amber-500/50 leading-relaxed" 
-                      placeholder="Die detaillierte Lebensgeschichte oder Herkunft des Charakters..." 
-                      value={editForm.description || ''} 
-                      onChange={e => {
-                        const val = e.target.value;
-                        setEditForm(prev => ({
-                          ...prev,
-                          description: val,
-                          details: {
-                            ...(prev.details || {}),
-                            bio: val
-                          }
-                        }));
-                      }} 
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span className="text-amber-500">◆</span> Aktuelle Situation
-                    </label>
-                    <AutoExpandingTextarea 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white min-h-[80px] text-sm outline-none focus:ring-1 focus:ring-amber-500/50" 
-                      placeholder="Was macht der Charakter zum aktuellen Zeitpunkt?" 
-                      value={editForm.details?.currentSituation || ''} 
-                      onChange={e => updateDetail('currentSituation', e.target.value)} 
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span className="text-amber-500">◆</span> Hauptziel / Motivation
-                    </label>
-                    <AutoExpandingTextarea 
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-white min-h-[80px] text-sm outline-none focus:ring-1 focus:ring-amber-500/50" 
-                      placeholder="Welches langfristige Ziel treibt den Charakter an?" 
-                      value={editForm.details?.goal || ''} 
-                      onChange={e => updateDetail('goal', e.target.value)} 
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2 flex flex-col gap-3 bg-slate-900/30 p-3.5 border border-slate-800/80 rounded-xl">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-1">
-                    <div>
-                      <span className="text-xs text-slate-300 font-bold uppercase tracking-wider">Beziehungen & Verhalten zu anderen</span>
-                      <span className="text-[10px] text-slate-500 block">Wer ist dieser Charakter für andere und wie verhält er sich zu ihnen?</span>
-                    </div>
+                  <div className="flex items-center gap-3">
                     <button 
-                      type="button"
                       onClick={() => {
-                        const newList = [
-                          ...(editForm.details?.relationships || []),
-                          { id: Date.now().toString() + Math.random().toString(36).substr(2, 5), targetCharacter: '', type: '', behavior: '', _isCustom: false }
-                        ];
-                        updateDetail('relationships', newList);
+                        if (selectedProposedIds.size === proposedEntries.length) {
+                          setSelectedProposedIds(new Set());
+                        } else {
+                          setSelectedProposedIds(new Set(proposedEntries.map(e => e.tempId)));
+                        }
                       }}
-                      className="px-2 py-1 bg-amber-600/20 border border-amber-500/30 text-amber-500 rounded text-[10px] font-bold flex items-center gap-1 hover:bg-amber-600/30 transition-all font-sans"
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300 transition-all font-semibold cursor-pointer"
                     >
-                      <i className="fa-solid fa-plus text-[9px]"></i> Eintrag hinzufügen
+                      {selectedProposedIds.size === proposedEntries.length ? 'Alle abwählen' : 'Alle auswählen'}
+                    </button>
+                    <button
+                      onClick={handleSaveSelectedOmniEntries}
+                      disabled={selectedProposedIds.size === 0}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/20 cursor-pointer"
+                    >
+                      <i className="fa-solid fa-floppy-disk"></i>
+                      <span>Ausgewählte ({selectedProposedIds.size}) im Codex speichern</span>
                     </button>
                   </div>
+                </div>
 
-                  {(!editForm.details?.relationships || editForm.details.relationships.length === 0) ? (
-                    <div className="text-[11px] text-slate-500 italic px-1 py-1">
-                      Bisher keine Beziehungen angelegt. Klicke oben auf "+ Eintrag hinzufügen", um eine zu erstellen.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {editForm.details.relationships.map((rel: any, idx: number) => (
-                        <div key={rel.id || `rel-${idx}`} className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 flex flex-col gap-3 relative animate-in fade-in duration-150">
+                <div className="grid gap-4">
+                  {proposedEntries.map((entry) => {
+                    const isSelected = selectedProposedIds.has(entry.tempId);
+                    
+                    const handleToggleSelect = () => {
+                      const updated = new Set(selectedProposedIds);
+                      if (isSelected) {
+                        updated.delete(entry.tempId);
+                      } else {
+                        updated.add(entry.tempId);
+                      }
+                      setSelectedProposedIds(updated);
+                    };
+
+                    const handleFieldChange = (field: 'title' | 'description', value: string) => {
+                      setProposedEntries(prev => prev.map(e => e.tempId === entry.tempId ? { ...e, [field]: value } : e));
+                    };
+
+                    return (
+                      <div 
+                        key={entry.tempId}
+                        className={`bg-slate-900 border transition-all rounded-2xl overflow-hidden p-5 flex flex-col gap-4 relative ${
+                          isSelected ? 'border-indigo-500/40 bg-slate-900/95 shadow-lg shadow-indigo-950/10' : 'border-slate-800/80 opacity-70'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 justify-between">
+                          <div className="flex items-center gap-3">
+                            <input 
+                              type="checkbox" 
+                              checked={isSelected}
+                              onChange={handleToggleSelect}
+                              className="rounded border-slate-700 bg-slate-950 text-indigo-500 focus:ring-0 cursor-pointer w-4 h-4 accent-indigo-500"
+                            />
+                            
+                            <span className={`text-[10px] uppercase font-black tracking-wider px-2 py-1 rounded-md flex items-center gap-1.5 ${
+                              entry.category === 'Charaktere' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                              entry.category === 'Gegner' ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                              entry.category === 'Orte' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                              entry.category === 'Fraktionen' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                              entry.category === 'Gegenstände' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' :
+                              'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                            }`}>
+                              {entry.category === 'Charaktere' && <i className="fa-solid fa-users text-[8px]"></i>}
+                              {entry.category === 'Gegner' && <i className="fa-solid fa-skull text-[8px]"></i>}
+                              {entry.category === 'Orte' && <i className="fa-solid fa-map text-[8px]"></i>}
+                              {entry.category === 'Fraktionen' && <i className="fa-solid fa-flag text-[8px]"></i>}
+                              {entry.category === 'Gegenstände' && <i className="fa-solid fa-khanda text-[8px]"></i>}
+                              {entry.category === 'Verbotenes Wissen' && <i className="fa-solid fa-eye-slash text-[8px]"></i>}
+                              {entry.category === 'Weltregeln' && <i className="fa-solid fa-scale-balanced text-[8px]"></i>}
+                              {entry.category === 'Zeitlinie' && <i className="fa-solid fa-timeline text-[8px]"></i>}
+                              {entry.category}
+                            </span>
+
+                            <input 
+                              type="text"
+                              value={entry.title || ''}
+                              onChange={e => handleFieldChange('title', e.target.value)}
+                              className="bg-transparent text-white font-bold text-sm outline-none border-b border-transparent focus:border-indigo-500 px-1 py-0.5"
+                              placeholder="Name oder Titel"
+                            />
+                          </div>
+
                           <button 
-                            type="button"
                             onClick={() => {
-                              updateDetail('relationships', (editForm.details?.relationships || []).filter((r: any) => r.id !== rel.id));
+                              setProposedEntries(prev => prev.filter(e => e.tempId !== entry.tempId));
+                              const updated = new Set(selectedProposedIds);
+                              updated.delete(entry.tempId);
+                              setSelectedProposedIds(updated);
                             }}
-                            className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-red-400 hover:bg-red-400/20 rounded transition-colors text-xs"
+                            className="text-slate-500 hover:text-rose-400 text-xs transition-all cursor-pointer"
+                            title="Aus der Liste entfernen"
                           >
                             <i className="fa-solid fa-trash"></i>
                           </button>
-                          
-                          <div className="text-xs font-bold text-slate-400 mb-1">Beziehung #{idx + 1}</div>
-                          
-                          <div className="flex flex-col gap-4">
-                            {/* Charakter / Ziel */}
-                            <div className="flex flex-col gap-1">
-                              <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Charakter / Ziel</label>
-                              {(() => {
-                                const codexCharacters = lore.filter(item => (item.category === 'Charaktere' || item.category === 'Gegner') && item.title !== editForm.title && (playerName ? item.title?.trim().toLowerCase() !== playerName.trim().toLowerCase() : true));
-                                const isCustom = rel._isCustom || (rel.targetCharacter && !codexCharacters.some(c => c.title === rel.targetCharacter) && (playerName ? rel.targetCharacter !== playerName : true));
-                                
-                                return !isCustom ? (
-                                  <div className="flex gap-1.5 w-full">
-                                    <select
-                                      value={rel.targetCharacter || ''}
-                                      onChange={e => {
-                                        const val = e.target.value;
-                                        const newList = [...(editForm.details?.relationships || [])];
-                                        if (val === '__custom__') {
-                                          newList[idx] = { ...rel, targetCharacter: '', _isCustom: true };
-                                        } else {
-                                          newList[idx] = { ...rel, targetCharacter: val, _isCustom: false };
-                                        }
-                                        updateDetail('relationships', newList);
-                                      }}
-                                      className="flex-1 bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-sm outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer h-[38px] w-full"
-                                    >
-                                      <option value="">-- Wählen --</option>
-                                      {playerName && <option value={playerName}>{playerName} (Spieler)</option>}
-                                      {codexCharacters.length > 0 && (
-                                        <optgroup label="Codex Charaktere">
-                                          {codexCharacters.map(c => (
-                                            <option key={c.id} value={c.title}>{c.title}</option>
-                                          ))}
-                                        </optgroup>
-                                      )}
-                                      <option value="__custom__">✍️ Freitext...</option>
-                                    </select>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const newList = [...(editForm.details?.relationships || [])];
-                                        newList[idx] = { ...rel, targetCharacter: '', _isCustom: true };
-                                        updateDetail('relationships', newList);
-                                      }}
-                                      title="Freitext eingeben"
-                                      className="px-2.5 bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white border border-slate-700 rounded-lg transition-all flex items-center h-[38px]"
-                                    >
-                                      <i className="fa-solid fa-pen text-[9px]"></i>
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <div className="flex gap-1.5 w-full">
-                                    <input
-                                      type="text"
-                                      placeholder="Name / Gruppe..."
-                                      value={rel.targetCharacter || ''}
-                                      onChange={e => {
-                                        const newList = [...(editForm.details?.relationships || [])];
-                                        newList[idx] = { ...rel, targetCharacter: e.target.value };
-                                        updateDetail('relationships', newList);
-                                      }}
-                                      className="flex-1 bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-sm outline-none focus:ring-1 focus:ring-amber-500 h-[38px] w-full"
-                                    />
-                                    {(playerName || codexCharacters.length > 0) && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const newList = [...(editForm.details?.relationships || [])];
-                                          newList[idx] = { ...rel, targetCharacter: '', _isCustom: false };
-                                          updateDetail('relationships', newList);
-                                        }}
-                                        title="Zurück zur Auswahl"
-                                        className="px-2.5 bg-slate-800 hover:bg-slate-750 text-slate-400 hover:text-white border border-slate-700 rounded-lg transition-all flex items-center h-[38px]"
-                                      >
-                                        <i className="fa-solid fa-list text-[10px]"></i>
-                                      </button>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Beschreibung</label>
+                          <AutoExpandingTextarea 
+                            value={entry.description || ''}
+                            onChange={e => handleFieldChange('description', e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800/80 rounded-lg p-3 text-slate-300 text-xs min-h-[70px] outline-none focus:border-indigo-500 transition-all"
+                            placeholder="Beschreibung"
+                          />
+                        </div>
+
+                        {entry.details && Object.keys(entry.details).length > 0 && (
+                          <div className="bg-slate-950/60 rounded-xl p-3 border border-slate-800/50 flex flex-col gap-2">
+                            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Erfasste Parameter:</span>
+                            <div className="flex flex-wrap gap-2 text-[11px]">
+                              {entry.category === 'Charaktere' && (
+                                <>
+                                  {entry.details.role && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Rolle:</strong> {entry.details.role}</span>}
+                                  {entry.details.race && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Rasse:</strong> {entry.details.race}</span>}
+                                  {entry.details.age && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Alter:</strong> {entry.details.age}</span>}
+                                  {entry.details.faction && <span className="bg-amber-950/20 border border-amber-800/20 px-2 py-0.5 rounded text-amber-300"><strong className="text-amber-400/80">Fraktion:</strong> {entry.details.faction}</span>}
+                                  {entry.details.skills && <span className="bg-indigo-950/20 border border-indigo-800/20 px-2 py-0.5 rounded text-indigo-300"><strong className="text-indigo-400/80">Kräfte:</strong> {entry.details.skills}</span>}
+                                </>
+                              )}
+                              {entry.category === 'Orte' && (
+                                <>
+                                  {entry.details.type && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Typ:</strong> {entry.details.type}</span>}
+                                  {entry.details.climate && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Klima:</strong> {entry.details.climate}</span>}
+                                  {entry.details.ruler && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Herrscher:</strong> {entry.details.ruler}</span>}
+                                  {entry.details.population && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Einwohner:</strong> {entry.details.population}</span>}
+                                </>
+                              )}
+                              {entry.category === 'Fraktionen' && (
+                                <>
+                                  {entry.details.leader && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Anführer:</strong> {entry.details.leader}</span>}
+                                  {entry.details.leadershipStructure && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Struktur:</strong> {entry.details.leadershipStructure}</span>}
+                                  {entry.details.foundingReason && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Ursprung:</strong> {entry.details.foundingReason}</span>}
+                                  {entry.details.currentGoal && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Ziel:</strong> {entry.details.currentGoal}</span>}
+                                  {entry.details.philosophy && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Credo:</strong> {entry.details.philosophy}</span>}
+                                  {entry.details.members && entry.details.members.length > 0 && <span className="bg-amber-950/30 border border-amber-800/40 px-2 py-0.5 rounded text-amber-300"><strong className="text-amber-400">Mitglieder:</strong> {entry.details.members.length}</span>}
+                                </>
+                              )}
+                              {entry.category === 'Gegenstände' && (
+                                <>
+                                  {entry.details.itemType && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Typ:</strong> {entry.details.itemType}</span>}
+                                  {entry.details.rarity && <span className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-slate-300"><strong className="text-slate-400">Seltenheit:</strong> {entry.details.rarity}</span>}
+                                </>
+                              )}
                             </div>
-                            
-                            {/* Details Row under the target character select */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {/* Beziehung zu ihm/ihr */}
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Beziehung zu ihm/ihr</label>
-                                <AutoExpandingTextarea
-                                  rows={3}
-                                  value={rel.type || ''}
-                                  onChange={e => {
-                                    const newList = [...(editForm.details?.relationships || [])];
-                                    newList[idx] = { ...rel, type: e.target.value };
-                                    updateDetail('relationships', newList);
-                                  }}
-                                  placeholder="z.B. Rivalin, Gefährte"
-                                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm outline-none focus:ring-1 focus:ring-amber-500 min-h-[96px]"
-                                />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex justify-end p-4 bg-slate-900/40 border border-slate-800 rounded-xl mt-2">
+                  <button
+                    onClick={handleSaveSelectedOmniEntries}
+                    disabled={selectedProposedIds.size === 0}
+                    className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 text-white font-bold rounded-xl text-sm transition-all flex items-center gap-2 shadow-lg shadow-emerald-950/30 cursor-pointer"
+                  >
+                    <i className="fa-solid fa-floppy-disk"></i>
+                    <span>Ausgewählte ({selectedProposedIds.size}) im Codex speichern</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : activeCategory === 'Orte' ? (
+          <div className="flex flex-col gap-6">
+            <div className="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 gap-1.5 self-start shadow-xl">
+              <button
+                type="button"
+                onClick={() => setOrteSubTab('map')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  orteSubTab === 'map'
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+              >
+                <i className="fa-solid fa-map"></i>
+                <span>Weltkarte</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrteSubTab('configurator')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  orteSubTab === 'configurator'
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+                }`}
+              >
+                <i className="fa-solid fa-earth-europe"></i>
+                <span>Welt-Konfigurator</span>
+              </button>
+            </div>
+
+            {orteSubTab === 'map' ? (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <button
+                        onClick={() => setIsMapLevelDropdownOpen(!isMapLevelDropdownOpen)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-slate-950 border border-slate-700 hover:border-slate-600 rounded-xl text-xs font-bold text-slate-200 shadow-sm cursor-pointer"
+                      >
+                        <i className={`fa-solid ${mapZoomLevel === 'macro' ? 'fa-earth-americas text-sky-400' : mapZoomLevel === 'meso' ? 'fa-mountain text-emerald-400' : mapZoomLevel === 'micro' ? 'fa-city text-amber-400' : 'fa-dungeon text-purple-400'}`}></i>
+                        <span>
+                          {mapZoomLevel === 'macro' && 'Welt'}
+                          {mapZoomLevel === 'meso' && 'Region'}
+                          {mapZoomLevel === 'micro' && 'Ort'}
+                          {mapZoomLevel === 'building' && 'Gebäude'}
+                        </span>
+                        <i className={`fa-solid fa-chevron-down text-[10px] text-slate-400 ml-1 transition-transform ${isMapLevelDropdownOpen ? 'rotate-180' : ''}`}></i>
+                      </button>
+
+                      {isMapLevelDropdownOpen && (
+                        <div className="absolute top-full left-0 mt-1.5 w-44 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden py-1">
+                          <button
+                            onClick={() => { setMapZoomLevel('macro'); setSelectedMacroId(null); setSelectedMesoId(null); setSelectedMicroId(null); setIsMapLevelDropdownOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-900 transition-colors ${mapZoomLevel === 'macro' ? 'bg-sky-950/40 text-sky-300 font-bold' : 'text-slate-300'}`}
+                          >
+                            <i className="fa-solid fa-earth-americas text-sky-400 w-4"></i>
+                            <span>Welt</span>
+                          </button>
+                          <button
+                            onClick={() => { setMapZoomLevel('meso'); setSelectedMesoId(null); setSelectedMicroId(null); setIsMapLevelDropdownOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-900 transition-colors ${mapZoomLevel === 'meso' ? 'bg-emerald-950/40 text-emerald-300 font-bold' : 'text-slate-300'}`}
+                          >
+                            <i className="fa-solid fa-mountain text-emerald-400 w-4"></i>
+                            <span>Region</span>
+                          </button>
+                          <button
+                            onClick={() => { setMapZoomLevel('micro'); setSelectedMicroId(null); setIsMapLevelDropdownOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-900 transition-colors ${mapZoomLevel === 'micro' ? 'bg-amber-950/40 text-amber-300 font-bold' : 'text-slate-300'}`}
+                          >
+                            <i className="fa-solid fa-city text-amber-400 w-4"></i>
+                            <span>Ort</span>
+                          </button>
+                          <button
+                            onClick={() => { setMapZoomLevel('building'); setIsMapLevelDropdownOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-900 transition-colors ${mapZoomLevel === 'building' ? 'bg-purple-950/40 text-purple-300 font-bold' : 'text-slate-300'}`}
+                          >
+                            <i className="fa-solid fa-dungeon text-purple-400 w-4"></i>
+                            <span>Gebäude</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1 bg-slate-950 px-2 py-1 rounded-xl border border-slate-800 text-xs">
+                      <button
+                        onClick={() => handleZoom(Math.max(0.5, mapScale - 0.2))}
+                        className="px-2 py-0.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
+                        title="Verkleinern"
+                      >
+                        <i className="fa-solid fa-minus"></i>
+                      </button>
+                      <span className="text-[11px] font-mono text-slate-300 px-1">{Math.round(mapScale * 100)}%</span>
+                      <button
+                        onClick={() => handleZoom(Math.min(3, mapScale + 0.2))}
+                        className="px-2 py-0.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded"
+                        title="Vergrößern"
+                      >
+                        <i className="fa-solid fa-plus"></i>
+                      </button>
+                      <button
+                        onClick={() => { setMapScale(1); setPanOffset({ x: 0, y: 0 }); }}
+                        className="ml-1 text-[10px] text-slate-500 hover:text-slate-300 px-1.5 py-0.5 hover:bg-slate-800 rounded"
+                        title="Ansicht zurücksetzen"
+                      >
+                        Reset
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => setIsCustomizingGrid(!isCustomizingGrid)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                        isCustomizingGrid
+                          ? 'bg-amber-600 border-amber-500 text-white shadow-lg shadow-amber-950/30'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <i className="fa-solid fa-border-all"></i>
+                      <span>Gitter ({mapGridSizes[mapZoomLevel]?.width || 10}x{mapGridSizes[mapZoomLevel]?.height || 10})</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <button
+                        onClick={() => setIsStamperDropdownOpen(!isStamperDropdownOpen)}
+                        className={`flex items-center gap-2 px-3 py-1.5 border rounded-xl text-xs font-bold transition-all ${
+                          activePlacingClassAsset
+                            ? 'bg-amber-950/60 border-amber-500 text-amber-300'
+                            : 'bg-slate-950 border-slate-700 hover:border-slate-600 text-slate-200'
+                        }`}
+                      >
+                        <i className="fa-solid fa-stamp text-amber-400"></i>
+                        <span>{activePlacingClassAsset ? activePlacingClassAsset.name : 'Objekt platzieren'}</span>
+                        <i className={`fa-solid fa-chevron-down text-[10px] text-slate-400 ml-1 transition-transform ${isStamperDropdownOpen ? 'rotate-180' : ''}`}></i>
+                      </button>
+
+                      {isStamperDropdownOpen && (
+                        <div className="absolute right-0 top-full mt-1.5 w-64 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden py-1 max-h-80 overflow-y-auto">
+                          {WORLD_MAP_CLASSES.map(cls => (
+                            <div key={cls.id} className="border-b border-slate-900 last:border-0">
+                              <div className="px-3 py-1.5 bg-slate-900/60 text-[10px] font-bold text-slate-400 flex items-center gap-2">
+                                <i className={cls.icon}></i>
+                                <span>{cls.label}</span>
                               </div>
-                              
-                              {/* Verhalten (Conduct) */}
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Verhalten (Conduct)</label>
-                                <AutoExpandingTextarea
-                                  rows={3}
-                                  value={rel.behavior || ''}
-                                  onChange={e => {
-                                    const newList = [...(editForm.details?.relationships || [])];
-                                    newList[idx] = { ...rel, behavior: e.target.value };
-                                    updateDetail('relationships', newList);
+                              {cls.items.map(item => (
+                                <button
+                                  key={item.name}
+                                  onClick={() => {
+                                    setActivePlacingClassAsset({ name: item.name, icon: item.icon, className: cls.id });
+                                    setIsStamperDropdownOpen(false);
                                   }}
-                                  placeholder="z.B. Distanziert aber treu"
-                                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white text-sm outline-none focus:ring-1 focus:ring-amber-500 min-h-[96px]"
-                                />
-                              </div>
+                                  className="w-full text-left px-4 py-2 text-xs flex items-center gap-2.5 hover:bg-slate-900 text-slate-300 transition-colors"
+                                >
+                                  <i className={`${item.icon} text-amber-400 w-4`}></i>
+                                  <div>
+                                    <div className="font-semibold text-slate-200">{item.name}</div>
+                                    <div className="text-[9px] text-slate-500">{item.description}</div>
+                                  </div>
+                                </button>
+                              ))}
                             </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => setIsShowingJSONConnections(!isShowingJSONConnections)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                        isShowingJSONConnections
+                          ? 'bg-indigo-600 border-indigo-500 text-white'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <i className="fa-solid fa-code"></i>
+                      <span>Hierarchie JSON</span>
+                    </button>
+                  </div>
+                </div>
+
+                {isCustomizingGrid && (
+                  <div className="bg-slate-950 border border-amber-900/40 p-4 rounded-xl flex flex-wrap items-center gap-4 animate-in fade-in duration-200">
+                    <span className="text-xs font-bold text-amber-400">Gittergröße für {mapZoomLevel.toUpperCase()}:</span>
+                    <div className="flex items-center gap-2 text-xs text-slate-300">
+                      <span>Breite:</span>
+                      <input
+                        type="number"
+                        min="4"
+                        max="50"
+                        value={mapGridSizes[mapZoomLevel]?.width || 10}
+                        onChange={e => {
+                          const val = Math.max(4, Math.min(50, parseInt(e.target.value) || 10));
+                          setMapGridSizes(prev => {
+                            const next = { ...prev, [mapZoomLevel]: { ...prev[mapZoomLevel], width: val } };
+                            localStorage.setItem('adventureforge_map_grid_sizes', JSON.stringify(next));
+                            return next;
+                          });
+                        }}
+                        className="w-16 bg-slate-900 border border-slate-700 px-2 py-1 rounded text-center font-mono"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-slate-300">
+                      <span>Höhe:</span>
+                      <input
+                        type="number"
+                        min="4"
+                        max="50"
+                        value={mapGridSizes[mapZoomLevel]?.height || 10}
+                        onChange={e => {
+                          const val = Math.max(4, Math.min(50, parseInt(e.target.value) || 10));
+                          setMapGridSizes(prev => {
+                            const next = { ...prev, [mapZoomLevel]: { ...prev[mapZoomLevel], height: val } };
+                            localStorage.setItem('adventureforge_map_grid_sizes', JSON.stringify(next));
+                            return next;
+                          });
+                        }}
+                        className="w-16 bg-slate-900 border border-slate-700 px-2 py-1 rounded text-center font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isShowingJSONConnections && (
+                  <div className="bg-slate-950 border border-indigo-900/40 p-4 rounded-xl flex flex-col gap-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-indigo-400">Hierarchische Struktur aller Orte:</span>
+                      <button onClick={() => navigator.clipboard.writeText(hierarchicalConnectionsJSON)} className="text-[10px] bg-slate-900 border border-slate-700 px-2 py-1 rounded text-slate-300 hover:text-white">
+                        Kopieren
+                      </button>
+                    </div>
+                    <pre className="text-[10px] text-slate-400 font-mono bg-slate-900 p-3 rounded max-h-48 overflow-y-auto">
+                      {hierarchicalConnectionsJSON}
+                    </pre>
+                  </div>
+                )}
+
+                <div 
+                  ref={mapContainerRef}
+                  onPointerDown={handleMapBgPointerDown}
+                  onPointerMove={handleMapPointerMove}
+                  onPointerUp={handleMapPointerUp}
+                  className="relative w-full aspect-[16/10] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 cursor-crosshair select-none touch-none shadow-2xl"
+                >
+                  <NauticalMapBackground
+                    lore={lore}
+                    mapZoomLevel={mapZoomLevel}
+                    selectedMacroId={selectedMacroId || undefined}
+                    selectedMesoId={selectedMesoId || undefined}
+                    selectedMicroId={selectedMicroId || undefined}
+                    worldTitle={worldTitle}
+                    world={world}
+                  />
+
+                  <div 
+                    className="absolute inset-0 transition-transform duration-75 origin-top-left"
+                    style={{
+                      transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${mapScale})`,
+                      width: '100%',
+                      height: '100%'
+                    }}
+                  >
+                    <div 
+                      className="absolute inset-0 grid opacity-30 pointer-events-none"
+                      style={{
+                        gridTemplateColumns: `repeat(${backgroundGridWidth}, 1fr)`,
+                        gridTemplateRows: `repeat(${backgroundGridHeight}, 1fr)`
+                      }}
+                    >
+                      {backgroundTiles.map((tile, idx) => (
+                        <div 
+                          key={`tile-${idx}`} 
+                          className="border border-slate-800/40 relative flex items-center justify-center text-[8px] font-mono text-slate-600/60"
+                          style={{
+                            backgroundColor: getTileColor(tile.terrainId)
+                          }}
+                        >
+                        </div>
+                      ))}
+                    </div>
+
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none">
+                      {lore.filter(l => l.category === 'Orte').map((place) => {
+                        if (!place.details?.coordinates) return null;
+                        const parent = lore.find(p => p.id === place.details?.parentPlaceId || p.title === place.details?.parentPlaceId);
+                        if (!parent || !parent.details?.coordinates) return null;
+                        
+                        return (
+                          <line
+                            key={`conn-${place.id}-${parent.id}`}
+                            x1={`${place.details.coordinates.x}%`}
+                            y1={`${place.details.coordinates.y}%`}
+                            x2={`${parent.details.coordinates.x}%`}
+                            y2={`${parent.details.coordinates.y}%`}
+                            stroke="#475569"
+                            strokeWidth="1.5"
+                            strokeDasharray="4 4"
+                            opacity="0.6"
+                          />
+                        );
+                      })}
+
+                      {combatEffects.map(eff => (
+                        <circle
+                          key={`eff-circle-${eff.id}`}
+                          cx={`${eff.x}%`}
+                          cy={`${eff.y}%`}
+                          r={`${eff.radius * 2}%`}
+                          fill={eff.type === 'magma' ? 'rgba(239, 68, 68, 0.25)' : eff.type === 'eis' ? 'rgba(6, 182, 212, 0.25)' : eff.type === 'feuer' ? 'rgba(249, 115, 22, 0.25)' : eff.type === 'blitze' ? 'rgba(234, 179, 8, 0.25)' : 'rgba(168, 85, 247, 0.25)'}
+                          stroke={eff.type === 'magma' ? '#ef4444' : eff.type === 'eis' ? '#06b6d4' : eff.type === 'feuer' ? '#f97316' : eff.type === 'blitze' ? '#eab308' : '#a855f7'}
+                          strokeWidth="1"
+                          strokeDasharray="2 2"
+                        />
+                      ))}
+                    </svg>
+
+                    {combatEffects.map(eff => (
+                      <div
+                        key={`eff-marker-${eff.id}`}
+                        style={{
+                          left: `${eff.x}%`,
+                          top: `${eff.y}%`,
+                          transform: 'translate(-50%, -50%)'
+                        }}
+                        className="absolute z-20 pointer-events-auto cursor-pointer group"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCombatEffects(prev => prev.filter(item => item.id !== eff.id));
+                        }}
+                        title={`${eff.description} (Klick zum Entfernen)`}
+                      >
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs shadow-lg ${
+                          eff.type === 'magma' ? 'bg-red-600 text-white shadow-red-500/50 animate-pulse' :
+                          eff.type === 'eis' ? 'bg-cyan-500 text-slate-950 shadow-cyan-400/50' :
+                          eff.type === 'feuer' ? 'bg-orange-500 text-white shadow-orange-500/50' :
+                          eff.type === 'blitze' ? 'bg-yellow-400 text-slate-950 shadow-yellow-400/50 animate-bounce' :
+                          'bg-purple-600 text-white shadow-purple-500/50'
+                        }`}>
+                          <i className={`fa-solid ${
+                            eff.type === 'magma' ? 'fa-fire' :
+                            eff.type === 'eis' ? 'fa-snowflake' :
+                            eff.type === 'feuer' ? 'fa-fire-flame-curved' :
+                            eff.type === 'blitze' ? 'fa-bolt' :
+                            'fa-skull'
+                          }`}></i>
+                        </div>
+                      </div>
+                    ))}
+
+                    {lore.filter(l => l.category === 'Orte').map((node) => {
+                      const lvl = node.details?.mapLevel || 'meso';
+                      let isVisible = false;
+                      if (mapZoomLevel === 'macro') isVisible = lvl === 'macro';
+                      else if (mapZoomLevel === 'meso') isVisible = lvl === 'meso' && (!selectedMacroId || node.details?.parentPlaceId === selectedMacroId);
+                      else if (mapZoomLevel === 'micro') isVisible = lvl === 'micro' && (!selectedMesoId || node.details?.parentPlaceId === selectedMesoId);
+                      else if (mapZoomLevel === 'building') isVisible = lvl === 'building' && (!selectedMicroId || node.details?.parentPlaceId === selectedMicroId);
+
+                      if (!isVisible) return null;
+
+                      const coords = node.details?.coordinates || { x: 50, y: 50 };
+                      const isSelected = selectedNodeId === node.id;
+                      const isTarget = node.details?.isActiveTarget;
+
+                      return (
+                        <div
+                          key={node.id}
+                          data-node="true"
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            setDraggedNodeId(node.id);
+                            setSelectedNodeId(node.id);
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedNodeId(node.id);
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            if (lvl === 'macro') {
+                              setSelectedMacroId(node.id);
+                              setMapZoomLevel('meso');
+                            } else if (lvl === 'meso') {
+                              setSelectedMesoId(node.id);
+                              setMapZoomLevel('micro');
+                            } else if (lvl === 'micro') {
+                              setSelectedMicroId(node.id);
+                              setMapZoomLevel('building');
+                            }
+                          }}
+                          style={{
+                            left: `${coords.x}%`,
+                            top: `${coords.y}%`,
+                            transform: 'translate(-50%, -50%)'
+                          }}
+                          className={`absolute z-30 cursor-grab active:cursor-grabbing group flex flex-col items-center select-none transition-transform ${
+                            isSelected ? 'scale-110 z-40' : ''
+                          }`}
+                        >
+                          <div className={`relative px-2.5 py-1.5 rounded-xl border flex items-center gap-1.5 shadow-xl backdrop-blur-md transition-all ${
+                            isTarget 
+                              ? 'bg-amber-600/90 border-amber-300 text-white ring-4 ring-amber-500/40 font-bold'
+                              : isSelected
+                                ? 'bg-indigo-600/90 border-indigo-300 text-white ring-2 ring-indigo-400/50'
+                                : 'bg-slate-900/85 border-slate-700/80 text-slate-200 hover:border-slate-500'
+                          }`}>
+                            <i className={`${node.details?.icon || 'fa-solid fa-location-dot'} text-xs ${
+                              isTarget ? 'text-white' : isSelected ? 'text-indigo-200' : 'text-amber-400'
+                            }`}></i>
+                            <span className="text-[11px] font-medium tracking-tight whitespace-nowrap">{node.title}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {getTacticalClashes().length > 0 && (
+                  <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-col gap-2">
+                    <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                      <i className="fa-solid fa-triangle-exclamation text-amber-400"></i>
+                      <span>Aktive Umwelt- und Kampfeffekte</span>
+                    </span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {getTacticalClashes().map((clash, idx) => (
+                        <div key={idx} className="bg-slate-950 p-3 rounded-lg border border-slate-800 flex items-start gap-3">
+                          <i className={`${clash.icon} text-amber-400 mt-1`}></i>
+                          <div>
+                            <div className="text-xs font-bold text-slate-200">{clash.label} ({clash.cell})</div>
+                            <div className="text-[11px] text-slate-400 mt-0.5">{clash.desc}</div>
                           </div>
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
-                <div className="sm:col-span-2 flex flex-col gap-4 mt-2">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <h4 className="text-sm font-bold text-slate-300">Fähigkeiten & Kräfte</h4>
-                    <button 
-                      onClick={() => updateDetail('abilities', [...(editForm.details?.abilities || []), { id: Date.now().toString(), source: '', cost: '', description: '', techniques: '' }])}
-                      className="px-2 py-1 bg-amber-600/20 border border-amber-500/30 text-amber-500 rounded text-[10px] font-bold flex items-center gap-1 hover:bg-amber-600/30 transition-all"
-                    >
-                      <i className="fa-solid fa-plus"></i> Kraft hinzufügen
-                    </button>
-                  </div>
-                  
-                  {editForm.details?.abilities && editForm.details.abilities.map((ability: any, idx: number) => (
-                    <div key={ability.id || `ability-${idx}`} className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 flex flex-col gap-3 relative">
-                      <button 
-                        onClick={() => updateDetail('abilities', editForm.details?.abilities?.filter((a: any) => a.id !== ability.id))}
-                        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-red-400 hover:bg-red-400/20 rounded transition-colors text-xs"
-                      >
-                        <i className="fa-solid fa-trash"></i>
-                      </button>
-                      <div className="text-xs font-bold text-slate-400 mb-1">Kraft / Fähigkeit #{idx + 1}</div>
-                      {(() => {
-                        const customSourceNames = world?.customResourceMappings?.map((m: any) => m.name) || [];
-                        const sourceVal = ability.source || '';
-                        const isSourceInOptions = customSourceNames.includes(sourceVal);
-                        const selectedSourceOpt = sourceVal === '' ? '' : (isSourceInOptions ? sourceVal : '__custom__');
-
-                        const customCostOptions = world?.costResources?.map((r: any) => r.name) || [];
-                        const defaultCostFallbacks = customCostOptions.length > 0 ? customCostOptions : ["MP", "Ausdauer"];
-                        const costVal = ability.cost || '';
-                        const isCostInOptions = defaultCostFallbacks.includes(costVal);
-                        const selectedCostOpt = costVal === '' ? '' : (isCostInOptions ? costVal : '__custom__');
-
-                        return (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {/* Kraftquelle */}
-                            <div className="flex flex-col gap-1.5">
-                              <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Kraftquelle</label>
-                              <select 
-                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 cursor-pointer h-[38px]"
-                                value={sourceVal}
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? {...a, source: val} : a));
-                                }}
-                              >
-                                <option value="">-- Wählen (Keine) --</option>
-                                {customSourceNames.length > 0 && (
-                                  <optgroup label="Spezial-Ressourcen / Kraftquellen">
-                                    {customSourceNames.map((name: string, mIdx: number) => <option key={`lore-custom-${name}-${mIdx}`} value={name}>{name}</option>)}
-                                  </optgroup>
-                                )}
-                              </select>
-                            </div>
-
-                            {/* Kosten / Verbrauch */}
-                            <div className="flex flex-col gap-1.5">
-                              <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Kosten / Verbrauch</label>
-                              <select 
-                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 cursor-pointer h-[38px]"
-                                value={costVal}
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? {...a, cost: val} : a));
-                                }}
-                              >
-                                <option value="">-- Wählen (Keine) --</option>
-                                <optgroup label="Kosten- & Verbrauchs-Ressourcen">
-                                  {defaultCostFallbacks.map((name: string, idx: number) => <option key={`lore-cost-${name}-${idx}`} value={name}>{name}</option>)}
-                                </optgroup>
-                              </select>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Fähigkeit (Beschreibung)</label>
-                        <textarea className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white min-h-[60px] text-sm outline-none focus:border-amber-500" placeholder="z.B. Mystische Zoan Frucht Modell Eis Fuchs..." value={ability.description || ''} onChange={e => updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? {...a, description: e.target.value} : a))} />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center justify-between">
-                          <label className="text-[10px] text-slate-500 font-bold uppercase ml-1">Techniken</label>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              const activeWorld = world || {};
-                              const defaultRules = activeWorld.techniqueRules || {
-                                Angriff: { type: 'Angriff', defaultSubtype: 'Einzelschuss', mainParameter: 'Stärke', progressionCostValue: 100, costResourceName: 'Mana', costValue: 10, levelScaling: 'Linear (+10% Schaden pro Level)' }
-                              };
-                              const rule = defaultRules['Angriff'] || {
-                                type: 'Angriff',
-                                defaultSubtype: 'Einzelschuss',
-                                mainParameter: 'Stärke',
-                                progressionCostValue: 100,
-                                costResourceName: 'Mana',
-                                costValue: 10,
-                                levelScaling: 'Linear (+10% Schaden pro Level)'
-                              };
-                              const progLogic = activeWorld.techniqueProgressionLogic || 'ep';
-                              const newTech = {
-                                id: Date.now().toString(),
-                                name: '',
-                                type: 'Angriff' as const,
-                                subtype: rule.defaultSubtype,
-                                description: rule.levelScaling,
-                                level: 1,
-                                maxLevel: 10,
-                                xp: 0,
-                                xpNeeded: progLogic === 'ep' ? (typeof rule.progressionCostValue === 'number' ? rule.progressionCostValue : 100) : undefined,
-                                xpGainPerUse: progLogic === 'ep' ? 10 : undefined,
-                                trainingRequired: progLogic === 'training' ? (typeof rule.progressionCostValue === 'number' ? rule.progressionCostValue : 3) : undefined,
-                                trainingProgress: progLogic === 'training' ? 0 : undefined,
-                                milestoneRequirement: progLogic === 'milestone' ? String(rule.progressionCostValue || 'Nach Bosskampf') : undefined,
-                                staticCost: progLogic === 'static' ? String(rule.progressionCostValue || '5 FP') : undefined,
-                                cost: `${rule.costValue} ${rule.costResourceName}`,
-                                tier: 'Tier 1',
-                                baseValue: 0,
-                                costResourceName: rule.costResourceName || 'Mana',
-                                costValue: rule.costValue || 10,
-                                costFormula: 'absolut'
-                              };
-                              const newTechList = [...(ability.techniqueList || []), newTech];
-                              updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? {...a, techniqueList: newTechList} : a));
-                            }}
-                            className="text-[10px] text-indigo-400 font-bold hover:text-indigo-300 transition-colors"
-                          >
-                            + Technik hinzufügen
-                          </button>
-                        </div>
-                        {(!ability.techniqueList || ability.techniqueList.length === 0) ? (
-                          <textarea className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white min-h-[60px] text-sm outline-none focus:border-amber-500" placeholder="z.B. Eis Atem, Angriff mit Eiszapfen..." value={ability.techniques || ''} onChange={e => updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? {...a, techniques: e.target.value} : a))} />
-                        ) : (
-                          <div className="flex flex-col gap-2.5 mt-1">
-                            {ability.techniqueList.map((tech: any, tIdx: number) => (
-                              <div key={tech.id || `tech-${tIdx}`} className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2 relative group">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-[10px] text-slate-500 font-extrabold uppercase">Technik #{tIdx + 1}</span>
-                                  <button 
-                                    type="button"
-                                    onClick={() => {
-                                      const newTechList = ability.techniqueList?.filter((t: any) => t.id !== tech.id) || [];
-                                      updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList, techniques: newTechList.map((t:any) => t.name).join(', ') } : a));
-                                    }}
-                                    className="text-[10px] text-red-400 hover:text-red-300 font-bold flex items-center gap-1 transition-colors px-2 py-0.5 rounded bg-red-500/10 hover:bg-red-500/20"
-                                  >
-                                    <i className="fa-solid fa-trash-can text-[9px]"></i> Löschen
-                                  </button>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
-                                  {/* Name der Technik */}
-                                  <div className="md:col-span-5 flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Name der Technik</label>
-                                    <AutoExpandingTextarea 
-                                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-600" 
-                                      placeholder="z.B. Eis Atem"
-                                      value={tech.name || ''}
-                                      onChange={e => {
-                                        const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, name: e.target.value } : t) || [];
-                                        updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList, techniques: newTechList.map((t:any) => t.name).join(', ') } : a));
-                                      }}
-                                    />
-                                  </div>
-
-                                  {/* Typ */}
-                                  <div className="md:col-span-3 flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Typ</label>
-                                    <select
-                                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 cursor-pointer h-[38px] text-slate-200"
-                                      value={tech.type || 'Angriff'}
-                                      onChange={e => {
-                                        const activeWorld = world || {};
-                                        const newType = e.target.value as any;
-                                        const defaultRules = activeWorld.techniqueRules || {
-                                          Angriff: { type: 'Angriff', defaultSubtype: 'Einzelschuss', mainParameter: 'Stärke', progressionCostValue: 100, costResourceName: 'Mana', costValue: 10, levelScaling: 'Linear (+10% Schaden pro Level)' },
-                                          Verteidigung: { type: 'Verteidigung', defaultSubtype: 'Schild/Barriere', mainParameter: 'Ausdauer', progressionCostValue: 100, costResourceName: 'Mana', costValue: 8, levelScaling: 'Linear (+15% Absorption pro Level)' },
-                                          Transformation: { type: 'Transformation', defaultSubtype: 'Modus/Form', mainParameter: 'Magie', progressionCostValue: 100, costResourceName: 'Mana', costValue: 15, levelScaling: 'Flach (Verlängert Dauer um +5s pro Level)' },
-                                          Support: { type: 'Support', defaultSubtype: 'Direkte Heilung', mainParameter: 'Intelligenz', progressionCostValue: 100, costResourceName: 'Mana', costValue: 12, levelScaling: 'Linear (+12% Effekt pro Level)' }
-                                        };
-                                        const rule = defaultRules[newType] || {
-                                          type: newType,
-                                          defaultSubtype: newType === 'Angriff' ? 'Einzelschuss' : newType === 'Verteidigung' ? 'Schild/Barriere' : newType === 'Transformation' ? 'Modus/Form' : 'Direkte Heilung',
-                                          mainParameter: newType === 'Angriff' ? 'Stärke' : newType === 'Verteidigung' ? 'Ausdauer' : newType === 'Transformation' ? 'Magie' : 'Intelligenz',
-                                          progressionCostValue: activeWorld.techniqueProgressionLogic === 'ep' ? 100 : activeWorld.techniqueProgressionLogic === 'training' ? 3 : 'Nach Bosskampf',
-                                          costResourceName: 'Mana',
-                                          costValue: newType === 'Angriff' ? 10 : newType === 'Verteidigung' ? 8 : newType === 'Transformation' ? 15 : 12,
-                                          levelScaling: newType === 'Angriff' ? 'Linear (+10% Schaden pro Level)' : newType === 'Verteidigung' ? 'Linear (+15% Absorption pro Level)' : newType === 'Transformation' ? 'Flach (Verlängert Dauer um +5s pro Level)' : 'Linear (+12% Effekt pro Level)'
-                                        };
-                                        const progLogic = activeWorld.techniqueProgressionLogic || 'ep';
-                                        
-                                        const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { 
-                                          ...t, 
-                                          type: newType, 
-                                          subtype: rule.defaultSubtype,
-                                          description: rule.levelScaling,
-                                          xpNeeded: progLogic === 'ep' ? (typeof rule.progressionCostValue === 'number' ? rule.progressionCostValue : 100) : undefined,
-                                          trainingRequired: progLogic === 'training' ? (typeof rule.progressionCostValue === 'number' ? rule.progressionCostValue : 3) : undefined,
-                                          milestoneRequirement: progLogic === 'milestone' ? String(rule.progressionCostValue || 'Nach Bosskampf') : undefined,
-                                          staticCost: progLogic === 'static' ? String(rule.progressionCostValue || '5 FP') : undefined,
-                                          cost: `${rule.costValue} ${rule.costResourceName}`
-                                        } : t) || [];
-                                        
-                                        updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                      }}
-                                    >
-                                      <option value="Angriff">💥 Angriff</option>
-                                      <option value="Transformation">🧬 Transformation</option>
-                                      <option value="Verteidigung">🛡️ Verteidigung</option>
-                                      <option value="Support">🧪 Support</option>
-                                    </select>
-                                  </div>
-
-                                  {/* Untertyp */}
-                                  <div className="md:col-span-4 flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Untertyp</label>
-                                    {(() => {
-                                      const currentType = tech.type || 'Angriff';
-                                      const presets = currentType === 'Angriff' 
-                                        ? ['Einzelschuss', 'Flächenangriff', 'Nahkampf', 'Fernkampf', 'Kettenangriff', 'Sonstiges']
-                                        : currentType === 'Transformation'
-                                        ? ['Modus/Form', 'Teilverwandlung', 'Vollverwandlung', 'Sonstiges']
-                                        : currentType === 'Verteidigung'
-                                        ? ['Schild/Barriere', 'Parade/Konter', 'Ausweichen', 'Sonstiges']
-                                        : ['Direkte Heilung', 'Regeneration', 'Stärkung (Buff)', 'Schwächung (Debuff)', 'Zustandsheilung', 'Sonstiges'];
-                                      
-                                      const isCustom = tech.subtype && !presets.includes(tech.subtype);
-                                      const selectVal = isCustom ? 'Sonstiges' : (tech.subtype || presets[0]);
-
-                                      return (
-                                        <div className="flex flex-col gap-1">
-                                          <select
-                                            className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 cursor-pointer h-[38px] text-slate-200"
-                                            value={selectVal}
-                                            onChange={e => {
-                                              const val = e.target.value;
-                                              const newSubtype = val === 'Sonstiges' ? '' : val;
-                                              const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, subtype: newSubtype } : t) || [];
-                                              updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                            }}
-                                          >
-                                            {presets.map(p => (
-                                              <option key={p} value={p}>{p}</option>
-                                            ))}
-                                          </select>
-                                          {(selectVal === 'Sonstiges' || isCustom) && (
-                                            <input
-                                              type="text"
-                                              className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white text-[11px] outline-none focus:border-amber-500 placeholder-slate-600 mt-1"
-                                              placeholder="Eigener Untertyp..."
-                                              value={tech.subtype || ''}
-                                              onChange={e => {
-                                                const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, subtype: e.target.value } : t) || [];
-                                                updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                              }}
-                                            />
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                  </div>
-
-                                  {/* Tier */}
-                                  <div className="md:col-span-3 flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Tier</label>
-                                    <select
-                                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 cursor-pointer h-[38px] text-slate-200 font-mono"
-                                      value={tech.tier || 'Tier 1'}
-                                      onChange={e => {
-                                        const val = e.target.value;
-                                        const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, tier: val } : t) || [];
-                                        updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                      }}
-                                    >
-                                      <option value="Tier 1">Tier 1</option>
-                                      <option value="Tier 2">Tier 2</option>
-                                      <option value="Tier 3">Tier 3</option>
-                                      <option value="Tier 4">Tier 4</option>
-                                    </select>
-                                  </div>
-
-                                  {/* Basis-Wert */}
-                                  <div className="md:col-span-2 flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Basis-Wert</label>
-                                    <input
-                                      type="number"
-                                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px] font-mono text-center"
-                                      placeholder="z.B. 15"
-                                      value={tech.baseValue !== undefined ? tech.baseValue : 0}
-                                      onChange={e => {
-                                        const val = parseInt(e.target.value) || 0;
-                                        const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, baseValue: val } : t) || [];
-                                        updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                      }}
-                                    />
-                                  </div>
-
-                                  {/* Kosten */}
-                                  {(() => {
-                                    const activeWorld = world || {};
-                                    const createdCostResources = activeWorld.costResources?.map((r: any) => r.name) || [];
-                                    const costResourceOptions = createdCostResources.length > 0 
-                                      ? createdCostResources 
-                                      : ['MP', 'SP'];
-
-                                    return (
-                                      <div className="md:col-span-7 flex flex-col gap-1">
-                                        <label className="text-[9px] text-slate-400 font-bold uppercase">Kosten (Ressource, Typ & Wert)</label>
-                                        <div className="flex gap-1.5 w-full">
-                                          {/* Resource Dropdown */}
-                                          <select
-                                            className="w-[40%] bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 cursor-pointer h-[38px] font-mono text-slate-200"
-                                            value={tech.costResourceName || (costResourceOptions[0] || 'MP')}
-                                            onChange={e => {
-                                              const resName = e.target.value;
-                                              const costVal = tech.costValue !== undefined ? tech.costValue : 10;
-                                              const formula = tech.costFormula || 'absolut';
-                                              const combinedCost = `${costVal}${formula === 'proz.' ? '%' : ''} ${resName}`;
-                                              const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { 
-                                                ...t, 
-                                                costResourceName: resName,
-                                                cost: combinedCost
-                                              } : t) || [];
-                                              updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                            }}
-                                          >
-                                            {costResourceOptions.map((res: string) => (
-                                              <option key={res} value={res}>{res}</option>
-                                            ))}
-                                          </select>
-
-                                          {/* Formula Selection */}
-                                          <select
-                                            className="w-[30%] bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 cursor-pointer h-[38px] font-mono text-slate-200"
-                                            value={tech.costFormula || 'absolut'}
-                                            onChange={e => {
-                                              const formula = e.target.value as 'absolut' | 'proz.';
-                                              const resName = tech.costResourceName || (costResourceOptions[0] || 'MP');
-                                              const costVal = tech.costValue !== undefined ? tech.costValue : 10;
-                                              const combinedCost = `${costVal}${formula === 'proz.' ? '%' : ''} ${resName}`;
-                                              const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { 
-                                                ...t, 
-                                                costFormula: formula,
-                                                cost: combinedCost
-                                              } : t) || [];
-                                              updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                            }}
-                                          >
-                                            <option value="absolut">Abs.</option>
-                                            <option value="proz.">Proz.</option>
-                                          </select>
-
-                                          {/* Cost Value Input */}
-                                          <input
-                                            type="number"
-                                            min="0"
-                                            className="w-[30%] bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px] text-center font-mono"
-                                            placeholder="10"
-                                            value={tech.costValue !== undefined ? tech.costValue : 10}
-                                            onChange={e => {
-                                              const costVal = Math.max(0, parseInt(e.target.value) || 0);
-                                              const resName = tech.costResourceName || (costResourceOptions[0] || 'MP');
-                                              const formula = tech.costFormula || 'absolut';
-                                              const combinedCost = `${costVal}${formula === 'proz.' ? '%' : ''} ${resName}`;
-                                              const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { 
-                                                ...t, 
-                                                costValue: costVal,
-                                                cost: combinedCost
-                                              } : t) || [];
-                                              updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                            }}
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-
-                                  {/* Beschreibung / Effekt */}
-                                  <div className="md:col-span-12 flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Beschreibung / Effekt (Was macht sie?)</label>
-                                    <AutoExpandingTextarea 
-                                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-600 min-h-[64px]" 
-                                      placeholder="z.B. Friert Gegner im Umkreis für 10 Sekunden ein."
-                                      value={tech.description || ''}
-                                      onChange={e => {
-                                        const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, description: e.target.value } : t) || [];
-                                        updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mt-2 border-t border-slate-800/60 pt-2.5">
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Start-Level (Standard: 1)</label>
-                                    <input 
-                                      type="number"
-                                      min="1"
-                                      max={tech.maxLevel || 99}
-                                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                      value={tech.level || 1}
-                                      onChange={e => {
-                                        const val = Math.max(1, parseInt(e.target.value) || 1);
-                                        const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, level: val } : t) || [];
-                                        updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Maximal-Level (Standard: 10)</label>
-                                    <input 
-                                      type="number"
-                                      min="1"
-                                      max="99"
-                                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                      value={tech.maxLevel || 10}
-                                      onChange={e => {
-                                        const val = Math.max(1, parseInt(e.target.value) || 10);
-                                        const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, maxLevel: val } : t) || [];
-                                        updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="flex flex-col gap-1">
-                                    <label className="text-[9px] text-slate-400 font-bold uppercase">Start-XP (Standard: 0)</label>
-                                    <input 
-                                      type="number"
-                                      min="0"
-                                      max="10000"
-                                      className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                      value={tech.xp || 0}
-                                      onChange={e => {
-                                        const val = Math.max(0, parseInt(e.target.value) || 0);
-                                        const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, xp: val } : t) || [];
-                                        updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-
-                                {/* Steigerungs-Logik */}
-                                <div className="w-full mt-2.5 border-t border-slate-800/60 pt-2.5">
-                                  <div className="flex flex-col gap-1">
-                                    {(() => {
-                                      const globalLogic = world?.techniqueProgressionLogic || 'ep';
-                                      if (globalLogic === 'ep') {
-                                        return (
-                                          <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                              <label className="text-[9px] text-slate-400 font-bold uppercase">XP Gewinn / Nutzung</label>
-                                              <input 
-                                                type="number"
-                                                min="1"
-                                                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                                value={tech.xpGainPerUse || 25}
-                                                onChange={e => {
-                                                  const val = Math.max(1, parseInt(e.target.value) || 25);
-                                                  const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, xpGainPerUse: val } : t) || [];
-                                                  updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                                }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="text-[9px] text-slate-400 font-bold uppercase">EP bis Level-Up</label>
-                                              <input 
-                                                type="number"
-                                                min="1"
-                                                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                                value={tech.xpNeeded || 100}
-                                                onChange={e => {
-                                                  const val = Math.max(1, parseInt(e.target.value) || 100);
-                                                  const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, xpNeeded: val } : t) || [];
-                                                  updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                                }}
-                                              />
-                                            </div>
-                                          </div>
-                                        );
-                                      }
-
-                                      if (globalLogic === 'training') {
-                                        return (
-                                          <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Übungen für Level-Up</label>
-                                              <input 
-                                                type="number"
-                                                min="1"
-                                                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                                value={tech.trainingRequired || 3}
-                                                onChange={e => {
-                                                  const val = Math.max(1, parseInt(e.target.value) || 3);
-                                                  const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, trainingRequired: val } : t) || [];
-                                                  updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                                }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Start-Fortschritt</label>
-                                              <input 
-                                                type="number"
-                                                min="0"
-                                                className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                                value={tech.trainingProgress || 0}
-                                                onChange={e => {
-                                                  const val = Math.max(0, parseInt(e.target.value) || 0);
-                                                  const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, trainingProgress: val } : t) || [];
-                                                  updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                                }}
-                                              />
-                                            </div>
-                                          </div>
-                                        );
-                                      }
-
-                                      if (globalLogic === 'milestone') {
-                                        return (
-                                          <div>
-                                            <label className="text-[9px] text-slate-400 font-bold uppercase">Bedingung für Aufstieg</label>
-                                            <input 
-                                              type="text"
-                                              className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                              placeholder="z.B. Finde das One Piece / Besiege den Boss"
-                                              value={tech.milestoneRequirement || ''}
-                                              onChange={e => {
-                                                const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, milestoneRequirement: e.target.value } : t) || [];
-                                                updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                              }}
-                                            />
-                                          </div>
-                                        );
-                                      }
-
-                                      if (globalLogic === 'static') {
-                                        return (
-                                          <div>
-                                            <label className="text-[9px] text-slate-400 font-bold uppercase">Freischalt-Kosten / Voraussetzung</label>
-                                            <input 
-                                              type="text"
-                                              className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-white text-xs outline-none focus:border-amber-500 h-[38px]"
-                                              placeholder="z.B. 10 Talentpunkte / 500 Gold"
-                                              value={tech.staticCost || ''}
-                                              onChange={e => {
-                                                const newTechList = ability.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, staticCost: e.target.value } : t) || [];
-                                                updateDetail('abilities', editForm.details?.abilities?.map((a: any) => a.id === ability.id ? { ...a, techniqueList: newTechList } : a));
-                                              }}
-                                            />
-                                          </div>
-                                        );
-                                      }
-                                      return null;
-                                    })()}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {(!editForm.details?.abilities || editForm.details.abilities.length === 0) && (
-                    <div className="text-center p-4 border border-dashed border-slate-800 rounded-lg text-slate-500 text-xs">
-                      Keine speziellen Kräfte definiert. Klicke auf "Kraft hinzufügen" um eine neue Fähigkeit zu erstellen.
-                    </div>
-                  )}
-                </div>
-
-                {worldPowerSettings && Object.keys(worldPowerSettings).length > 0 && (
-                  <div className="sm:col-span-2">
-                    <CharacterPowerRadar 
-                      worldPowerSettings={worldPowerSettings}
-                      characterData={editForm.details?.campaignPowerLevels}
-                      onChange={(newData) => updateDetail('campaignPowerLevels', newData)}
-                    />
                   </div>
                 )}
               </div>
-            )}
+            ) : (
+              <div className="flex flex-col gap-6">
+                <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 flex flex-col gap-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                      <i className="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+                      <span>KI-Weltschöpfung</span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Gib eine Vision für deine Welt ein. Es werden Geografie, Regionen und Regeln automatisch generiert.
+                    </p>
+                  </div>
 
-            {currentCategory === 'Orte' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Typ</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.type || ''} onChange={e => updateDetail('type', e.target.value)} placeholder="z.B. Stadt, Wald, Dungeon" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Klima / Atmosphäre</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.climate || ''} onChange={e => updateDetail('climate', e.target.value)} placeholder="z.B. Neblig, düster, kalt" />
-                </div>
-                <div className="sm:col-span-2 flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Wichtige Landmarken</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.landmarks || ''} onChange={e => updateDetail('landmarks', e.target.value)} placeholder="z.B. Alter Wachturm im Zentrum" />
+                  <AutoExpandingTextarea
+                    value={aiWorldDescription}
+                    onChange={e => setAiWorldDescription(e.target.value)}
+                    placeholder="Beschreibung für die automatische Welterstellung eingeben..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-300 text-xs min-h-[100px] outline-none focus:border-amber-500"
+                  />
+
+                  <div className="flex justify-between items-center">
+                    <div className="flex gap-2">
+                      <button onClick={() => applyPreset('onepiece')} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg">Preset: Inselwelt</button>
+                      <button onClick={() => applyPreset('middleearth')} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg">Preset: Kontinent</button>
+                      <button onClick={() => applyPreset('westeros')} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg">Preset: Halbinsel</button>
+                    </div>
+
+                    <button
+                      onClick={handleGenerateAiWorld}
+                      disabled={isGeneratingAiWorld || !aiWorldDescription.trim()}
+                      className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2"
+                    >
+                      {isGeneratingAiWorld ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-sparkles"></i>}
+                      <span>Welt generieren</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
+          </div>
 
-            {currentCategory === 'Fraktionen' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Anführer</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.leader || ''} onChange={e => updateDetail('leader', e.target.value)} placeholder="z.B. Lord Garm" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Beziehung / Status</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.status || ''} onChange={e => updateDetail('status', e.target.value)} placeholder="z.B. Feindlich, Verbündet" />
-                </div>
-                <div className="sm:col-span-2 flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Philosophie / Motivation</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.philosophy || ''} onChange={e => updateDetail('philosophy', e.target.value)} placeholder="z.B. Wollen die alten Götter wecken" />
-                </div>
-                
-                {/* Mitgliederliste */}
-                <div className="sm:col-span-2 flex flex-col gap-3 mt-4 border-t border-slate-800 pt-4">
-                  <h4 className="text-xs text-amber-500 font-bold uppercase flex items-center gap-2">
-                    <i className="fa-solid fa-users text-amber-500"></i>
-                    Mitglieder dieser Fraktion
+        ) : activeCategory === 'Weltkarte' ? (
+          <div className="flex flex-col gap-6">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col gap-5 shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div>
+                  <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i className="fa-solid fa-earth-americas text-sky-400"></i>
+                    <span>Gebietsverwaltung ({world?.territories?.length || 0})</span>
                   </h4>
-                  {(() => {
-                    const members = lore.filter(l => 
-                      (l.category === 'Charaktere' || l.category === 'Gegner') && 
-                      l.details?.faction && 
-                      editForm.title && 
-                      l.details.faction.trim().toLowerCase() === editForm.title.trim().toLowerCase()
-                    );
-                    if (members.length === 0) {
+                  <p className="text-xs text-slate-400 mt-1">
+                    Definiere Kontinente, Reiche, Städte, Dungeons und Zonen für die Weltkarte.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const count = world?.territories?.length || 0;
+                      if (confirm(`Möchtest du das Tag 'Weltkarte' und alle (${count}) Einträge wirklich löschen?`)) {
+                        handleDeleteCategoryAndEntries('Weltkarte');
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900 border border-rose-800/80 text-rose-300 text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    title="Tag Weltkarte und alle Gebiets-Einträge löschen"
+                  >
+                    <i className="fa-solid fa-trash-can text-rose-400"></i>
+                    <span>Tag &amp; alle ({world?.territories?.length || 0}) Einträge löschen</span>
+                  </button>
+                  {isEditingTerritory && (
+                    <button
+                      onClick={() => {
+                        setIsEditingTerritory(null);
+                        setTerritoryForm({
+                          name: '',
+                          type: 'stadt',
+                          description: '',
+                          parentId: null,
+                          population: '',
+                          ruler: '',
+                          climate: '',
+                          culture: '',
+                          terrain: '',
+                          faction: '',
+                          x: 50,
+                          y: 50
+                        });
+                      }}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl"
+                    >
+                      Neues Gebiet erstellen
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter and Search Bar for Territories */}
+              <div className="flex flex-wrap items-center gap-3 bg-slate-950/80 p-3 rounded-xl border border-slate-800/80">
+                <div className="flex-1 min-w-[200px] relative">
+                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                  <input
+                    type="text"
+                    value={weltkarteSearch}
+                    onChange={e => setWeltkarteSearch(e.target.value)}
+                    placeholder="Gebiete durchsuchen..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+                  />
+                  {weltkarteSearch && (
+                    <button
+                      onClick={() => setWeltkarteSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs"
+                    >
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 font-medium">Typ:</span>
+                  <select
+                    value={weltkarteTypeFilter}
+                    onChange={e => setWeltkarteTypeFilter(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500"
+                  >
+                    <option value="all">Alle Typen</option>
+                    <option value="kontinent">Kontinent</option>
+                    <option value="ozean">Meer / Ozean</option>
+                    <option value="insel">Insel</option>
+                    <option value="region">Region</option>
+                    <option value="zone">Zone</option>
+                    <option value="stadt">Stadt</option>
+                    <option value="dorf">Dorf</option>
+                    <option value="ort">Ort</option>
+                    <option value="dungeon">Dungeon</option>
+                    <option value="gebaeude">Gebäude</option>
+                  </select>
+                </div>
+
+                {parentOptions.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400 font-medium">Übergeordnet:</span>
+                    <select
+                      value={weltkarteParentFilter}
+                      onChange={e => setWeltkarteParentFilter(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500 max-w-[140px] truncate"
+                    >
+                      <option value="all">Alle</option>
+                      {parentOptions.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400 font-medium">Sortierung:</span>
+                  <select
+                    value={weltkarteSortBy}
+                    onChange={e => setWeltkarteSortBy(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500"
+                  >
+                    <option value="name-asc">Name (A-Z)</option>
+                    <option value="name-desc">Name (Z-A)</option>
+                    <option value="type">Typ</option>
+                    <option value="pos-x">Position X</option>
+                    <option value="pos-y">Position Y</option>
+                  </select>
+                </div>
+
+                {(weltkarteSearch || weltkarteTypeFilter !== 'all' || weltkarteParentFilter !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setWeltkarteSearch('');
+                      setWeltkarteTypeFilter('all');
+                      setWeltkarteParentFilter('all');
+                      setWeltkarteSortBy('name-asc');
+                    }}
+                    className="text-[11px] text-sky-400 hover:text-sky-300 font-semibold ml-auto"
+                  >
+                    Filter zurücksetzen
+                  </button>
+                )}
+              </div>
+
+              {/* Territory Editor Form */}
+              <div className="bg-slate-950/60 border border-slate-800 p-5 rounded-xl flex flex-col gap-4">
+                <h5 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span>{isEditingTerritory ? 'Gebiet bearbeiten' : 'Neues Gebiet hinzufügen'}</span>
+                    {isEditingTerritory && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingTerritory(null);
+                          setTerritoryForm({ type: 'stadt', x: 50, y: 50 });
+                        }}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300 text-[10px] font-bold rounded-lg transition-all cursor-pointer border border-slate-700/60"
+                      >
+                        <i className="fa-solid fa-plus mr-1"></i>
+                        <span>Neues Gebiet hinzufügen</span>
+                      </button>
+                    )}
+                  </div>
+                </h5>
+
+                {/* Smart Fill Gebiet */}
+                <div className="bg-slate-800/30 border border-indigo-500/30 rounded-xl p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-wand-magic-sparkles"></i>
+                      <span>SMART FILL GEBIET</span>
+                    </span>
+                    <button 
+                      type="button"
+                      onClick={handleTerritorySmartFill}
+                      disabled={isSmartFillingTerritory || !weltkarteSmartFill.trim()}
+                      className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shrink-0"
+                    >
+                      <i className={`fa-solid ${isSmartFillingTerritory ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
+                      <span>Automatisch Ausfüllen</span>
+                    </button>
+                  </div>
+
+                  <AutoExpandingTextarea 
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
+                    placeholder="Beschreibe das Gebiet, seine Besonderheiten, Einwohner, Geschichte oder Klimazonen. Die KI füllt alle passenden Felder für diesen Gebietstyp automatisch aus." 
+                    value={weltkarteSmartFill} 
+                    onChange={e => setWeltkarteSmartFill(e.target.value)} 
+                  />
+
+                  <div className="flex items-center gap-2 px-1 select-none">
+                    <input 
+                      type="checkbox" 
+                      id="isSmartFillComplementModeCheckbox"
+                      checked={isSmartFillComplementMode} 
+                      onChange={e => setIsSmartFillComplementMode(e.target.checked)}
+                      className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-4 h-4 accent-indigo-600"
+                    />
+                    <label htmlFor="isSmartFillComplementModeCheckbox" className="text-[11px] text-slate-300 font-medium cursor-pointer">
+                      <span className="text-emerald-400 font-bold">Ergänzungs-Modus:</span> Bestehende Gebiets-Daten behalten und neue Informationen hinzufügen
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Name des Gebiets</label>
+                    <input
+                      type="text"
+                      value={territoryForm.name || ''}
+                      onChange={e => setTerritoryForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Name"
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Gebietstyp</label>
+                    <select
+                      value={territoryForm.type || 'stadt'}
+                      onChange={e => setTerritoryForm(prev => ({ ...prev, type: e.target.value as any }))}
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-sky-500"
+                    >
+                      <option value="kontinent">Kontinent</option>
+                      <option value="ozean">Meer / Ozean</option>
+                      <option value="insel">Insel</option>
+                      <option value="region">Region</option>
+                      <option value="zone">Zone</option>
+                      <option value="stadt">Stadt</option>
+                      <option value="dorf">Dorf</option>
+                      <option value="ort">Ort</option>
+                      <option value="dungeon">Dungeon</option>
+                      <option value="gebaeude">Gebäude</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Übergeordnetes Gebiet</label>
+                    <select
+                      value={territoryForm.parentId || ''}
+                      onChange={e => setTerritoryForm(prev => ({ ...prev, parentId: e.target.value || null }))}
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-sky-500"
+                    >
+                      <option value="">Keines (Oberste Ebene)</option>
+                      {(world?.territories || []).filter((t: any) => t.id !== isEditingTerritory).map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Fraktion</label>
+                    <input
+                      type="text"
+                      value={territoryForm.faction || ''}
+                      onChange={e => setTerritoryForm(prev => ({ ...prev, faction: e.target.value }))}
+                      placeholder="Zugehörige Fraktion"
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Position X (0 - 100 %)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={territoryForm.x !== undefined ? territoryForm.x : 50}
+                      onChange={e => setTerritoryForm(prev => ({ ...prev, x: Number(e.target.value) }))}
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Position Y (0 - 100 %)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={territoryForm.y !== undefined ? territoryForm.y : 50}
+                      onChange={e => setTerritoryForm(prev => ({ ...prev, y: Number(e.target.value) }))}
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Typ-spezifische Eigenschaften */}
+                <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl flex flex-col gap-2.5">
+                  <div className="text-[10px] font-bold text-sky-400 uppercase tracking-wider flex items-center justify-between border-b border-slate-800/80 pb-2">
+                    <span>Eigenschaften für Gebietstyp: <strong className="text-slate-200 capitalize">{territoryForm.type || 'stadt'}</strong></span>
+                  </div>
+                  <TerritorySpecificFields
+                    territory={territoryForm}
+                    updateTerritory={(changes) => setTerritoryForm(prev => ({ ...prev, ...changes }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Beschreibung</label>
+                  <AutoExpandingTextarea
+                    value={territoryForm.description || ''}
+                    onChange={e => setTerritoryForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Detaillierte Beschreibung der Geografie, Geschichte und Besonderheiten..."
+                    className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 outline-none focus:border-sky-500 min-h-[80px]"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveTerritory}
+                    disabled={!territoryForm.name || !territoryForm.description}
+                    className="px-5 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-sky-950/20"
+                  >
+                    <i className="fa-solid fa-floppy-disk"></i>
+                    <span>{isEditingTerritory ? 'Gebiet aktualisieren' : 'Gebiet speichern'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Territory List (Von oben nach unten) */}
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Gespeicherte Gebiete ({filteredAndSortedTerritories.length})
+                  </span>
+                  <span className="text-[11px] text-slate-500 italic">
+                    Klicke auf ein Feld, um das Gebiet zu bearbeiten
+                  </span>
+                </div>
+
+                {filteredAndSortedTerritories.length === 0 ? (
+                  <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
+                    Keine Gebiete vorhanden.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5">
+                    {filteredAndSortedTerritories.map((territory: any) => {
+                      const isSelected = isEditingTerritory === territory.id;
+                      const parentTerritory = (world?.territories || []).find((t: any) => t.id === territory.parentId);
+
                       return (
-                        <p className="text-xs text-slate-500 italic pb-2">Noch keine Mitglieder in dieser Fraktion eingetragen.</p>
-                      );
-                    }
-                    return (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                        {members.map(m => (
-                          <div 
-                            key={m.id} 
-                            onClick={() => handleEdit(m)}
-                            className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-amber-500/50 transition-colors cursor-pointer group"
-                          >
-                            {m.image ? (
-                              <img src={m.image} alt={m.title} className="w-9 h-9 rounded-full object-cover shrink-0 border border-slate-700 group-hover:border-amber-500/40 transition-colors" />
-                            ) : (
-                              <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center shrink-0 border border-slate-700 group-hover:border-amber-500/40 transition-colors">
-                                <i className="fa-solid fa-user text-xs text-slate-400"></i>
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs font-bold text-slate-200 truncate group-hover:text-amber-400 transition-colors">{m.title}</div>
-                              {m.details?.role && (
-                                <div className="text-[10px] text-slate-400 truncate">{m.details.role}</div>
+                        <div
+                          key={territory.id}
+                          onClick={() => {
+                            setIsEditingTerritory(territory.id);
+                            setTerritoryForm(territory);
+                            formTopRef.current?.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                          className={`bg-slate-950 border px-4 py-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all cursor-pointer ${
+                            isSelected
+                              ? 'border-sky-500 bg-sky-950/30 text-sky-200 shadow-md shadow-sky-950/20'
+                              : 'border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/80 text-slate-200'
+                          }`}
+                        >
+                          <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-sky-400">
+                                {territory.type || 'Ort'}
+                              </span>
+                              <h5 className="text-sm font-bold text-slate-100 truncate">
+                                {territory.name}
+                              </h5>
+                              {parentTerritory && (
+                                <span className="text-[10px] text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800/60">
+                                  in {parentTerritory.name}
+                                </span>
                               )}
                             </div>
-                            <span className="text-[9px] bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded text-slate-400 uppercase font-bold tracking-wider shrink-0">Charakter</span>
+
+                            {territory.description && (
+                              <p className="text-xs text-slate-400 line-clamp-1">
+                                {territory.description}
+                              </p>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400 border-t border-slate-900/80 pt-2 mt-0.5">
+                              {territory.population && <span><strong>Einwohner:</strong> {territory.population}</span>}
+                              {territory.ruler && <span><strong>Herrscher:</strong> {territory.ruler}</span>}
+                              {territory.climate && <span><strong>Klima:</strong> {territory.climate}</span>}
+                              {territory.faction && <span><strong>Fraktion:</strong> {territory.faction}</span>}
+                              <span><strong>Position:</strong> ({territory.x}%, {territory.y}%)</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsEditingTerritory(territory.id);
+                                setTerritoryForm(territory);
+                                formTopRef.current?.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                                isSelected
+                                  ? 'bg-sky-600 text-white shadow-sm'
+                                  : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border border-slate-800'
+                              }`}
+                              title="Bearbeiten"
+                            >
+                              <i className="fa-solid fa-pen-to-square"></i>
+                              <span>{isSelected ? 'Bearbeiten...' : 'Bearbeiten'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTerritory(territory.id);
+                              }}
+                              className="text-slate-500 hover:text-rose-400 text-xs p-1.5 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
+                              title="Gebiet löschen"
+                            >
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : activeCategory === 'Verhüllung' ? (
+          <div className="flex flex-col gap-6">
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col gap-4 shadow-xl">
+              <div>
+                <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <i className="fa-solid fa-mask text-sky-400"></i>
+                  <span>Verhüllung &amp; Wissensstand der Charaktere</span>
+                </h4>
+                <p className="text-xs text-slate-400 mt-1">
+                  Lege fest, was Charaktere oder Spieler über andere Personen, Fraktionen und Geheimnisse wissen oder verhüllen.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-300 font-semibold">Aktiver Betrachter:</span>
+                <select
+                  value={selectedActorId}
+                  onChange={e => setSelectedActorId(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+                >
+                  <option value="__player_knowledge__">{playerName || 'Spieler'} (Wissen des Spielers)</option>
+                  {lore.filter(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.id !== '__player_knowledge__').map(c => (
+                    <option key={c.id} value={c.id}>{c.title} ({c.category})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                {lore.filter(l => l.id !== selectedActorId && (l.category === 'Charaktere' || l.category === 'Gegner' || l.category === 'Fraktionen')).map(targetItem => {
+                  const currentActor = lore.find(l => l.id === selectedActorId) || { details: { knowledgeMap: {} } };
+                  const knowledgeMap = currentActor.details?.knowledgeMap || {};
+                  const currentKnowledge = knowledgeMap[targetItem.title] || '';
+
+                  return (
+                    <div key={targetItem.id} className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-200">{targetItem.title}</span>
+                        <span className="text-[10px] text-slate-500 uppercase">{targetItem.category}</span>
+                      </div>
+                      <AutoExpandingTextarea
+                        value={currentKnowledge}
+                        onChange={e => handleUpdateKnowledge(selectedActorId, targetItem.title, e.target.value)}
+                        placeholder="Was dieser Charakter über diesen Eintrag weiß..."
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-sky-500 min-h-[60px]"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+        ) : (currentCategory === 'Charaktere' || currentCategory === 'Gegner') ? (
+          <div className="flex flex-col gap-6">
+            <CharacterLoreForm
+              editForm={editForm}
+              setEditForm={setEditForm}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+              onSave={handleSave}
+              onDelete={handleDelete}
+              onCancel={() => {
+                setIsEditing(null);
+                setEditForm({ category: currentCategory });
+              }}
+              lore={lore}
+              onUpdateLore={onUpdateLore}
+              worldTitle={worldTitle}
+              isNsfw={isNsfw}
+              worldPowerSettings={worldPowerSettings}
+              playerName={playerName}
+              world={world}
+            />
+
+            {/* List of Existing Lore Entries for this category */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Gespeicherte Einträge ({filteredLore.length})
+                </span>
+
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Einträge filtern..."
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 w-36 sm:w-48"
+                />
+              </div>
+
+              {filteredLore.length === 0 ? (
+                <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
+                  Keine Einträge vorhanden.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {groupedLore.map(([factionName, items]) => (
+                    <div key={factionName} className="flex flex-col gap-2">
+                      <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
+                        <span>{factionName}</span>
+                        <span className="text-slate-500 text-[10px]">({items.length})</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {items.map(item => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleEdit(item)}
+                            className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                              isEditing === item.id 
+                                ? 'border-amber-500 bg-amber-950/30 text-amber-300 font-bold shadow-md' 
+                                : 'border-slate-800 hover:border-slate-700 hover:bg-slate-850 text-slate-200'
+                            }`}
+                          >
+                            <span className="text-xs font-semibold truncate flex-1">
+                              {item.title || 'Unbenannter Eintrag'}
+                            </span>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(item.id);
+                                }}
+                                className="text-slate-500 hover:text-rose-400 text-xs p-1 transition-colors"
+                                title="Eintrag löschen"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
-                    );
-                  })()}
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {/* Standard Lore Form */}
+            <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl flex flex-col gap-5 shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div>
+                  <h4 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <i className={`fa-solid ${
+                      (currentCategory as string) === 'Fraktionen' ? 'fa-flag text-amber-400' :
+                      (currentCategory as string) === 'Gegenstände' ? 'fa-khanda text-indigo-400' :
+                      (currentCategory as string) === 'Verbotenes Wissen' ? 'fa-eye-slash text-purple-400' :
+                      (currentCategory as string) === 'Weltregeln' ? 'fa-scale-balanced text-teal-400' :
+                      (currentCategory as string) === 'Story & Quests' || (currentCategory as string) === 'Events' ? 'fa-map-route text-amber-500' :
+                      'fa-timeline text-rose-400'
+                    }`}></i>
+                    <span>
+                      {isEditing 
+                        ? `Eintrag bearbeiten: ${editForm.title || ''}` 
+                        : `Neuer Eintrag (${(currentCategory as string) === 'Story & Quests' || (currentCategory as string) === 'Events' ? 'Story & Quests' : currentCategory})`}
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {currentCategory === 'Story & Quests' || (currentCategory as string) === 'Events'
+                      ? 'Gestalte die Stationen und Meilensteine der Kampagne.'
+                      : `Definiere Details und Werte für ${currentCategory}.`}
+                  </p>
+                </div>
 
-            {currentCategory === 'Gegenstände' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Typ</label>
-                  {(() => {
-                    const currentType = editForm.details?.itemType || '';
-                    const isCustom = editForm.details?._itemTypeIsCustom || (currentType && !ITEM_TYPE_OPTIONS.includes(currentType));
-                    
-                    return !isCustom ? (
-                      <div className="flex gap-1.5 w-full">
-                        <select
-                          value={currentType}
-                          onChange={e => {
-                            const val = e.target.value;
-                            if (val === '__custom__') {
-                              updateDetail('itemType', '');
-                              updateDetail('_itemTypeIsCustom', true);
-                            } else {
-                              updateDetail('itemType', val);
-                              updateDetail('_itemTypeIsCustom', false);
-                            }
-                          }}
-                          className="flex-1 bg-slate-950 border border-slate-800 text-white rounded p-2 text-sm w-full outline-none focus:border-amber-500 cursor-pointer h-[38px]"
-                        >
-                          <option value="">-- Typ wählen / Unbekannt --</option>
-                          {ITEM_TYPE_OPTIONS.map(opt => (
-                            <option key={opt} value={opt}>{opt}</option>
-                          ))}
-                          <option value="__custom__">✍️ Freitext...</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            updateDetail('itemType', '');
-                            updateDetail('_itemTypeIsCustom', true);
-                          }}
-                          title="Freitext eingeben"
-                          className="px-2.5 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white border border-slate-800 rounded transition-all flex items-center h-[38px]"
-                        >
-                          <i className="fa-solid fa-pen text-[9px]"></i>
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex gap-1.5 w-full">
-                        <input
-                          type="text"
-                          placeholder="z.B. Trank, Relikt..."
-                          value={currentType}
-                          onChange={e => updateDetail('itemType', e.target.value)}
-                          className="flex-1 bg-slate-950 border border-slate-800 text-white rounded p-2.5 text-sm w-full outline-none focus:border-amber-500 h-[38px]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            updateDetail('itemType', '');
-                            updateDetail('_itemTypeIsCustom', false);
-                          }}
-                          title="Zurück zur Auswahl"
-                          className="px-2.5 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white border border-slate-800 rounded transition-all flex items-center h-[38px]"
-                        >
-                          <i className="fa-solid fa-rotate-left text-[9px]"></i>
-                        </button>
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Seltenheit</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.rarity || ''} onChange={e => updateDetail('rarity', e.target.value)} placeholder="z.B. Legendär, Episch" />
-                </div>
-                <div className="sm:col-span-2 flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Aktueller Besitzer</label>
-                  <div className="flex gap-1.5 w-full">
-                    {(() => {
-                      const codexCharacters = lore.filter(item => (item.category === 'Charaktere' || item.category === 'Gegner') && (playerName ? item.title?.trim().toLowerCase() !== playerName.trim().toLowerCase() : true));
-                      const isCustom = editForm.details?._ownerIsCustom || (editForm.details?.owner && !codexCharacters.some(c => c.title === editForm.details?.owner) && (playerName ? editForm.details?.owner !== playerName : true));
-                      
-                      return !isCustom ? (
-                        <div className="flex gap-1.5 w-full">
-                          <select
-                            value={editForm.details?.owner || ''}
-                            onChange={e => {
-                              const val = e.target.value;
-                              if (val === '__custom__') {
-                                updateDetail('owner', '');
-                                updateDetail('_ownerIsCustom', true);
-                              } else {
-                                updateDetail('owner', val);
-                                updateDetail('_ownerIsCustom', false);
-                              }
-                            }}
-                            className="flex-1 bg-slate-950 border border-slate-800 text-white rounded p-2.5 text-sm w-full outline-none focus:border-amber-500 cursor-pointer h-[38px]"
-                          >
-                            <option value="">-- Kein Besitzer / Unbekannt --</option>
-                            {playerName && <option value={playerName}>{playerName} (Spieler)</option>}
-                            {codexCharacters.length > 0 && (
-                              <optgroup label="Codex Charaktere">
-                                {codexCharacters.map(c => (
-                                  <option key={c.id} value={c.title}>{c.title}</option>
-                                ))}
-                              </optgroup>
-                            )}
-                            <option value="__custom__">✍️ Freitext...</option>
-                          </select>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              updateDetail('owner', '');
-                              updateDetail('_ownerIsCustom', true);
-                            }}
-                            title="Freitext eingeben"
-                            className="px-2.5 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white border border-slate-800 rounded transition-all flex items-center h-[38px]"
-                          >
-                            <i className="fa-solid fa-pen text-[9px]"></i>
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-1.5 w-full">
-                          <input
-                            type="text"
-                            placeholder="Name des Besitzers..."
-                            value={editForm.details?.owner || ''}
-                            onChange={e => updateDetail('owner', e.target.value)}
-                            className="flex-1 bg-slate-950 border border-slate-800 text-white rounded p-2.5 text-sm w-full outline-none focus:border-amber-500 h-[38px]"
-                          />
-                          {(playerName || codexCharacters.length > 0) && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                updateDetail('owner', '');
-                                updateDetail('_ownerIsCustom', false);
-                              }}
-                              title="Zurück zur Auswahl"
-                              className="px-2.5 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-white border border-slate-800 rounded transition-all flex items-center h-[38px]"
-                            >
-                              <i className="fa-solid fa-list text-[10px]"></i>
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-                <div className="sm:col-span-2 flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Magische Effekte</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.effects || ''} onChange={e => updateDetail('effects', e.target.value)} placeholder="z.B. Heilt 50 HP, verbrennt den Gegner" />
-                </div>
-              </div>
-            )}
-
-            {currentCategory === 'Fähigkeiten' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-800/50">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Typ</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.abilityType || ''} onChange={e => updateDetail('abilityType', e.target.value)} placeholder="z.B. Magie, Passiv, Beschwörung" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Kosten</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.cost || ''} onChange={e => updateDetail('cost', e.target.value)} placeholder="z.B. 20 MP" />
-                </div>
-                <div className="sm:col-span-2 flex flex-col gap-1">
-                  <label className="text-xs text-slate-400 font-bold uppercase">Auswirkungen / Schaden</label>
-                  <AutoExpandingTextarea className="bg-slate-950 border border-slate-800 rounded p-2 text-white text-sm w-full outline-none focus:border-amber-500" value={editForm.details?.impact || ''} onChange={e => updateDetail('impact', e.target.value)} placeholder="z.B. Betäubt das Ziel für 1 Runde" />
-                </div>
-              </div>
-            )}
-
-            {currentCategory === 'Events' && (
-              <div className="flex flex-col gap-6">
-                {/* Simplified Name of the Event Timeline */}
-                <div className="flex flex-col gap-1.5 bg-slate-950/30 p-4 border border-slate-800 rounded-xl">
-                  <label className="text-xs text-slate-350 font-bold uppercase tracking-wider">Ablauf-Name / Kapitel-Titel</label>
-                  <input
-                    type="text"
-                    className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-amber-500 outline-none w-full text-sm font-semibold"
-                    value={editForm.title || ''}
-                    onChange={e => {
-                      const newTitle = e.target.value;
-                      const prev = editForm;
-                      const updated = { ...prev, title: newTitle } as LoreEntry;
-                      setEditForm(updated);
-                      if (prev.id) {
-                        onUpdateLore(lore.map(l => l.id === prev.id ? updated : l));
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const count = lore.filter(l => l.category === currentCategory).length;
+                      if (confirm(`Möchtest du das Tag '${currentCategory}' und alle (${count}) Einträge wirklich löschen?`)) {
+                        handleDeleteCategoryAndEntries(currentCategory as string);
                       }
                     }}
-                    placeholder="z.B. Kapitel 1: Das Erwachen der Gilde"
-                  />
-                  <p className="text-[10px] text-slate-500">Gib dem Ereignisverlauf einen Namen, unter dem er im Codex aufgeführt wird.</p>
-                </div>
-
-                {/* Single Smart Fill area specifically styled for events */}
-                <div className="bg-slate-800/20 border border-amber-500/30 rounded-xl p-4 flex flex-col gap-3">
-                  <div className="flex justify-between items-center flex-wrap gap-2">
-                    <label className="text-xs text-amber-500 font-extrabold uppercase flex items-center gap-1.5">
-                      <i className="fa-solid fa-sparkles text-amber-500 animate-pulse"></i>
-                      Smart Fill (Geschichte automatisch zerlegen)
-                    </label>
-                    <button 
-                      type="button"
-                      onClick={handleLoreSmartFill}
-                      disabled={isSmartFillingLore || !loreSmartFill.trim()}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white rounded-lg text-xs transition-all flex items-center gap-1.5 font-bold shadow-md shadow-amber-950/20"
-                    >
-                      {isSmartFillingLore ? (
-                        <>
-                          <i className="fa-solid fa-spinner animate-spin"></i> Zerlege...
-                        </>
-                      ) : (
-                        <>
-                          <i className="fa-solid fa-bolt"></i> Story aufteilen
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <textarea 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-300 text-xs min-h-[70px] outline-none focus:border-amber-500 resize-y" 
-                    placeholder="Schreibe einfach den unstrukturierten Verlauf auf (z.B. 'Die Helden kommen im Wirtshaus an, sprechen mit dem Hehler, werden von Meuchelmördern attackiert und fliehen in die Kanalisation.'). Die KI baut daraus automatisch nummerierte Teilschritte."
-                    value={loreSmartFill} 
-                    onChange={e => setLoreSmartFill(e.target.value)} 
-                  />
-                </div>
-
-                {/* Input field to add / edit manual steps sequence */}
-                <div className="flex flex-col gap-4 bg-slate-800/10 border border-slate-800 rounded-xl p-5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs text-slate-300 font-bold uppercase flex items-center gap-1.5">
-                      <i className="fa-solid fa-plus-circle text-indigo-400"></i>
-                      {editingStepId ? 'Station bearbeiten' : 'Neue Station / Meilenstein manuell hinzufügen'}
-                    </label>
-                    {editingStepId && (
-                      <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded font-bold animate-pulse">
-                        Bearbeitungsmodus aktiv
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-400">Trage hier die Einzelheiten der Station ein. Sie wird der Timeline hinzugefügt oder aktualisiert.</p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Step Title Input */}
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase">Titel der Station (optional)</label>
-                      <input 
-                        type="text"
-                        className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
-                        placeholder="z.B. Das Geheimnis des Hehlers"
-                        value={newEventStepTitle}
-                        onChange={e => setNewEventStepTitle(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Step Branch Selector */}
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase">Story-Strang</label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setNewEventStepBranch('main')}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
-                            newEventStepBranch === 'main'
-                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/40'
-                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
-                          }`}
-                        >
-                          <i className="fa-solid fa-crown text-[10px] mr-1.5"></i> Hauptstory
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNewEventStepBranch('side')}
-                          className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${
-                            newEventStepBranch === 'side'
-                              ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/40'
-                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
-                          }`}
-                        >
-                          <i className="fa-solid fa-compass text-[10px] mr-1.5"></i> Nebenquest
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Step Unlock Conditions */}
-                    <div className="flex flex-col gap-1 md:col-span-1">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase">Freischalt-Bedingungen (optional)</label>
-                      <input 
-                        type="text"
-                        className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
-                        placeholder="z.B. Kapitel 1 abgeschlossen ODER Hehler befragt"
-                        value={newEventStepConditions}
-                        onChange={e => setNewEventStepConditions(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Step Chat Instruction */}
-                    <div className="flex flex-col gap-1 md:col-span-1">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase">Dungeon Master Chat-Anweisung</label>
-                      <input 
-                        type="text"
-                        className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
-                        placeholder="z.B. Hinterhalt von 2 Spinnen im Chat starten"
-                        value={newEventStepChatInstruction}
-                        onChange={e => setNewEventStepChatInstruction(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Step Description/Text */}
-                    <div className="flex flex-col gap-1 md:col-span-2">
-                      <label className="text-[10px] text-slate-400 font-bold uppercase">Beschreibung des Ablaufs <span className="text-red-500">*</span></label>
-                      <AutoExpandingTextarea 
-                        className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700 min-h-[64px]"
-                        placeholder="Beschreibe im Detail, was in dieser Station passieren soll..."
-                        value={newEventStepText}
-                        onChange={e => setNewEventStepText(e.target.value)}
-                      />
-                    </div>
-
-                    {/* Reise- & Zeitdetails */}
-                    <div className="md:col-span-2 border-t border-slate-800/60 pt-3 mt-1 grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {/* Travel Path */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-amber-500/80 font-bold uppercase flex items-center gap-1">
-                          <i className="fa-solid fa-route text-[9px]"></i> Der Reise-Pfad / Stationen
-                        </label>
-                        <input 
-                          type="text"
-                          className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
-                          placeholder="z.B. Von Eldoria nach Silberhafen"
-                          value={newEventStepTravelPath}
-                          onChange={e => setNewEventStepTravelPath(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Travel Duration Days */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-amber-500/80 font-bold uppercase flex items-center gap-1">
-                          <i className="fa-solid fa-hourglass-half text-[9px]"></i> Reise-Dauer (in Tagen)
-                        </label>
-                        <input 
-                          type="number"
-                          min="0"
-                          className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
-                          placeholder="z.B. 3"
-                          value={newEventStepTravelDurationDays}
-                          onChange={e => setNewEventStepTravelDurationDays(e.target.value === '' ? '' : Number(e.target.value))}
-                        />
-                      </div>
-
-                      {/* Time of Day */}
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[10px] text-amber-500/80 font-bold uppercase flex items-center gap-1">
-                          <i className="fa-solid fa-clock text-[9px]"></i> Uhrzeit
-                        </label>
-                        <input 
-                          type="text"
-                          className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-700"
-                          placeholder="z.B. 14:00 Uhr oder Dämmerung"
-                          value={newEventStepTimeOfDay}
-                          onChange={e => setNewEventStepTimeOfDay(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2 justify-end mt-2">
-                    {editingStepId && (
-                      <button
-                        type="button"
-                        onClick={handleCancelEditStep}
-                        className="px-4 py-2 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-bold transition-all"
-                      >
-                        Abbrechen
-                      </button>
-                    )}
+                    className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900 border border-rose-800/80 text-rose-300 text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                    title={`Tag ${currentCategory} und alle Einträge löschen`}
+                  >
+                    <i className="fa-solid fa-trash-can text-rose-400"></i>
+                    <span>Tag &amp; alle ({lore.filter(l => l.category === currentCategory).length}) Einträge löschen</span>
+                  </button>
+                  {isEditing && (
                     <button
                       type="button"
-                      onClick={handleAddManualStep}
-                      disabled={!newEventStepText.trim()}
-                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-                        editingStepId
-                          ? 'bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white'
-                          : 'bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white'
-                      }`}
+                      onClick={() => {
+                        setIsEditing(null);
+                        setEditForm({ category: ((activeCategory as string) === 'Verhüllung' ? 'Charaktere' : (activeCategory as string) === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory });
+                      }}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-xl transition-all"
                     >
-                      {editingStepId ? (
-                        <>
-                          <i className="fa-solid fa-floppy-disk"></i> Station aktualisieren
-                        </>
-                      ) : (
-                        <>
-                          <i className="fa-solid fa-plus"></i> Station hinzufügen
-                        </>
-                      )}
+                      Neuen Eintrag erstellen
                     </button>
-                  </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Smart-Fill Input */}
+              <div className="bg-slate-800/30 border border-indigo-500/30 rounded-xl p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <i className="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>SMART FILL CODEX ({currentCategory.toUpperCase()})</span>
+                  </span>
+                  <button 
+                    type="button"
+                    onClick={handleLoreSmartFill}
+                    disabled={isSmartFillingLore || !loreSmartFill.trim()}
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shrink-0"
+                  >
+                    <i className={`fa-solid ${isSmartFillingLore ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
+                    <span>Automatisch Ausfüllen</span>
+                  </button>
                 </div>
 
-                {/* Flowchart Section */}
-                <div className="flex flex-col gap-3">
-                  <h4 className="text-xs text-slate-350 font-bold uppercase tracking-wider flex items-center justify-between">
-                    <span>Dynamisches Flussdiagramm (Hauptstory & Nebenquests)</span>
-                    {editForm.details?.eventSteps && editForm.details.eventSteps.length > 0 && (
-                      <span className="text-[10px] text-slate-500 font-mono normal-case">{editForm.details.eventSteps.length} Stationen</span>
+                <AutoExpandingTextarea 
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
+                  placeholder={`Beschreibe den Eintrag für ${currentCategory}... Die KI füllt alle relevanten Felder (Titel, Beschreibung, Beziehungen, Attribute, Fraktion etc.) automatisch aus.`} 
+                  value={loreSmartFill} 
+                  onChange={e => setLoreSmartFill(e.target.value)} 
+                />
+
+                <div className="flex items-center gap-2 px-1 select-none">
+                  <input 
+                    type="checkbox" 
+                    id="keepExistingLoreDetailsCheckbox"
+                    checked={keepExistingLoreDetails} 
+                    onChange={e => setKeepExistingLoreDetails(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-4 h-4 accent-indigo-600"
+                  />
+                  <label htmlFor="keepExistingLoreDetailsCheckbox" className="text-[11px] text-slate-300 font-medium cursor-pointer">
+                    <span className="text-emerald-400 font-bold">Ergänzungs-Modus:</span> Bestehende Codex-Daten behalten und neue Informationen hinzufügen
+                  </label>
+                </div>
+              </div>
+
+              {/* Basic Fields */}
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Titel / Name</label>
+                <input
+                  type="text"
+                  value={editForm.title || ''}
+                  onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Name des Eintrags"
+                  className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Main Description */}
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Hauptbeschreibung</label>
+                <AutoExpandingTextarea
+                  value={editForm.description || ''}
+                  onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Detaillierte Beschreibung des Eintrags..."
+                  className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[90px]"
+                />
+              </div>
+
+              {currentCategory === 'Fraktionen' && (
+                <div className="flex flex-col gap-5">
+                  {/* Einheitliche Fraktions- & Mitglieder-Synchronisation */}
+                  <div className="bg-slate-900/90 border border-amber-500/40 rounded-xl p-4 flex flex-col gap-3 shadow-md">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                          <i className="fa-solid fa-arrows-rotate text-amber-400"></i>
+                          <span>Einheitliche Aktualisierung (Fraktion &amp; Charaktere)</span>
+                        </span>
+                        <span className="text-[11px] text-slate-400 mt-0.5">
+                          Synchronisiert die Fraktionsdaten basierend auf dem Anführer-Profil und befüllt wechselseitige Beziehungen, Verhalten und gemeinsame Vorgeschichte aller Mitglieder.
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleHarmonizeFaction}
+                        disabled={isHarmonizingFaction || !editForm.title?.trim()}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-slate-950 font-bold rounded-lg text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow shrink-0"
+                      >
+                        <i className={`fa-solid ${isHarmonizingFaction ? 'fa-spinner animate-spin' : 'fa-arrows-rotate'}`}></i>
+                        <span>{isHarmonizingFaction ? 'Synchronisiere...' : 'Fraktion & Charaktere synchronisieren'}</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-400 font-medium">Anführer / Leitfigur:</span>
+                        <span className="text-xs font-bold text-amber-300 font-mono">
+                          {editForm.details?.leader?.trim() || (isUserInThisFaction ? `${effectivePlayerName} (Nutzer)` : 'Nicht festgelegt')}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-400 font-medium">Mitglieder für Beziehungsabgleich:</span>
+                        <span className="text-xs font-bold text-slate-200 font-mono">
+                          {effectiveMembers.length} Personen
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
+                        Zusatzanweisung für die Synchronisation (Optional)
+                      </label>
+                      <AutoExpandingTextarea
+                        value={factionHarmonizePrompt}
+                        onChange={e => setFactionHarmonizePrompt(e.target.value)}
+                        placeholder="Optionale Vorgaben zur gemeinsamen Vorgeschichte, Führungsstil oder spezifischen Beziehungen..."
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                      />
+                    </div>
+
+                    {harmonizeSuccessMessage && (
+                      <div className="bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 px-3 py-2 rounded-lg text-xs flex items-center gap-2">
+                        <i className="fa-solid fa-check text-emerald-400"></i>
+                        <span>{harmonizeSuccessMessage}</span>
+                      </div>
                     )}
-                  </h4>
+                  </div>
 
-                  {editForm.details?.eventSteps && editForm.details.eventSteps.length > 0 ? (
-                    <div className="relative border border-slate-800/80 bg-slate-950/40 rounded-2xl p-4 md:p-6 overflow-hidden">
-                      {/* Flowchart vertical line */}
-                      <div className="absolute top-0 bottom-0 left-[21px] md:left-1/2 w-0.5 bg-gradient-to-b from-amber-500/80 via-indigo-500/50 to-slate-800/20 pointer-events-none"></div>
-                      
-                      <div className="space-y-8 relative">
-                        {editForm.details.eventSteps.map((step: any, idx: number) => {
-                          const isMain = step.branch !== 'side';
+                  {/* Schritt 1 von 9: Führung, Sitz & Philosophie */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+                    <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <i className="fa-solid fa-scepter text-amber-500"></i>
+                      <span>Schritt 1 von 9: Führung, Sitz &amp; Philosophie</span>
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Anführer / Leitfigur ('leader')</label>
+                        <input
+                          type="text"
+                          value={editForm.details?.leader || ''}
+                          onChange={e => updateDetail('leader', e.target.value)}
+                          placeholder="Name des Anführers oder Ratsvorsitzenden"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Führungsstruktur ('leadershipStructure')</label>
+                        <input
+                          type="text"
+                          value={editForm.details?.leadershipStructure || ''}
+                          onChange={e => updateDetail('leadershipStructure', e.target.value)}
+                          placeholder="Einzelner Anführer, Rat, Königsfamilie, Gilde, Senat"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Hauptquartier / Sitz ('headquarters')</label>
+                        <input
+                          type="text"
+                          value={editForm.details?.headquarters || ''}
+                          onChange={e => updateDetail('headquarters', e.target.value)}
+                          placeholder="Ort, Festung, Hauptsitz oder Stadt"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Grundphilosophie &amp; Credo ('philosophy')</label>
+                      <AutoExpandingTextarea
+                        value={editForm.details?.philosophy || ''}
+                        onChange={e => updateDetail('philosophy', e.target.value)}
+                        placeholder="Leitmotiv, Wahlspruch oder zentrale Werte der Fraktion..."
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Schritt 2 von 9: Ursprung & Zielsetzungen */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+                    <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <i className="fa-solid fa-compass text-amber-500"></i>
+                      <span>Schritt 2 von 9: Ursprung &amp; Zielsetzungen</span>
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">1. Gründungsanlass &amp; Ursprung ('foundingReason')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.foundingReason || ''}
+                          onChange={e => updateDetail('foundingReason', e.target.value)}
+                          placeholder="Schutz, Religion, Krieg, Handel, Widerstand, Macht..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">2. Ursprüngliches Ziel ('originalGoal')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.originalGoal || ''}
+                          onChange={e => updateDetail('originalGoal', e.target.value)}
+                          placeholder="Historisches Ziel bei der Gründung..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">3. Aktuelle &amp; langfristige Ziele ('currentGoal')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.currentGoal || ''}
+                          onChange={e => updateDetail('currentGoal', e.target.value)}
+                          placeholder="Aktuelles Hauptziel und langfristige Bestrebungen..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Schritt 3 von 9: Geschichte & Entwicklung */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+                    <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <i className="fa-solid fa-clock-rotate-left text-amber-500"></i>
+                      <span>Schritt 3 von 9: Geschichte &amp; Entwicklung</span>
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">4. Prägende historische Ereignisse ('keyHistoricalEvents')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.keyHistoricalEvents || ''}
+                          onChange={e => updateDetail('keyHistoricalEvents', e.target.value)}
+                          placeholder="Wichtigste historische Ereignisse (Kriege, Paktabschlüsse, Krisen)..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">5. Wandel &amp; Veränderung ('evolutionAndChange')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.evolutionAndChange || ''}
+                          onChange={e => updateDetail('evolutionAndChange', e.target.value)}
+                          placeholder="Entwicklung und organisatorischer Wandel über die Zeit..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Schritt 4 von 9: Zusammenhalt & Interne Konflikte */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+                    <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <i className="fa-solid fa-users-gear text-amber-500"></i>
+                      <span>Schritt 4 von 9: Zusammenhalt &amp; Interne Konflikte</span>
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">7. Zusammenhalt der Mitglieder ('cohesion')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.cohesion || ''}
+                          onChange={e => updateDetail('cohesion', e.target.value)}
+                          placeholder="Faktoren des Zusammenhalts (Ideologie, Loyalität, Geld, Religion)..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">8. Interne Konflikte &amp; Spannungen ('internalConflicts')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.internalConflicts || ''}
+                          onChange={e => updateDetail('internalConflicts', e.target.value)}
+                          placeholder="Machtkämpfe, Richtungsstreitigkeiten, interne Fraktionen..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Schritt 5 von 9: Beziehungen, Bündnisse & Wirtschafts-Verbindungen */}
+                  <div className="bg-slate-950 border border-amber-500/30 rounded-xl p-4 flex flex-col gap-4 shadow-md">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-handshake text-amber-400 text-sm"></i>
+                        <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                          Schritt 5 von 9: Beziehungen, Bündnisse &amp; Wirtschafts-Verbindungen
+                        </h5>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                          <i className="fa-solid fa-link text-[9px]"></i>
+                          Wirtschaftssystem verknüpft
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Diplomatische Grundstruktur */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Natürliche Verbündete ('allies')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.allies || ''}
+                          onChange={e => updateDetail('allies', e.target.value)}
+                          placeholder="Partner mit gleichen Werten oder Interessen..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Rivalen ('rivals')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.rivals || ''}
+                          onChange={e => updateDetail('rivals', e.target.value)}
+                          placeholder="Wettbewerber um Macht, Territorium, Ressourcen..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Feinde ('enemies')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.enemies || ''}
+                          onChange={e => updateDetail('enemies', e.target.value)}
+                          placeholder="Offene Feindschaft oder Feinde im Krieg..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Zweckallianzen ('convenienceAlliances')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.convenienceAlliances || ''}
+                          onChange={e => updateDetail('convenienceAlliances', e.target.value)}
+                          placeholder="Pragmatische oder brüchige Bündnisse..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Ungelöste Konflikte ('unresolvedConflicts')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.unresolvedConflicts || ''}
+                          onChange={e => updateDetail('unresolvedConflicts', e.target.value)}
+                          placeholder="Schwelende Streitigkeiten, alte Rechnungen..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Haltung zum Spieler / Abenteurern ('status')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.status || ''}
+                          onChange={e => updateDetail('status', e.target.value)}
+                          placeholder="Neutral, Verbündet, Misstrauisch, Feindselig..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Spezifische Anbindung an das Wirtschafts- & Managementsystem */}
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3.5 flex flex-col gap-3">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <div className="flex items-center gap-2">
+                          <i className="fa-solid fa-network-wired text-emerald-400 text-xs"></i>
+                          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                            Wirtschafts- &amp; Handelsnetzwerk im Bündnissystem
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {factionHoldings.length} Betriebe zugeordnet
+                        </span>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
+                          Wirtschafts- &amp; Handelsabkommen ('economicAgreements')
+                        </label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.economicAgreements || ''}
+                          onChange={e => updateDetail('economicAgreements', e.target.value)}
+                          placeholder="Beschreibung von Handelsverträgen, Zöllen, Monopolen, Rohstoff-Lieferkontrakten und finanziellen Bündnisabkommen..."
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-col gap-1">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold">Zugeordnete Betriebe</span>
+                          <span className="text-sm font-bold text-emerald-400 font-mono">{factionHoldings.length} Gebäude / Gewerbe</span>
+                          <span className="text-[10px] text-slate-500">Im Wirtschafts- &amp; Managementsystem registriert</span>
+                        </div>
+
+                        <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-col gap-1">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold">Registrierte Mitglieder</span>
+                          <span className="text-sm font-bold text-amber-400 font-mono">
+                            {editForm.details?.members?.length || 0} Personen
+                          </span>
+                          <span className="text-[10px] text-slate-500">Mit Personal- &amp; Aufgabenverknüpfung</span>
+                        </div>
+
+                        <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-col gap-1">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold">Finanzieller Status</span>
+                          <span className="text-sm font-bold text-slate-200 font-mono truncate">
+                            {editForm.details?.resourceEconomy ? editForm.details.resourceEconomy.substring(0, 24) : 'Nicht festgelegt'}
+                          </span>
+                          <span className="text-[10px] text-slate-500">Geld &amp; Ressourcen-Grundlage</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Schritt 6 von 9: Ressourcen & Machtpotenzial */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+                    <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <i className="fa-solid fa-coins text-amber-500"></i>
+                      <span>Schritt 6 von 9: Ressourcen &amp; Machtpotenzial</span>
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Geld / Wirtschaft ('resourceEconomy')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.resourceEconomy || ''}
+                          onChange={e => updateDetail('resourceEconomy', e.target.value)}
+                          placeholder="Finanzen, Schatzkammern, Einnahmequellen..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Territorium ('resourceTerritory')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.resourceTerritory || ''}
+                          onChange={e => updateDetail('resourceTerritory', e.target.value)}
+                          placeholder="Beherrschte Gebiete, Festungen, Posten..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Rohstoffe ('resourceMaterials')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.resourceMaterials || ''}
+                          onChange={e => updateDetail('resourceMaterials', e.target.value)}
+                          placeholder="Erze, Magiekristalle, Bauholz, Getreide..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Mitglieder ('resourceMembers')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.resourceMembers || ''}
+                          onChange={e => updateDetail('resourceMembers', e.target.value)}
+                          placeholder="Mitgliederzahl, Ausbildung, Rekrutierung..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Militär &amp; Kräfte ('resourceMilitary')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.resourceMilitary || ''}
+                          onChange={e => updateDetail('resourceMilitary', e.target.value)}
+                          placeholder="Truppen, Schiffe, Elitekämpfer, Bewaffnung..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Politischer Einfluss ('resourceInfluence')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.resourceInfluence || ''}
+                          onChange={e => updateDetail('resourceInfluence', e.target.value)}
+                          placeholder="Einfluss auf Gesetze, Höfe, Herrscher..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Wissen, Magie, Tech ('resourceKnowledge')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.resourceKnowledge || ''}
+                          onChange={e => updateDetail('resourceKnowledge', e.target.value)}
+                          placeholder="Arkane Forschung, Spionage, Artefakte..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Handelsnetzwerk ('resourceTrade')</label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.resourceTrade || ''}
+                          onChange={e => updateDetail('resourceTrade', e.target.value)}
+                          placeholder="Karawanenrouten, Handelsposten, Zölle..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Schritt 7 von 9: Betriebe & Besitztümer (Wirtschafts- & Managementsystem) */}
+                  <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-building-user text-amber-400 text-sm"></i>
+                        <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                          Schritt 7 von 9: Betriebe &amp; Besitztümer (Wirtschafts- &amp; Managementsystem)
+                        </h5>
+                        <span className="text-[10px] bg-slate-900 text-slate-400 border border-slate-800 px-2 py-0.5 rounded-full font-mono">
+                          {factionHoldings.length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {factionHoldings.length === 0 ? (
+                      <div className="p-4 bg-slate-900/40 border border-slate-800/60 rounded-lg text-center text-xs text-slate-400 flex flex-col gap-1.5 items-center">
+                        <span className="font-semibold text-slate-300">Keine Betriebe dieser Fraktion zugeordnet.</span>
+                        <span className="text-[11px] text-slate-400 max-w-md">
+                          Die Zuordnung, Koppelung und Erstellung von Betrieben erfolgt direkt im <strong className="text-amber-400 font-semibold">Wirtschafts- &amp; Managementsystem</strong> unter den Betriebsstammdaten (Eigentümer / Besitzer).
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {factionHoldings.map((holding: any, idx: number) => {
                           return (
-                            <div key={step.id || `flow-${idx}`} className={`flex flex-col md:flex-row items-stretch md:items-center ${isMain ? 'md:justify-start' : 'md:justify-end'} relative group`}>
-                              
-                              {/* Connector Bullet */}
-                              <div className="absolute left-[10px] md:left-1/2 md:-ml-3.5 top-3.5 md:top-1/2 md:-translate-y-1/2 z-10">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleStepStatus(step.id)}
-                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shadow-lg ${
-                                    step.status === 'happened'
-                                      ? 'bg-emerald-500 border-emerald-400 text-white hover:bg-emerald-600 scale-110 shadow-emerald-500/20'
-                                      : isMain
-                                      ? 'bg-slate-950 border-amber-500 text-amber-500 hover:border-amber-400 hover:text-amber-400'
-                                      : 'bg-slate-950 border-cyan-500 text-cyan-500 hover:border-cyan-400 hover:text-cyan-400'
-                                  }`}
-                                  title={step.status === 'happened' ? 'Erledigt (Zum Zurücksetzen klicken)' : 'Ausstehend (Als erledigt markieren)'}
-                                >
-                                  {step.status === 'happened' ? (
-                                    <i className="fa-solid fa-check text-[9px]"></i>
-                                  ) : (
-                                    <span className="text-[9px] font-bold font-mono">{idx + 1}</span>
-                                  )}
-                                </button>
+                            <div key={holding.id || idx} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-200">{holding.name}</span>
+                                <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-mono">
+                                  {holding.type || 'Betrieb'} (Stufe {holding.level || 1})
+                                </span>
                               </div>
-
-                              {/* Card body */}
-                              <div className={`w-full md:w-[calc(50%-20px)] pl-10 md:pl-0 ${isMain ? 'md:pr-6' : 'md:pl-6'} transition-all`}>
-                                <div className={`p-4 rounded-xl border transition-all ${
-                                  step.status === 'happened'
-                                    ? 'bg-emerald-950/15 border-emerald-800/40 hover:border-emerald-700/60 shadow-md shadow-emerald-950/10'
-                                    : isMain
-                                    ? 'bg-slate-900/90 border-amber-500/20 hover:border-amber-500/40 shadow-sm shadow-amber-950/5'
-                                    : 'bg-slate-900/90 border-cyan-500/20 hover:border-cyan-500/40 shadow-sm shadow-cyan-950/5'
-                                }`}>
-                                  {/* Header with Title and Branch Badge */}
-                                  <div className="flex items-center justify-between gap-2 border-b border-slate-800/50 pb-2 mb-2.5">
-                                    <span className="font-bold text-sm text-slate-100 font-sans tracking-tight truncate max-w-[150px] md:max-w-[180px]">
-                                      {step.title || `Station #${idx + 1}`}
-                                    </span>
-                                    
-                                    <div className="flex items-center gap-1 shrink-0">
-                                      <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                                        isMain
-                                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                          : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-                                      }`}>
-                                        {isMain ? 'Hauptstory' : 'Nebenquest'}
-                                      </span>
-                                      <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                                        step.status === 'happened'
-                                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                                          : 'bg-slate-950 text-slate-400 border border-slate-800'
-                                      }`}>
-                                        {step.status === 'happened' ? 'Erledigt' : 'Geplant'}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  {/* Description (Full read text as requested) */}
-                                  <p className="text-xs text-slate-300 leading-relaxed font-sans whitespace-pre-wrap mb-3 select-text">
-                                    {step.description}
-                                  </p>
-
-                                  {/* Travel & Time Details */}
-                                  {(step.travelPath || step.travelDurationDays !== undefined || step.timeOfDay) && (
-                                    <div className="bg-amber-950/10 border border-amber-500/10 rounded-lg p-2.5 mb-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-left">
-                                      {step.travelPath && (
-                                        <div className="sm:col-span-3 flex items-start gap-1.5 border-b border-amber-500/5 pb-1.5 mb-0.5">
-                                          <i className="fa-solid fa-route text-amber-500 text-[10px] mt-1"></i>
-                                          <div className="flex-1 min-w-0">
-                                            <span className="text-[9px] text-amber-500/80 font-bold block uppercase tracking-wider leading-none mb-0.5">Reise-Pfad / Stationen</span>
-                                            <span className="text-[11px] text-slate-300 font-medium leading-tight">{step.travelPath}</span>
-                                          </div>
-                                        </div>
-                                      )}
-                                      {step.travelDurationDays !== undefined && (
-                                        <div className="flex items-start gap-1.5">
-                                          <i className="fa-solid fa-hourglass-half text-amber-500 text-[10px] mt-1"></i>
-                                          <div>
-                                            <span className="text-[9px] text-amber-500/80 font-bold block uppercase tracking-wider leading-none mb-0.5">Reise-Dauer</span>
-                                            <span className="text-[11px] text-slate-300 font-medium font-mono">{step.travelDurationDays} {step.travelDurationDays === 1 ? 'Tag' : 'Tage'}</span>
-                                          </div>
-                                        </div>
-                                      )}
-                                      {step.timeOfDay && (
-                                        <div className="flex items-start gap-1.5 sm:col-span-2">
-                                          <i className="fa-solid fa-clock text-amber-500 text-[10px] mt-1"></i>
-                                          <div>
-                                            <span className="text-[9px] text-amber-500/80 font-bold block uppercase tracking-wider leading-none mb-0.5">Uhrzeit / Tageszeit</span>
-                                            <span className="text-[11px] text-slate-300 font-medium">{step.timeOfDay}</span>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Unlock Conditions */}
-                                  {step.unlockConditions && step.unlockConditions !== 'Keine' && (
-                                    <div className="bg-slate-950/50 border border-slate-800/60 rounded-lg p-2.5 mb-2 flex items-start gap-2">
-                                      <i className="fa-solid fa-key text-yellow-500 text-[10px] mt-0.5"></i>
-                                      <div className="flex-1 min-w-0">
-                                        <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider leading-none mb-1">Freischalt-Bedingung</span>
-                                        <span className="text-[11px] text-slate-300 leading-normal">{step.unlockConditions}</span>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Chat instruction for Dungeon Master */}
-                                  {step.chatInstruction && (
-                                    <div className="bg-indigo-950/15 border border-indigo-500/15 rounded-lg p-2.5 mb-2 flex items-start gap-2">
-                                      <i className="fa-solid fa-message-bot text-indigo-400 text-[10px] mt-0.5"></i>
-                                      <div className="flex-1 min-w-0">
-                                        <span className="text-[10px] text-indigo-400 font-bold block uppercase tracking-wider leading-none mb-1">Chat-Anweisung (Dungeon Master)</span>
-                                        <span className="text-[11px] text-indigo-300 leading-normal">{step.chatInstruction}</span>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Controls */}
-                                  <div className="flex items-center justify-between gap-2 border-t border-slate-800/40 pt-2 mt-2">
-                                    <div className="flex gap-1">
-                                      <button
-                                        type="button"
-                                        disabled={idx === 0}
-                                        onClick={() => handleMoveStep(idx, idx - 1)}
-                                        className="w-6 h-6 flex items-center justify-center rounded bg-slate-950 border border-slate-800 text-slate-400 hover:text-white disabled:opacity-10 transition-all text-[9px]"
-                                        title="Nach oben verschieben"
-                                      >
-                                        <i className="fa-solid fa-arrow-up"></i>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={idx === editForm.details.eventSteps.length - 1}
-                                        onClick={() => handleMoveStep(idx, idx + 1)}
-                                        className="w-6 h-6 flex items-center justify-center rounded bg-slate-950 border border-slate-800 text-slate-400 hover:text-white disabled:opacity-10 transition-all text-[9px]"
-                                        title="Nach unten verschieben"
-                                      >
-                                        <i className="fa-solid fa-arrow-down"></i>
-                                      </button>
-                                    </div>
-
-                                    <div className="flex gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleStartEditStep(step)}
-                                        className={`px-2 py-1 text-[10px] font-bold rounded flex items-center gap-1 transition-all ${
-                                          editingStepId === step.id
-                                            ? 'bg-amber-600 text-white'
-                                            : 'bg-slate-950 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-900'
-                                        }`}
-                                      >
-                                        <i className="fa-solid fa-pen text-[8px]"></i> Bearbeiten
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleDeleteStep(step.id)}
-                                        className="px-2 py-1 text-[10px] font-bold rounded bg-slate-950 border border-slate-800 text-red-400 hover:bg-red-500/10 hover:border-red-500/20 transition-all flex items-center gap-1"
-                                      >
-                                        <i className="fa-solid fa-trash text-[8px]"></i> Löschen
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                </div>
+                              <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                                <div>Standort: <span className="text-slate-200">{holding.locationName || holding.location || 'Unbekannt'}</span></div>
+                                <div>Einnahmen: <span className="text-emerald-400 font-mono">+{holding.incomePerInterval || 0} G/Monat</span></div>
+                                <div>Unterhalt: <span className="text-rose-400 font-mono">-{holding.upkeepPerInterval || 0} G/Monat</span></div>
+                                <div>Mitarbeiter: <span className="text-slate-200 font-mono">{holding.staffCount || 0}</span></div>
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-center p-8 border border-dashed border-slate-800 rounded-2xl text-slate-500 text-xs bg-slate-950/20">
-                      <i className="fa-solid fa-route text-2xl mb-2 text-slate-700"></i>
-                      <p>Noch keine Schritte vorhanden.</p>
-                      <p className="text-[10px] text-slate-600 mt-1">Verwende das obige Smart Fill oder füge eine Station manuell hinzu.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+                    )}
+                  </div>
 
-            {currentCategory !== 'Events' && currentCategory !== 'Charaktere' && (
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-slate-400 font-bold uppercase">Ausführliche Beschreibung <span className="text-red-500">*</span></label>
-                <textarea 
-                  className="bg-slate-950 border border-slate-800 rounded-xl p-4 text-white min-h-[160px] focus:border-amber-500 outline-none leading-relaxed"
-                  value={editForm.description || ''}
-                  onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Umfassende Details, Historie, Aussehen..."
-                />
-              </div>
-            )}
+                  {/* Schritt 8 von 9: Personal- & Mitgliederverwaltung (Wirtschafts- & Managementsystem) */}
+                  <div className="bg-slate-950 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-users-rectangle text-amber-400 text-sm"></i>
+                        <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                          Schritt 8 von 9: Personal- &amp; Mitgliederverwaltung (Wirtschafts- &amp; Managementsystem)
+                        </h5>
+                        <span className="text-[10px] bg-slate-900 text-slate-400 border border-slate-800 px-2 py-0.5 rounded-full font-mono">
+                          {effectiveMembers.length}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleAddMember}
+                          className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        >
+                          <i className="fa-solid fa-user-plus text-[11px]"></i>
+                          <span>Mitglied hinzufügen</span>
+                        </button>
+                      </div>
+                    </div>
 
-            {/* Geheimnisse & Verborgenes Wissen (3-Stufen-Logik) */}
-            {!['Events', 'Gegenstände'].includes(currentCategory) && (
-              <div className="mt-4 p-5 bg-slate-950/60 border border-slate-800/80 rounded-2xl space-y-4">
-                <div className="flex items-center gap-2.5 border-b border-slate-800 pb-2.5">
-                  <i className="fa-solid fa-user-shield text-amber-500 text-base"></i>
-                  <div>
-                    <h4 className="text-xs text-slate-200 font-extrabold uppercase tracking-wider">Geheimnisse & Verborgenes Wissen (3-Stufen-Logik)</h4>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Verwalte hier das Metawissen der KI. Die Stufen steuern, wie tief das Wissen im Chat verborgen bleibt.</p>
+                    {effectiveMembers.length === 0 ? (
+                      <div className="p-4 bg-slate-900/40 border border-slate-800/60 rounded-lg text-center text-xs text-slate-500 italic">
+                        Keine Mitglieder vorhanden. Charaktere im Codex mit dieser Fraktion werden hier automatisch angezeigt. Klicke auf "Mitglied hinzufügen", um weitere Personen manuell einzutragen.
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {effectiveMembers.map((member, index) => (
+                          <div key={member.id || index} className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3.5 flex flex-col gap-3 shadow-sm">
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                              
+                              {/* Name & Codex Link */}
+                              <div className="md:col-span-4 flex flex-col gap-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                    Name / Charakter
+                                  </label>
+                                </div>
+                                <div className="flex gap-1.5">
+                                  <input
+                                    type="text"
+                                    value={member.name || ''}
+                                    onChange={e => handleUpdateMember(index, { name: e.target.value })}
+                                    placeholder="Name des Mitglieds..."
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 transition-colors"
+                                  />
+                                  <select
+                                    value={member.characterId || (member.name && member.name.trim().toLowerCase() === effectivePlayerName.toLowerCase() ? '__player__' : '')}
+                                    onChange={e => {
+                                      if (e.target.value === '__player__') {
+                                        handleUpdateMember(index, {
+                                          characterId: '__player__',
+                                          name: effectivePlayerName,
+                                          job: effectivePlayerRole || member.job || 'Hauptcharakter'
+                                        });
+                                        return;
+                                      }
+                                      const selectedChar = lore.find(l => l.id === e.target.value);
+                                      const charRole = selectedChar ? (selectedChar.details?.role || selectedChar.details?.appearance?.role || selectedChar.details?.job || '') : '';
+                                      handleUpdateMember(index, {
+                                        characterId: e.target.value,
+                                        name: selectedChar ? selectedChar.title : member.name,
+                                        job: charRole || member.job
+                                      });
+                                    }}
+                                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-[11px] text-slate-400 outline-none focus:border-amber-500 max-w-[130px] truncate"
+                                    title="Charakter aus Codex oder Nutzer übernehmen"
+                                  >
+                                    <option value="">Aus Codex...</option>
+                                    <option value="__player__">
+                                      {effectivePlayerName} {effectivePlayerRole ? `(${effectivePlayerRole})` : '(Nutzer)'}
+                                    </option>
+                                    {lore.filter(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.id !== '__player_knowledge__').map(c => {
+                                      const r = c.details?.role || c.details?.appearance?.role || c.details?.job;
+                                      return (
+                                        <option key={c.id} value={c.id}>
+                                          {c.title} {r ? `(${r})` : ''}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Job / Funktion */}
+                              <div className="md:col-span-3 flex flex-col gap-1">
+                                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                  Job / Funktion
+                                </label>
+                                <input
+                                  type="text"
+                                  value={member.job || ''}
+                                  onChange={e => handleUpdateMember(index, { job: e.target.value })}
+                                  placeholder="z.B. Verwalter, Wache, Inhaberin..."
+                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 transition-colors"
+                                />
+                              </div>
+
+                              {/* Seit wann in der Fraktion */}
+                              <div className="md:col-span-3 flex flex-col gap-1">
+                                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                  Mitglied seit
+                                </label>
+                                <input
+                                  type="text"
+                                  value={member.joinedDate || ''}
+                                  onChange={e => handleUpdateMember(index, { joinedDate: e.target.value })}
+                                  placeholder="z.B. Seit Gründung / Seit 3 Jahren..."
+                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 transition-colors"
+                                />
+                              </div>
+
+                              {/* Status & Entfernen */}
+                              <div className="md:col-span-2 flex items-center justify-between gap-2">
+                                <div className="flex flex-col gap-1 flex-1">
+                                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                    Status
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={member.status || 'Aktiv'}
+                                    onChange={e => handleUpdateMember(index, { status: e.target.value })}
+                                    placeholder="z.B. Aktiv..."
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 transition-colors"
+                                  />
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveMember(index)}
+                                  className="mt-4 p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-all cursor-pointer"
+                                  title="Mitglied entfernen"
+                                >
+                                  <i className="fa-solid fa-trash text-xs"></i>
+                                </button>
+                              </div>
+
+                            </div>
+
+                            {/* Aufgaben (Wirtschafts- & Managementsystem) */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                Aufgaben (Wirtschafts- &amp; Managementsystem)
+                              </label>
+                              <AutoExpandingTextarea
+                                value={member.tasks || ''}
+                                onChange={e => handleUpdateMember(index, { tasks: e.target.value })}
+                                placeholder="Aufgaben und Pflichten für das Wirtschafts- und Managementsystem..."
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[45px]"
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Schritt 9 von 9: Wirtschaftliches Auftrags- & Verwaltungssystem */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
+                    <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                      <i className="fa-solid fa-file-signature text-amber-500"></i>
+                      <span>Schritt 9 von 9: Wirtschaftliches Auftrags- &amp; Verwaltungssystem</span>
+                    </h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
+                          Fraktions-Direktiven &amp; Wirtschaftsaufträge ('economyDirectives')
+                        </label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.economyDirectives || ''}
+                          onChange={e => updateDetail('economyDirectives', e.target.value)}
+                          placeholder="Strategische Vorgaben, laufende Handelsaufträge und Produktionsanweisungen..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">
+                          Offene Verwaltungsentscheidungen ('pendingDecisions')
+                        </label>
+                        <AutoExpandingTextarea
+                          value={editForm.details?.pendingDecisions || ''}
+                          onChange={e => updateDetail('pendingDecisions', e.target.value)}
+                          placeholder="Ausstehende Beschlüsse zur Investition, Bündniserweiterung oder Infrastruktur..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div className="grid grid-cols-1 gap-5">
-                  {/* Stufe 1 */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Stufe 1: Öffentliches Wissen
-                    </label>
-                    <p className="text-[9px] text-slate-500 leading-tight mb-1">Für alle NPCs und Charaktere von Anfang an bekannt.</p>
-                    <AutoExpandingTextarea 
-                      className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
-                      placeholder="z.B. Er ist ein registrierter Abenteurer, besitzt ein blaues Schwert..."
+              {currentCategory === 'Gegenstände' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Gegenstandstyp</label>
+                    <select
+                      value={editForm.details?.itemType || ITEM_TYPE_OPTIONS[0]}
+                      onChange={e => updateDetail('itemType', e.target.value)}
+                      className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                    >
+                      {ITEM_TYPE_OPTIONS.map(it => (
+                        <option key={it} value={it}>{it}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Seltenheit</label>
+                    <input
+                      type="text"
+                      value={editForm.details?.rarity || ''}
+                      onChange={e => updateDetail('rarity', e.target.value)}
+                      placeholder="z.B. Legendär, Selten"
+                      className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Besonderer Effekt / Wert</label>
+                    <input
+                      type="text"
+                      value={editForm.details?.effect || ''}
+                      onChange={e => updateDetail('effect', e.target.value)}
+                      placeholder="Wirkung oder Goldwert"
+                      className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(currentCategory === 'Story & Quests' || (currentCategory as string) === 'Events') && (
+                <div className="flex flex-col gap-4">
+                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col gap-3">
+                    <span className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                      <span>Station hinzufügen oder bearbeiten</span>
+                      {editingStepId && (
+                        <button onClick={handleCancelEditStep} className="text-[10px] text-rose-400 hover:text-rose-300">
+                          Abbrechen
+                        </button>
+                      )}
+                    </span>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] text-slate-400 font-bold uppercase">Titel der Station</label>
+                        <input
+                          type="text"
+                          value={newEventStepTitle}
+                          onChange={e => setNewEventStepTitle(e.target.value)}
+                          placeholder="z.B. Ankunft im Hafen"
+                          className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase">Typ</label>
+                          <select
+                            value={newEventStepType}
+                            onChange={e => setNewEventStepType(e.target.value as any)}
+                            className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                          >
+                            <option value="story">Story</option>
+                            <option value="quest">Quest</option>
+                          </select>
+                        </div>
+
+                        <div className="flex-1">
+                          <label className="text-[10px] text-slate-400 font-bold uppercase">Zweig</label>
+                          <select
+                            value={newEventStepBranch}
+                            onChange={e => setNewEventStepBranch(e.target.value as any)}
+                            className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                          >
+                            <option value="main">Hauptstrang</option>
+                            <option value="side">Nebenstrang</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-slate-400 font-bold uppercase">Ereignis-Beschreibung</label>
+                      <AutoExpandingTextarea
+                        value={newEventStepText}
+                        onChange={e => setNewEventStepText(e.target.value)}
+                        placeholder="Was passiert an dieser Station..."
+                        className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                      />
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleAddManualStep}
+                        disabled={!newEventStepText.trim()}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md"
+                      >
+                        <i className="fa-solid fa-plus"></i>
+                        <span>{editingStepId ? 'Station aktualisieren' : 'Station anfügen'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* List of Steps */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs font-bold text-slate-300">Ablauf der Kampagne ({(editForm.details?.eventSteps || []).length} Stationen):</span>
+                    {(editForm.details?.eventSteps || []).map((step: any, idx: number) => (
+                      <div
+                        key={step.id}
+                        className={`bg-slate-950 border p-3 rounded-xl flex items-center justify-between gap-3 ${
+                          step.status === 'happened' ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleStepStatus(step.id)}
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs border ${
+                              step.status === 'happened'
+                                ? 'bg-emerald-600 border-emerald-400 text-white'
+                                : 'bg-slate-900 border-slate-700 text-slate-500'
+                            }`}
+                          >
+                            <i className="fa-solid fa-check"></i>
+                          </button>
+
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-200">{idx + 1}. {step.title}</span>
+                            <span className="text-[11px] text-slate-400">{step.description}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleMoveStep(idx, idx - 1)}
+                            disabled={idx === 0}
+                            className="p-1.5 text-slate-500 hover:text-slate-200 disabled:opacity-30 text-xs"
+                          >
+                            <i className="fa-solid fa-arrow-up"></i>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveStep(idx, idx + 1)}
+                            disabled={idx === (editForm.details?.eventSteps || []).length - 1}
+                            className="p-1.5 text-slate-500 hover:text-slate-200 disabled:opacity-30 text-xs"
+                          >
+                            <i className="fa-solid fa-arrow-down"></i>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditStep(step)}
+                            className="p-1.5 text-slate-400 hover:text-amber-300 text-xs"
+                          >
+                            <i className="fa-solid fa-pen"></i>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStep(step.id)}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 text-xs"
+                          >
+                            <i className="fa-solid fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Secrets Stages for Forbidden Knowledge */}
+              <div className="bg-slate-950/60 border border-purple-900/30 p-4 rounded-xl flex flex-col gap-3">
+                <span className="text-xs font-bold text-purple-300 flex items-center gap-2">
+                  <i className="fa-solid fa-eye-slash text-purple-400"></i>
+                  <span>Geheimnis-Stufen (Verborgenes Wissen)</span>
+                </span>
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="text-[10px] text-purple-400/80 font-bold uppercase">Stufe 1 (Gerüchte)</label>
+                    <AutoExpandingTextarea
                       value={editForm.secretsStage1 || ''}
                       onChange={e => setEditForm(prev => ({ ...prev, secretsStage1: e.target.value }))}
+                      placeholder="Was als Gerücht bekannt ist..."
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-purple-500 min-h-[60px]"
                     />
                   </div>
-
-                  {/* Stufe 2 */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-purple-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span> Stufe 2: Indizien & Verdacht
-                    </label>
-                    <p className="text-[9px] text-slate-500 leading-tight mb-1">NPCs wissen es nicht direkt, dürfen aber vorsichtig nachforschen.</p>
-                    <AutoExpandingTextarea 
-                      className="w-full bg-slate-900 border border-slate-800 focus:border-purple-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
-                      placeholder="z.B. Er schaut oft nervös auf seine Taschenuhr, wenn das Wort 'Zeit' fällt..."
+                  <div>
+                    <label className="text-[10px] text-purple-400/80 font-bold uppercase">Stufe 2 (Eingeweiht)</label>
+                    <AutoExpandingTextarea
                       value={editForm.secretsStage2 || ''}
                       onChange={e => setEditForm(prev => ({ ...prev, secretsStage2: e.target.value }))}
+                      placeholder="Was Eingeweihte wissen..."
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-purple-500 min-h-[60px]"
                     />
                   </div>
-
-                  {/* Stufe 3 */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-red-400 font-extrabold uppercase tracking-wide flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse"></span> Stufe 3: Absolutes Geheimnis
-                    </label>
-                    <p className="text-[9px] text-slate-500 leading-tight mb-1">Absolute Blackbox. Für NPCs streng tabu, bis es bewiesen wird.</p>
-                    <AutoExpandingTextarea 
-                      className="w-full bg-slate-900 border border-slate-800 focus:border-red-500 rounded-xl p-3 text-white text-xs min-h-[64px] outline-none transition-all resize-none leading-relaxed"
-                      placeholder="z.B. Er ist in Wahrheit der gesuchte Schattenmagier, der vor 5 Jahren floh..."
+                  <div>
+                    <label className="text-[10px] text-purple-400/80 font-bold uppercase">Stufe 3 (Die Wahrheit)</label>
+                    <AutoExpandingTextarea
                       value={editForm.secretsStage3 || ''}
                       onChange={e => setEditForm(prev => ({ ...prev, secretsStage3: e.target.value }))}
+                      placeholder="Die absolute Wahrheit..."
+                      className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-purple-500 min-h-[60px]"
                     />
                   </div>
                 </div>
               </div>
-            )}
 
-            {activeCategory !== 'Events' && (
-              <div className="flex items-center justify-between mt-2 pt-4 border-t border-slate-800/50">
-                <div className="flex items-center gap-3">
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      className="sr-only peer"
-                      checked={editForm.isUnlocked !== false}
-                      onChange={e => setEditForm(prev => ({ ...prev, isUnlocked: e.target.checked }))}
-                    />
-                    <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-400 peer-checked:after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
-                  </label>
-                  <div>
-                    <div className="text-sm text-slate-200 font-medium">Sofort verfügbar</div>
-                    <div className="text-[10px] text-slate-500">Ist dies dem Spieler zu Beginn bereits bekannt?</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+              {/* Form Action Buttons */}
+              <div className="flex justify-end gap-3 border-t border-slate-800 pt-4 mt-2">
+                {isEditing && (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(isEditing)}
+                    className="px-4 py-2.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 rounded-xl text-xs font-bold flex items-center gap-1.5 mr-auto transition-all"
+                  >
+                    <i className="fa-solid fa-trash"></i>
+                    <span>Löschen</span>
+                  </button>
+                )}
 
-          {/* Dynamic Duplicate Warning */}
-          {(() => {
-            if (activeCategory !== 'Charaktere' || !editForm.title) return null;
-            const titleVal = editForm.title.trim().toLowerCase();
-            const rufVal = editForm.details?.rufName?.trim().toLowerCase();
-            const nickVal = editForm.details?.nickname?.trim().toLowerCase();
-
-            const duplicate = lore.find(l => {
-              if (l.category !== 'Charaktere' || l.id === isEditing) return false;
-              
-              const t = l.title?.trim().toLowerCase();
-              const r = l.details?.rufName?.trim().toLowerCase();
-              const n = l.details?.nickname?.trim().toLowerCase();
-
-              const matches = (val: string | undefined) => {
-                if (!val) return false;
-                return val === titleVal || (rufVal && val === rufVal) || (nickVal && val === nickVal);
-              };
-
-              return matches(t) || matches(r) || matches(n);
-            });
-
-            if (duplicate) {
-              return (
-                <div className="flex items-center gap-3 bg-red-950/45 border border-red-900/50 text-red-200 rounded-xl p-4.5 text-xs font-semibold leading-relaxed mt-4 animate-pulse">
-                  <i className="fa-solid fa-triangle-exclamation text-red-500 text-base"></i>
-                  <div>
-                    Achtung: Ein Charakter-Eintrag für <span className="text-white font-extrabold underline">"{duplicate.title}"</span> existiert bereits. Bitte stelle sicher, dass kein doppelter Eintrag erzeugt wird (Prüfung von Name, Rufname und Spitzname/Alias).
-                  </div>
-                </div>
-              );
-            }
-            return null;
-          })()}
-
-          {activeCategory !== 'Events' && (
-            <div className="flex gap-4 justify-end mt-4">
-              {isEditing && (
-                <button 
-                  onClick={() => { setIsEditing(null); setEditForm({ category: activeCategory }); }}
-                  className="px-6 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-bold transition-colors"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(null);
+                    setEditForm({ category: ((activeCategory as string) === 'Verhüllung' ? 'Charaktere' : (activeCategory as string) === 'Weltkarte' ? 'Orte' : activeCategory) as LoreCategory });
+                  }}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all"
                 >
                   Abbrechen
                 </button>
-              )}
-              <button 
-                onClick={handleSave}
-                className={`px-8 py-2 rounded-xl text-sm font-bold transition-all shadow-lg text-white ${!editForm.title || !editForm.description ? 'bg-amber-600/50 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-500 active:scale-95'}`}
-              >
-                {isEditing ? 'Änderungen Speichern' : `${activeCategory} Hinzufügen`}
-              </button>
-            </div>
-          )}
-        </div>
 
-        {/* Database List */}
-        {activeCategory !== 'Events' && (
-          <div className="flex flex-col gap-4 mt-6">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-               <h3 className="text-xl font-bold text-slate-100">Bestehende {activeCategory}</h3>
-            </div>
-            
-            <div className="relative">
-              <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
-              <input
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl py-3 pl-11 pr-4 text-sm text-white focus:border-amber-500 outline-none transition-colors shadow-sm"
-                placeholder={`Suche in ${activeCategory}...`}
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={!editForm.title || !editForm.description}
+                  className="px-6 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-amber-950/20 transition-all cursor-pointer"
+                >
+                  <i className="fa-solid fa-floppy-disk"></i>
+                  <span>{isEditing ? 'Eintrag aktualisieren' : 'Im Codex speichern'}</span>
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-3">
+            {/* List of Existing Lore Entries for this category */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Gespeicherte Einträge ({filteredLore.length})
+                </span>
+
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Einträge filtern..."
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 w-36 sm:w-48"
+                />
+              </div>
+
               {filteredLore.length === 0 ? (
-                <div className="text-center p-12 bg-slate-900/50 rounded-2xl border border-slate-800 border-dashed text-slate-500 flex flex-col items-center gap-3">
-                  <div className="w-16 h-16 bg-slate-800/50 rounded-full flex items-center justify-center">
-                    <i className="fa-solid fa-book-open text-2xl opacity-50"></i>
-                  </div>
-                  <div>
-                    <h4 className="text-slate-300 font-medium mb-1">Keine Einträge gefunden</h4>
-                    <p className="text-xs">Füge neue Elemente über das Formular hinzu.</p>
-                  </div>
+                <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
+                  Keine Einträge vorhanden.
+                </div>
+              ) : (activeCategory === 'Charaktere' || activeCategory === 'Gegner') ? (
+                <div className="flex flex-col gap-4">
+                  {groupedLore.map(([factionName, items]) => (
+                    <div key={factionName} className="flex flex-col gap-2">
+                      <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
+                        <span>{factionName}</span>
+                        <span className="text-slate-500 text-[10px]">({items.length})</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {items.map(item => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleEdit(item)}
+                            className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                              isEditing === item.id 
+                                ? 'border-amber-500 bg-amber-950/30 text-amber-300 font-bold shadow-md' 
+                                : 'border-slate-800 hover:border-slate-700 hover:bg-slate-850 text-slate-200'
+                            }`}
+                          >
+                            <span className="text-xs font-semibold truncate flex-1">
+                              {item.title || 'Unbenannter Eintrag'}
+                            </span>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(item.id);
+                                }}
+                                className="text-slate-500 hover:text-rose-400 text-xs p-1 transition-colors"
+                                title="Eintrag löschen"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {filteredLore.map((entry, idx) => (
-                    <div key={entry.id || `lore-${idx}`} onClick={() => handleEdit(entry)} className={`p-3 rounded-lg border transition-all flex items-center justify-between cursor-pointer hover:border-amber-500/50 ${
-                      entry.isUnlocked ? 'bg-slate-800/80 border-slate-700 shadow-sm' : 'bg-slate-900/50 border-slate-800 opacity-70'
-                    }`}>
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        {!entry.isUnlocked ? (
-                          <i className="fa-solid fa-lock text-slate-500 text-xs shrink-0" title="Noch geheim"></i>
-                        ) : (
-                          <i className="fa-solid fa-book text-amber-500/50 text-xs shrink-0"></i>
-                        )}
-                        
-                        <div className="flex items-center gap-2 truncate">
-                          <h3 className="text-sm font-bold text-amber-500 truncate">{entry.title}</h3>
-                          {(activeCategory === 'Charaktere' || activeCategory === 'Gegner') && entry.details?.role && (
-                            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full border border-indigo-500/30 truncate shrink-0">{entry.details.role}</span>
-                          )}
-                          {(activeCategory === 'Charaktere' || activeCategory === 'Gegner') && entry.details?.rufName && (
-                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 truncate shrink-0 font-medium">Rufname: {entry.details.rufName}</span>
-                          )}
-                          {activeCategory === 'Fraktionen' && (() => {
-                            const count = lore.filter(l => 
-                              (l.category === 'Charaktere' || l.category === 'Gegner') && 
-                              l.details?.faction && 
-                              l.details.faction.trim().toLowerCase() === entry.title.trim().toLowerCase()
-                            ).length;
-                            return count > 0 ? (
-                              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-500/30 shrink-0 font-medium">
-                                {count} {count === 1 ? 'Mitglied' : 'Mitglieder'}
-                              </span>
-                            ) : (
-                              <span className="text-[10px] bg-slate-900 text-slate-500 px-1.5 py-0.5 rounded-full border border-slate-800 shrink-0 font-medium font-mono">
-                                0 Mitglieder
-                              </span>
-                            );
-                          })()}
-                          {activeCategory === 'Gegenstände' && entry.details?.owner && (
-                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-500/30 truncate shrink-0 font-medium flex items-center gap-1">
-                              <i className="fa-solid fa-user text-[9px] text-amber-400"></i>
-                              Besitzer: {entry.details.owner}
-                            </span>
-                          )}
+                  {filteredLore.map(item => (
+                    <div
+                      key={item.id}
+                      onClick={() => handleEdit(item)}
+                      className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                        isEditing === item.id 
+                          ? 'border-amber-500 bg-amber-950/30 text-amber-300 font-bold shadow-md' 
+                          : 'border-slate-800 hover:border-slate-700 hover:bg-slate-850 text-slate-200'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold truncate flex-1">
+                        {item.title || 'Unbenannter Eintrag'}
+                      </span>
 
-                        </div>
-                      </div>
-                      
-                      <div className="flex gap-1 shrink-0 bg-slate-900/50 rounded-lg border border-slate-800 p-1 ml-2">
-                        <button onClick={(e) => { e.stopPropagation(); handleEdit(entry); }} className="p-1 w-7 h-7 flex items-center justify-center text-indigo-400 hover:bg-slate-800 hover:text-indigo-300 rounded transition-colors" title="Bearbeiten / Details ansehen"><i className="fa-solid fa-pen text-xs"></i></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDelete(entry.id); }} className="p-1 w-7 h-7 flex items-center justify-center text-red-400 hover:bg-slate-800 hover:text-red-300 rounded transition-colors" title="Löschen"><i className="fa-solid fa-trash text-xs"></i></button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(item.id);
+                          }}
+                          className="text-slate-500 hover:text-rose-400 text-xs p-1 transition-colors"
+                          title="Eintrag löschen"
+                        >
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -2556,4 +5759,3 @@ const LoreDatabaseView: React.FC<Props> = ({ lore, onUpdateLore, onClose, worldT
 };
 
 export default LoreDatabaseView;
-

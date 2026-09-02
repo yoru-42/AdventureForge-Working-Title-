@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend } from 'recharts';
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { CampaignPowerParameter, CustomResourceMapping, CostResource, CustomStatAllocation } from '../types';
+import { 
+  EP_DEFAULT_PARAMETERS, 
+  EP_DEFAULT_STAT_ALLOCATIONS, 
+  EP_DEFAULT_COST_RESOURCES, 
+  EP_DEFAULT_HEALTH_NAMES, 
+  EP_DEFAULT_COST_NAMES 
+} from '../lib/progressionDefaults';
 
 interface Props {
   data: Record<string, number | CampaignPowerParameter>;
@@ -454,37 +461,18 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
   // Pre-populate default allocations if empty
   useEffect(() => {
     if (customStatAllocations.length === 0 && onCustomStatAllocationsChange) {
-      const defaults: CustomStatAllocation[] = [
-        {
-          id: 'strength',
-          label: 'Stärke (Muskelkraft)',
-          icon: '💪',
-          selectedRadarNames: ['Stärke', 'Ausdauer'].filter(cat => categories.includes(cat)),
-          coreRole: 'CORE_PHYS_DAMAGE'
-        },
-        {
-          id: 'defense',
-          label: 'Verteidigung',
-          icon: '🛡️',
-          selectedRadarNames: ['Konstitution', 'Abwehr', 'Magie-Abwehr'].filter(cat => categories.includes(cat)),
-          coreRole: 'CORE_PHYS_DEFENSE'
-        },
-        {
-          id: 'agility',
-          label: 'Beweglichkeit',
-          icon: '🏃',
-          selectedRadarNames: ['Geschwindigkeit', 'Geschicklichkeit'].filter(cat => categories.includes(cat)),
-          coreRole: 'CORE_SPEED_INITIATIVE'
-        }
-      ];
-      // Fallback if the filtered list is empty, just keep the standard name
-      defaults.forEach(d => {
-        if (d.selectedRadarNames.length === 0) {
-          if (d.id === 'strength') d.selectedRadarNames = categories.includes('Stärke') ? ['Stärke'] : categories.includes('strength') ? ['strength'] : [];
-          if (d.id === 'defense') d.selectedRadarNames = categories.includes('Abwehr') ? ['Abwehr'] : categories.includes('defense') ? ['defense'] : [];
-          if (d.id === 'agility') d.selectedRadarNames = categories.includes('Geschwindigkeit') ? ['Geschwindigkeit'] : categories.includes('speed') ? ['speed'] : [];
-        }
-      });
+      // Use EP_DEFAULT_STAT_ALLOCATIONS (11 Kampfeigenschaften)
+      const defaults: CustomStatAllocation[] = JSON.parse(JSON.stringify(EP_DEFAULT_STAT_ALLOCATIONS));
+      
+      // If categories are already defined, filter selected radar names if needed or keep full defaults
+      if (categories.length > 0) {
+        defaults.forEach(d => {
+          const matching = d.selectedRadarNames.filter(cat => categories.includes(cat));
+          if (matching.length > 0) {
+            d.selectedRadarNames = matching;
+          }
+        });
+      }
       onCustomStatAllocationsChange(defaults);
     }
   }, [customStatAllocations.length, onCustomStatAllocationsChange, categories]);
@@ -556,26 +544,46 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
 
   const getChartDataForCats = (cats: string[]) => {
     return cats.map(cat => {
-      const sMin = normalizedData[cat].scaleMin ?? 0;
-      const sMax = normalizedData[cat].scaleMax ?? 100;
+      const sMin = normalizedData[cat]?.scaleMin ?? 0;
+      const sMax = normalizedData[cat]?.scaleMax ?? 100;
       const range = sMax - sMin || 100;
 
-      const relativeStart = Math.min(100, Math.max(0, Math.round(((normalizedData[cat].min - sMin) / range) * 100)));
-      const relativeMax = Math.min(100, Math.max(0, Math.round(((normalizedData[cat].max - sMin) / range) * 100)));
+      const pMin = normalizedData[cat]?.min ?? 10;
+      const pMax = normalizedData[cat]?.max ?? 100;
+
+      const relativeStart = Math.min(100, Math.max(0, Math.round(((pMin - sMin) / range) * 100)));
+      const relativeMax = Math.min(100, Math.max(0, Math.round(((pMax - sMin) / range) * 100)));
 
       return {
-        subject: `${cat} (${normalizedData[cat].min}-${normalizedData[cat].max})`,
+        subject: cat,
         Start: relativeStart,
         Maximum: relativeMax,
         fullMark: 100,
-        actualMin: normalizedData[cat].min,
-        actualMax: normalizedData[cat].max
+        actualMin: pMin,
+        actualMax: pMax,
+        sMin,
+        sMax
       };
     });
   };
 
   const physicalChartData = getChartDataForCats(physicalCategories);
   const supernaturalChartData = getChartDataForCats(supernaturalCategories);
+
+  const customRadarTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-slate-900 border border-slate-700 p-2.5 rounded-lg shadow-2xl text-xs z-50">
+          <p className="font-bold text-slate-100 mb-1">{data.subject}</p>
+          <p className="text-amber-400 font-medium">Startwert (Min): <span className="font-mono font-bold">{data.actualMin}</span></p>
+          <p className="text-rose-400 font-medium">Maximum (Bis): <span className="font-mono font-bold">{data.actualMax}</span></p>
+          <p className="text-slate-400 text-[10px] mt-0.5 font-mono">Skala: {data.sMin} bis {data.sMax}</p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   const renderFallbackList = (cats: string[], theme: 'physical' | 'supernatural') => {
     const isPhysical = theme === 'physical';
@@ -840,22 +848,24 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
           Schaffe deine eigenen Macht-Dimensionen (z.B. <strong>Ninjutsu, Stärke, Magie, Mana</strong>). Du kannst jetzt für jede Dimension das absolute Minimum und Maximum der Skala eingeben, den Einstiegsbereich (Von) sowie das maximale Limit (Bis) definieren und festlegen, wie die Steigerung erfolgen soll.
         </p>
 
-        <div className="flex gap-2">
-          <input 
-            type="text" 
-            value={newCatName}
-            onChange={(e) => setNewCatName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-            placeholder="Neuer Parameter (z.B. Ninjutsu, Magie, Willenskraft...)"
-            className="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500"
-          />
-          <button 
-            onClick={handleAddCategory}
-            disabled={!newCatName.trim()}
-            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-          >
-            <i className="fa-solid fa-plus"></i> Hinzufügen
-          </button>
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch">
+          <div className="flex-1 flex gap-2">
+            <input 
+              type="text" 
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
+              placeholder="Neuer Parameter (z.B. Ninjutsu, Magie, Willenskraft...)"
+              className="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500"
+            />
+            <button 
+              onClick={handleAddCategory}
+              disabled={!newCatName.trim()}
+              className="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <i className="fa-solid fa-plus"></i> Hinzufügen
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1577,9 +1587,8 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm(`Möchtest du den Parameter "${cat}" wirklich löschen?`)) {
-                          handleRemoveCategory(cat);
-                        }
+                        // Remove confirm as it blocks inside iframes
+                        handleRemoveCategory(cat);
                       }}
                       className="px-2 py-1.5 text-slate-500 hover:text-red-400 border-l border-slate-800/40 transition-colors"
                       title={`${cat} löschen`}
@@ -1673,98 +1682,114 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
         </div>
 
         {/* Diagramm-Vorschau (Rechte Spalte) */}
-        <div className="lg:col-span-6 flex flex-col gap-6">
-          {/* 1. KÖRPERLICHE EIGENSCHAFTEN */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between min-h-[350px]">
+        <div className="lg:col-span-6 flex flex-col gap-6" id="diagramm-vorschau-spalte">
+          <div className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-5" id="diagramm-gruppenfeld">
             <div>
-              <h4 className="text-xs font-bold uppercase text-slate-300 tracking-wider flex items-center gap-1.5">
-                <span className="text-sm">🩸</span>
-                <span>Körperliche Eigenschaften</span>
+              <h4 className="text-xs font-extrabold uppercase text-amber-400 tracking-wider flex items-center gap-1.5" id="diagramm-gruppenfeld-titel">
+                <span>📊</span>
+                <span>Diagramme & Parameter-Verteilung</span>
               </h4>
-              <p className="text-[10px] text-slate-500 mt-0.5 leading-snug text-left">
-                Radar-Diagramm für Physis, Ausdauer, Nahkampf und körperliche Attribute ({physicalCategories.length} Parameter).
+              <p className="text-[10px] text-slate-400 mt-1 leading-snug text-left" id="diagramm-gruppenfeld-desc">
+                Diese beiden Radar-Diagramme zeigen die Start- und Grenzwerte deiner erstellten Parameter im physischen und übernatürlichen Bereich und gehören zusammen als fundamentale Verteilung deines Machtniveaus.
               </p>
             </div>
 
-            <div className="flex-1 w-full flex items-center justify-center mt-3" style={{ minHeight: '220px' }}>
-              {physicalCategories.length >= 3 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="62%" data={physicalChartData}>
-                    <PolarGrid stroke="#1e293b" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#fb7185', fontSize: 9, fontWeight: 'bold' }} />
-                    <PolarRadiusAxis 
-                      angle={30} 
-                      domain={[0, 100]} 
-                      tick={{ fill: '#475569', fontSize: 8 }}
-                      tickCount={5}
-                    />
-                    <Radar
-                      name="Startwert (Min)"
-                      dataKey="Start"
-                      stroke="#f59e0b"
-                      fill="#f59e0b"
-                      fillOpacity={0.25}
-                    />
-                    <Radar
-                      name="Maximum (Bis)"
-                      dataKey="Maximum"
-                      stroke="#f43f5e"
-                      fill="#f43f5e"
-                      fillOpacity={0.15}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '10px', marginTop: '10px' }} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              ) : (
-                renderFallbackList(physicalCategories, 'physical')
-              )}
-            </div>
-          </div>
+            <div className="flex flex-col gap-5">
+              {/* 1. KÖRPERLICHE EIGENSCHAFTEN */}
+              <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-4 flex flex-col justify-between min-h-[350px] transition-all hover:border-slate-800/80" id="radar-koerperlich">
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-slate-300 tracking-wider flex items-center gap-1.5">
+                    <span className="text-sm">🩸</span>
+                    <span>Körperliche Eigenschaften</span>
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug text-left">
+                    Radar-Diagramm für Physis, Ausdauer, Nahkampf und körperliche Attribute ({physicalCategories.length} Parameter).
+                  </p>
+                </div>
 
-          {/* 2. ÜBERNATÜRLICHE EIGENSCHAFTEN */}
-          <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex flex-col justify-between min-h-[350px]">
-            <div>
-              <h4 className="text-xs font-bold uppercase text-slate-300 tracking-wider flex items-center gap-1.5">
-                <span className="text-sm">🔮</span>
-                <span>Übernatürliche Kräfte</span>
-              </h4>
-              <p className="text-[10px] text-slate-500 mt-0.5 leading-snug text-left">
-                Radar-Diagramm für Magie, Mana, Chakra, Seele und übernatürliche Kräfte ({supernaturalCategories.length} Parameter).
-              </p>
-            </div>
+                <div className="w-full h-[270px] relative mt-3 flex items-center justify-center" id="radar-koerperlich-container">
+                  {physicalCategories.length >= 3 ? (
+                    <ResponsiveContainer width="100%" height={270}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="60%" data={physicalChartData}>
+                        <PolarGrid stroke="#1e293b" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#fb7185', fontSize: 10, fontWeight: 'bold' }} />
+                        <PolarRadiusAxis 
+                          angle={30} 
+                          domain={[0, 100]} 
+                          tick={false}
+                          axisLine={false}
+                        />
+                        <Tooltip content={customRadarTooltip} />
+                        <Radar
+                          name="Startwert (Min)"
+                          dataKey="Start"
+                          stroke="#f59e0b"
+                          fill="#f59e0b"
+                          fillOpacity={0.3}
+                        />
+                        <Radar
+                          name="Maximum (Bis)"
+                          dataKey="Maximum"
+                          stroke="#f43f5e"
+                          fill="#f43f5e"
+                          fillOpacity={0.18}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '6px' }} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    renderFallbackList(physicalCategories, 'physical')
+                  )}
+                </div>
+              </div>
 
-            <div className="flex-1 w-full flex items-center justify-center mt-3" style={{ minHeight: '220px' }}>
-              {supernaturalCategories.length >= 3 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="62%" data={supernaturalChartData}>
-                    <PolarGrid stroke="#1e293b" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#818cf8', fontSize: 9, fontWeight: 'bold' }} />
-                    <PolarRadiusAxis 
-                      angle={30} 
-                      domain={[0, 100]} 
-                      tick={{ fill: '#475569', fontSize: 8 }}
-                      tickCount={5}
-                    />
-                    <Radar
-                      name="Startwert (Min)"
-                      dataKey="Start"
-                      stroke="#a5b4fc"
-                      fill="#a5b4fc"
-                      fillOpacity={0.25}
-                    />
-                    <Radar
-                      name="Maximum (Bis)"
-                      dataKey="Maximum"
-                      stroke="#6366f1"
-                      fill="#6366f1"
-                      fillOpacity={0.15}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '10px', marginTop: '10px' }} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              ) : (
-                renderFallbackList(supernaturalCategories, 'supernatural')
-              )}
+              {/* 2. ÜBERNATÜRLICHE EIGENSCHAFTEN */}
+              <div className="bg-slate-900/30 border border-slate-900 rounded-xl p-4 flex flex-col justify-between min-h-[350px] transition-all hover:border-slate-800/80" id="radar-uebernatuerlich">
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-slate-300 tracking-wider flex items-center gap-1.5">
+                    <span className="text-sm">🔮</span>
+                    <span>Übernatürliche Kräfte</span>
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-0.5 leading-snug text-left">
+                    Radar-Diagramm für Magie, Mana, Chakra, Seele und übernatürliche Kräfte ({supernaturalCategories.length} Parameter).
+                  </p>
+                </div>
+
+                <div className="w-full h-[270px] relative mt-3 flex items-center justify-center" id="radar-uebernatuerlich-container">
+                  {supernaturalCategories.length >= 3 ? (
+                    <ResponsiveContainer width="100%" height={270}>
+                      <RadarChart cx="50%" cy="50%" outerRadius="60%" data={supernaturalChartData}>
+                        <PolarGrid stroke="#1e293b" />
+                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#818cf8', fontSize: 10, fontWeight: 'bold' }} />
+                        <PolarRadiusAxis 
+                          angle={30} 
+                          domain={[0, 100]} 
+                          tick={false}
+                          axisLine={false}
+                        />
+                        <Tooltip content={customRadarTooltip} />
+                        <Radar
+                          name="Startwert (Min)"
+                          dataKey="Start"
+                          stroke="#a5b4fc"
+                          fill="#a5b4fc"
+                          fillOpacity={0.3}
+                        />
+                        <Radar
+                          name="Maximum (Bis)"
+                          dataKey="Maximum"
+                          stroke="#6366f1"
+                          fill="#6366f1"
+                          fillOpacity={0.18}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '6px' }} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    renderFallbackList(supernaturalCategories, 'supernatural')
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

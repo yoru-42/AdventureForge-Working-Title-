@@ -27,23 +27,19 @@ export const autoCalculateAppearance = (app: any, changedField: string, force = 
 
   // 1. GENDER & AGE changes
   if (changedField === 'gender' || changedField === 'age') {
-    if (isMale || age < 14) {
-      data.cupSize = '-';
-      data.chestSize = '-';
-      // For boys/men or kids, calculate male/default measurements
-      let chest = isMale ? 100 : 70;
-      let waist = isMale ? 85 : 60;
-      let hips = isMale ? 95 : 72;
+    if (isMale) {
+      // For boys/men, calculate male/default measurements
+      let chest = 100;
+      let waist = 85;
+      let hips = 95;
       
-      if (isMale) {
-        if (build === 'Muskulös') { chest += 15; waist -= 5; }
-        if (build === 'Schlank' || build === 'Zierlich') { chest -= 10; waist -= 10; hips -= 5; }
-        if (build === 'Stämmig') { chest += 20; waist += 25; hips += 15; }
-        if (build === 'Kräftig') { chest += 10; waist += 10; hips += 10; }
-      }
+      if (build === 'Muskulös') { chest += 15; waist -= 5; }
+      if (build === 'Schlank' || build === 'Zierlich') { chest -= 10; waist -= 10; hips -= 5; }
+      if (build === 'Stämmig') { chest += 20; waist += 25; hips += 15; }
+      if (build === 'Kräftig') { chest += 10; waist += 10; hips += 10; }
       
       data.measurements = `${chest}-${waist}-${hips}`;
-    } else if (isFemale && age >= 14) {
+    } else if (isFemale) {
       if (data.cupSize === '-' || !data.cupSize) {
         data.cupSize = 'B';
       }
@@ -141,10 +137,54 @@ export const autoCalculateAppearance = (app: any, changedField: string, force = 
          data.chestSize = `${chest}cm`;
       }
     }
+
+    // Auto-calculate Weight, Body Fat and Muscle Mass defaults
+    const isFemaleNow = (data.gender || '').toLowerCase() === 'weiblich';
+    if (build === 'Schlank') {
+      data.weight = isFemaleNow ? '50kg' : '65kg';
+      data.bodyFat = isFemaleNow ? '15%' : '8%';
+      data.muscleMass = isFemaleNow ? '25%' : '32%';
+    } else if (build === 'Zierlich') {
+      data.weight = isFemaleNow ? '44kg' : '55kg';
+      data.bodyFat = isFemaleNow ? '13%' : '7%';
+      data.muscleMass = isFemaleNow ? '20%' : '28%';
+    } else if (build === 'Hager') {
+      data.weight = isFemaleNow ? '46kg' : '58kg';
+      data.bodyFat = isFemaleNow ? '10%' : '6%';
+      data.muscleMass = isFemaleNow ? '18%' : '26%';
+    } else if (build === 'Drahtig') {
+      data.weight = isFemaleNow ? '52kg' : '70kg';
+      data.bodyFat = isFemaleNow ? '12%' : '7%';
+      data.muscleMass = isFemaleNow ? '30%' : '38%';
+    } else if (build === 'Muskulös') {
+      data.weight = isFemaleNow ? '58kg' : '82kg';
+      data.bodyFat = isFemaleNow ? '14%' : '8%';
+      data.muscleMass = isFemaleNow ? '38%' : '46%';
+    } else if (build === 'Sportlich') {
+      data.weight = isFemaleNow ? '60kg' : '78kg';
+      data.bodyFat = isFemaleNow ? '20%' : '13%';
+      data.muscleMass = isFemaleNow ? '35%' : '42%';
+    } else if (build === 'Kurvig') {
+      data.weight = isFemaleNow ? '72kg' : '85kg';
+      data.bodyFat = isFemaleNow ? '30%' : '22%';
+      data.muscleMass = isFemaleNow ? '26%' : '34%';
+    } else if (build === 'Kräftig') {
+      data.weight = isFemaleNow ? '78kg' : '94kg';
+      data.bodyFat = isFemaleNow ? '29%' : '23%';
+      data.muscleMass = isFemaleNow ? '38%' : '45%';
+    } else if (build === 'Stämmig') {
+      data.weight = isFemaleNow ? '88kg' : '105kg';
+      data.bodyFat = isFemaleNow ? '38%' : '30%';
+      data.muscleMass = isFemaleNow ? '28%' : '36%';
+    } else {
+      data.weight = isFemaleNow ? '65kg' : '80kg';
+      data.bodyFat = isFemaleNow ? '22%' : '15%';
+      data.muscleMass = isFemaleNow ? '30%' : '38%';
+    }
   }
 
   // 5. CUP SIZE changes
-  if (changedField === 'cupSize' && isFemale && age >= 14) {
+  if (changedField === 'cupSize') {
      let bust = cupToBustAdd[data.cupSize] || 86;
      if (build === 'Stämmig') bust += 10;
      if (build === 'Kräftig') bust += 5;
@@ -156,8 +196,8 @@ export const autoCalculateAppearance = (app: any, changedField: string, force = 
          data.measurements = `${bust}-${parts[1]}-${parts[2]}`;
        }
      } else {
-       let waist = 65;
-       let hips = parseInt(data.height) ? (parseInt(data.height) - 75) : 90; 
+       let waist = isMale ? 85 : 65;
+       let hips = parseInt(data.height) ? (parseInt(data.height) - 75) : (isMale ? 95 : 90); 
        if (build === 'Kurvig') { waist += 5; hips += 15; }
        if (build === 'Schlank' || build === 'Zierlich') { hips -= 5; waist -= 5; }
        if (build === 'Sportlich') { waist += 2; hips += 0; }
@@ -168,7 +208,7 @@ export const autoCalculateAppearance = (app: any, changedField: string, force = 
   }
 
   // 6. CHEST SIZE changes
-  if (changedField === 'chestSize' && isFemale && age >= 14) {
+  if (changedField === 'chestSize') {
      const chestNum = parseInt(data.chestSize.replace(/\D/g, ''));
      if (!isNaN(chestNum)) {
        if (chestNum < 78) data.cupSize = "AA";

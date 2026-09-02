@@ -1,0 +1,171 @@
+  7560	
+  7561	              {/* Standard Fields */}
+  7562	              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+  7563	                <div className="flex flex-col gap-1.5">
+  7564	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7565	                    <span className="text-indigo-400">◆</span> Name
+  7566	                  </label>
+  7567	                  <input 
+  7568	                    type="text"
+  7569	                    className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm font-semibold transition-all"
+  7570	                    value={territoryForm.name || ''}
+  7571	                    onChange={e => setTerritoryForm(prev => ({ ...prev, name: e.target.value }))}
+  7572	                    placeholder="z.B. Eldoria, Schattental..."
+  7573	                  />
+  7574	                </div>
+  7575	
+  7576	                <div className="flex flex-col gap-1.5">
+  7577	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7578	                    <span className="text-indigo-400">◆</span> Typ
+  7579	                  </label>
+  7580	                  <select 
+  7581	                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none cursor-pointer focus:border-indigo-500" 
+  7582	                    value={territoryForm.type || 'stadt'} 
+  7583	                    onChange={e => setTerritoryForm(prev => ({ ...prev, type: e.target.value as any }))}
+  7584	                  >
+  7585	                    <option value="welt">Welt 🌍</option>
+  7586	                    <option value="meer">Meer 🌊</option>
+  7587	                    <option value="kontinent">Kontinent 🏔️</option>
+  7588	                    <option value="insel">Insel 🏝️</option>
+  7589	                    <option value="region">Region 🗺️</option>
+  7590	                    <option value="zone">Zone 🌲</option>
+  7591	                    <option value="ort">Ort 📍</option>
+  7592	                    <option value="stadt">Stadt 🏙️</option>
+  7593	                    <option value="gebäude">Gebäude 🏰</option>
+  7594	                  </select>
+  7595	                </div>
+  7596	
+  7597	                <div className="flex flex-col gap-1.5">
+  7598	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7599	                    <span className="text-indigo-400">◆</span> Einwohnerzahl (Population)
+  7600	                  </label>
+  7601	                  <input 
+  7602	                    type="text"
+  7603	                    className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm transition-all"
+  7604	                    value={territoryForm.population || ''}
+  7605	                    onChange={e => setTerritoryForm(prev => ({ ...prev, population: e.target.value }))}
+  7606	                    placeholder="z.B. 50.000, Unbewohnt, Ca. 200 Magier..."
+  7607	                  />
+  7608	                </div>
+  7609	
+  7610	                <div className="flex flex-col gap-1.5">
+  7611	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7612	                    <span className="text-indigo-400">◆</span> Herrscher (Ruler)
+  7613	                  </label>
+  7614	                  <input 
+  7615	                    type="text"
+  7616	                    className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm transition-all"
+  7617	                    value={territoryForm.ruler || ''}
+  7618	                    onChange={e => setTerritoryForm(prev => ({ ...prev, ruler: e.target.value }))}
+  7619	                    placeholder="z.B. König Alden III, Magiergilde..."
+  7620	                  />
+  7621	                </div>
+  7622	
+  7623	                <div className="flex flex-col gap-1.5">
+  7624	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7625	                    <span className="text-indigo-400">◆</span> Klima (Climate)
+  7626	                  </label>
+  7627	                  <input 
+  7628	                    type="text"
+  7629	                    className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm transition-all"
+  7630	                    value={territoryForm.climate || ''}
+  7631	                    onChange={e => setTerritoryForm(prev => ({ ...prev, climate: e.target.value }))}
+  7632	                    placeholder="z.B. Maritim, Heiß & trocken, Polar..."
+  7633	                  />
+  7634	                </div>
+  7635	
+  7636	                <div className="flex flex-col gap-1.5">
+  7637	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7638	                    <span className="text-indigo-400">◆</span> Kultur (Culture)
+  7639	                  </label>
+  7640	                  <input 
+  7641	                    type="text"
+  7642	                    className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm transition-all"
+  7643	                    value={territoryForm.culture || ''}
+  7644	                    onChange={e => setTerritoryForm(prev => ({ ...prev, culture: e.target.value }))}
+  7645	                    placeholder="z.B. Handelsorientiert, Ritterorden, Magisch..."
+  7646	                  />
+  7647	                </div>
+  7648	
+  7649	                <div className="flex flex-col gap-1.5">
+  7650	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7651	                    <span className="text-indigo-400">◆</span> Terrain / Landschaft
+  7652	                  </label>
+  7653	                  <input 
+  7654	                    type="text"
+  7655	                    className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm transition-all"
+  7656	                    value={territoryForm.terrain || ''}
+  7657	                    onChange={e => setTerritoryForm(prev => ({ ...prev, terrain: e.target.value }))}
+  7658	                    placeholder="z.B. Klippen & Küste, Verschneite Berge..."
+  7659	                  />
+  7660	                </div>
+  7661	
+  7662	                <div className="flex flex-col gap-1.5">
+  7663	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7664	                    <span className="text-indigo-400">◆</span> Herrschende Fraktion
+  7665	                  </label>
+  7666	                  <input 
+  7667	                    type="text"
+  7668	                    className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm transition-all"
+  7669	                    value={territoryForm.faction || ''}
+  7670	                    onChange={e => setTerritoryForm(prev => ({ ...prev, faction: e.target.value }))}
+  7671	                    placeholder="z.B. Das Kaiserreich, Die Sonnenwächter..."
+  7672	                  />
+  7673	                </div>
+  7674	
+  7675	                <div className="flex flex-col gap-1.5">
+  7676	                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7677	                    <span className="text-indigo-400">◆</span> Übergeordnetes Gebiet
+  7678	                  </label>
+  7679	                  <select 
+  7680	                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none cursor-pointer focus:border-indigo-500" 
+  7681	                    value={territoryForm.parentId || ''} 
+  7682	                    onChange={e => setTerritoryForm(prev => ({ ...prev, parentId: e.target.value || null }))}
+  7683	                  >
+  7684	                    <option value="">Kein übergeordnetes Gebiet (Hauptregion)</option>
+  7685	                    {world?.territories?.map((t: any) => (
+  7686	                      <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+  7687	                    ))}
+  7688	                  </select>
+  7689	                </div>
+  7690	
+  7691	                <div className="grid grid-cols-2 gap-3">
+  7692	                  <div className="flex flex-col gap-1.5">
+  7693	                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7694	                      <span className="text-indigo-400">◆</span> Koordinate X (10-90)
+  7695	                    </label>
+  7696	                    <input 
+  7697	                      type="number"
+  7698	                      min="10"
+  7699	                      max="90"
+  7700	                      className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm transition-all"
+  7701	                      value={territoryForm.x !== undefined ? territoryForm.x : 50}
+  7702	                      onChange={e => setTerritoryForm(prev => ({ ...prev, x: Number(e.target.value) }))}
+  7703	                    />
+  7704	                  </div>
+  7705	                  <div className="flex flex-col gap-1.5">
+  7706	                    <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7707	                      <span className="text-indigo-400">◆</span> Koordinate Y (10-90)
+  7708	                    </label>
+  7709	                    <input 
+  7710	                      type="number"
+  7711	                      min="10"
+  7712	                      max="90"
+  7713	                      className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white focus:border-indigo-500 outline-none w-full text-sm transition-all"
+  7714	                      value={territoryForm.y !== undefined ? territoryForm.y : 50}
+  7715	                      onChange={e => setTerritoryForm(prev => ({ ...prev, y: Number(e.target.value) }))}
+  7716	                    />
+  7717	                  </div>
+  7718	                </div>
+  7719	              </div>
+  7720	
+  7721	              <div className="flex flex-col gap-1.5">
+  7722	                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+  7723	                  <span className="text-indigo-400">◆</span> Beschreibung
+  7724	                </label>
+  7725	                <textarea 
+  7726	                  className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-indigo-500 outline-none w-full text-sm min-h-[100px] max-h-[300px] transition-all"
+  7727	                  value={territoryForm.description || ''}
+  7728	                  onChange={e => setTerritoryForm(prev => ({ ...prev, description: e.target.value }))}
+  7729	                  placeholder="Detaillierte Beschreibung der Geschichte, Geografie und Besonderheiten..."
+  7730	                />

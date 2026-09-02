@@ -2,7 +2,9 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import { EyeColorEditor } from './EyeColorEditor';
 import { autoCalculateAppearance } from '../utils/appearance';
+import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArchetypesData';
 
 interface Props {
   profile: UserProfile;
@@ -17,9 +19,20 @@ const CUP_SIZE_OPTIONS = ["-", "AA", "A", "B", "C", "D", "E", "F", "G", "H", "I"
 const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
   const [formData, setFormData] = useState<UserProfile>(profile);
 
-  const handleAppearanceChange = (field: keyof UserProfile['appearance'], value: string) => {
+  const handleAppearanceChange = (field: keyof UserProfile['appearance'], value: any) => {
     let updatedAppearance = { ...formData.appearance, [field]: value };
     updatedAppearance = autoCalculateAppearance(updatedAppearance, field);
+    setFormData({
+      ...formData,
+      appearance: updatedAppearance
+    });
+  };
+
+  const handleAppearanceMultiple = (updates: Partial<UserProfile['appearance']>) => {
+    let updatedAppearance = { ...formData.appearance, ...updates };
+    Object.keys(updates).forEach(k => {
+      updatedAppearance = autoCalculateAppearance(updatedAppearance, k);
+    });
     setFormData({
       ...formData,
       appearance: updatedAppearance
@@ -102,12 +115,14 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
                 />
               </div>
               <div>
-                <label className="text-[10px] text-slate-500 block mb-1">Augenfarbe</label>
-                <input 
-                  type="text" 
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs"
-                  value={formData.appearance.eyeColor || ''}
-                  onChange={e => handleAppearanceChange('eyeColor', e.target.value)}
+                <EyeColorEditor
+                  eyeColor={formData.appearance.eyeColor || ''}
+                  hasHeterochromia={formData.appearance.hasHeterochromia}
+                  eyeColorLeft={formData.appearance.eyeColorLeft}
+                  eyeColorRight={formData.appearance.eyeColorRight}
+                  onChange={updates => handleAppearanceMultiple(updates)}
+                  labelClassName="text-[10px] text-slate-500 block mb-1"
+                  inputClassName="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500"
                 />
               </div>
               <div>
@@ -118,6 +133,45 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
                   onChange={e => handleAppearanceChange('cupSize', e.target.value)}
                 >
                   {CUP_SIZE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2 sm:col-span-1">
+                <label className="text-[10px] text-slate-500 block mb-1">Archetyp / Typus</label>
+                <select 
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500"
+                  value={formData.appearance.personalityArchetype || formData.personalityArchetype || '-'}
+                  onChange={e => {
+                    const val = e.target.value;
+                    const updatedTraits = applyArchetypeToTraits(formData.personalityTraits, val);
+                    handleAppearanceChange('personalityArchetype', val);
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      personalityArchetype: val,
+                      personalityTraits: updatedTraits
+                    }));
+                  }}
+                >
+                  <option value="-">- Kein Archetyp (Neutral) -</option>
+                  <optgroup label="Klassische Dere-Typen">
+                    {PERSONALITY_ARCHETYPES.filter(a => a.category === 'Klassische Dere-Typen').map(a => (
+                      <option key={a.name} value={a.name}>{a.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Subtypen & Varianten">
+                    {PERSONALITY_ARCHETYPES.filter(a => a.category === 'Subtypen & Varianten').map(a => (
+                      <option key={a.name} value={a.name}>{a.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Western-Typen">
+                    {PERSONALITY_ARCHETYPES.filter(a => a.category === 'Western-Typen').map(a => (
+                      <option key={a.name} value={a.name}>{a.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Spezielle & Exzentrische Typen">
+                    {PERSONALITY_ARCHETYPES.filter(a => a.category === 'Spezielle & Exzentrische Typen').map(a => (
+                      <option key={a.name} value={a.name}>{a.name}</option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
               <div className="col-span-2">
@@ -139,6 +193,32 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
                   />
                 </div>
               </div>
+              <div className="col-span-2">
+                <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold">Gewicht, KFA & Muskeln</label>
+                <div className="flex gap-1.5">
+                  <input 
+                    type="text" 
+                    className="w-1/3 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500"
+                    placeholder="z.B. 75kg"
+                    value={formData.appearance.weight || ''}
+                    onChange={e => handleAppearanceChange('weight', e.target.value)}
+                  />
+                  <input 
+                    type="text" 
+                    className="w-1/3 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500"
+                    placeholder="KFA (z.B. 22%)"
+                    value={formData.appearance.bodyFat || ''}
+                    onChange={e => handleAppearanceChange('bodyFat', e.target.value)}
+                  />
+                  <input 
+                    type="text" 
+                    className="w-1/3 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500"
+                    placeholder="Muskeln (z.B. 35%)"
+                    value={formData.appearance.muscleMass || ''}
+                    onChange={e => handleAppearanceChange('muscleMass', e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-1">
@@ -155,10 +235,10 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] text-slate-500 font-bold uppercase">Deine Geschichte (Bio)</label>
+            <label className="text-[10px] text-slate-500 font-bold uppercase">Vergangenheit / Biografie</label>
             <AutoExpandingTextarea 
               className="w-full bg-slate-800 border border-slate-700 rounded-xl p-4 text-white min-h-[128px] outline-none focus:border-amber-500 text-sm"
-              placeholder="Erzähle der KI wer du bist..."
+              placeholder="Herkunft, Kindheit, wichtige Bezugspersonen, Schlüsselereignisse, Werdegang, prägende Erfahrungen und ungelöste Vergangenheit..."
               value={formData.bio || ''}
               onChange={e => setFormData({...formData, bio: e.target.value})}
             />

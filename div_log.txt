@@ -1,0 +1,606 @@
+Line 7180 [+0 -0] (Total: 0) | <>
+Line 7181 [+1 -0] (Total: 1) | <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-24 z-10 relative">
+Line 7182 [+0 -0] (Total: 1) | {messages.map((msg, idx) => {
+Line 7183 [+0 -0] (Total: 1) | const isLastMessage = idx === messages.length - 1;
+Line 7184 [+0 -0] (Total: 1) | const isModelMsg = msg.role === 'model';
+Line 7185 [+0 -0] (Total: 1) | const isRegeneratable = isLastMessage && isModelMsg && msg.id !== 'prologue-msg' && msg.id !== 'first-msg';
+Line 7186 [+0 -0] (Total: 1) | 
+Line 7187 [+0 -0] (Total: 1) | return (
+Line 7188 [+1 -0] (Total: 2) | <div key={msg.id || `chat-msg-${idx}`} className="flex flex-col gap-1">
+Line 7189 [+1 -0] (Total: 3) | <div className={`flex items-end ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-3 animate-in fade-in duration-300 relative`}>
+Line 7190 [+1 -0] (Total: 4) | <div className={`max-w-[85%] rounded-2xl shadow-xl overflow-hidden relative ${msg.role === 'user' ? 'bg-amber-600 text-white rounded-tr-none p-4 text-[15px] md:text-[16px]' : 'bg-slate-900/90 border border-slate-800 text-slate-200 rounded-tl-none italic'}`}>
+Line 7191 [+0 -0] (Total: 4) | {msg.image && <img src={msg.image} className="w-full aspect-video object-cover mb-3" />}
+Line 7192 [+0 -0] (Total: 4) | {msg.role === 'model' ? (
+Line 7193 [+1 -0] (Total: 5) | <div className="p-4 markdown-body text-slate-300 space-y-4 text-[15px] md:text-[16px] leading-relaxed">
+Line 7194 [+0 -0] (Total: 5) | {msg.isDialogue ? (
+Line 7195 [+0 -0] (Total: 5) | renderDialogueText(cleanTextForDisplay(msg.text))
+Line 7196 [+0 -0] (Total: 5) | ) : (
+Line 7197 [+0 -0] (Total: 5) | <ReactMarkdown
+Line 7198 [+0 -0] (Total: 5) | components={{
+Line 7199 [+0 -0] (Total: 5) | strong: ({node, ...props}) => {
+Line 7200 [+0 -0] (Total: 5) | const text = String(props.children);
+Line 7201 [+0 -0] (Total: 5) | const isATE = text.toLowerCase().includes('active time event:');
+Line 7202 [+0 -0] (Total: 5) | return <strong className={isATE ? "block text-amber-500 font-bold bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg my-3 uppercase tracking-widest text-xs" : "font-semibold text-slate-100"} {...props} />;
+Line 7203 [+0 -0] (Total: 5) | },
+Line 7204 [+0 -0] (Total: 5) | p: ({node, ...props}) => <p className="leading-relaxed" {...props} />
+Line 7205 [+0 -0] (Total: 5) | }}
+Line 7206 [+0 -0] (Total: 5) | >{cleanTextForDisplay(msg.text)}</ReactMarkdown>
+Line 7207 [+0 -0] (Total: 5) | )}
+Line 7208 [+0 -1] (Total: 4) | </div>
+Line 7209 [+0 -0] (Total: 4) | ) : (
+Line 7210 [+1 -1] (Total: 4) | <div className="whitespace-pre-wrap leading-relaxed p-4">{msg.text}</div>
+Line 7211 [+0 -0] (Total: 4) | )}
+Line 7212 [+0 -1] (Total: 3) | </div>
+Line 7213 [+0 -1] (Total: 2) | </div>
+Line 7214 [+0 -0] (Total: 2) | 
+Line 7215 [+0 -0] (Total: 2) | {isRegeneratable && (
+Line 7216 [+1 -0] (Total: 3) | <div className="flex justify-end gap-2 mt-1.5 mr-2 max-w-[85%] self-start w-full">
+Line 7217 [+0 -0] (Total: 3) | <button
+Line 7218 [+0 -0] (Total: 3) | onClick={handleRegenerate}
+Line 7219 [+0 -0] (Total: 3) | disabled={isLoading}
+Line 7220 [+0 -0] (Total: 3) | className="h-8 px-3 text-slate-400 hover:text-amber-400 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg shadow-lg transition-all text-[11px] font-bold flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+Line 7221 [+0 -0] (Total: 3) | title="Diese Antwort verwerfen und neu generieren"
+Line 7222 [+0 -0] (Total: 3) | >
+Line 7223 [+0 -0] (Total: 3) | <i className={`fa-solid fa-arrows-rotate text-xs ${isLoading ? 'animate-spin' : ''}`}></i>
+Line 7224 [+0 -0] (Total: 3) | <span>Neu laden</span>
+Line 7225 [+0 -0] (Total: 3) | </button>
+Line 7226 [+0 -0] (Total: 3) | 
+Line 7227 [+0 -0] (Total: 3) | <button
+Line 7228 [+0 -0] (Total: 3) | onClick={handleDeleteLastMessage}
+Line 7229 [+0 -0] (Total: 3) | onMouseLeave={() => setShowDeleteConfirm(false)}
+Line 7230 [+0 -0] (Total: 3) | disabled={isLoading}
+Line 7231 [+0 -0] (Total: 3) | className={`h-8 border rounded-lg shadow-lg transition-all text-[11px] font-bold flex items-center gap-1.5 px-3 active:scale-95 disabled:opacity-50 ${
+Line 7232 [+0 -0] (Total: 3) | showDeleteConfirm
+Line 7233 [+0 -0] (Total: 3) | ? 'bg-red-600 border-red-500 text-white'
+Line 7234 [+0 -0] (Total: 3) | : 'text-red-400/85 hover:text-red-400 bg-slate-950 hover:bg-slate-800 border-slate-800'
+Line 7235 [+0 -0] (Total: 3) | }`}
+Line 7236 [+0 -0] (Total: 3) | title="Diese Antwort dauerhaft löschen"
+Line 7237 [+0 -0] (Total: 3) | >
+Line 7238 [+0 -0] (Total: 3) | <i className="fa-solid fa-trash-can text-xs"></i>
+Line 7239 [+0 -0] (Total: 3) | <span>Löschen{showDeleteConfirm ? '?' : ''}</span>
+Line 7240 [+0 -0] (Total: 3) | </button>
+Line 7241 [+0 -1] (Total: 2) | </div>
+Line 7242 [+0 -0] (Total: 2) | )}
+Line 7243 [+0 -1] (Total: 1) | </div>
+Line 7244 [+0 -0] (Total: 1) | );
+Line 7245 [+0 -0] (Total: 1) | })}
+Line 7246 [+4 -4] (Total: 1) | {isLoading && <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl w-fit animate-pulse flex gap-2"><div className="w-2 h-2 bg-amber-500 rounded-full animate-bounce"></div><div className="w-2 h-2 bg-amber-500 rounded-full animate-bounce delay-100"></div><div className="w-2 h-2 bg-amber-500 rounded-full animate-bounce delay-200"></div></div>}
+Line 7247 [+1 -0] (Total: 2) | <div ref={chatEndRef} />
+Line 7248 [+0 -1] (Total: 1) | </div>
+Line 7249 [+0 -0] (Total: 1) | 
+Line 7250 [+0 -0] (Total: 1) | {/* Aufklappbares Dialog-Steuerpanel */}
+Line 7251 [+0 -0] (Total: 1) | {isDialogueMenuExpanded && (
+Line 7252 [+1 -0] (Total: 2) | <div id="dialogue-control-menu" className="bg-slate-900/95 border-2 border-amber-500/40 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-sm w-[calc(100vw-32px)] absolute bottom-24 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+Line 7253 [+0 -0] (Total: 2) | {/* Header */}
+Line 7254 [+1 -0] (Total: 3) | <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+Line 7255 [+1 -0] (Total: 4) | <div className="flex items-center gap-2">
+Line 7256 [+0 -0] (Total: 4) | <i className="fa-solid fa-comments text-amber-500"></i>
+Line 7257 [+0 -0] (Total: 4) | <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
+Line 7258 [+0 -0] (Total: 4) | Reiner Dialog-Modus
+Line 7259 [+0 -0] (Total: 4) | </span>
+Line 7260 [+0 -1] (Total: 3) | </div>
+Line 7261 [+0 -0] (Total: 3) | <button
+Line 7262 [+0 -0] (Total: 3) | onClick={() => setIsDialogueMenuExpanded(false)}
+Line 7263 [+0 -0] (Total: 3) | className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1"
+Line 7264 [+0 -0] (Total: 3) | >
+Line 7265 [+0 -0] (Total: 3) | ✕
+Line 7266 [+0 -0] (Total: 3) | </button>
+Line 7267 [+0 -1] (Total: 2) | </div>
+Line 7268 [+0 -0] (Total: 2) | 
+Line 7269 [+0 -0] (Total: 2) | {/* Status Indicator */}
+Line 7270 [+1 -0] (Total: 3) | <div className="flex items-center justify-between bg-slate-950/60 p-2.5 rounded-xl border border-slate-850">
+Line 7271 [+0 -0] (Total: 3) | <span className="text-xs text-slate-400">Modus-Status:</span>
+Line 7272 [+0 -0] (Total: 3) | <button
+Line 7273 [+0 -0] (Total: 3) | onClick={() => setIsDialogueActive(!isDialogueActive)}
+Line 7274 [+0 -0] (Total: 3) | className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+Line 7275 [+0 -0] (Total: 3) | isDialogueActive
+Line 7276 [+0 -0] (Total: 3) | ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/10'
+Line 7277 [+0 -0] (Total: 3) | : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+Line 7278 [+0 -0] (Total: 3) | }`}
+Line 7279 [+0 -0] (Total: 3) | >
+Line 7280 [+0 -0] (Total: 3) | {isDialogueActive ? '🟢 AKTIV (Keine Erzählung)' : '⚪ INAKTIV'}
+Line 7281 [+0 -0] (Total: 3) | </button>
+Line 7282 [+0 -1] (Total: 2) | </div>
+Line 7283 [+0 -0] (Total: 2) | 
+Line 7284 [+0 -0] (Total: 2) | {/* Dialogue Type Selector (Tabs) */}
+Line 7285 [+1 -0] (Total: 3) | <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-850">
+Line 7286 [+0 -0] (Total: 3) | <button
+Line 7287 [+0 -0] (Total: 3) | type="button"
+Line 7288 [+0 -0] (Total: 3) | onClick={() => setDialogueType('user_npc')}
+Line 7289 [+0 -0] (Total: 3) | className={`py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-wider ${
+Line 7290 [+0 -0] (Total: 3) | dialogueType === 'user_npc'
+Line 7291 [+0 -0] (Total: 3) | ? 'bg-amber-600 text-white'
+Line 7292 [+0 -0] (Total: 3) | : 'text-slate-400 hover:text-slate-200'
+Line 7293 [+0 -0] (Total: 3) | }`}
+Line 7294 [+0 -0] (Total: 3) | >
+Line 7295 [+0 -0] (Total: 3) | Spieler & NPC
+Line 7296 [+0 -0] (Total: 3) | </button>
+Line 7297 [+0 -0] (Total: 3) | <button
+Line 7298 [+0 -0] (Total: 3) | type="button"
+Line 7299 [+0 -0] (Total: 3) | onClick={() => setDialogueType('npc_npc')}
+Line 7300 [+0 -0] (Total: 3) | className={`py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-wider ${
+Line 7301 [+0 -0] (Total: 3) | dialogueType === 'npc_npc'
+Line 7302 [+0 -0] (Total: 3) | ? 'bg-amber-600 text-white'
+Line 7303 [+0 -0] (Total: 3) | : 'text-slate-400 hover:text-slate-200'
+Line 7304 [+0 -0] (Total: 3) | }`}
+Line 7305 [+0 -0] (Total: 3) | >
+Line 7306 [+0 -0] (Total: 3) | NPC & NPC
+Line 7307 [+0 -0] (Total: 3) | </button>
+Line 7308 [+0 -0] (Total: 3) | <button
+Line 7309 [+0 -0] (Total: 3) | type="button"
+Line 7310 [+0 -0] (Total: 3) | onClick={() => setDialogueType('group')}
+Line 7311 [+0 -0] (Total: 3) | className={`py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-wider ${
+Line 7312 [+0 -0] (Total: 3) | dialogueType === 'group'
+Line 7313 [+0 -0] (Total: 3) | ? 'bg-amber-600 text-white'
+Line 7314 [+0 -0] (Total: 3) | : 'text-slate-400 hover:text-slate-200'
+Line 7315 [+0 -0] (Total: 3) | }`}
+Line 7316 [+0 -0] (Total: 3) | >
+Line 7317 [+0 -0] (Total: 3) | Gruppe
+Line 7318 [+0 -0] (Total: 3) | </button>
+Line 7319 [+0 -1] (Total: 2) | </div>
+Line 7320 [+0 -0] (Total: 2) | 
+Line 7321 [+0 -0] (Total: 2) | {/* Dialogue Type Options */}
+Line 7322 [+0 -0] (Total: 2) | {dialogueType === 'user_npc' && (
+Line 7323 [+1 -0] (Total: 3) | <div className="space-y-2">
+Line 7324 [+0 -0] (Total: 3) | <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Gesprächspartner wählen:</label>
+Line 7325 [+0 -0] (Total: 3) | {adventure.npcs && adventure.npcs.length > 0 ? (
+Line 7326 [+0 -0] (Total: 3) | <select
+Line 7327 [+0 -0] (Total: 3) | value={dialogueSpeakerId}
+Line 7328 [+0 -0] (Total: 3) | onChange={(e) => setDialogueSpeakerId(e.target.value)}
+Line 7329 [+0 -0] (Total: 3) | className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50"
+Line 7330 [+0 -0] (Total: 3) | >
+Line 7331 [+0 -0] (Total: 3) | {adventure.npcs.map(npc => (
+Line 7332 [+0 -0] (Total: 3) | <option key={npc.id} value={npc.id}>
+Line 7333 [+0 -0] (Total: 3) | {npc.nickname || npc.name} ({npc.role})
+Line 7334 [+0 -0] (Total: 3) | </option>
+Line 7335 [+0 -0] (Total: 3) | ))}
+Line 7336 [+0 -0] (Total: 3) | </select>
+Line 7337 [+0 -0] (Total: 3) | ) : (
+Line 7338 [+0 -0] (Total: 3) | <p className="text-[10px] text-red-400 italic">Keine NPCs in dieser Welt verfügbar. Bitte erstelle zuerst einen Charakter/NPC im Codex!</p>
+Line 7339 [+0 -0] (Total: 3) | )}
+Line 7340 [+0 -0] (Total: 3) | <p className="text-[10px] text-slate-500 leading-normal">
+Line 7341 [+0 -0] (Total: 3) | Schreibe unten deine gesprochenen Worte. Der gewählte NPC wird im reinen Dialog antworten – ganz ohne beschreibende Erzählungen.
+Line 7342 [+0 -0] (Total: 3) | </p>
+Line 7343 [+0 -1] (Total: 2) | </div>
+Line 7344 [+0 -0] (Total: 2) | )}
+Line 7345 [+0 -0] (Total: 2) | 
+Line 7346 [+0 -0] (Total: 2) | {dialogueType === 'npc_npc' && (
+Line 7347 [+1 -0] (Total: 3) | <div className="space-y-3">
+Line 7348 [+1 -0] (Total: 4) | <div className="grid grid-cols-2 gap-2">
+Line 7349 [+1 -0] (Total: 5) | <div className="space-y-1">
+Line 7350 [+0 -0] (Total: 5) | <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Sprecher A:</label>
+Line 7351 [+0 -0] (Total: 5) | <select
+Line 7352 [+0 -0] (Total: 5) | value={dialogueSpeakerId}
+Line 7353 [+0 -0] (Total: 5) | onChange={(e) => setDialogueSpeakerId(e.target.value)}
+Line 7354 [+0 -0] (Total: 5) | className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500/50"
+Line 7355 [+0 -0] (Total: 5) | >
+Line 7356 [+0 -0] (Total: 5) | {adventure.npcs?.map(npc => (
+Line 7357 [+0 -0] (Total: 5) | <option key={npc.id} value={npc.id} disabled={npc.id === dialogueTargetId}>
+Line 7358 [+0 -0] (Total: 5) | {npc.nickname || npc.name}
+Line 7359 [+0 -0] (Total: 5) | </option>
+Line 7360 [+0 -0] (Total: 5) | ))}
+Line 7361 [+0 -0] (Total: 5) | </select>
+Line 7362 [+0 -1] (Total: 4) | </div>
+Line 7363 [+1 -0] (Total: 5) | <div className="space-y-1">
+Line 7364 [+0 -0] (Total: 5) | <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Sprecher B:</label>
+Line 7365 [+0 -0] (Total: 5) | <select
+Line 7366 [+0 -0] (Total: 5) | value={dialogueTargetId}
+Line 7367 [+0 -0] (Total: 5) | onChange={(e) => setDialogueTargetId(e.target.value)}
+Line 7368 [+0 -0] (Total: 5) | className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500/50"
+Line 7369 [+0 -0] (Total: 5) | >
+Line 7370 [+0 -0] (Total: 5) | {adventure.npcs?.map(npc => (
+Line 7371 [+0 -0] (Total: 5) | <option key={npc.id} value={npc.id} disabled={npc.id === dialogueSpeakerId}>
+Line 7372 [+0 -0] (Total: 5) | {npc.nickname || npc.name}
+Line 7373 [+0 -0] (Total: 5) | </option>
+Line 7374 [+0 -0] (Total: 5) | ))}
+Line 7375 [+0 -0] (Total: 5) | </select>
+Line 7376 [+0 -1] (Total: 4) | </div>
+Line 7377 [+0 -1] (Total: 3) | </div>
+Line 7378 [+0 -0] (Total: 3) | <p className="text-[10px] text-slate-500 leading-normal">
+Line 7379 [+0 -0] (Total: 3) | Gib unten ein Gesprächsthema vor oder schreibe den ersten Satz (z.B. "Sie reden über die anstehende Mission") und drücke Senden. Die beiden NPCs führen ein reines Hin-und-Her-Gespräch.
+Line 7380 [+0 -0] (Total: 3) | </p>
+Line 7381 [+0 -1] (Total: 2) | </div>
+Line 7382 [+0 -0] (Total: 2) | )}
+Line 7383 [+0 -0] (Total: 2) | 
+Line 7384 [+0 -0] (Total: 2) | {dialogueType === 'group' && (
+Line 7385 [+1 -0] (Total: 3) | <div className="space-y-2">
+Line 7386 [+0 -0] (Total: 3) | <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Teilnehmer wählen (Mehrfachauswahl):</label>
+Line 7387 [+1 -0] (Total: 4) | <div className="space-y-1.5 max-h-32 overflow-y-auto bg-slate-950/80 p-2 rounded-xl border border-slate-850">
+Line 7388 [+0 -0] (Total: 4) | {adventure.npcs && adventure.npcs.length > 0 ? (
+Line 7389 [+0 -0] (Total: 4) | adventure.npcs.map(npc => {
+Line 7390 [+0 -0] (Total: 4) | const isChecked = dialogueGroupSelectedIds.includes(npc.id);
+Line 7391 [+0 -0] (Total: 4) | return (
+Line 7392 [+0 -0] (Total: 4) | <button
+Line 7393 [+0 -0] (Total: 4) | key={npc.id}
+Line 7394 [+0 -0] (Total: 4) | type="button"
+Line 7395 [+0 -0] (Total: 4) | onClick={() => {
+Line 7396 [+0 -0] (Total: 4) | if (isChecked) {
+Line 7397 [+0 -0] (Total: 4) | setDialogueGroupSelectedIds(prev => prev.filter(id => id !== npc.id));
+Line 7398 [+0 -0] (Total: 4) | } else {
+Line 7399 [+0 -0] (Total: 4) | setDialogueGroupSelectedIds(prev => [...prev, npc.id]);
+Line 7400 [+0 -0] (Total: 4) | }
+Line 7401 [+0 -0] (Total: 4) | }}
+Line 7402 [+0 -0] (Total: 4) | className="w-full flex items-center justify-between text-left p-1.5 hover:bg-slate-900 rounded-lg transition-all"
+Line 7403 [+0 -0] (Total: 4) | >
+Line 7404 [+0 -0] (Total: 4) | <span className="text-xs text-slate-200">{npc.nickname || npc.name}</span>
+Line 7405 [+0 -0] (Total: 4) | <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] border ${isChecked ? 'bg-amber-600 border-amber-500 text-white' : 'border-slate-700 text-transparent'}`}>✓</span>
+Line 7406 [+0 -0] (Total: 4) | </button>
+Line 7407 [+0 -0] (Total: 4) | );
+Line 7408 [+0 -0] (Total: 4) | })
+Line 7409 [+0 -0] (Total: 4) | ) : (
+Line 7410 [+0 -0] (Total: 4) | <p className="text-[10px] text-slate-500 italic">Keine NPCs vorhanden.</p>
+Line 7411 [+0 -0] (Total: 4) | )}
+Line 7412 [+0 -1] (Total: 3) | </div>
+Line 7413 [+0 -0] (Total: 3) | <p className="text-[10px] text-slate-500 leading-normal">
+Line 7414 [+0 -0] (Total: 3) | Gib unten ein Thema für die Gruppe vor. Die ausgewählten NPCs unterhalten sich lebendig im reinen Dialogformat miteinander.
+Line 7415 [+0 -0] (Total: 3) | </p>
+Line 7416 [+0 -1] (Total: 2) | </div>
+Line 7417 [+0 -0] (Total: 2) | )}
+Line 7418 [+0 -1] (Total: 1) | </div>
+Line 7419 [+0 -0] (Total: 1) | )}
+Line 7420 [+0 -0] (Total: 1) | 
+Line 7421 [+0 -0] (Total: 1) | {/* Aufklappbares JRPG Kampf-Steuerpanel */}
+Line 7422 [+0 -0] (Total: 1) | {isCombatMenuExpanded && (
+Line 7423 [+1 -0] (Total: 2) | <div id="jrpg-combat-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-sm w-[calc(100vw-32px)] absolute bottom-24 left-4 animate-in slide-in-from-bottom duration-200 z-30">
+Line 7424 [+0 -0] (Total: 2) | {/* Kopfzeile */}
+Line 7425 [+1 -0] (Total: 3) | <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+Line 7426 [+1 -0] (Total: 4) | <div className="flex items-center gap-2">
+Line 7427 [+0 -0] (Total: 4) | <i className={`fa-solid ${isCombatActive ? 'fa-hand-fist text-red-500' : 'fa-circle-info text-amber-500'}`}></i>
+Line 7428 [+0 -0] (Total: 4) | <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300 font-sans">
+Line 7429 [+0 -0] (Total: 4) | {isCombatActive ? 'JRPG Kampf-Interface' : 'Kampf vorbereiten'}
+Line 7430 [+0 -0] (Total: 4) | </span>
+Line 7431 [+0 -1] (Total: 3) | </div>
+Line 7432 [+0 -0] (Total: 3) | <button
+Line 7433 [+0 -0] (Total: 3) | onClick={() => setIsCombatMenuExpanded(false)}
+Line 7434 [+0 -0] (Total: 3) | className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1"
+Line 7435 [+0 -0] (Total: 3) | >
+Line 7436 [+0 -0] (Total: 3) | ✕
+Line 7437 [+0 -0] (Total: 3) | </button>
+Line 7438 [+0 -1] (Total: 2) | </div>
+Line 7439 [+0 -0] (Total: 2) | 
+Line 7440 [+0 -0] (Total: 2) | {/* SubMenu: START (Wenn Kampf inaktiv) */}
+Line 7441 [+1 -0] (Total: 3) | <div className="space-y-3">
+Line 7442 [+0 -0] (Total: 3) | <p className="text-[11px] text-slate-400">
+Line 7443 [+0 -0] (Total: 3) | Wähle einen anwesenden Gegner oder eine Gruppe aus den jüngsten Chat-Ereignissen, um den Kampf zu starten:
+Line 7444 [+0 -0] (Total: 3) | </p>
+Line 7445 [+0 -0] (Total: 3) | 
+Line 7446 [+0 -0] (Total: 3) | {/* Erkannte anwesende Gegner und Gruppen */}
+Line 7447 [+1 -0] (Total: 4) | <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+Line 7448 [+0 -0] (Total: 4) | {detectedEnemies.length > 0 ? (
+Line 7449 [+0 -0] (Total: 4) | detectedEnemies.map(enemy => (
+Line 7450 [+0 -0] (Total: 4) | <button
+Line 7451 [+0 -0] (Total: 4) | key={enemy.id}
+Line 7452 [+0 -0] (Total: 4) | onClick={() => {
+Line 7453 [+0 -0] (Total: 4) | if (enemy.type === 'npc') {
+Line 7454 [+0 -0] (Total: 4) | startCombat(enemy.id, enemy.name);
+Line 7455 [+0 -0] (Total: 4) | } else {
+Line 7456 [+0 -0] (Total: 4) | startCombat('custom', enemy.name);
+Line 7457 [+0 -0] (Total: 4) | }
+Line 7458 [+0 -0] (Total: 4) | }}
+Line 7459 [+0 -0] (Total: 4) | className="w-full text-left p-2.5 rounded-xl border border-red-500/30 bg-red-950/20 hover:bg-red-950/40 hover:border-red-500/50 transition-all flex items-center justify-between group"
+Line 7460 [+0 -0] (Total: 4) | >
+Line 7461 [+1 -0] (Total: 5) | <div className="flex items-center gap-2">
+Line 7462 [+0 -0] (Total: 5) | <span className="text-red-500 group-hover:scale-110 transition-transform text-xs">
+Line 7463 [+0 -0] (Total: 5) | {enemy.type === 'npc' ? '👤' : enemy.type === 'group' ? '👥' : '⚔️'}
+Line 7464 [+0 -0] (Total: 5) | </span>
+Line 7465 [+1 -0] (Total: 6) | <div>
+Line 7466 [+1 -0] (Total: 7) | <div className="text-xs font-bold text-slate-200">
+Line 7467 [+0 -0] (Total: 7) | {enemy.name} {enemy.type === 'group' && (() => {
+Line 7468 [+0 -0] (Total: 7) | const count = parseGroupCountFromText(enemy.name, messages.map(m => m.text || '').join(' '));
+Line 7469 [+0 -0] (Total: 7) | return count ? `(Gruppe von ca. ${count})` : '(Gruppe)';
+Line 7470 [+0 -0] (Total: 7) | })()}
+Line 7471 [+0 -1] (Total: 6) | </div>
+Line 7472 [+1 -0] (Total: 7) | <div className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">
+Line 7473 [+0 -0] (Total: 7) | {enemy.subtitle || (enemy.type === 'npc' ? 'Anwesender Charakter' : 'Erkannte Bedrohung / Gruppe')}
+Line 7474 [+0 -1] (Total: 6) | </div>
+Line 7475 [+0 -1] (Total: 5) | </div>
+Line 7476 [+0 -1] (Total: 4) | </div>
+Line 7477 [+0 -0] (Total: 4) | <i className="fa-solid fa-chevron-right text-[10px] text-red-500/60 group-hover:translate-x-0.5 transition-transform"></i>
+Line 7478 [+0 -0] (Total: 4) | </button>
+Line 7479 [+0 -0] (Total: 4) | ))
+Line 7480 [+0 -0] (Total: 4) | ) : (
+Line 7481 [+1 -0] (Total: 5) | <div className="text-center py-3 text-[10px] text-slate-500 italic bg-slate-950/40 rounded-xl border border-slate-900">
+Line 7482 [+0 -0] (Total: 5) | Keine anwesenden Bedrohungen im Chat erkannt.
+Line 7483 [+0 -1] (Total: 4) | </div>
+Line 7484 [+0 -0] (Total: 4) | )}
+Line 7485 [+0 -1] (Total: 3) | </div>
+Line 7486 [+0 -0] (Total: 3) | 
+Line 7487 [+0 -0] (Total: 3) | {/* Trennlinie */}
+Line 7488 [+1 -0] (Total: 4) | <div className="flex items-center gap-2 my-2">
+Line 7489 [+1 -1] (Total: 4) | <div className="h-px bg-slate-800 flex-1"></div>
+Line 7490 [+0 -0] (Total: 4) | <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Oder manuell eingeben</span>
+Line 7491 [+1 -1] (Total: 4) | <div className="h-px bg-slate-800 flex-1"></div>
+Line 7492 [+0 -1] (Total: 3) | </div>
+Line 7493 [+0 -0] (Total: 3) | 
+Line 7494 [+1 -0] (Total: 4) | <div className="space-y-1">
+Line 7495 [+0 -0] (Total: 4) | <input
+Line 7496 [+0 -0] (Total: 4) | type="text"
+Line 7497 [+0 -0] (Total: 4) | value={customEnemyName}
+Line 7498 [+0 -0] (Total: 4) | onChange={e => setCustomEnemyName(e.target.value)}
+Line 7499 [+0 -0] (Total: 4) | placeholder="z.B. Großer Bär, Ninja-Assassinen, Banditen..."
+Line 7500 [+0 -0] (Total: 4) | className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-600"
+Line 7501 [+0 -0] (Total: 4) | />
+Line 7502 [+0 -1] (Total: 3) | </div>
+Line 7503 [+0 -0] (Total: 3) | 
+Line 7504 [+0 -0] (Total: 3) | <button
+Line 7505 [+0 -0] (Total: 3) | onClick={() => {
+Line 7506 [+0 -0] (Total: 3) | if (!customEnemyName.trim()) {
+Line 7507 [+0 -0] (Total: 3) | setError("Bitte gib einen Gegner an!");
+Line 7508 [+0 -0] (Total: 3) | return;
+Line 7509 [+0 -0] (Total: 3) | }
+Line 7510 [+0 -0] (Total: 3) | 
+Line 7511 [+0 -0] (Total: 3) | startCombat('custom', customEnemyName);
+Line 7512 [+0 -0] (Total: 3) | }}
+Line 7513 [+0 -0] (Total: 3) | className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-1.5"
+Line 7514 [+0 -0] (Total: 3) | >
+Line 7515 [+0 -0] (Total: 3) | <i className="fa-solid fa-crosshairs"></i> Kampf beginnen
+Line 7516 [+0 -0] (Total: 3) | </button>
+Line 7517 [+0 -1] (Total: 2) | </div>
+Line 7518 [+0 -1] (Total: 1) | </div>
+Line 7519 [+0 -0] (Total: 1) | )}
+Line 7520 [+0 -0] (Total: 1) | 
+Line 7521 [+1 -0] (Total: 2) | <div className="absolute bottom-0 left-0 right-0 p-3 pb-6 bg-gradient-to-t from-slate-950 to-transparent z-20">
+Line 7522 [+0 -0] (Total: 2) | {error && (
+Line 7523 [+1 -0] (Total: 3) | <div className="mb-2 p-2 bg-red-950/90 border border-red-800/40 rounded-xl text-red-200 text-xs flex justify-between items-center shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-bottom-1 duration-200 gap-2">
+Line 7524 [+0 -0] (Total: 3) | <span className="flex-1 pr-2">{error}</span>
+Line 7525 [+0 -0] (Total: 3) | <button
+Line 7526 [+0 -0] (Total: 3) | onClick={() => {
+Line 7527 [+0 -0] (Total: 3) | setError(null);
+Line 7528 [+0 -0] (Total: 3) | handleRegenerate();
+Line 7529 [+0 -0] (Total: 3) | }}
+Line 7530 [+0 -0] (Total: 3) | className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-[10px] font-bold transition-all shrink-0 uppercase tracking-wider"
+Line 7531 [+0 -0] (Total: 3) | >
+Line 7532 [+0 -0] (Total: 3) | Wiederholen
+Line 7533 [+0 -0] (Total: 3) | </button>
+Line 7534 [+0 -0] (Total: 3) | <button onClick={() => setError(null)} className="text-red-400 hover:text-red-200 font-bold px-2 py-1">✕</button>
+Line 7535 [+0 -1] (Total: 2) | </div>
+Line 7536 [+0 -0] (Total: 2) | )}
+Line 7537 [+0 -0] (Total: 2) | 
+Line 7538 [+0 -0] (Total: 2) | {/* Icon-Leiste über dem Chat-Eingabefeld */}
+Line 7539 [+1 -0] (Total: 3) | <div className="flex items-center gap-3 mb-2 px-3">
+Line 7540 [+0 -0] (Total: 3) | <button
+Line 7541 [+0 -0] (Total: 3) | id="combat-toggle-btn"
+Line 7542 [+0 -0] (Total: 3) | onClick={() => {
+Line 7543 [+0 -0] (Total: 3) | setIsCombatMenuExpanded(!isCombatMenuExpanded);
+Line 7544 [+0 -0] (Total: 3) | if (!isCombatMenuExpanded) {
+Line 7545 [+0 -0] (Total: 3) | setCombatSubMenu(isCombatActive ? 'main' : 'start');
+Line 7546 [+0 -0] (Total: 3) | }
+Line 7547 [+0 -0] (Total: 3) | setIsDialogueMenuExpanded(false);
+Line 7548 [+0 -0] (Total: 3) | }}
+Line 7549 [+0 -0] (Total: 3) | className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all shadow-xl active:scale-95 ${
+Line 7550 [+0 -0] (Total: 3) | isCombatActive
+Line 7551 [+0 -0] (Total: 3) | ? 'bg-red-600 border-red-400 animate-pulse text-white shadow-red-900/50'
+Line 7552 [+0 -0] (Total: 3) | : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-amber-500 hover:text-amber-500 shadow-slate-950/50'
+Line 7553 [+0 -0] (Total: 3) | }`}
+Line 7554 [+0 -0] (Total: 3) | title={isCombatActive ? "JRPG Kampf-Steuerung" : "Kampf-Modus starten"}
+Line 7555 [+0 -0] (Total: 3) | >
+Line 7556 [+0 -0] (Total: 3) | <i className="fa-solid fa-bolt text-sm"></i>
+Line 7557 [+0 -0] (Total: 3) | </button>
+Line 7558 [+0 -0] (Total: 3) | 
+Line 7559 [+0 -0] (Total: 3) | <button
+Line 7560 [+0 -0] (Total: 3) | id="dialogue-toggle-btn"
+Line 7561 [+0 -0] (Total: 3) | onClick={() => {
+Line 7562 [+0 -0] (Total: 3) | setIsDialogueMenuExpanded(!isDialogueMenuExpanded);
+Line 7563 [+0 -0] (Total: 3) | if (!isDialogueMenuExpanded) {
+Line 7564 [+0 -0] (Total: 3) | setIsCombatMenuExpanded(false);
+Line 7565 [+0 -0] (Total: 3) | // Autofill first NPC for speech if available
+Line 7566 [+0 -0] (Total: 3) | if (adventure.npcs && adventure.npcs.length > 0) {
+Line 7567 [+0 -0] (Total: 3) | if (!dialogueSpeakerId) setDialogueSpeakerId(adventure.npcs[0].id);
+Line 7568 [+0 -0] (Total: 3) | if (adventure.npcs.length > 1 && !dialogueTargetId) setDialogueTargetId(adventure.npcs[1].id);
+Line 7569 [+0 -0] (Total: 3) | }
+Line 7570 [+0 -0] (Total: 3) | }
+Line 7571 [+0 -0] (Total: 3) | }}
+Line 7572 [+0 -0] (Total: 3) | className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all shadow-xl active:scale-95 ${
+Line 7573 [+0 -0] (Total: 3) | isDialogueActive
+Line 7574 [+0 -0] (Total: 3) | ? 'bg-amber-500 border-amber-300 text-slate-950 shadow-amber-950/50'
+Line 7575 [+0 -0] (Total: 3) | : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-amber-500 hover:text-amber-500 shadow-slate-950/50'
+Line 7576 [+0 -0] (Total: 3) | }`}
+Line 7577 [+0 -0] (Total: 3) | title={isDialogueActive ? "Reiner Dialog-Modus aktiv" : "Reinen Dialog-Modus starten"}
+Line 7578 [+0 -0] (Total: 3) | >
+Line 7579 [+0 -0] (Total: 3) | <i className="fa-solid fa-comments text-xs"></i>
+Line 7580 [+0 -0] (Total: 3) | </button>
+Line 7581 [+0 -0] (Total: 3) | 
+Line 7582 [+1 -1] (Total: 3) | <div className="w-px h-6 bg-slate-700 mx-1"></div>
+Line 7583 [+0 -0] (Total: 3) | 
+Line 7584 [+0 -0] (Total: 3) | {!isCombatActive && (
+Line 7585 [+0 -0] (Total: 3) | <>
+Line 7586 [+0 -0] (Total: 3) | <button
+Line 7587 [+0 -0] (Total: 3) | type="button"
+Line 7588 [+0 -0] (Total: 3) | onClick={() => handleRestAction('short')}
+Line 7589 [+0 -0] (Total: 3) | className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-emerald-400 hover:bg-emerald-950 hover:border-emerald-500 hover:text-emerald-350 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
+Line 7590 [+0 -0] (Total: 3) | title="Kurze Rast einlegen (+30% HP, MP & Kräfte)"
+Line 7591 [+0 -0] (Total: 3) | >
+Line 7592 [+0 -0] (Total: 3) | <i className="fa-solid fa-mug-hot group-hover:-translate-y-0.5 transition-transform text-sm"></i>
+Line 7593 [+0 -0] (Total: 3) | </button>
+Line 7594 [+0 -0] (Total: 3) | 
+Line 7595 [+0 -0] (Total: 3) | <button
+Line 7596 [+0 -0] (Total: 3) | type="button"
+Line 7597 [+0 -0] (Total: 3) | onClick={() => handleRestAction('long')}
+Line 7598 [+0 -0] (Total: 3) | className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-indigo-400 hover:bg-indigo-950 hover:border-indigo-500 hover:text-indigo-350 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
+Line 7599 [+0 -0] (Total: 3) | title="Schlafen / Lange Rast (+100% HP, MP, Ausdauer & Kräfte)"
+Line 7600 [+0 -0] (Total: 3) | >
+Line 7601 [+0 -0] (Total: 3) | <i className="fa-solid fa-bed group-hover:-translate-y-0.5 transition-transform text-sm"></i>
+Line 7602 [+0 -0] (Total: 3) | </button>
+Line 7603 [+0 -0] (Total: 3) | 
+Line 7604 [+1 -1] (Total: 3) | <div className="w-px h-6 bg-slate-700 mx-1"></div>
+Line 7605 [+0 -0] (Total: 3) | </>
+Line 7606 [+0 -0] (Total: 3) | )}
+Line 7607 [+0 -0] (Total: 3) | 
+Line 7608 [+0 -0] (Total: 3) | <button
+Line 7609 [+0 -0] (Total: 3) | onClick={() => insertFormatting('*', '*')}
+Line 7610 [+0 -0] (Total: 3) | className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
+Line 7611 [+0 -0] (Total: 3) | title="Handlung beschreiben (*...*)"
+Line 7612 [+0 -0] (Total: 3) | >
+Line 7613 [+0 -0] (Total: 3) | <i className="fa-solid fa-person-running group-hover:-translate-y-0.5 transition-transform"></i>
+Line 7614 [+0 -0] (Total: 3) | </button>
+Line 7615 [+0 -0] (Total: 3) | 
+Line 7616 [+1 -0] (Total: 4) | <div className="relative">
+Line 7617 [+0 -0] (Total: 4) | <button
+Line 7618 [+0 -0] (Total: 4) | onClick={() => { setShowEmotionMenu(!showEmotionMenu); setShowToneMenu(false); setShowFavoritesMenu(false); }}
+Line 7619 [+0 -0] (Total: 4) | className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
+Line 7620 [+0 -0] (Total: 4) | title="Gesichtsausdruck beschreiben"
+Line 7621 [+0 -0] (Total: 4) | >
+Line 7622 [+0 -0] (Total: 4) | <i className="fa-regular fa-face-smile group-hover:-translate-y-0.5 transition-transform"></i>
+Line 7623 [+0 -0] (Total: 4) | </button>
+Line 7624 [+0 -0] (Total: 4) | {showEmotionMenu && (
+Line 7625 [+1 -0] (Total: 5) | <div className="absolute bottom-full left-0 mb-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
+Line 7626 [+1 -0] (Total: 6) | <div className="p-1.5 px-3 text-[10px] uppercase font-bold text-slate-400 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
+Line 7627 [+0 -0] (Total: 6) | <span>Emotion</span>
+Line 7628 [+0 -0] (Total: 6) | <span className="text-[8px] text-slate-500 lowercase">oft benutzt oben</span>
+Line 7629 [+0 -1] (Total: 5) | </div>
+Line 7630 [+1 -0] (Total: 6) | <div className="max-h-56 overflow-y-auto">
+Line 7631 [+0 -0] (Total: 6) | {sortedEmotions.map(e => {
+Line 7632 [+0 -0] (Total: 6) | const count = emotionUsage[e] || 0;
+Line 7633 [+0 -0] (Total: 6) | return (
+Line 7634 [+0 -0] (Total: 6) | <button
+Line 7635 [+0 -0] (Total: 6) | key={e}
+Line 7636 [+0 -0] (Total: 6) | onClick={() => {
+Line 7637 [+0 -0] (Total: 6) | insertFormatting(`[schaut ${e}] `, '');
+Line 7638 [+0 -0] (Total: 6) | handleSelectEmotion(e);
+Line 7639 [+0 -0] (Total: 6) | setShowEmotionMenu(false);
+Line 7640 [+0 -0] (Total: 6) | }}
+Line 7641 [+0 -0] (Total: 6) | className="block w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+Line 7642 [+0 -0] (Total: 6) | >
+Line 7643 [+0 -0] (Total: 6) | <span className="flex items-center justify-between w-full">
+Line 7644 [+0 -0] (Total: 6) | <span>{e}</span>
+Line 7645 [+0 -0] (Total: 6) | {count > 0 && <span className="text-[9px] text-amber-500 font-extrabold flex items-center gap-0.5 font-mono">🔥 {count}</span>}
+Line 7646 [+0 -0] (Total: 6) | </span>
+Line 7647 [+0 -0] (Total: 6) | </button>
+Line 7648 [+0 -0] (Total: 6) | );
+Line 7649 [+0 -0] (Total: 6) | })}
+Line 7650 [+0 -1] (Total: 5) | </div>
+Line 7651 [+0 -1] (Total: 4) | </div>
+Line 7652 [+0 -0] (Total: 4) | )}
+Line 7653 [+0 -1] (Total: 3) | </div>
+Line 7654 [+0 -0] (Total: 3) | 
+Line 7655 [+1 -0] (Total: 4) | <div className="relative">
+Line 7656 [+0 -0] (Total: 4) | <button
+Line 7657 [+0 -0] (Total: 4) | onClick={() => { setShowToneMenu(!showToneMenu); setShowEmotionMenu(false); setShowFavoritesMenu(false); }}
+Line 7658 [+0 -0] (Total: 4) | className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
+Line 7659 [+0 -0] (Total: 4) | title="Stimme/Tonart beschreiben"
+Line 7660 [+0 -0] (Total: 4) | >
+Line 7661 [+0 -0] (Total: 4) | <i className="fa-solid fa-microphone-lines group-hover:-translate-y-0.5 transition-transform"></i>
+Line 7662 [+0 -0] (Total: 4) | </button>
+Line 7663 [+0 -0] (Total: 4) | {showToneMenu && (
+Line 7664 [+1 -0] (Total: 5) | <div className="absolute bottom-full left-0 mb-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
+Line 7665 [+1 -0] (Total: 6) | <div className="p-1.5 px-3 text-[10px] uppercase font-bold text-slate-400 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
+Line 7666 [+0 -0] (Total: 6) | <span>Tonart</span>
+Line 7667 [+0 -0] (Total: 6) | <span className="text-[8px] text-slate-500 lowercase">oft benutzt oben</span>
+Line 7668 [+0 -1] (Total: 5) | </div>
+Line 7669 [+1 -0] (Total: 6) | <div className="max-h-56 overflow-y-auto">
+Line 7670 [+0 -0] (Total: 6) | {sortedTones.map(e => {
+Line 7671 [+0 -0] (Total: 6) | const count = toneUsage[e] || 0;
+Line 7672 [+0 -0] (Total: 6) | return (
+Line 7673 [+0 -0] (Total: 6) | <button
+Line 7674 [+0 -0] (Total: 6) | key={e}
+Line 7675 [+0 -0] (Total: 6) | onClick={() => {
+Line 7676 [+0 -0] (Total: 6) | insertFormatting(`[spricht ${e}] `, '');
+Line 7677 [+0 -0] (Total: 6) | handleSelectTone(e);
+Line 7678 [+0 -0] (Total: 6) | setShowToneMenu(false);
+Line 7679 [+0 -0] (Total: 6) | }}
+Line 7680 [+0 -0] (Total: 6) | className="block w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+Line 7681 [+0 -0] (Total: 6) | >
+Line 7682 [+0 -0] (Total: 6) | <span className="flex items-center justify-between w-full">
+Line 7683 [+0 -0] (Total: 6) | <span>{e}</span>
+Line 7684 [+0 -0] (Total: 6) | {count > 0 && <span className="text-[9px] text-amber-500 font-extrabold flex items-center gap-0.5 font-mono">🔥 {count}</span>}
+Line 7685 [+0 -0] (Total: 6) | </span>
+Line 7686 [+0 -0] (Total: 6) | </button>
+Line 7687 [+0 -0] (Total: 6) | );
+Line 7688 [+0 -0] (Total: 6) | })}
+Line 7689 [+0 -1] (Total: 5) | </div>
+Line 7690 [+0 -1] (Total: 4) | </div>
+Line 7691 [+0 -0] (Total: 4) | )}
+Line 7692 [+0 -1] (Total: 3) | </div>
+Line 7693 [+0 -0] (Total: 3) | 
+Line 7694 [+1 -0] (Total: 4) | <div className="relative">
+Line 7695 [+0 -0] (Total: 4) | <button
+Line 7696 [+0 -0] (Total: 4) | type="button"
+Line 7697 [+0 -0] (Total: 4) | onClick={() => { setShowFavoritesMenu(!showFavoritesMenu); setShowEmotionMenu(false); setShowToneMenu(false); }}
+Line 7698 [+0 -0] (Total: 4) | className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
+Line 7699 [+0 -0] (Total: 4) | title="Lieblingstechniken (Favoriten)"
+Line 7700 [+0 -0] (Total: 4) | >
+Line 7701 [+0 -0] (Total: 4) | <i className="fa-solid fa-star text-amber-400 group-hover:scale-110 transition-transform"></i>
+Line 7702 [+0 -0] (Total: 4) | </button>
+Line 7703 [+0 -0] (Total: 4) | {showFavoritesMenu && (
+Line 7704 [+1 -0] (Total: 5) | <div className="absolute bottom-full left-0 mb-2 w-72 bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+Line 7705 [+1 -0] (Total: 6) | <div className="p-2.5 px-3 text-[10px] uppercase font-extrabold text-amber-500 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+Line 7706 [+0 -0] (Total: 6) | <span className="flex items-center gap-1.5"><i className="fa-solid fa-star text-amber-400"></i> Favoriten-Techniken</span>
+Line 7707 [+0 -0] (Total: 6) | <button onClick={() => setShowFavoritesMenu(false)} className="text-slate-500 hover:text-slate-300 text-xs">✕</button>
+Line 7708 [+0 -1] (Total: 5) | </div>
+Line 7709 [+1 -0] (Total: 6) | <div className="max-h-64 overflow-y-auto p-1.5 space-y-1 bg-slate-950/40">
+Line 7710 [+0 -0] (Total: 6) | {getFavoriteTechniques().length === 0 ? (
+Line 7711 [+1 -0] (Total: 7) | <div className="p-4 text-center text-xs text-slate-500 italic leading-relaxed">
+Line 7712 [+0 -0] (Total: 7) | Keine Favoriten markiert.<br />
+Line 7713 [+0 -0] (Total: 7) | Markiere Techniken im <span className="text-amber-500/95 font-bold">Logbuch</span> (oben rechts) mit dem Stern-Symbol.
+Line 7714 [+0 -1] (Total: 6) | </div>
+Line 7715 [+0 -0] (Total: 6) | ) : (
+Line 7716 [+0 -0] (Total: 6) | getFavoriteTechniques().map((tech, i) => (
+Line 7717 [+0 -0] (Total: 6) | <button
+Line 7718 [+0 -0] (Total: 6) | key={tech.id || i}
+Line 7719 [+0 -0] (Total: 6) | type="button"
+Line 7720 [+0 -0] (Total: 6) | onClick={() => {
+Line 7721 [+0 -0] (Total: 6) | insertFormatting(`*${tech.name}*`, '');
+Line 7722 [+0 -0] (Total: 6) | setShowFavoritesMenu(false);
+Line 7723 [+0 -0] (Total: 6) | }}
+Line 7724 [+0 -0] (Total: 6) | className="w-full text-left p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-850/60 hover:border-amber-500/30 transition-all flex flex-col gap-0.5"
+Line 7725 [+0 -0] (Total: 6) | >
+Line 7726 [+1 -0] (Total: 7) | <div className="flex justify-between items-center w-full">
+Line 7727 [+0 -0] (Total: 7) | <span className="font-bold text-xs text-slate-200">{tech.name}</span>
+Line 7728 [+0 -0] (Total: 7) | <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 font-bold">Lv. {tech.level || 1}</span>
+Line 7729 [+0 -1] (Total: 6) | </div>
+Line 7730 [+0 -0] (Total: 6) | {tech.description && (
+Line 7731 [+0 -0] (Total: 6) | <p className="text-[10px] text-slate-400 leading-tight line-clamp-2 italic">{tech.description}</p>
+Line 7732 [+0 -0] (Total: 6) | )}
+Line 7733 [+0 -0] (Total: 6) | </button>
+Line 7734 [+0 -0] (Total: 6) | ))
+Line 7735 [+0 -0] (Total: 6) | )}
+Line 7736 [+0 -1] (Total: 5) | </div>
+Line 7737 [+0 -1] (Total: 4) | </div>
+Line 7738 [+0 -0] (Total: 4) | )}
+Line 7739 [+0 -1] (Total: 3) | </div>
+Line 7740 [+0 -1] (Total: 2) | </div>
+Line 7741 [+0 -0] (Total: 2) | 
+Line 7742 [+1 -0] (Total: 3) | <div className={`relative flex items-center gap-2 bg-slate-900/80 border rounded-3xl p-1 shadow-2xl backdrop-blur-md transition-all ${
+Line 7743 [+0 -0] (Total: 3) | isDialogueActive
+Line 7744 [+0 -0] (Total: 3) | ? 'border-amber-500/50 ring-2 ring-amber-500/20 shadow-amber-900/10'
+Line 7745 [+0 -0] (Total: 3) | : 'border-slate-700/50'
+Line 7746 [+0 -0] (Total: 3) | }`}>
+Line 7747 [+0 -0] (Total: 3) | {isDialogueActive && (
+Line 7748 [+1 -0] (Total: 4) | <div className="pl-3 shrink-0 flex items-center" title="Reiner Dialog-Modus aktiv">
+Line 7749 [+0 -0] (Total: 4) | <span className="flex h-2.5 w-2.5 relative">
+Line 7750 [+0 -0] (Total: 4) | <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+Line 7751 [+0 -0] (Total: 4) | <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+Line 7752 [+0 -0] (Total: 4) | </span>
+Line 7753 [+0 -1] (Total: 3) | </div>
+Line 7754 [+0 -0] (Total: 3) | )}
+Line 7755 [+0 -0] (Total: 3) | <AutoExpandingTextarea
+Line 7756 [+0 -0] (Total: 3) | ref={textareaRef}
+Line 7757 [+0 -0] (Total: 3) | rows={1}
+Line 7758 [+0 -0] (Total: 3) | value={inputText}
+Line 7759 [+0 -0] (Total: 3) | onChange={e => setInputText(e.target.value)}
+Line 7760 [+0 -0] (Total: 3) | onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), isDialogueActive ? handleSendDialogue() : handleSend())}
+Line 7761 [+0 -0] (Total: 3) | placeholder={
+Line 7762 [+0 -0] (Total: 3) | !isDialogueActive ? "Deine Handlung..." :
+Line 7763 [+0 -0] (Total: 3) | dialogueType === 'user_npc' ? `Wörtliche Rede an ${(adventure.npcs?.find(n => n.id === dialogueSpeakerId)?.nickname || adventure.npcs?.find(n => n.id === dialogueSpeakerId)?.name || 'NPC')}...` :
+Line 7764 [+0 -0] (Total: 3) | dialogueType === 'npc_npc' ? "Gesprächsthema oder erster Satz..." : "Thema für die Gruppe..."
+Line 7765 [+0 -0] (Total: 3) | }
+Line 7766 [+0 -0] (Total: 3) | className="flex-1 bg-transparent border-none px-4 py-2 text-sm text-white outline-none resize-none placeholder:text-slate-500 max-h-40"
+Line 7767 [+0 -0] (Total: 3) | />
+Line 7768 [+0 -0] (Total: 3) | <button
+Line 7769 [+0 -0] (Total: 3) | onClick={isDialogueActive ? handleSendDialogue : handleSend}
+Line 7770 [+0 -0] (Total: 3) | disabled={isLoading || (isDialogueActive ? (dialogueType === 'user_npc' && !inputText.trim()) : !inputText.trim())}
+Line 7771 [+0 -0] (Total: 3) | className={`w-10 h-10 rounded-full text-white disabled:opacity-50 flex items-center justify-center shadow-md active:scale-90 transition-all flex-shrink-0 ${
+Line 7772 [+0 -0] (Total: 3) | isDialogueActive ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold' : 'bg-amber-600 hover:bg-amber-500'
+Line 7773 [+0 -0] (Total: 3) | }`}
+Line 7774 [+0 -0] (Total: 3) | >
+Line 7775 [+0 -0] (Total: 3) | <i className="fa-solid fa-paper-plane text-sm"></i>
+Line 7776 [+0 -0] (Total: 3) | </button>
+Line 7777 [+0 -1] (Total: 2) | </div>
+Line 7778 [+0 -1] (Total: 1) | </div>
+Line 7779 [+0 -0] (Total: 1) | </>
+Line 7780 [+0 -0] (Total: 1) | ) : (
+Line 7781 [+0 -0] (Total: 1) | /* SPEZIELLES DEDIZIERTES KAMPFFELD (MULTI-PANEL COMBAT STAGE) */
+Line 7782 [+1 -0] (Total: 2) | <div className="flex-1 flex flex-col md:flex-row p-3 gap-3 overflow-hidden z-10 relative bg-slate-950/40">
+Line 7783 [+0 -0] (Total: 2) | 
+Line 7784 [+0 -0] (Total: 2) | {/* LINKS: LISTE DER VERBÜNDETEN (ALLIES) */}
+Line 7785 [+1 -0] (Total: 3) | <div className="flex-shrink-0 md:w-64 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col gap-4 shadow-xl backdrop-blur-sm overflow-y-auto max-h-[30vh] md:max-h-full">

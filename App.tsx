@@ -4,6 +4,8 @@ import { Adventure, GameViewMode, UserProfile } from './types';
 import AdventureEditor from './components/AdventureEditor';
 import GameView from './components/GameView';
 import UserProfileEditor from './components/UserProfileEditor';
+import { BodySilhouette } from './components/BodySilhouette';
+import { GeminiService } from './services/geminiService';
 
 const USER_ID = "local-user-123";
 
@@ -47,8 +49,9 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [adventureToDelete, setAdventureToDelete] = useState<string | null>(null);
-  const [activeLogbookTab, setActiveLogbookTab] = useState<'character' | 'stats' | 'abilities' | 'inventory' | 'chronicle'>('character');
+  const [activeLogbookTab, setActiveLogbookTab] = useState<'character' | 'stats' | 'abilities' | 'inventory' | 'chronicle' | 'codex'>('character');
   const [statsSubTab, setStatsSubTab] = useState<'resources' | 'radar'>('resources');
+  const [codexSubTab, setCodexSubTab] = useState<'rules' | 'timeline'>('rules');
   const [newWeaponName, setNewWeaponName] = useState("");
   const [newItemName, setNewItemName] = useState("");
 
@@ -57,7 +60,95 @@ const App: React.FC = () => {
     try {
       const saved = localStorage.getItem('adventures');
       if (saved) {
-        setAdventures(JSON.parse(saved));
+        const loadedAdventures: Adventure[] = JSON.parse(saved);
+        setAdventures(loadedAdventures);
+
+        // Async background optimization to shrink large images (e.g., length > 120,000)
+        setTimeout(async () => {
+          let hasOptimized = false;
+          const optimized = await Promise.all(loadedAdventures.map(async (adv) => {
+            let advChanged = false;
+            
+            // Compress player portrait
+            if (adv.player?.image && adv.player.image.startsWith('data:') && adv.player.image.length > 120000) {
+              try {
+                const compressed = await GeminiService.compressImageBase64(adv.player.image, 512, 0.65);
+                if (compressed !== adv.player.image) {
+                  adv.player.image = compressed;
+                  advChanged = true;
+                }
+              } catch (e) {
+                console.error("Failed to compress player image", e);
+              }
+            }
+
+            // Compress initial player portrait
+            if (adv.initialPlayer?.image && adv.initialPlayer.image.startsWith('data:') && adv.initialPlayer.image.length > 120000) {
+              try {
+                const compressed = await GeminiService.compressImageBase64(adv.initialPlayer.image, 512, 0.65);
+                if (compressed !== adv.initialPlayer.image) {
+                  adv.initialPlayer.image = compressed;
+                  advChanged = true;
+                }
+              } catch (e) {
+                console.error("Failed to compress initial player image", e);
+              }
+            }
+
+            // Compress NPCs portraits
+            if (adv.npcs && adv.npcs.length > 0) {
+              const updatedNpcs = await Promise.all(adv.npcs.map(async (npc) => {
+                if (npc.image && npc.image.startsWith('data:') && npc.image.length > 120000) {
+                  try {
+                    const compressed = await GeminiService.compressImageBase64(npc.image, 512, 0.65);
+                    if (compressed !== npc.image) {
+                      advChanged = true;
+                      return { ...npc, image: compressed };
+                    }
+                  } catch (e) {
+                    console.error("Failed to compress NPC image", e);
+                  }
+                }
+                return npc;
+              }));
+              if (advChanged) {
+                adv.npcs = updatedNpcs;
+              }
+            }
+
+            // Compress initial NPCs portraits
+            if (adv.initialNpcs && adv.initialNpcs.length > 0) {
+              const updatedInitialNpcs = await Promise.all(adv.initialNpcs.map(async (npc) => {
+                if (npc.image && npc.image.startsWith('data:') && npc.image.length > 120000) {
+                  try {
+                    const compressed = await GeminiService.compressImageBase64(npc.image, 512, 0.65);
+                    if (compressed !== npc.image) {
+                      advChanged = true;
+                      return { ...npc, image: compressed };
+                    }
+                  } catch (e) {
+                    console.error("Failed to compress initial NPC image", e);
+                  }
+                }
+                return npc;
+              }));
+              if (advChanged) {
+                adv.initialNpcs = updatedInitialNpcs;
+              }
+            }
+
+            if (advChanged) {
+              hasOptimized = true;
+            }
+            return adv;
+          }));
+
+          if (hasOptimized) {
+            console.log("LocalStorage adventures successfully optimized and compressed!");
+            setAdventures(optimized);
+            localStorage.setItem('adventures', JSON.stringify(optimized));
+          }
+        }, 1500);
       }
     } catch (e) {
       console.error("Fehler beim Laden der Abenteuer:", e);
@@ -97,21 +188,372 @@ const App: React.FC = () => {
       newAdventures = [adventure, ...adventures];
     }
     
+    // Set state and navigate to PLAY mode immediately so the user can play and chat!
+    setAdventures(newAdventures);
+    setCurrentAdventure(adventure);
+    setViewMode(GameViewMode.PLAY);
+    setError(null);
+
     try {
       localStorage.setItem('adventures_temp', JSON.stringify(newAdventures));
       localStorage.removeItem('adventures_temp');
-      setAdventures(newAdventures);
-      setCurrentAdventure(adventure);
-      setViewMode(GameViewMode.PLAY);
-      setError(null);
     } catch (e) {
-      setError("Speicherplatz reicht nicht aus für dieses Abenteuer (Bilder zu groß?).");
+      setError("Speicherplatz voll (Bilder zu groß?). Deine Änderungen sind in dieser Sitzung aktiv, können aber beim Schließen verloren gehen.");
     }
   };
 
+  const autoSaveAdventure = (adventure: Adventure) => {
+    const exists = adventures.find(a => a.id === adventure.id);
+    let newAdventures;
+    if (exists) {
+      newAdventures = adventures.map(a => a.id === adventure.id ? adventure : a);
+    } else {
+      newAdventures = [adventure, ...adventures];
+    }
+    
+    try {
+      setAdventures(newAdventures);
+      setCurrentAdventure(adventure);
+    } catch (e) {
+    }
+  };
+
+  /**
+   * cleanupCodex: Bereinigt die loreDatabase von verwaisten Geister-Einträgen,
+   * unvollständigen Fragmenten und Einträgen, die nicht mit der aktuellen
+   * Abenteuer-Session oder dem aktiven Nutzer verknüpft sind.
+   */
+  const cleanupCodex = (advToClean?: Adventure): Adventure | null => {
+    const target = advToClean || currentAdventure;
+    if (!target) return null;
+
+    const playerName = (target.player?.name || '').trim().toLowerCase();
+    const playerNick = (target.player?.nickname || '').trim().toLowerCase();
+    const origPlayerName = (target.player?.originalIdentity?.name || '').trim().toLowerCase();
+    const userProfileName = (userProfile?.name || '').trim().toLowerCase();
+
+    const isUserOrPlayerOwner = (owner?: string) => {
+      if (!owner) return true; // Globale / neutrale Welteneinträge beibehalten
+      const o = owner.trim().toLowerCase();
+      if (['spieler', 'player', 'user', 'nutzer', 'alle', 'öffentlich', 'world', 'welt'].includes(o)) return true;
+      if (playerName && (o === playerName || o.includes(playerName) || playerName.includes(o))) return true;
+      if (playerNick && (o === playerNick || o.includes(playerNick) || playerNick.includes(o))) return true;
+      if (origPlayerName && (o === origPlayerName || o.includes(origPlayerName))) return true;
+      if (userProfileName && (o === userProfileName || o.includes(userProfileName))) return true;
+      return false;
+    };
+
+    const activeNpcNames = new Set<string>();
+    (target.npcs || []).forEach(n => {
+      if (n.name) activeNpcNames.add(n.name.trim().toLowerCase());
+      if (n.nickname) activeNpcNames.add(n.nickname.trim().toLowerCase());
+    });
+    (target.initialNpcs || []).forEach(n => {
+      if (n.name) activeNpcNames.add(n.name.trim().toLowerCase());
+      if (n.nickname) activeNpcNames.add(n.nickname.trim().toLowerCase());
+    });
+
+    const isKnownNpcOwner = (owner?: string) => {
+      if (!owner) return false;
+      const o = owner.trim().toLowerCase();
+      for (const npcName of activeNpcNames) {
+        if (o === npcName || o.includes(npcName) || npcName.includes(o)) return true;
+      }
+      return false;
+    };
+
+    const structuredInvItems = new Set<string>();
+    if (target.structuredInventory) {
+      (target.structuredInventory.weapons || []).forEach(w => w && structuredInvItems.add(w.trim().toLowerCase()));
+      (target.structuredInventory.generalItems || []).forEach(i => i && structuredInvItems.add(i.trim().toLowerCase()));
+      if (target.structuredInventory.armor) {
+        Object.values(target.structuredInventory.armor).forEach(a => typeof a === 'string' && a && structuredInvItems.add(a.trim().toLowerCase()));
+      }
+      if (target.structuredInventory.accessories) {
+        Object.values(target.structuredInventory.accessories).forEach(a => typeof a === 'string' && a && structuredInvItems.add(a.trim().toLowerCase()));
+      }
+    }
+    (target.inventory || []).forEach(i => i && structuredInvItems.add(i.trim().toLowerCase()));
+
+    const currentLore = target.loreDatabase || [];
+    const seenSignatures = new Set<string>();
+    const cleanedLore: any[] = [];
+
+    currentLore.forEach((entry: any) => {
+      if (!entry || typeof entry !== 'object') return;
+      const title = (entry.title || '').trim();
+      const category = (entry.category || '').trim();
+      if (!title || !category) return; // Ungültige Fragmente ohne Titel oder Kategorie entfernen
+
+      // Eindeutige Signatur (Kategorie + bereinigter Name)
+      const normKey = `${category.toLowerCase()}_${title.toLowerCase().replace(/[-\s_]/g, '')}`;
+      if (seenSignatures.has(normKey)) {
+        return; // Duplikate und Geister-Klone verwerfen
+      }
+
+      // Spezifische Bereinigungsprüfung nach Kategorie
+      if (category === 'Gegenstände') {
+        const owner = entry.details?.owner;
+        const lowerTitle = title.toLowerCase();
+        const isInInventory = structuredInvItems.has(lowerTitle);
+        const isPlayerOwned = isUserOrPlayerOwner(owner);
+        const isNpcOwned = isKnownNpcOwner(owner);
+
+        // Verwaiste Gegenstände ohne Bezug zum Spieler, den aktiven NPCs oder dem Inventar
+        if (owner && !isPlayerOwned && !isNpcOwned && !isInInventory && entry.id?.startsWith('dyn-')) {
+          return;
+        }
+      } else if (category === 'Charaktere') {
+        const charNameLower = title.toLowerCase();
+        const isPlayer = isUserOrPlayerOwner(charNameLower);
+        const isNpc = isKnownNpcOwner(charNameLower);
+        const isInitialWorldChar = !(entry.id?.startsWith('dyn-'));
+
+        // Dynamische Geister-Charaktere aus vorherigen Sitzungen eliminieren
+        if (!isPlayer && !isNpc && !isInitialWorldChar && (!entry.description || entry.description.trim().length < 5)) {
+          return;
+        }
+      }
+
+      seenSignatures.add(normKey);
+      cleanedLore.push(entry);
+    });
+
+    const cleanedAdventure: Adventure = {
+      ...target,
+      loreDatabase: cleanedLore,
+      ...(target.initialLoreDatabase ? {
+        initialLoreDatabase: target.initialLoreDatabase.filter((initEntry: any) =>
+          cleanedLore.some((c: any) => c.id === initEntry.id || c.title === initEntry.title)
+        )
+      } : {})
+    };
+
+    setAdventures(prev => {
+      const updated = prev.map(a => a.id === cleanedAdventure.id ? cleanedAdventure : a);
+      try {
+        localStorage.setItem('adventures', JSON.stringify(updated));
+      } catch (e) {
+        console.error("Fehler beim Speichern der bereinigten Abenteuer:", e);
+      }
+      return updated;
+    });
+
+    setCurrentAdventure(cleanedAdventure);
+    return cleanedAdventure;
+  };
+
   const updateAdventure = (updatedAdv: Adventure) => {
-    setAdventures(prev => prev.map(a => a.id === updatedAdv.id ? updatedAdv : a));
-    setCurrentAdventure(updatedAdv);
+    let finalAdv = updatedAdv;
+    if (updatedAdv.structuredInventory) {
+      const pName = updatedAdv.player?.name || 'Spieler';
+      let updatedLore = [...(updatedAdv.loreDatabase || [])];
+      let changed = false;
+
+      const isOwnerMatch = (owner?: string) => {
+        if (!owner) return false;
+        const o = owner.trim().toLowerCase();
+        const p = pName.trim().toLowerCase();
+        return o === p || o === 'spieler' || o === 'player' || (updatedAdv.player?.nickname && o === updatedAdv.player.nickname.trim().toLowerCase());
+      };
+
+      // Ensure that any item whose owner is NOT the player is removed from the player's structuredInventory
+      const notOwnedItemNames = updatedLore
+        .filter(entry => 
+          entry.category === 'Gegenstände' && 
+          (!entry.details?.owner || !isOwnerMatch(entry.details.owner))
+        )
+        .map(entry => entry.title.trim().toLowerCase());
+
+      // Ensure that any weapon or item whose owner IS the player is added to structuredInventory
+      const playerOwnedEntries = updatedLore.filter(entry => 
+        entry.category === 'Gegenstände' && isOwnerMatch(entry.details?.owner)
+      );
+
+      let invChanged = false;
+      let currentInv = { ...updatedAdv.structuredInventory };
+
+      let cleanWeapons = [...(currentInv.weapons || [])].filter(wpn => {
+        const isNotOwned = wpn && notOwnedItemNames.includes(wpn.trim().toLowerCase());
+        if (isNotOwned) invChanged = true;
+        return !isNotOwned;
+      });
+
+      let cleanGeneralItems = [...(currentInv.generalItems || [])].filter(itm => {
+        const isNotOwned = itm && notOwnedItemNames.includes(itm.trim().toLowerCase());
+        if (isNotOwned) invChanged = true;
+        return !isNotOwned;
+      });
+
+      const cleanArmor = { ...(currentInv.armor || {}) };
+      if (currentInv.armor) {
+        (Object.keys(currentInv.armor) as Array<keyof typeof cleanArmor>).forEach(slot => {
+          const val = cleanArmor[slot];
+          if (val && notOwnedItemNames.includes(val.trim().toLowerCase())) {
+            cleanArmor[slot] = "";
+            invChanged = true;
+          }
+        });
+      }
+
+      const cleanAccessories = { ...(currentInv.accessories || {}) };
+      if (currentInv.accessories) {
+        (Object.keys(currentInv.accessories) as Array<keyof typeof cleanAccessories>).forEach(slot => {
+          const val = cleanAccessories[slot];
+          if (val && notOwnedItemNames.includes(val.trim().toLowerCase())) {
+            cleanAccessories[slot] = "";
+            invChanged = true;
+          }
+        });
+      }
+
+      // Check for weapons and items from the Codex that belong to the player
+      const weaponKeywords = ['schwert', 'bogen', 'dolch', 'klinge', 'degen', 'gewehr', 'pistole', 'lanze', 'speer', 'axt', 'tsuki no wa', 'säbel', 'katana', 'waffe', 'weapon', 'messer', 'schild', 'drachenschwert', 'lanze', 'kolben', 'hammer', 'stab'];
+      playerOwnedEntries.forEach(entry => {
+        const title = entry.title?.trim();
+        if (!title) return;
+        const titleLower = title.toLowerCase();
+        const typeLower = (entry.details?.itemType || '').toLowerCase();
+        const descLower = (entry.description || '').toLowerCase();
+        const isWeapon = typeLower.includes('waff') || weaponKeywords.some(kw => titleLower.includes(kw) || typeLower.includes(kw) || descLower.includes(kw));
+
+        if (isWeapon) {
+          if (!cleanWeapons.some(w => w.trim().toLowerCase() === titleLower)) {
+            cleanWeapons.push(title);
+            invChanged = true;
+          }
+        } else {
+          // If it's not armor or accessory, add to generalItems if not present
+          const inArmor = Object.values(cleanArmor).some(a => typeof a === 'string' && a.trim().toLowerCase() === titleLower);
+          const inAcc = Object.values(cleanAccessories).some(a => typeof a === 'string' && a.trim().toLowerCase() === titleLower);
+          if (!inArmor && !inAcc && !cleanGeneralItems.some(i => i.trim().toLowerCase() === titleLower)) {
+            cleanGeneralItems.push(title);
+            invChanged = true;
+          }
+        }
+      });
+
+      if (invChanged) {
+        updatedAdv = {
+          ...updatedAdv,
+          structuredInventory: {
+            ...currentInv,
+            weapons: cleanWeapons,
+            generalItems: cleanGeneralItems,
+            armor: cleanArmor,
+            accessories: cleanAccessories
+          }
+        };
+        finalAdv = updatedAdv;
+      }
+
+      const ensureItemInCodex = (name: string, isWpn: boolean) => {
+        if (!name) return;
+        const trimmed = name.trim();
+        const lower = trimmed.toLowerCase();
+        if (!trimmed || lower === 'keine' || lower === 'keines' || lower === 'kein' || lower === 'empty') return;
+
+        const existsIdx = updatedLore.findIndex(e => e.category === 'Gegenstände' && e.title.trim().toLowerCase() === lower);
+        if (existsIdx > -1) {
+          const existing = updatedLore[existsIdx];
+          const currentDetails = existing.details || {};
+          if (!existing.isUnlocked || currentDetails.owner?.trim().toLowerCase() !== pName.trim().toLowerCase()) {
+            updatedLore[existsIdx] = {
+              ...existing,
+              isUnlocked: true,
+              details: {
+                ...currentDetails,
+                owner: pName
+              }
+            };
+            changed = true;
+          }
+        } else {
+          const itemType = isWpn ? 'Waffen' : 'Werkzeuge & Alltags-Gegenstände';
+          const newEntry = {
+            id: 'dyn-itm-' + Math.random().toString(36).substr(2, 9),
+            category: 'Gegenstände',
+            title: trimmed,
+            description: isWpn
+              ? `Eine Waffe im Besitz von ${pName}.`
+              : `Ein nützlicher Gegenstand in der Tasche von ${pName}.`,
+            isUnlocked: true,
+            details: {
+              owner: pName,
+              itemType,
+              rarity: 'Gewöhnlich'
+            }
+          };
+          updatedLore.push(newEntry as any);
+          changed = true;
+        }
+      };
+
+      if (Array.isArray(updatedAdv.structuredInventory.weapons)) {
+        updatedAdv.structuredInventory.weapons.forEach((wpn: string) => ensureItemInCodex(wpn, true));
+      }
+      if (Array.isArray(updatedAdv.structuredInventory.generalItems)) {
+        updatedAdv.structuredInventory.generalItems.forEach((itm: string) => ensureItemInCodex(itm, false));
+      }
+      if (updatedAdv.structuredInventory.armor) {
+        Object.values(updatedAdv.structuredInventory.armor).forEach((itm: any) => {
+          if (typeof itm === 'string') ensureItemInCodex(itm, false);
+        });
+      }
+      if (updatedAdv.structuredInventory.accessories) {
+        Object.values(updatedAdv.structuredInventory.accessories).forEach((itm: any) => {
+          if (typeof itm === 'string') ensureItemInCodex(itm, false);
+        });
+      }
+
+      if (changed) {
+        finalAdv = {
+          ...updatedAdv,
+          loreDatabase: updatedLore
+        };
+      }
+    }
+
+    // Deduplicate loreDatabase automatically to prevent similar-named duplicates of the same category
+    if (finalAdv.loreDatabase && finalAdv.loreDatabase.length > 0) {
+      const seenCleanTitles = new Map<string, any>(); // category_cleanTitle -> entry reference
+      const cleanLore: any[] = [];
+      let isLoreCleaned = false;
+
+      finalAdv.loreDatabase.forEach((entry: any) => {
+        if (!entry || !entry.category || !entry.title) return;
+        const cleanTitle = `${entry.category}_${entry.title.trim().toLowerCase().replace(/[-\s_]/g, '')}`;
+        if (seenCleanTitles.has(cleanTitle)) {
+          isLoreCleaned = true;
+          // merge details and description of duplicates
+          const firstSeen = seenCleanTitles.get(cleanTitle);
+          if (firstSeen) {
+            firstSeen.description = firstSeen.description || entry.description;
+            firstSeen.details = {
+              ...(firstSeen.details || {}),
+              ...(entry.details || {})
+            };
+            if (entry.isUnlocked) {
+              firstSeen.isUnlocked = true;
+            }
+          }
+        } else {
+          const entryCopy = { ...entry };
+          seenCleanTitles.set(cleanTitle, entryCopy);
+          cleanLore.push(entryCopy);
+        }
+      });
+
+      if (isLoreCleaned) {
+        finalAdv = {
+          ...finalAdv,
+          loreDatabase: cleanLore
+        };
+      }
+    }
+
+    setAdventures(prev => prev.map(a => a.id === finalAdv.id ? finalAdv : a));
+    setCurrentAdventure(finalAdv);
   };
 
   const deleteAdventure = (id: string, e: React.MouseEvent) => {
@@ -292,6 +734,7 @@ const App: React.FC = () => {
       {(viewMode === GameViewMode.CREATE || viewMode === GameViewMode.EDIT_WORLD || viewMode === GameViewMode.JOIN_CUSTOM_CHAR) && (
         <AdventureEditor 
           onSave={saveAdventure} 
+          onAutoSave={autoSaveAdventure}
           onCancel={() => setViewMode(GameViewMode.HOME)}
           initialData={currentAdventure || undefined}
           mode={viewMode}
@@ -320,7 +763,7 @@ const App: React.FC = () => {
           </div>
 
           {/* RPG Tab Navigation */}
-          <div className="grid grid-cols-5 gap-1 mb-6 bg-slate-950 p-1.5 rounded-2xl border border-slate-800/80 shadow-inner">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 mb-6 bg-slate-950 p-1.5 rounded-2xl border border-slate-800/80 shadow-inner">
             <button
               onClick={() => setActiveLogbookTab('character')}
               className={`flex flex-col items-center justify-center py-2 rounded-xl border transition-all cursor-pointer ${
@@ -375,6 +818,17 @@ const App: React.FC = () => {
             >
               <i className="fa-solid fa-book-open text-xs mb-1"></i>
               <span className="text-[10px] tracking-tight uppercase">Chronik</span>
+            </button>
+            <button
+              onClick={() => setActiveLogbookTab('codex')}
+              className={`flex flex-col items-center justify-center py-2 rounded-xl border transition-all cursor-pointer ${
+                activeLogbookTab === 'codex'
+                  ? 'bg-gradient-to-b from-amber-500/15 to-amber-600/5 border-amber-500/50 text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.12)] font-bold'
+                  : 'bg-transparent border-transparent text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+              }`}
+            >
+              <i className="fa-solid fa-scale-balanced text-xs mb-1"></i>
+              <span className="text-[10px] tracking-tight uppercase">Codex</span>
             </button>
           </div>
 
@@ -431,6 +885,100 @@ const App: React.FC = () => {
                     <span className="text-slate-200 text-sm">{(currentAdventure.player.appearance as any).measurements || '-'}</span>
                   </div>
                 </div>
+
+                {/* VISUAL BODY SILHOUETTE SECTION */}
+                <div className="space-y-3 pt-4 border-t border-slate-800/60">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest block">
+                    Körper-Silhouette & Physischer Status
+                  </span>
+                  <BodySilhouette
+                    player={currentAdventure.player}
+                    loreDatabase={currentAdventure.loreDatabase}
+                    npcs={currentAdventure.npcs}
+                    onUpdateLore={(updatedLore) => {
+                      updateAdventure({
+                        ...currentAdventure,
+                        loreDatabase: updatedLore
+                      });
+                    }}
+                    onUpdateNpcs={(updatedNpcs) => {
+                      updateAdventure({
+                        ...currentAdventure,
+                        npcs: updatedNpcs
+                      });
+                    }}
+                    onUpdatePlayer={(updatedPlayer) => {
+                      updateAdventure({
+                        ...currentAdventure,
+                        player: updatedPlayer
+                      });
+                    }}
+                  />
+                </div>
+
+                {/* TRANSFORMATIONEN SECTION */}
+                {currentAdventure.player.abilities?.some(a => a.category === 'Transformationen') && (
+                  <div className="space-y-3 pt-4 border-t border-slate-800/60">
+                    <span className="text-[10px] text-purple-400 font-bold uppercase tracking-widest block">
+                      🌀 Verfügbare Transformationen
+                    </span>
+                    <div className="grid grid-cols-1 gap-2">
+                      {currentAdventure.player.abilities
+                        .filter(a => a.category === 'Transformationen')
+                        .map(ability => {
+                          const isActive = currentAdventure.player.appearance?.activeTransformationId === ability.id;
+                          return (
+                            <div 
+                              key={ability.id} 
+                              className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 ${
+                                isActive 
+                                  ? 'bg-purple-950/20 border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.15)]' 
+                                  : 'bg-slate-950/40 border-slate-850 hover:border-slate-800'
+                              }`}
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-200">{ability.name}</span>
+                                  {isActive && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-200 border border-purple-500/30 font-bold animate-pulse">
+                                      AKTIV
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-400 italic line-clamp-2">{ability.description || 'Keine Beschreibung.'}</p>
+                                {ability.cost && (
+                                  <span className="text-[9.5px] text-slate-500 font-mono">Kosten: {ability.cost}</span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedPlayer = {
+                                    ...currentAdventure.player,
+                                    appearance: {
+                                      ...currentAdventure.player.appearance,
+                                      activeTransformationId: isActive ? 'standard' : (ability.id || '')
+                                    }
+                                  };
+                                  updateAdventure({
+                                    ...currentAdventure,
+                                    player: updatedPlayer
+                                  });
+                                }}
+                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all select-none shrink-0 cursor-pointer ${
+                                  isActive
+                                    ? 'bg-rose-950/40 hover:bg-rose-900/40 border border-rose-900/50 text-rose-300'
+                                    : 'bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/40 text-purple-200'
+                                }`}
+                              >
+                                {isActive ? 'Abbrechen' : 'Verwandeln'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Hintergrund</span>
@@ -1156,9 +1704,28 @@ const App: React.FC = () => {
                       ...oldInv,
                       [field]: value
                     };
+
+                    let updatedStatus = currentAdventure.statusElements;
+                    if (field === 'money' || field === 'currencyLabel') {
+                      const newMoney = field === 'money' ? (parseInt(value) || 0) : (oldInv.money ?? 100);
+                      const newCurr = field === 'currencyLabel' ? (value || '') : (oldInv.currencyLabel || 'Goldstücke');
+                      const moneyStr = `${newMoney} ${newCurr}`.trim();
+
+                      if (updatedStatus && updatedStatus.length > 0) {
+                        updatedStatus = updatedStatus.map(el => {
+                          const l = (el.label || '').toLowerCase();
+                          if (l.includes('vermögen') || l.includes('geld') || l.includes('gold') || l.includes('währung') || l.includes('münzen') || l.includes('berry') || l.includes('credits')) {
+                            return { ...el, value: moneyStr };
+                          }
+                          return el;
+                        });
+                      }
+                    }
+
                     updateAdventure({
                       ...currentAdventure,
-                      structuredInventory: newInv
+                      structuredInventory: newInv,
+                      statusElements: updatedStatus
                     });
                   };
 
@@ -1418,25 +1985,35 @@ const App: React.FC = () => {
                           <i className="fa-solid fa-hand-fist"></i> Waffen / Bewaffnung
                         </h5>
 
-                        {weapons.length > 0 || codexWeapons.length > 0 ? (
+                        {weapons.length > 0 ? (
                           <div className="flex flex-wrap gap-2 pt-1">
-                            {weapons.map((wpn, idx) => (
-                              <span key={`weapon-${idx}`} className="px-3 py-1.5 bg-slate-900/60 border border-slate-850 rounded-xl text-xs text-slate-200 flex items-center gap-2">
-                                <i className="fa-solid fa-shield-halved text-sky-500 text-[10px]"></i>
-                                {wpn}
-                              </span>
-                            ))}
-                            {codexWeapons.map((entry) => (
-                              <span 
-                                key={`codex-weapon-${entry.id}`} 
-                                className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-slate-200 flex items-center gap-2"
-                                title={`${entry.title}: ${entry.description}`}
-                              >
-                                <i className="fa-solid fa-shield-halved text-amber-500 text-[10px]"></i>
-                                {entry.title}
-                                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[8px] font-bold rounded uppercase tracking-wider">Codex</span>
-                              </span>
-                            ))}
+                            {weapons.map((wpn, idx) => {
+                              const codexEntry = (currentAdventure.loreDatabase || []).find(entry => 
+                                entry.category === 'Gegenstände' && 
+                                entry.title.trim().toLowerCase() === wpn.trim().toLowerCase()
+                              );
+
+                              if (codexEntry) {
+                                return (
+                                  <span 
+                                    key={`weapon-codex-${idx}`} 
+                                    className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-slate-200 flex items-center gap-2"
+                                    title={`${codexEntry.title}: ${codexEntry.description}`}
+                                  >
+                                    <i className="fa-solid fa-shield-halved text-amber-500 text-[10px]"></i>
+                                    {codexEntry.title}
+                                    <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[8px] font-bold rounded uppercase tracking-wider">Codex</span>
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <span key={`weapon-${idx}`} className="px-3 py-1.5 bg-slate-900/60 border border-slate-850 rounded-xl text-xs text-slate-200 flex items-center gap-2">
+                                  <i className="fa-solid fa-shield-halved text-sky-500 text-[10px]"></i>
+                                  {wpn}
+                                </span>
+                              );
+                            })}
                           </div>
                         ) : (
                           <p className="text-[11px] text-slate-500 italic py-2 text-center">Keine Waffen ausgerüstet.</p>
@@ -1449,25 +2026,35 @@ const App: React.FC = () => {
                           <i className="fa-solid fa-box-open"></i> Sonstige Gegenstände (Tasche)
                         </h5>
 
-                        {generalItems.length > 0 || codexGeneralItems.length > 0 ? (
+                        {generalItems.length > 0 ? (
                           <div className="flex flex-wrap gap-2 pt-1">
-                            {generalItems.map((itm, idx) => (
-                              <span key={`item-${idx}`} className="px-3 py-1.5 bg-slate-900/60 border border-slate-850 rounded-xl text-xs text-slate-200 flex items-center gap-2">
-                                <i className="fa-solid fa-briefcase text-emerald-500 text-[10px]"></i>
-                                {itm}
-                              </span>
-                            ))}
-                            {codexGeneralItems.map((entry) => (
-                              <span 
-                                key={`codex-item-${entry.id}`} 
-                                className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-slate-200 flex items-center gap-2"
-                                title={`${entry.title}: ${entry.description}`}
-                              >
-                                <i className="fa-solid fa-briefcase text-amber-500 text-[10px]"></i>
-                                {entry.title}
-                                <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[8px] font-bold rounded uppercase tracking-wider">Codex</span>
-                              </span>
-                            ))}
+                            {generalItems.map((itm, idx) => {
+                              const codexEntry = (currentAdventure.loreDatabase || []).find(entry => 
+                                entry.category === 'Gegenstände' && 
+                                entry.title.trim().toLowerCase() === itm.trim().toLowerCase()
+                              );
+
+                              if (codexEntry) {
+                                return (
+                                  <span 
+                                    key={`item-codex-${idx}`} 
+                                    className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-slate-200 flex items-center gap-2"
+                                    title={`${codexEntry.title}: ${codexEntry.description}`}
+                                  >
+                                    <i className="fa-solid fa-briefcase text-amber-500 text-[10px]"></i>
+                                    {codexEntry.title}
+                                    <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[8px] font-bold rounded uppercase tracking-wider">Codex</span>
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <span key={`item-${idx}`} className="px-3 py-1.5 bg-slate-900/60 border border-slate-850 rounded-xl text-xs text-slate-200 flex items-center gap-2">
+                                  <i className="fa-solid fa-briefcase text-emerald-500 text-[10px]"></i>
+                                  {itm}
+                                </span>
+                              );
+                            })}
                           </div>
                         ) : (
                           <p className="text-[11px] text-slate-500 italic py-2 text-center">Tasche ist leer.</p>
@@ -1492,6 +2079,172 @@ const App: React.FC = () => {
                   <p className="text-xs text-slate-500 italic py-6 text-center">
                     Noch keine Chronik aufgezeichnet. Bestreite Abenteuer, damit die KI hier Zusammenfassungen einträgt!
                   </p>
+                )}
+              </div>
+            )}
+
+            {activeLogbookTab === 'codex' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Subtabs for Codex & Cleanup Action */}
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex bg-slate-950 p-1.5 rounded-xl border border-slate-850 gap-1.5 shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => setCodexSubTab('rules')}
+                      className={`px-4 py-1.5 rounded-lg text-[10px] uppercase font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        codexSubTab === 'rules'
+                          ? 'bg-amber-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      <i className="fa-solid fa-scale-balanced"></i>
+                      <span>Weltregeln</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCodexSubTab('timeline')}
+                      className={`px-4 py-1.5 rounded-lg text-[10px] uppercase font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        codexSubTab === 'timeline'
+                          ? 'bg-amber-600 text-white shadow'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      }`}
+                    >
+                      <i className="fa-solid fa-timeline"></i>
+                      <span>Zeitlinie der Geschichte</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => cleanupCodex()}
+                    className="px-3 py-1.5 bg-slate-950 hover:bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl text-[10px] uppercase font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                    title="Bereinigt nicht verknüpfte Geister-Einträge aus der Datenbank"
+                  >
+                    <i className="fa-solid fa-broom text-slate-500"></i>
+                    <span>Codex bereinigen</span>
+                  </button>
+                </div>
+
+                {codexSubTab === 'rules' && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="text-[10px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                        <i className="fa-solid fa-gavel text-amber-500"></i> Aktive Weltregeln ({
+                          (currentAdventure.loreDatabase || []).filter((e: any) => e.category === 'Weltregeln').length
+                        })
+                      </span>
+                    </div>
+
+                    {(() => {
+                      const rules = (currentAdventure.loreDatabase || []).filter((e: any) => e.category === 'Weltregeln');
+                      if (rules.length === 0) {
+                        return (
+                          <div className="text-center py-8 bg-slate-950 rounded-2xl border border-slate-850 p-4">
+                            <p className="text-xs text-slate-500 italic">Keine Weltregeln im Codex eingetragen.</p>
+                            <p className="text-[10px] text-slate-600 mt-1">Du kannst Weltregeln während der Abenteuererstellung im Codex-Schritt konfigurieren.</p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="space-y-3">
+                          {rules.map((rule: any, idx: number) => (
+                            <div key={rule.id || `rule-${idx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-850 shadow-inner flex flex-col gap-2 hover:border-amber-500/20 transition-all animate-in slide-in-from-bottom-2 duration-150">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <h4 className="text-xs font-black text-amber-500 uppercase tracking-wide">{rule.title}</h4>
+                                <div className="flex gap-1.5">
+                                  {rule.details?.ruleType && (
+                                    <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-black uppercase">
+                                      {rule.details.ruleType}
+                                    </span>
+                                  )}
+                                  {rule.details?.scope && (
+                                    <span className="text-[9px] bg-slate-900 text-slate-400 border border-slate-800 px-2 py-0.5 rounded font-black uppercase">
+                                      {rule.details.scope}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-xs text-slate-300 leading-relaxed font-sans">{rule.description}</p>
+                              {rule.details?.aiInstruction && (
+                                <div className="mt-1 bg-slate-900/50 border border-slate-800/40 rounded-xl p-2.5">
+                                  <span className="text-[9px] text-slate-500 font-extrabold uppercase tracking-wider block mb-1">
+                                    <i className="fa-solid fa-brain text-[8px] mr-1"></i> KI-Durchsetzungsanweisung
+                                  </span>
+                                  <p className="text-[11px] text-slate-400 leading-normal italic font-sans">{rule.details.aiInstruction}</p>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {codexSubTab === 'timeline' && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <span className="text-[10px] text-rose-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                        <i className="fa-solid fa-clock text-rose-400"></i> Historische Zeitlinie der Welt ({
+                          (currentAdventure.loreDatabase || []).filter((e: any) => e.category === 'Zeitlinie' && e.isUnlocked).length
+                        })
+                      </span>
+                    </div>
+
+                    {(() => {
+                      const timelineEntries = (currentAdventure.loreDatabase || [])
+                        .filter((e: any) => e.category === 'Zeitlinie' && e.isUnlocked)
+                        .sort((a: any, b: any) => (a.order !== undefined ? a.order : 9999) - (b.order !== undefined ? b.order : 9999));
+
+                      if (timelineEntries.length === 0) {
+                        return (
+                          <div className="text-center py-8 bg-slate-950 rounded-2xl border border-slate-850 p-4">
+                            <p className="text-xs text-slate-500 italic">Noch keine historischen Ereignisse in der Zeitlinie eingetragen oder freigeschaltet.</p>
+                            <p className="text-[10px] text-slate-600 mt-1">Bestreite das Abenteuer, um geschichtliche Ereignisse freizuschalten, oder trage sie im Codex-Editor ein.</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="relative pl-6 border-l-2 border-slate-800 space-y-6 py-2 ml-2">
+                          {timelineEntries.map((entry: any, idx: number) => (
+                            <div key={entry.id || `timeline-${idx}`} className="relative group">
+                              {/* Dot pointer on line */}
+                              <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-slate-900 border-2 border-rose-500 shadow-sm flex items-center justify-center transition-all group-hover:scale-110">
+                                <div className="w-1.5 h-1.5 rounded-full bg-rose-400"></div>
+                              </div>
+                              
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                  <span className="text-xs font-black text-rose-400 font-mono tracking-tight bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded">
+                                    {entry.details?.timeOfEvent || 'Chronik-Punkt'}
+                                  </span>
+                                  {entry.details?.location && (
+                                    <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                                      <i className="fa-solid fa-map-pin text-[8px] text-indigo-400"></i>
+                                      {entry.details.location}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 shadow-inner hover:border-rose-500/20 transition-all">
+                                  <h4 className="text-sm font-bold text-slate-100 mb-1">{entry.title}</h4>
+                                  <p className="text-xs text-slate-300 leading-relaxed font-sans">{entry.description}</p>
+                                  {entry.details?.involvedCharacters && (
+                                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[9px] text-slate-500 font-extrabold uppercase">Beteiligte:</span>
+                                      <span className="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-850 font-medium">
+                                        {entry.details.involvedCharacters}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 )}
               </div>
             )}

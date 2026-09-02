@@ -17,6 +17,18 @@
         .font-fantasy {
             font-family: 'Cinzel', serif;
         }
+        /* Hide scrollbars for utility classes */
+        .custom-scrollbar::-webkit-scrollbar,
+        .no-scrollbar::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+        }
+        .custom-scrollbar,
+        .no-scrollbar {
+            -ms-overflow-style: none !important;  /* IE and Edge */
+            scrollbar-width: none !important;  /* Firefox */
+        }
     </style>
 <script type="importmap">
 {
