@@ -99,6 +99,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
   {
     category: "Militär",
     jobs: [
+      "Soldat",
       "Reitersoldat / Kavallerist",
       "Infanterist",
       "Bogenschütze",
@@ -114,6 +115,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
   {
     category: "Wachen & Sicherheit",
     jobs: [
+      "Wache",
       "Stadtwache",
       "Türsteher",
       "Leibwächter",
@@ -244,11 +246,14 @@ export const JOB_CATEGORIES: JobCategory[] = [
     category: "Dienstleistungen",
     jobs: [
       "Tavernenwirt / Wirt",
-      "Kellner / Magd",
+      "Kellner",
+      "Maid / Hausmädchen",
+      "Magd",
       "Koch / Chefkoch",
       "Barbier / Friseur",
       "Herbergsleiter",
-      "Dienstbote / Butler",
+      "Dienstbote",
+      "Butler",
       "Haushofmeister",
       "Wascherin"
     ]

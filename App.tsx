@@ -193,13 +193,6 @@ const App: React.FC = () => {
     setCurrentAdventure(adventure);
     setViewMode(GameViewMode.PLAY);
     setError(null);
-
-    try {
-      localStorage.setItem('adventures_temp', JSON.stringify(newAdventures));
-      localStorage.removeItem('adventures_temp');
-    } catch (e) {
-      setError("Speicherplatz voll (Bilder zu groß?). Deine Änderungen sind in dieser Sitzung aktiv, können aber beim Schließen verloren gehen.");
-    }
   };
 
   const autoSaveAdventure = (adventure: Adventure) => {
@@ -218,8 +211,6 @@ const App: React.FC = () => {
       setAdventures(newAdventures);
       setCurrentAdventure(adventure);
       
-      localStorage.setItem('adventures_temp', JSON.stringify(newAdventures));
-      localStorage.removeItem('adventures_temp');
       localStorage.setItem('adventures', JSON.stringify(newAdventures));
     } catch (e) {
       console.warn("Auto-save failed to write to localStorage:", e);

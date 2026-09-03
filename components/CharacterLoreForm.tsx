@@ -123,7 +123,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
   const [openApplicationsDropdown, setOpenApplicationsDropdown] = useState<string | null>(null);
 
   // Helper to get and update appearance/details
-  const getDetail = (key: string, defaultVal: string = '') => {
+  const getDetail = <T = string,>(key: string, defaultVal: T = '' as any): T => {
     return editForm.details?.[key] !== undefined ? editForm.details[key] : defaultVal;
   };
 
@@ -2765,7 +2765,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               onJobTitleChange={val => updateDetail('jobTitle', val)}
               professionDescription={getDetail('professionDescription', '')}
               onProfessionDescriptionChange={val => updateDetail('professionDescription', val)}
-              secondaryProfessions={getDetail('secondaryProfessions', [])}
+              secondaryProfessions={getDetail<any[]>('secondaryProfessions', [])}
               onSecondaryProfessionsChange={val => updateDetail('secondaryProfessions', val)}
               talents={getDetail('talents', '')}
               onTalentsChange={val => updateDetail('talents', val)}

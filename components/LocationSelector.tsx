@@ -19,7 +19,7 @@ interface LocationNode {
 }
 
 export const LocationSelector: React.FC<LocationSelectorProps> = ({
-  value,
+  value = "",
   onChange,
   loreDatabase = [],
   placeholder = 'z.B. Zum Tänzelnden Pony',
@@ -27,17 +27,18 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
   className
 }) => {
   const [isManualMode, setIsManualMode] = useState(false);
+  const safeValue = value || "";
 
   // 1. Convert Lore Orte into standard LocationNodes
   const loreNodes = useMemo(() => {
-    const locations = loreDatabase.filter(l => l.category === 'Orte');
+    const locations = loreDatabase.filter(l => l.category === 'Orte' || (l.category as string) === 'Weltkarte');
     return locations.map(l => {
       const mapLevel = l.details?.mapLevel || 'micro';
       let parentId = l.details?.parentPlaceId || null;
       
       // If parentId is a string name, resolve it to an ID where possible
       if (parentId) {
-        const parentEntry = locations.find(p => p.title.trim().toLowerCase() === parentId!.trim().toLowerCase());
+        const parentEntry = locations.find(p => (p.title || '').trim().toLowerCase() === parentId!.trim().toLowerCase());
         if (parentEntry) {
           parentId = parentEntry.id;
         }
@@ -45,7 +46,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
 
       return {
         id: l.id,
-        name: l.title,
+        name: l.title || '',
         type: mapLevel === 'macro' ? 'welt' 
             : mapLevel === 'meso' ? 'region' 
             : mapLevel === 'micro' ? 'ort' 
@@ -62,54 +63,89 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
     const territories = world?.territories || [];
     return territories.map((t: any) => ({
       id: t.id,
-      name: t.name,
+      name: t.name || '',
       type: t.type,
       parentId: t.parentId || null,
       description: t.description
     } as LocationNode));
   }, [world?.territories]);
 
-  // 3. Determine active nodes list (combine both world territories and lore Orte)
+  // 2b. Convert World Region Markers into standard LocationNodes
+  const regionMarkerNodes = useMemo(() => {
+    const markers = world?.regionMarkers || [];
+    return markers.map((m: any) => ({
+      id: m.id || `marker-${m.name}`,
+      name: m.name || '',
+      type: m.type || 'ort',
+      parentId: m.parentId || null,
+      description: m.description
+    } as LocationNode));
+  }, [world?.regionMarkers]);
+
+  // 3. Determine active nodes list (combine world territories, region markers, and lore Orte)
   const nodes = useMemo(() => {
     const combined = [...territoryNodes];
+
+    regionMarkerNodes.forEach(rn => {
+      const exists = combined.some(cn => cn.id === rn.id || (cn.name || '').trim().toLowerCase() === (rn.name || '').trim().toLowerCase());
+      if (!exists) {
+        combined.push(rn);
+      }
+    });
+
     loreNodes.forEach(ln => {
-      const exists = combined.some(cn => cn.id === ln.id || cn.name.trim().toLowerCase() === ln.name.trim().toLowerCase());
+      const exists = combined.some(cn => cn.id === ln.id || (cn.name || '').trim().toLowerCase() === (ln.name || '').trim().toLowerCase());
       if (!exists) {
         combined.push(ln);
       }
     });
+
     return combined;
-  }, [territoryNodes, loreNodes]);
+  }, [territoryNodes, regionMarkerNodes, loreNodes]);
 
   // 4. Build hierarchically ordered flat list with depth information for the <select> options
   const hierarchyOptions = useMemo(() => {
     const parentToChildren: Record<string, LocationNode[]> = {};
     const roots: LocationNode[] = [];
+    const nodeIds = new Set(nodes.map(n => n.id));
 
     nodes.forEach(node => {
-      if (!node.parentId) {
-        roots.push(node);
+      let pId = node.parentId;
+      // Sanitize parentId to check for common string representations of null
+      if (pId === 'null' || pId === 'undefined' || pId === 'none' || pId === 'Keines' || !pId) {
+        pId = null;
+      }
+      
+      // Orphan protection: if the parent does not exist in the nodes array, treat this node as a root
+      if (pId && !nodeIds.has(pId)) {
+        pId = null;
+      }
+
+      if (!pId) {
+        roots.push({ ...node, parentId: null });
       } else {
-        if (!parentToChildren[node.parentId]) {
-          parentToChildren[node.parentId] = [];
+        const cleanedNode = { ...node, parentId: pId };
+        if (!parentToChildren[pId]) {
+          parentToChildren[pId] = [];
         }
-        parentToChildren[node.parentId].push(node);
+        parentToChildren[pId].push(cleanedNode);
       }
     });
 
     // Sort alphabetically
-    roots.sort((a, b) => a.name.localeCompare(b.name));
+    roots.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     Object.keys(parentToChildren).forEach(key => {
-      parentToChildren[key].sort((a, b) => a.name.localeCompare(b.name));
+      parentToChildren[key].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     });
 
     const result: { id: string; name: string; fullPath: string; depth: number }[] = [];
 
     const traverse = (node: LocationNode, depth: number, currentPath: string) => {
-      const fullPath = currentPath ? `${currentPath} ➔ ${node.name}` : node.name;
+      const nodeName = node.name || 'Unbenannter Ort';
+      const fullPath = currentPath ? `${currentPath} ➔ ${nodeName}` : nodeName;
       result.push({
         id: node.id,
-        name: node.name,
+        name: nodeName,
         fullPath,
         depth
       });
@@ -124,10 +160,10 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
 
   // 5. Try to find if currently selected value matches any option in the list
   const matchedOption = useMemo(() => {
-    if (!value) return null;
+    if (!safeValue) return null;
     
     // Clean coordinates like " (X:10, Y:15)" from the value for matching
-    const cleanValue = value.replace(/\s*\(X:\d+,\s*Y:\d+\)/i, '').trim();
+    const cleanValue = safeValue.replace(/\s*\(X:\d+,\s*Y:\d+\)/i, '').trim();
     if (!cleanValue) return null;
 
     // Try exact full path match first
@@ -136,16 +172,16 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
     // Try trailing name match
     const tail = hierarchyOptions.find(opt => opt.fullPath.split(' ➔ ').pop()?.toLowerCase() === cleanValue.toLowerCase());
     return tail;
-  }, [value, hierarchyOptions]);
+  }, [safeValue, hierarchyOptions]);
 
   // 6. Automatically sync manual mode if we have a custom typed value
   useEffect(() => {
-    if (value && !matchedOption) {
+    if (safeValue && !matchedOption) {
       setIsManualMode(true);
     } else {
       setIsManualMode(false);
     }
-  }, [value, matchedOption]);
+  }, [safeValue, matchedOption]);
 
   const selectStyle = className || "w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 cursor-pointer";
 
@@ -156,7 +192,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
           type="text"
           className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-500"
           placeholder={placeholder}
-          value={value}
+          value={safeValue}
           onChange={e => onChange(e.target.value)}
           autoFocus
           id="location-selector-manual-input"
@@ -182,7 +218,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
     <div className="relative w-full text-slate-200" id="location-selector-root">
       <select
         className={selectStyle}
-        value={matchedOption ? matchedOption.fullPath : value ? "custom" : ""}
+        value={matchedOption ? matchedOption.fullPath : safeValue ? "custom" : ""}
         onChange={e => {
           const val = e.target.value;
           if (val === "manual") {
@@ -198,8 +234,8 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
       >
         <option value="">-- Standort wählen --</option>
         
-        {value && !matchedOption && (
-          <option value="custom">✍️ {value} (Eigener Ort)</option>
+        {safeValue && !matchedOption && (
+          <option value="custom">{safeValue} (Eigener Ort)</option>
         )}
 
         {hierarchyOptions.map((opt, index) => {
@@ -213,7 +249,7 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
         })}
 
         <option value="manual" className="text-amber-400 font-semibold bg-slate-950">
-          ✍️ Freitext eingeben (Eigener Ort)...
+          Freitext eingeben (Eigener Ort)...
         </option>
       </select>
     </div>

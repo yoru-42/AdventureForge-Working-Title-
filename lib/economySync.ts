@@ -3,7 +3,8 @@ import {
   LoreEntry, 
   Territory, 
   EconomyHolding, 
-  EconomyConfig
+  EconomyConfig,
+  EconomyRole
 } from '../types';
 import { HOLDING_TYPES, getHoldingPresets } from '../components/economy/EconomyPresets';
 

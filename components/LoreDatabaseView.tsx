@@ -1729,6 +1729,31 @@ const LoreDatabaseView: React.FC<Props> = ({
     }
   };
 
+  const handleDeleteRegionMarker = (id: string) => {
+    const markers = world?.regionMarkers || [];
+    const updatedMarkers = markers.filter((m: any) => {
+      const markerId = m.id || `marker-${m.name}`;
+      return markerId !== id && m.name !== id;
+    });
+    if (onUpdateWorld) {
+      onUpdateWorld({
+        ...world,
+        regionMarkers: updatedMarkers
+      });
+    }
+  };
+
+  const handleDeleteAllRegionMarkers = () => {
+    if (confirm("Möchtest du wirklich alle regionalen POIs, Wegpunkte und Meereszonen unwiderruflich löschen?")) {
+      if (onUpdateWorld) {
+        onUpdateWorld({
+          ...world,
+          regionMarkers: []
+        });
+      }
+    }
+  };
+
   const handleTerritorySmartFill = async () => {
     if (!weltkarteSmartFill.trim()) return;
     setIsSmartFillingTerritory(true);
@@ -4631,6 +4656,76 @@ const LoreDatabaseView: React.FC<Props> = ({
                               <i className="fa-solid fa-trash"></i>
                             </button>
                           </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Region Markers List */}
+              <div className="flex flex-col gap-4 border-t border-slate-800/80 pt-6 mt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h5 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                      <i className="fa-solid fa-compass text-emerald-400"></i>
+                      <span>Regionale Orte &amp; Meereszonen ({world?.regionMarkers?.length || 0})</span>
+                    </h5>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Hier werden zusätzliche Kartenpunkte, maritime Zonen oder sonstige Orientierungspunkte verwaltet.
+                    </p>
+                  </div>
+                  {world?.regionMarkers && world.regionMarkers.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleDeleteAllRegionMarkers}
+                      className="px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900 border border-rose-800/60 text-rose-300 text-xs rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-sm animate-fade-in"
+                    >
+                      <i className="fa-solid fa-trash-can text-rose-400"></i>
+                      <span>Alle löschen</span>
+                    </button>
+                  )}
+                </div>
+
+                {!world?.regionMarkers || world.regionMarkers.length === 0 ? (
+                  <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
+                    Keine regionalen Orte oder Meereszonen vorhanden.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {world.regionMarkers.map((marker: any, index: number) => {
+                      const markerId = marker.id || `marker-${marker.name}`;
+                      return (
+                        <div
+                          key={markerId || index}
+                          className="bg-slate-950 border border-slate-800/80 p-3.5 rounded-xl flex items-start justify-between gap-3 text-slate-200"
+                        >
+                          <div className="flex flex-col gap-1.5 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-emerald-400">
+                                {marker.type || 'Ort'}
+                              </span>
+                              <span className="text-xs font-bold text-slate-200 truncate">
+                                {marker.name}
+                              </span>
+                            </div>
+                            {marker.description && (
+                              <p className="text-[11px] text-slate-400 line-clamp-2">
+                                {marker.description}
+                              </p>
+                            )}
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                              Position: {marker.x !== undefined ? `${marker.x}%` : '50%'}, {marker.y !== undefined ? `${marker.y}%` : '50%'}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRegionMarker(markerId)}
+                            className="text-slate-500 hover:text-rose-400 text-xs p-1.5 hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0"
+                            title="Wegpunkt löschen"
+                          >
+                            <i className="fa-solid fa-trash"></i>
+                          </button>
                         </div>
                       );
                     })}

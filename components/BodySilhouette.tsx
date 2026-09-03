@@ -40,6 +40,9 @@ export interface SilhouetteState {
   isVirgin?: boolean;
   hasChildren?: boolean;
   childrenCount?: number;
+  pregnancyDaysRemaining?: number;
+  pregnancyTestDone?: boolean;
+  pregnancyChangesVisible?: boolean;
 }
 
 const areStatesEqual = (s1: any, s2: any): boolean => {
@@ -658,7 +661,10 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
       customCupSize: undefined,
       isVirgin: initIsVirgin,
       hasChildren: initHasChildren,
-      childrenCount: initChildrenCount
+      childrenCount: initChildrenCount,
+      pregnancyDaysRemaining: saved?.pregnancyDaysRemaining ?? (initPregMonth > 0 ? Math.max(0, 270 - (initPregMonth - 1) * 30) : 270),
+      pregnancyTestDone: saved?.pregnancyTestDone ?? false,
+      pregnancyChangesVisible: saved?.pregnancyChangesVisible ?? false
     };
 
     if (saved) {
@@ -1918,11 +1924,14 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
       const newWeight = Math.max(30, Math.min(250, baseNonPregWeight + Math.round(newMonth * 1.4)));
       const newFat = Math.max(3, Math.min(60, baseNonPregFat + Math.round(newMonth * 0.6)));
 
+      const defaultDays = Math.max(0, 270 - (newMonth - 1) * 30);
+
       return {
         ...prev,
         pregnancyMonth: newMonth,
         weight: newWeight,
-        bodyFat: newFat
+        bodyFat: newFat,
+        pregnancyDaysRemaining: defaultDays
       };
     });
   };
@@ -3595,6 +3604,92 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                       onChange={e => updatePregnancyMonth(parseInt(e.target.value))}
                       className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-pink-500 focus:outline-none"
                     />
+                  </div>
+
+                  {/* Countdown bis zur Geburt */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-[10px] font-bold text-slate-300">
+                      <span>Countdown bis zur Geburt:</span>
+                      <span className="text-pink-400 font-bold">
+                        {state.pregnancyDaysRemaining !== undefined ? state.pregnancyDaysRemaining : Math.max(0, 270 - ((state.pregnancyMonth || 1) - 1) * 30)} Tage
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="280"
+                      disabled={readOnly}
+                      value={state.pregnancyDaysRemaining !== undefined ? state.pregnancyDaysRemaining : Math.max(0, 270 - ((state.pregnancyMonth || 1) - 1) * 30)}
+                      onChange={e => {
+                        const val = parseInt(e.target.value);
+                        setState(prev => ({ ...prev, pregnancyDaysRemaining: val }));
+                      }}
+                      className="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-pink-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* HUD-Sichtbarkeit und Bedingungen */}
+                  <div className="space-y-2 bg-slate-900/50 p-2.5 rounded-lg border border-slate-800/80">
+                    <span className="text-[10px] font-bold text-slate-300 block">
+                      Status-Sichtbarkeit im physischen HUD:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => {
+                          setState(prev => ({ ...prev, pregnancyTestDone: !prev.pregnancyTestDone }));
+                        }}
+                        className={`py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition-all flex items-center justify-start gap-2 cursor-pointer border ${
+                          state.pregnancyTestDone
+                            ? 'bg-pink-600/20 text-pink-300 border-pink-500/40'
+                            : 'bg-slate-950/40 text-slate-400 border-slate-850 hover:text-slate-200 hover:bg-slate-900/60'
+                        }`}
+                      >
+                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] ${
+                          state.pregnancyTestDone
+                            ? 'border-pink-400 bg-pink-500/30 text-pink-200'
+                            : 'border-slate-700 bg-slate-900 text-transparent'
+                        }`}>
+                          <i className="fa-solid fa-check"></i>
+                        </div>
+                        <span>Test positiv durchgeführt</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => {
+                          setState(prev => ({ ...prev, pregnancyChangesVisible: !prev.pregnancyChangesVisible }));
+                        }}
+                        className={`py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition-all flex items-center justify-start gap-2 cursor-pointer border ${
+                          state.pregnancyChangesVisible
+                            ? 'bg-pink-600/20 text-pink-300 border-pink-500/40'
+                            : 'bg-slate-950/40 text-slate-400 border-slate-850 hover:text-slate-200 hover:bg-slate-900/60'
+                        }`}
+                      >
+                        <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[9px] ${
+                          state.pregnancyChangesVisible
+                            ? 'border-pink-400 bg-pink-500/30 text-pink-200'
+                            : 'border-slate-700 bg-slate-900 text-transparent'
+                        }`}>
+                          <i className="fa-solid fa-check"></i>
+                        </div>
+                        <span>Körperliche Veränderungen</span>
+                      </button>
+                    </div>
+
+                    <div className="text-[9px] leading-relaxed text-slate-400">
+                      { (state.pregnancyTestDone || state.pregnancyChangesVisible) ? (
+                        <span className="text-emerald-400 font-medium">
+                          Anzeige aktiv: Zustand und Countdown sind im HUD &amp; Status sichtbar.
+                        </span>
+                      ) : (
+                        <span className="text-amber-500 font-medium">
+                          Anzeige inaktiv: Der Zustand bleibt im HUD verborgen (Heimlichkeit).
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Stat-Übersicht */}

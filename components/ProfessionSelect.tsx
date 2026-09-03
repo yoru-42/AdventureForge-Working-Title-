@@ -8,26 +8,30 @@ interface ProfessionSelectProps {
   className?: string;
   selectClassName?: string;
   inputClassName?: string;
+  showNobleChildrenButton?: boolean;
 }
 
 export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
-  value,
+  value = "",
   onChange,
   placeholder = "Beruf wählen oder eintragen...",
   selectClassName = "w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal",
-  inputClassName = "w-full mt-2 bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal"
+  inputClassName = "w-full mt-2 bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal",
+  showNobleChildrenButton = true
 }) => {
-  const isValueInPresets = ALL_PRESET_JOBS.includes(value);
-  const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && value.trim().length > 0);
+  const safeValue = value || "";
+  const isValueInPresets = ALL_PRESET_JOBS.includes(safeValue);
+  const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && safeValue.trim().length > 0);
   const [showNobleChildrenSubmenu, setShowNobleChildrenSubmenu] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!ALL_PRESET_JOBS.includes(value) && value.trim().length > 0) {
+    const sVal = value || "";
+    if (!ALL_PRESET_JOBS.includes(sVal) && sVal.trim().length > 0) {
       setIsCustomMode(true);
     }
   }, [value]);
 
-  const selectValue = isCustomMode ? '__custom__' : (isValueInPresets ? value : '');
+  const selectValue = isCustomMode ? '__custom__' : (isValueInPresets ? safeValue : '');
 
   const handleSelectTitle = (title: string) => {
     setIsCustomMode(false);
@@ -62,65 +66,69 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
         <option value="__custom__">Eigener Beruf / Freitext eingeben...</option>
       </select>
 
-      <div className="flex items-center justify-between mt-1.5">
-        <button
-          type="button"
-          onClick={() => setShowNobleChildrenSubmenu(!showNobleChildrenSubmenu)}
-          className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition flex items-center gap-1.5 cursor-pointer"
-        >
-          <i className="fa-solid fa-sitemap text-[10px]"></i>
-          <span>
-            {showNobleChildrenSubmenu ? 'Adelsnachkommen-Menü schließen' : 'Kinder von Adeligen & Kindertitel (z.B. Herzogstochter)...'}
-          </span>
-        </button>
-      </div>
-
-      {showNobleChildrenSubmenu && (
-        <div className="bg-slate-950 border border-slate-800/90 rounded-xl p-3 mt-2 space-y-3 shadow-md">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
-              Titel für Adelsnachkommen & Kinder
-            </span>
-            <span className="text-[10px] text-slate-400">
-              Klicken zum Übernehmen
-            </span>
+      {showNobleChildrenButton && (
+        <>
+          <div className="flex items-center justify-between mt-1.5">
+            <button
+              type="button"
+              onClick={() => setShowNobleChildrenSubmenu(!showNobleChildrenSubmenu)}
+              className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <i className="fa-solid fa-sitemap text-[10px]"></i>
+              <span>
+                {showNobleChildrenSubmenu ? 'Adelsnachkommen-Menü schließen' : 'Kinder von Adeligen & Kindertitel (z.B. Herzogstochter)...'}
+              </span>
+            </button>
           </div>
 
-          <div className="space-y-2.5">
-            {NOBLE_CHILDREN_GROUPS.map(group => (
-              <div key={group.house} className="space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 block">
-                  {group.house}:
+          {showNobleChildrenSubmenu && (
+            <div className="bg-slate-950 border border-slate-800/90 rounded-xl p-3 mt-2 space-y-3 shadow-md">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
+                  Titel für Adelsnachkommen & Kinder
                 </span>
-                <div className="flex flex-wrap gap-1">
-                  {group.titles.map(title => {
-                    const isSelected = value === title;
-                    return (
-                      <button
-                        key={title}
-                        type="button"
-                        onClick={() => handleSelectTitle(title)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
-                            : 'bg-slate-900/80 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-                        }`}
-                      >
-                        {title}
-                      </button>
-                    );
-                  })}
-                </div>
+                <span className="text-[10px] text-slate-400">
+                  Klicken zum Übernehmen
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
+
+              <div className="space-y-2.5">
+                {NOBLE_CHILDREN_GROUPS.map(group => (
+                  <div key={group.house} className="space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 block">
+                      {group.house}:
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {group.titles.map(title => {
+                        const isSelected = safeValue === title;
+                        return (
+                          <button
+                            key={title}
+                            type="button"
+                            onClick={() => handleSelectTitle(title)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
+                                : 'bg-slate-900/80 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+                            }`}
+                          >
+                            {title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {isCustomMode && (
         <input
           type="text"
-          value={value}
+          value={safeValue}
           onChange={e => onChange(e.target.value)}
           placeholder="Eigener Beruf / Freitext..."
           className={inputClassName}

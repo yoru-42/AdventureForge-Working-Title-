@@ -64,6 +64,9 @@ export interface SilhouetteState {
   isVirgin?: boolean;
   hasChildren?: boolean;
   childrenCount?: number;
+  pregnancyDaysRemaining?: number;
+  pregnancyTestDone?: boolean;
+  pregnancyChangesVisible?: boolean;
   injuries?: string;
   customBuild?: string;
   customCupSize?: string;

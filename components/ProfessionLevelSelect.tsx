@@ -20,22 +20,24 @@ interface ProfessionLevelSelectProps {
 }
 
 export const ProfessionLevelSelect: React.FC<ProfessionLevelSelectProps> = ({
-  value,
+  value = "",
   onChange,
   placeholder = "Berufslevel / Ausbildungsgrad wählen...",
   selectClassName = "w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal",
   inputClassName = "w-full mt-2 bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal"
 }) => {
-  const isValueInPresets = PROFESSION_LEVEL_PRESETS.includes(value);
-  const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && value.trim().length > 0);
+  const safeValue = value || "";
+  const isValueInPresets = PROFESSION_LEVEL_PRESETS.includes(safeValue);
+  const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && safeValue.trim().length > 0);
 
   useEffect(() => {
-    if (!PROFESSION_LEVEL_PRESETS.includes(value) && value.trim().length > 0) {
+    const sVal = value || "";
+    if (!PROFESSION_LEVEL_PRESETS.includes(sVal) && sVal.trim().length > 0) {
       setIsCustomMode(true);
     }
   }, [value]);
 
-  const selectValue = isCustomMode ? '__custom__' : (isValueInPresets ? value : '');
+  const selectValue = isCustomMode ? '__custom__' : (isValueInPresets ? safeValue : '');
 
   return (
     <div className="flex flex-col w-full">
@@ -64,7 +66,7 @@ export const ProfessionLevelSelect: React.FC<ProfessionLevelSelectProps> = ({
       {isCustomMode && (
         <input
           type="text"
-          value={value}
+          value={safeValue}
           onChange={e => onChange(e.target.value)}
           placeholder="Eigener Ausbildungsgrad / Freitext..."
           className={inputClassName}

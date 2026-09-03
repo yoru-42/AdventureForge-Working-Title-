@@ -1827,7 +1827,13 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       else if (pregMonth === 8) bumpDesc = 'Sehr großer Bauch, spürbare Einschränkung';
       else bumpDesc = 'Hochschwanger, massiver Bauch, baldige Geburt';
       
-      parts.push(`SCHWANGERSCHAFT: ${pregMonth}. Monat (${bumpDesc}, +${Math.round(pregMonth * 1.4)}kg Gewichtszunahme)`);
+      const silState = (resolved as any).silhouetteState || {};
+      const daysRemaining = silState.pregnancyDaysRemaining !== undefined ? silState.pregnancyDaysRemaining : Math.max(0, 270 - (pregMonth - 1) * 30);
+      const testDone = silState.pregnancyTestDone || false;
+      const changesVisible = silState.pregnancyChangesVisible || false;
+      const shownInHUD = testDone || changesVisible;
+
+      parts.push(`SCHWANGERSCHAFT: ${pregMonth}. Monat (${bumpDesc}, +${Math.round(pregMonth * 1.4)}kg Gewichtszunahme, Noch ${daysRemaining} Tage bis zur Geburt, Test positiv: ${testDone ? 'Ja' : 'Nein'}, Körperliche Veränderungen aufgetreten: ${changesVisible ? 'Ja' : 'Nein'}, Sichtbarkeit im HUD Körperlicher Zustand: ${shownInHUD ? 'Ja (Sichtbar)' : 'Nein (Verborgen)'})`);
     } else if (isFemale) {
       parts.push(`Schwangerschaft: Nicht schwanger`);
     }
@@ -1873,6 +1879,60 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     }
 
     return parts.join(', ');
+  };
+
+  const getActiveTerritoryInstruction = () => {
+    const currentLocName = (adventure?.player?.appearance?.currentLocation || '').trim();
+    if (!currentLocName) return '';
+
+    const territories = adventure?.world?.territories || [];
+    
+    // Clean coordinates and parentheses from location name for comparison
+    const cleanLocName = currentLocName.replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '').split('(')[0].trim().toLowerCase();
+    
+    // Try to find matching territory
+    const activeTerr = territories.find((t: any) => {
+      const cleanTName = (t.name || '').replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '').split('(')[0].trim().toLowerCase();
+      return cleanTName === cleanLocName || t.id === currentLocName;
+    });
+
+    if (!activeTerr) {
+      return `\nAKTUELLES GEBIET / STANDORT:
+- Name: ${currentLocName}
+Hinweis: Für diesen genauen Standort existiert kein detaillierter Eintrag in der Gebietsdatenbank. Beschreibe die Umgebung passend und logisch basierend auf dem Namen.`;
+    }
+
+    // If we found the territory, extract its specific fields
+    const typeLabel = activeTerr.type ? activeTerr.type.toUpperCase() : 'ORT';
+    const owner = activeTerr.ruler || activeTerr.controlledByFactionId || '';
+    const residents = activeTerr.population || '';
+    const functionTrade = activeTerr.trade || '';
+    const equipment = activeTerr.resources || '';
+    const security = activeTerr.defense || '';
+    const poi = activeTerr.pointsOfInterest || '';
+    const desc = activeTerr.description || '';
+    const danger = activeTerr.dangerLevel || '';
+    const terrain = activeTerr.terrain || '';
+    const climate = activeTerr.climate || '';
+
+    return `\nAKTUELLES GEBIET / STANDORT:
+- Name: ${activeTerr.name} (Typ: ${typeLabel})
+${desc ? `- Beschreibung: ${desc}` : ''}
+${terrain ? `- Umgebung/Gelände: ${terrain}` : ''}
+${climate ? `- Klima: ${climate}` : ''}
+${owner ? `- Besitzer/Herrscher: ${owner}` : ''}
+${residents ? `- Personal / Bewohner (Hintergrund-Präsenz): ${residents}` : ''}
+${functionTrade ? `- Funktion/Nutzung: ${functionTrade}` : ''}
+${equipment ? `- Ausstattung/Ressourcen: ${equipment}` : ''}
+${security ? `- Sicherheit/Wachen: ${security}` : ''}
+${poi ? `- Besonderheiten/POIs: ${poi}` : ''}
+${danger ? `- Gefahrenstufe/Risiken: ${danger}` : ''}
+
+WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN DUNGEON MASTER (STRENGSTENS EINZUHALTEN):
+Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, Köche oder Bewohner ("Personal / Bewohner") sowie die Sicherheitsvorkehrungen aktiv und lebendig in das Geschehen im Hintergrund deiner Antworten einbinden! 
+- Sie sind im Hintergrund präsent: Diener eilen durch die Flure des Anwesens, Köche klappern in der Küche mit Töpfen, Wachen patrouillieren auf den Mauern oder Gängen.
+- Reagiere dynamisch auf die Situation: Wenn es zu einem Schrei, Lärm oder Kampf kommt, stürmen nahegelegene Wachen oder Bedienstete besorgt in das Zimmer. Wenn der Spieler die Küche betritt, agieren dort die Köche fleißig und reagieren auf ihn. Wenn er die Gänge durchstreift, begegnet er dem Hauspersonal, das seiner Arbeit nachgeht.
+- Lass die Szene nicht leer oder ausgestorben wirken, sondern fülle sie mit dem beschriebenen Personal/Bewohnern, um eine lebendige, stimmige und logische Kulisse zu erschaffen!`;
   };
 
   const renderDialogueText = (text: string) => {
@@ -4489,6 +4549,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       ${techniqueRulesInstruction}
       ${loreInstruction}
       ${economyInstruction}
+      ${getActiveTerritoryInstruction()}
 
       ${nsfwInstruction}
       ${heroicInstruction}
@@ -6250,6 +6311,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       ${techniqueRulesInstruction}
       ${loreInstruction}
       ${economyInstruction2}
+      ${getActiveTerritoryInstruction()}
 
       ${nsfwInstruction}
       ${heroicInstruction}

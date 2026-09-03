@@ -13,7 +13,7 @@ interface CharacterAssigneeSelectProps {
 }
 
 export const CharacterAssigneeSelect: React.FC<CharacterAssigneeSelectProps> = ({
-  value,
+  value = "",
   onChange,
   loreDatabase = [],
   npcs = [],
@@ -24,7 +24,10 @@ export const CharacterAssigneeSelect: React.FC<CharacterAssigneeSelectProps> = (
 }) => {
   // Extract all character names from loreDatabase
   const codexCharacters = (loreDatabase || [])
-    .filter(l => l.category === 'Charaktere' || l.category === 'Gegner' || l.category === 'Akteure' || l.category === 'Fraktionen' || l.type === 'character')
+    .filter(l => {
+      const cat = l.category as string;
+      return cat === 'Charaktere' || cat === 'Gegner' || cat === 'Akteure' || cat === 'Fraktionen' || (l as any).type === 'character';
+    })
     .map(l => l.title.trim())
     .filter(Boolean);
 
@@ -32,7 +35,7 @@ export const CharacterAssigneeSelect: React.FC<CharacterAssigneeSelectProps> = (
   const npcNames = (npcs || []).map(n => n.name ? n.name.trim() : '').filter(Boolean);
 
   // Extract names from holding lore members if available
-  const holdingMemberNames = (holding?.loreMembers || []).map(m => m.name ? m.name.trim() : '').filter(Boolean);
+  const holdingMemberNames = ((holding as any)?.loreMembers || []).map((m: any) => m.name ? m.name.trim() : '').filter(Boolean);
 
   // Combine unique character names
   const allKnownCharacters = Array.from(new Set([
@@ -41,18 +44,20 @@ export const CharacterAssigneeSelect: React.FC<CharacterAssigneeSelectProps> = (
     ...holdingMemberNames
   ]));
 
+  const safeValue = value || "";
   const presetValues = ['', 'Spieler', ...allKnownCharacters];
-  const isValueInPresets = presetValues.includes(value.trim());
+  const isValueInPresets = presetValues.includes(safeValue.trim());
 
-  const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && value.trim().length > 0);
+  const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && safeValue.trim().length > 0);
 
   useEffect(() => {
-    if (!presetValues.includes(value.trim()) && value.trim().length > 0) {
+    const sVal = value || "";
+    if (!presetValues.includes(sVal.trim()) && sVal.trim().length > 0) {
       setIsCustomMode(true);
     }
   }, [value, allKnownCharacters.join(',')]);
 
-  const selectValue = isCustomMode ? '__custom__' : (isValueInPresets ? value : '');
+  const selectValue = isCustomMode ? '__custom__' : (isValueInPresets ? safeValue : '');
 
   return (
     <div className="flex flex-col w-full">
@@ -88,7 +93,7 @@ export const CharacterAssigneeSelect: React.FC<CharacterAssigneeSelectProps> = (
       {isCustomMode && (
         <input
           type="text"
-          value={value}
+          value={safeValue}
           onChange={e => onChange(e.target.value)}
           placeholder="Name oder Bezeichnung eingeben..."
           className={inputClassName}

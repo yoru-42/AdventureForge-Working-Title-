@@ -406,6 +406,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                       placeholder="Beruf / Rolle der Gruppe wählen..."
                       selectClassName="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-amber-500 transition"
                       inputClassName="w-full mt-1.5 bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-amber-500 transition"
+                      showNobleChildrenButton={false}
                     />
                   </div>
 

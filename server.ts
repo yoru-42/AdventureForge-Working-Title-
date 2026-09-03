@@ -23,13 +23,14 @@ const getSafetySettings = () => {
 };
 
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
-  const defaultModel = (requestedModel && requestedModel !== 'gemini-3.5-flash') ? requestedModel : 'gemini-2.5-flash';
+  const defaultModel = requestedModel || 'gemini-3.5-flash';
   const candidates = [
     defaultModel,
-    'gemini-2.5-flash',
-    'gemini-3.7-flash',
+    'gemini-3.5-flash',
+    'gemini-3.8-flash',
     'gemini-3.1-flash-lite',
-    'gemini-flash-latest'
+    'gemini-flash-latest',
+    'gemini-2.5-flash'
   ];
   const modelsToTry = Array.from(new Set(candidates));
 
@@ -70,12 +71,17 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
                                      errMsg.toLowerCase().includes('deadline') ||
                                      errMsg.toLowerCase().includes('timeout');
 
+        const isQuotaExceeded = errMsg.toLowerCase().includes('quota') || 
+                                errMsg.toLowerCase().includes('exhausted') || 
+                                errMsg.includes('429') || 
+                                errMsg.includes('RESOURCE_EXHAUSTED');
+
         console.log(`[Gemini Server] Model ${currentModel} did not return a response (Attempt ${attempts}).`);
         
-        // If it's a transient overload (503/UNAVAILABLE), don't waste time retrying the exact same model.
+        // If it's a transient overload or quota issue, don't waste time retrying.
         // Fall back to the next model immediately.
-        if (isTransientOverload) {
-          console.log(`[Gemini Server] Model ${currentModel} is busy. Trying fallback.`);
+        if (isTransientOverload || isQuotaExceeded) {
+          console.log(`[Gemini Server] Model ${currentModel} encountered transient overload or quota limit. Trying fallback model.`);
           break; 
         }
 
@@ -294,9 +300,9 @@ async function startServer() {
       let lastError: any = null;
 
       const imageModelsToTry = [
-        'gemini-2.5-flash-image',
         'gemini-3.1-flash-lite-image',
-        'gemini-3.1-flash-image'
+        'gemini-3.1-flash-image',
+        'gemini-2.5-flash-image'
       ];
 
       for (const modelName of imageModelsToTry) {

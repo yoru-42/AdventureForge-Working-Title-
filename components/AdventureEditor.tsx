@@ -2317,6 +2317,90 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     }
   };
 
+  const handleDeleteAbility = (abilityId: string) => {
+    const currentAbilities = player.abilities || [];
+    const abilityToDelete = currentAbilities.find(a => a.id === abilityId);
+
+    // 1. Basic filter to remove from player.abilities
+    const updatedAbilities = currentAbilities.filter(a => a.id !== abilityId);
+
+    // 2. If it's the active transformation, reset activeTransformationId to standard
+    let updatedAppearance = player.appearance;
+    if (player.appearance?.activeTransformationId === abilityId) {
+      updatedAppearance = {
+        ...player.appearance,
+        activeTransformationId: 'standard'
+      };
+    }
+
+    setPlayer({
+      ...player,
+      appearance: updatedAppearance,
+      abilities: updatedAbilities
+    });
+
+    // 3. If it is a Body Swap (koerpertausch) or reciprocal swap, we should also clean it up on partner characters
+    if (abilityToDelete) {
+      const isBodySwap = abilityToDelete.transformIdentityPerception === 'koerpertausch' || 
+                         abilityToDelete.transformSwappedCharacterName ||
+                         (abilityId && String(abilityId).startsWith('trans_swap_reciprocal_')) ||
+                         (abilityId && String(abilityId).startsWith('reciprocal_swap_'));
+      
+      if (isBodySwap) {
+        const targetId = abilityToDelete.transformSwappedCharacterId;
+        const targetName = abilityToDelete.transformSwappedCharacterName || 
+                           abilityToDelete.name?.replace('Körpertausch: ', '')?.trim();
+
+        // A. Clean up NPCs
+        if (npcs && npcs.length > 0) {
+          const updatedNpcs = npcs.map(npc => {
+            const matchesNpc = (targetId && npc.id === targetId) || 
+                               (targetName && npc.name?.toLowerCase().trim() === targetName.toLowerCase().trim());
+            
+            if (matchesNpc && npc.abilities) {
+              return {
+                ...npc,
+                abilities: npc.abilities.filter(a => {
+                  const isMatch = a.transformIdentityPerception === 'koerpertausch' && 
+                    (a.transformSwappedCharacterId === (player as any).id || 
+                     (a.transformSwappedCharacterName && a.transformSwappedCharacterName.toLowerCase().trim() === (player.name || '').toLowerCase().trim()));
+                  return !isMatch;
+                })
+              };
+            }
+            return npc;
+          });
+          setNpcs(updatedNpcs);
+        }
+
+        // B. Clean up Lore Database (Codex-Charaktere)
+        if (loreDatabase && loreDatabase.length > 0) {
+          const updatedLore = loreDatabase.map(entry => {
+            const matchesLore = (targetId && entry.id === targetId) || 
+                                (targetName && entry.title?.toLowerCase().trim() === targetName.toLowerCase().trim());
+            
+            if (matchesLore && entry.details?.abilities) {
+              return {
+                ...entry,
+                details: {
+                  ...entry.details,
+                  abilities: entry.details.abilities.filter((a: any) => {
+                    const isMatch = a.transformIdentityPerception === 'koerpertausch' && 
+                      (a.transformSwappedCharacterId === (player as any).id || 
+                       (a.transformSwappedCharacterName && a.transformSwappedCharacterName.toLowerCase().trim() === (player.name || '').toLowerCase().trim()));
+                    return !isMatch;
+                  })
+                }
+              };
+            }
+            return entry;
+          });
+          setLoreDatabase(updatedLore);
+        }
+      }
+    }
+  };
+
   const addNPC = () => {
     const id = Math.random().toString(36).substr(2, 9);
     const newNPC: NPC = {
@@ -5144,12 +5228,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                                             />
                                             <button 
                                               type="button"
-                                              onClick={() => {
-                                                setPlayer({
-                                                  ...player,
-                                                  abilities: currentAbilities.filter(a => a.id !== ability.id)
-                                                });
-                                              }}
+                                              onClick={() => handleDeleteAbility(ability.id)}
                                               className="w-8 h-8 flex items-center justify-center text-red-400 hover:bg-red-400/10 hover:text-red-300 rounded-lg transition-all text-xs shrink-0 border border-transparent hover:border-red-500/10"
                                               title="Fähigkeit löschen"
                                             >
@@ -5325,7 +5404,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                               <div key={ability.id || `ability-${idx}`} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col gap-3 relative shadow-inner">
                                 <button 
                                   type="button"
-                                  onClick={() => setPlayer({ ...player, abilities: currentAbilities.filter(a => a.id !== ability.id) })}
+                                  onClick={() => handleDeleteAbility(ability.id)}
                                   className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-red-400 hover:bg-red-400/20 rounded-lg transition-colors text-xs border border-transparent hover:border-red-500/20"
                                   title="Löschen"
                                 >

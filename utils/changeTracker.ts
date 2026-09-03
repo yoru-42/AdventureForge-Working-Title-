@@ -373,19 +373,11 @@ export const getCompactBodyConditionSummary = (
   const fatigueLevel = silState.fatigueLevel || 'normal'; // normal, leicht, mittel, erschöpft, kollaps
   const pregMonthNum = typeof resolvedApp.pregnancyMonth === 'number' ? resolvedApp.pregnancyMonth : parseInt(String(resolvedApp.pregnancyMonth || '0'), 10) || 0;
   const isPregnant = pregMonthNum > 0 || (silState.pregnancyMonth > 0);
+  const showPregnancyInHud = isPregnant && (silState.pregnancyTestDone || silState.pregnancyChangesVisible);
 
   const hasInjuries = injuries.trim().length > 0;
   const hasCurses = activeConditions.some(c => c.type === 'curse');
   const hasNegativeEffects = hasInjuries || hasCurses || painLevel === 'stark' || fatigueLevel === 'erschöpft' || fatigueLevel === 'kollaps';
-
-  if (!hasNegativeEffects && activeConditions.length === 0) {
-    return {
-      statusText: 'Gesund',
-      detailText: 'Keine Verletzungen oder Beschwerden',
-      isHealthy: true,
-      severity: 'healthy'
-    };
-  }
 
   const details: string[] = [];
   if (hasInjuries) {
@@ -401,8 +393,28 @@ export const getCompactBodyConditionSummary = (
   if (hasCurses) {
     details.push('Fluch aktiv');
   }
-  if (isPregnant) {
-    details.push(`Schwangerschaft (${resolvedApp.pregnancyMonth || 1}. Monat)`);
+  if (showPregnancyInHud) {
+    const defaultDays = Math.max(0, 270 - (pregMonthNum - 1) * 30);
+    const daysRemaining = silState.pregnancyDaysRemaining !== undefined ? silState.pregnancyDaysRemaining : defaultDays;
+    details.push(`Schwanger (Noch ${daysRemaining} Tage bis Geburt)`);
+  }
+
+  if (!hasNegativeEffects && activeConditions.length === 0 && !showPregnancyInHud) {
+    return {
+      statusText: 'Gesund',
+      detailText: 'Keine Verletzungen oder Beschwerden',
+      isHealthy: true,
+      severity: 'healthy'
+    };
+  }
+
+  if (!hasNegativeEffects && activeConditions.length === 0) {
+    return {
+      statusText: 'Gesund',
+      detailText: details.slice(0, 3).join(' · ') || 'Keine Beschwerden',
+      isHealthy: true,
+      severity: 'healthy'
+    };
   }
 
   let statusText = 'Angeschlagen';
