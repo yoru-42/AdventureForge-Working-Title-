@@ -476,6 +476,7 @@ export interface SecondaryProfession {
 }
 
 export interface Character {
+  id?: string;
   name: string;
   nickname?: string;
   rufName?: string;
@@ -793,7 +794,44 @@ export interface EconomyTask {
   reward: string;
   assigneeName?: string;
   assigneeId?: string;
+  assigneeGroupId?: string;
+  assigneeGroupName?: string;
   createdByName?: string;
+  createdById?: string;
+  parentOrderId?: string;
+  taskType?: 'manual' | 'generated' | 'routine' | 'delegated' | 'emergency';
+  canDelegate?: boolean;
+  requiredJob?: string;
+  requiredRank?: string;
+  dependencies?: string[];
+  consequenceOnFailure?: string;
+  generatedByAI?: boolean;
+  generatedReason?: string;
+}
+
+export interface TemporaryAuthority {
+  id: string;
+  authority: string;
+  grantedToId?: string;
+  grantedToName: string;
+  grantedById?: string;
+  grantedByName?: string;
+  reason?: string;
+  validFrom?: string;
+  validUntil?: string;
+  active: boolean;
+}
+
+export interface WorkWorkflowTemplate {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  steps: {
+    title: string;
+    description?: string;
+    suggestedRole?: string;
+  }[];
 }
 
 export interface EconomyDuty {
@@ -892,6 +930,8 @@ export interface EconomyHolding {
   orders?: EconomyOrder[]; // Aufträge / Direktiven
   decisions?: EconomyDecision[]; // Management-Entscheidungen & Vorfälle
   activityLogs?: EconomyLogEntry[]; // Lebendige Hintergrundaktivität & Betriebs-Log
+  temporaryAuthorities?: TemporaryAuthority[]; // Vergebene Sonderrechte & temporäre Befugnisse
+  workTemplates?: WorkWorkflowTemplate[]; // Vorlagen für Arbeitsabläufe
 
   // Physischer Zustand & Allgemeine Gebäudeinformationen
   physicalCondition?: string; // Zustand (z.B. "Hervorragend", "Gut", "Reparaturbedürftig", "Ruine")

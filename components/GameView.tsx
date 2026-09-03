@@ -15,6 +15,7 @@ import { formatRelationshipForAI } from '../lib/relationshipHelper';
 import { formatDisplayLocationName } from '../utils/mapUtils';
 import { createOrganicIslandPoints } from './worldmap/worldMapData';
 import { formatPersonalityTraitsAsPrompt } from './PersonalityTraitsEditor';
+import { WorkManagementModal } from './WorkManagementModal';
 
 
 const baseEmotions = [
@@ -396,6 +397,18 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [showEmotionMenu, setShowEmotionMenu] = useState(false);
   const [showToneMenu, setShowToneMenu] = useState(false);
   const [showFavoritesMenu, setShowFavoritesMenu] = useState(false);
+  const [showWorkMenu, setShowWorkMenu] = useState(false);
+
+  const pendingWorkTasksCount = React.useMemo(() => {
+    const holdings = adventure.world?.economyConfig?.holdings || [];
+    let count = 0;
+    for (const h of holdings) {
+      if (h.tasks) {
+        count += h.tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length;
+      }
+    }
+    return count;
+  }, [adventure.world?.economyConfig?.holdings]);
 
   // Selected HUD field for compact detail modal (Step 7)
   const [selectedHudDetailField, setSelectedHudDetailField] = useState<{
@@ -4535,11 +4548,27 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
 
       const economyConfig = world.economyConfig || adventure?.world?.economyConfig;
       const economyInstruction = economyConfig?.holdings?.length ? `
-      BESITZTÜMER, WIRTSCHAFT & MANAGEMENT:
-      - Währung: ${economyConfig.currencyName || 'Goldmünzen'} (${economyConfig.currencyIcon || ''})
-      - Abrechnungs-Intervall: ${economyConfig.payoutInterval || 'weekly'} (Passives Einkommen: ${economyConfig.allowPassiveIncome ? 'Aktiv' : 'Inaktiv'})
-      - Konfigurierte Betriebe in der Welt:
-      ${economyConfig.holdings.map(h => `  * ${h.icon || ''} "${h.name}" (Stufe ${h.level} ${h.type.toUpperCase()}) | Besitzer: ${h.ownerType === 'user' ? 'Nutzer/Gruppe' : h.ownerType === 'faction' ? (h.ownerFactionName || 'Fraktion') : (h.assignedCharacterName || 'Charakter/NPC')} | Einnahmen: +${h.incomePerInterval} ${economyConfig.currencyIcon} | Unterhalt: -${h.upkeepPerInterval} ${economyConfig.currencyIcon} | Personal: ${h.staffCount} | Ort: ${h.locationName || 'Unbekannt'} | Status: ${h.status}`).join('\n')}
+      BESITZTÜMER, BETRIEBE, PERSONAL & ARBEITSAUFGABEN:
+      - Währung: ${economyConfig.currencyName || 'Goldmünzen'}
+      - Abrechnungs-Intervall: ${economyConfig.payoutInterval || 'weekly'}
+      - Betriebe, anwesendes Personal & Aufgaben:
+      ${economyConfig.holdings.map(h => {
+        const pendingTasks = h.tasks?.filter(t => t.status === 'pending' || t.status === 'in_progress')
+          .map(t => `"${t.title}" [Prio: ${t.priority}, Zugewiesen: ${t.assigneeName || 'Offen'}]`).join(', ') || 'Keine offenen Aufgaben';
+        const staffSummary = h.staffGroups?.map(sg => `${sg.count}x ${sg.roleName} (Bereich: ${sg.workplaceArea}, Status: ${sg.status})`).join(', ') || '';
+        const rolesSummary = h.roles?.map(r => `${r.name}: ${r.assignedToName}`).join(', ') || '';
+        const dutiesSummary = h.duties?.map(d => `${d.title} (${d.frequency})`).join(', ') || '';
+        return `  * "${h.name}" (${h.type.toUpperCase()}, Stufe ${h.level}) | Ort: ${h.locationName || 'Vor Ort'}
+    - Namentliche Posten: ${rolesSummary || 'Keine'}
+    - Personalgruppen (physisch präsent am Ort): ${staffSummary || `${h.staffCount} Mitarbeiter allgemein`}
+    - Aktuelle operative Aufgaben: ${pendingTasks}
+    - Wiederkehrende Pflichten: ${dutiesSummary || 'Standardbetrieb'}`;
+      }).join('\n')}
+      HINWEIS FÜR DIE SZENERIE:
+      Wenn der Spieler sich in einem dieser Betriebe oder an dessen Standort befindet:
+      1. Lass das dortige Personal (z.B. Küchenhilfen, Köche, Mägde, Gesellen, Wachen) lebendig im Hintergrund auftreten (sie schneiden Gemüse, schleppen Kisten, putzen Tische, halten Wache).
+      2. Reagiere auf Ereignisse im Raum (Schrei, Befehl, Einbruch, Brand) plausibel mit den anwesenden Personalgruppen.
+      3. Beziehe delegierte oder aktive Aufgaben bei passenden Gelegenheiten mit ein.
       ` : '';
 
       const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${world.title}".
@@ -6297,11 +6326,27 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
       const economyConfig2 = world.economyConfig || adventure?.world?.economyConfig;
       const economyInstruction2 = economyConfig2?.holdings?.length ? `
-      BESITZTÜMER, WIRTSCHAFT & MANAGEMENT:
-      - Währung: ${economyConfig2.currencyName || 'Goldmünzen'} (${economyConfig2.currencyIcon || ''})
-      - Abrechnungs-Intervall: ${economyConfig2.payoutInterval || 'weekly'} (Passives Einkommen: ${economyConfig2.allowPassiveIncome ? 'Aktiv' : 'Inaktiv'})
-      - Konfigurierte Betriebe in der Welt:
-      ${economyConfig2.holdings.map(h => `  * ${h.icon || ''} "${h.name}" (Stufe ${h.level} ${h.type.toUpperCase()}) | Besitzer: ${h.ownerType === 'user' ? 'Nutzer/Gruppe' : h.ownerType === 'faction' ? (h.ownerFactionName || 'Fraktion') : (h.assignedCharacterName || 'Charakter/NPC')} | Einnahmen: +${h.incomePerInterval} ${economyConfig2.currencyIcon} | Unterhalt: -${h.upkeepPerInterval} ${economyConfig2.currencyIcon} | Personal: ${h.staffCount} | Ort: ${h.locationName || 'Unbekannt'} | Status: ${h.status}`).join('\n')}
+      BESITZTÜMER, BETRIEBE, PERSONAL & ARBEITSAUFGABEN:
+      - Währung: ${economyConfig2.currencyName || 'Goldmünzen'}
+      - Abrechnungs-Intervall: ${economyConfig2.payoutInterval || 'weekly'}
+      - Betriebe, anwesendes Personal & Aufgaben:
+      ${economyConfig2.holdings.map(h => {
+        const pendingTasks = h.tasks?.filter(t => t.status === 'pending' || t.status === 'in_progress')
+          .map(t => `"${t.title}" [Prio: ${t.priority}, Zugewiesen: ${t.assigneeName || 'Offen'}]`).join(', ') || 'Keine offenen Aufgaben';
+        const staffSummary = h.staffGroups?.map(sg => `${sg.count}x ${sg.roleName} (Bereich: ${sg.workplaceArea}, Status: ${sg.status})`).join(', ') || '';
+        const rolesSummary = h.roles?.map(r => `${r.name}: ${r.assignedToName}`).join(', ') || '';
+        const dutiesSummary = h.duties?.map(d => `${d.title} (${d.frequency})`).join(', ') || '';
+        return `  * "${h.name}" (${h.type.toUpperCase()}, Stufe ${h.level}) | Ort: ${h.locationName || 'Vor Ort'}
+    - Namentliche Posten: ${rolesSummary || 'Keine'}
+    - Personalgruppen (physisch präsent am Ort): ${staffSummary || `${h.staffCount} Mitarbeiter allgemein`}
+    - Aktuelle operative Aufgaben: ${pendingTasks}
+    - Wiederkehrende Pflichten: ${dutiesSummary || 'Standardbetrieb'}`;
+      }).join('\n')}
+      HINWEIS FÜR DIE SZENERIE:
+      Wenn der Spieler sich in einem dieser Betriebe oder an dessen Standort befindet:
+      1. Lass das dortige Personal (z.B. Küchenhilfen, Köche, Mägde, Gesellen, Wachen) lebendig im Hintergrund auftreten (sie schneiden Gemüse, schleppen Kisten, putzen Tische, halten Wache).
+      2. Reagiere auf Ereignisse im Raum (Schrei, Befehl, Einbruch, Brand) plausibel mit den anwesenden Personalgruppen.
+      3. Beziehe delegierte oder aktive Aufgaben bei passenden Gelegenheiten mit ein.
       ` : '';
 
       const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${world.title}".
@@ -7891,6 +7936,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   </div>
                 )}
               </div>
+
+              <div className="w-px h-6 bg-slate-700 mx-1"></div>
+
+              <button
+                type="button"
+                onClick={() => setShowWorkMenu(true)}
+                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-amber-400 hover:bg-amber-950 hover:border-amber-500 hover:text-amber-300 transition-all flex items-center justify-center shadow-lg active:scale-95 group relative"
+                title="Aufgaben & Betriebsführung"
+              >
+                <i className="fa-solid fa-list-check group-hover:scale-110 transition-transform"></i>
+                {pendingWorkTasksCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-slate-950 font-bold text-[9px] flex items-center justify-center font-mono">
+                    {pendingWorkTasksCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             <div className={`relative flex items-center gap-2 bg-slate-900/80 border rounded-3xl p-1 shadow-2xl backdrop-blur-md transition-all ${
@@ -9601,6 +9662,15 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             </div>
           </div>
         </div>
+      )}
+
+      {showWorkMenu && (
+        <WorkManagementModal
+          isOpen={showWorkMenu}
+          onClose={() => setShowWorkMenu(false)}
+          adventure={adventure}
+          onUpdateAdventure={onUpdateAdventure}
+        />
       )}
     </div>
   );

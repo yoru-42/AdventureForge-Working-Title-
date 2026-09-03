@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { jsonrepair } from "jsonrepair";
-import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory } from "../types";
+import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
 import { CANON_PROTECTION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
 import {
   executeDrawingPlan,
@@ -6723,6 +6723,202 @@ Gib ein JSON Array mit Objekten zurück:
     });
   }
 
+  static async generateSubtasksForOrder(
+    order: EconomyOrder,
+    holding: EconomyHolding,
+    player?: Character,
+    world?: WorldSetting
+  ): Promise<EconomyTask[]> {
+    return this.callWithRetry(async () => {
+      const ai = this.getAI();
+      const rolesDesc = holding.roles?.map(r => `${r.name} (${r.assignedToName})`).join(', ') || 'Keine speziellen Rollen';
+      const staffGroupsDesc = holding.staffGroups?.map(sg => `${sg.count}x ${sg.roleName} (Status: ${sg.status})`).join(', ') || 'Kein Gruppenpersonal';
+      const resourcesDesc = holding.resources?.map(r => `${r.amount} ${r.unit} ${r.name}`).join(', ') || 'Keine Ressourcen gelistet';
+
+      const prompt = `Du bist ein erfahrener Betriebsleiter und Quest-Designer.
+Zerlege folgenden übergeordneten Auftrag in 3 bis 6 konkrete, operative Teilaufgaben (Tasks) für den Betrieb "${holding.name}" (${holding.type}).
+
+AUFTRAG:
+Titel: "${order.title}"
+Zielvorgabe: "${order.targetGoal}"
+Auftraggeber: "${order.issuerName}"
+Empfänger: "${order.recipientName}"
+Priorität: "${order.priority}"
+Frist: "${order.deadline || 'Keine Frist'}"
+
+BETRIEB & KONTEXT:
+Betrieb: "${holding.name}" (${holding.type})
+Beschreibung: "${holding.description || ''}"
+Verfügbares Personal (Rollen): ${rolesDesc}
+Verfügbare Personalgruppen: ${staffGroupsDesc}
+Verfügbare Ressourcen: ${resourcesDesc}
+Spieler: "${player?.name || 'Spieler'}" (Beruf: "${player?.profession || 'Unbekannt'}", Rang: "${player?.professionLevel || 'Geselle'}")
+
+REGELN:
+1. Erzeuge 3 bis 6 logische, chronologische Teilaufgaben, die für die Erfüllung des Auftrags notwendig sind.
+2. Schlage sinnvolle Zuweisungen vor (entweder Spieler selbst, eine namentliche Rolle oder eine Personalgruppe).
+3. KEINE EMOJIS! Verwende absolut keine Emojis oder Sonderzeichen.
+4. Gib ein JSON-Array zurück mit Objekten:
+- title: Kurzer, präziser Titel der Teilaufgabe (z.B. "Vorräte prüfen und inventarisieren", "Gemüse schneiden")
+- description: 1-2 Sätze Handlungsanweisung
+- priority: "low", "medium", "high" oder "urgent"
+- deadline: z.B. "Vor Arbeitsbeginn", "Innerhalb von 2 Stunden", "Heute Abend"
+- requiredResources: Benötigte Gegenstände/Zutaten oder leer
+- suggestedAssigneeName: Name der vorgeschlagenen Rolle/Gruppe oder leer
+- isForStaffGroup: true/false
+`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response.text || '[]');
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed.map((item: any, idx: number): EconomyTask => ({
+        id: `task-ord-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        title: item.title || `Teilaufgabe ${idx + 1}`,
+        description: item.description || '',
+        status: 'pending',
+        priority: (['low', 'medium', 'high', 'urgent'].includes(item.priority) ? item.priority : 'medium') as any,
+        deadline: item.deadline || '',
+        progress: 0,
+        requiredResources: item.requiredResources || '',
+        reward: '',
+        parentOrderId: order.id,
+        taskType: 'generated',
+        canDelegate: true,
+        generatedByAI: true,
+        generatedReason: `Abgeleitet aus Auftrag: ${order.title}`,
+        assigneeName: item.suggestedAssigneeName || undefined,
+        assigneeGroupName: item.isForStaffGroup ? item.suggestedAssigneeName : undefined
+      }));
+    });
+  }
+
+  static async generateTaskFromDuty(
+    duty: EconomyDuty,
+    holding: EconomyHolding,
+    player?: Character,
+    world?: WorldSetting
+  ): Promise<EconomyTask> {
+    return this.callWithRetry(async () => {
+      const ai = this.getAI();
+      const prompt = `Erzeuge aus folgender wiederkehrender Pflicht eine konkrete operative Aufgabe für heute bzw. die aktuelle Schicht im Betrieb "${holding.name}" (${holding.type}).
+
+PFLICHT:
+Titel: "${duty.title}"
+Beschreibung: "${duty.description}"
+Frequenz: "${duty.frequency}"
+Zugeordnete Rolle: "${duty.assignedRoleName || 'Allgemein'}"
+
+SPIELER & BETRIEB:
+Betrieb: "${holding.name}"
+Spieler: "${player?.name || 'Spieler'}" (Beruf: "${player?.profession || 'Mitarbeiter'}")
+
+REGELN:
+- Formuliere die konkrete heutige Ausführung dieser Pflicht als operative Aufgabe.
+- KEINE EMOJIS!
+- Gib ein JSON-Objekt zurück mit:
+  - title: Konkreter Aufgabentitel für heute
+  - description: Genaue Handlungsanweisung
+  - priority: "low", "medium", "high" oder "urgent"
+  - deadline: Zeitangabe (z.B. "Ende der Schicht")
+  - requiredResources: falls nötig
+`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      return {
+        id: `task-duty-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        title: parsed.title || duty.title,
+        description: parsed.description || duty.description,
+        status: 'pending',
+        priority: (['low', 'medium', 'high', 'urgent'].includes(parsed.priority) ? parsed.priority : 'medium') as any,
+        deadline: parsed.deadline || 'Heute',
+        progress: 0,
+        requiredResources: parsed.requiredResources || '',
+        reward: '',
+        taskType: 'routine',
+        canDelegate: true,
+        generatedByAI: true,
+        generatedReason: `Aus Pflicht instanziiert: ${duty.title}`,
+        assigneeName: duty.assignedRoleName || undefined
+      };
+    });
+  }
+
+  static async suggestOperationalTasks(
+    holding: EconomyHolding,
+    player?: Character,
+    world?: WorldSetting,
+    situationPrompt?: string
+  ): Promise<EconomyTask[]> {
+    return this.callWithRetry(async () => {
+      const ai = this.getAI();
+      const rolesDesc = holding.roles?.map(r => `${r.name} (${r.assignedToName})`).join(', ') || 'Keine';
+      const staffGroupsDesc = holding.staffGroups?.map(sg => `${sg.count}x ${sg.roleName}`).join(', ') || 'Keine';
+      const issues = Array.isArray(holding.currentIssuesOrDecisions) ? holding.currentIssuesOrDecisions.join(', ') : holding.currentIssuesOrDecisions || 'Keine akuten Probleme';
+
+      const prompt = `Erzeuge 3 bis 5 sinnvolle operative Tagesaufgaben für den Betrieb "${holding.name}" (${holding.type}).
+${situationPrompt ? `SITUATION / VORGABE: "${situationPrompt}"` : ''}
+AKTUELLE THEMEN/PROBLEME: ${issues}
+PERSONAL: Rollen: ${rolesDesc} | Gruppen: ${staffGroupsDesc}
+SPIELER: "${player?.name || 'Spieler'}" (Beruf: "${player?.profession || 'Mitarbeiter'}", Position/Rolle: "${holding.userRoleName || 'Mitarbeiter'}")
+
+REGELN:
+- Realistische handwerkliche, organisatorische oder leitende Aufgaben passend zum Betriebstyp.
+- KEINE EMOJIS!
+- JSON-Array mit Objekten:
+  - title: Prägnanter Aufgabentitel
+  - description: 1-2 Sätze
+  - priority: "low", "medium", "high" oder "urgent"
+  - deadline: Zeitangabe
+  - requiredResources: Optionale Ressourcen
+  - suggestedRole: Vorgeschlagene Rolle oder leer
+`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response.text || '[]');
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed.map((item: any, idx: number): EconomyTask => ({
+        id: `task-sug-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        title: item.title || `Betriebsaufgabe ${idx + 1}`,
+        description: item.description || '',
+        status: 'pending',
+        priority: (['low', 'medium', 'high', 'urgent'].includes(item.priority) ? item.priority : 'medium') as any,
+        deadline: item.deadline || 'Heute',
+        progress: 0,
+        requiredResources: item.requiredResources || '',
+        reward: '',
+        taskType: 'generated',
+        canDelegate: true,
+        generatedByAI: true,
+        generatedReason: situationPrompt ? `Vorgabe: ${situationPrompt}` : 'Tagesgeschäft & Situationsanalyse',
+        assigneeName: item.suggestedRole || undefined
+      }));
+    });
+  }
+
   static async generateWorldQuickEnrichment(
     worldTitle: string,
     genres: string[],
@@ -7451,3 +7647,7 @@ export const upgradeNamelessStaffToCharacter = GeminiService.upgradeNamelessStaf
 export const generateHoldingActivityLog = async (world: WorldSetting, holding: EconomyHolding, count?: number): Promise<EconomyLogEntry[]> => {
   return GeminiService.generateHoldingActivityLog(holding, world);
 };
+export const generateSubtasksForOrder = GeminiService.generateSubtasksForOrder.bind(GeminiService);
+export const generateTaskFromDuty = GeminiService.generateTaskFromDuty.bind(GeminiService);
+export const suggestOperationalTasks = GeminiService.suggestOperationalTasks.bind(GeminiService);
+

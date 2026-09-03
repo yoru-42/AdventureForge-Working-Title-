@@ -120,10 +120,10 @@ export const HoldingTasksTab: React.FC<HoldingTasksTabProps> = ({
                       onChange={e => handleUpdateTask(task.id, { status: e.target.value as any })}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs font-bold text-slate-200 outline-none cursor-pointer"
                     >
-                      <option value="pending">⏳ Offen</option>
-                      <option value="in_progress">⚙️ In Arbeit</option>
-                      <option value="completed">✓ Erledigt</option>
-                      <option value="failed">☠️ Fehlgeschlagen</option>
+                      <option value="pending">Offen</option>
+                      <option value="in_progress">In Arbeit</option>
+                      <option value="completed">Erledigt</option>
+                      <option value="failed">Fehlgeschlagen</option>
                     </select>
                   </div>
 
@@ -148,6 +148,30 @@ export const HoldingTasksTab: React.FC<HoldingTasksTabProps> = ({
                       value={task.deadline || ''}
                       onChange={e => handleUpdateTask(task.id, { deadline: e.target.value })}
                       placeholder="z.B. 3 Tage"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Zuständigkeit (Person / Gruppe)</label>
+                    <input
+                      type="text"
+                      value={task.assigneeName || ''}
+                      onChange={e => handleUpdateTask(task.id, { assigneeName: e.target.value })}
+                      placeholder="z.B. Anton oder Küchenhilfen"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">Benötigte Ressourcen</label>
+                    <input
+                      type="text"
+                      value={task.requiredResources || ''}
+                      onChange={e => handleUpdateTask(task.id, { requiredResources: e.target.value })}
+                      placeholder="z.B. 10 Holz, 2 Eisen"
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none"
                     />
                   </div>
