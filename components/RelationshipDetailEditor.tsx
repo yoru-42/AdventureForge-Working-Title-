@@ -95,8 +95,8 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
         keepExistingDetails
       );
 
-      // Intelligent verketten/befüllen
-      let updatedRel: any;
+      let updatedRel: any = { ...rel };
+      const hasUserInstruction = smartFillPrompt.trim().length > 0;
 
       const isBlank = (val: any) => {
         if (val === undefined || val === null) return true;
@@ -106,6 +106,7 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
       };
 
       if (!keepExistingDetails) {
+        // Complete override mode
         updatedRel = {
           id: rel.id || `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
           _isCustom: rel._isCustom || false,
@@ -113,7 +114,7 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
           ...generated
         };
       } else {
-        updatedRel = { ...rel };
+        // Ergänzungs-Modus (oder mit spezifischer Nutzeranweisung)
         const allKeys = [
           'type',
           'relationshipStatus',
@@ -141,13 +142,22 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
           const genVal = (generated as any)[key];
           const curVal = (rel as any)[key];
 
-          if (isBlank(curVal)) {
-            if (!isBlank(genVal)) {
-              updatedRel[key] = genVal;
-            }
-          } else if (key === 'valuesSelfToTarget' || key === 'valuesTargetToSelf') {
+          if (key === 'valuesSelfToTarget' || key === 'valuesTargetToSelf') {
             if (genVal && typeof genVal === 'object') {
-              updatedRel[key] = genVal;
+              updatedRel[key] = { ...(curVal || {}), ...genVal };
+            }
+          } else if (key === 'keyEvents') {
+            if (Array.isArray(genVal) && genVal.length > 0) {
+              updatedRel.keyEvents = (hasUserInstruction || isBlank(curVal))
+                ? genVal
+                : [...(curVal || []), ...genVal];
+            }
+          } else {
+            // Drop field if user provided explicit instruction OR current value is empty
+            if (hasUserInstruction || isBlank(curVal)) {
+              if (!isBlank(genVal)) {
+                updatedRel[key] = genVal;
+              }
             }
           }
         }
@@ -311,8 +321,8 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
         <div className="bg-amber-950/30 border border-amber-600/40 rounded-xl p-3 flex flex-col gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-              <i className="fa-solid fa-bolt text-amber-400"></i>
-              KI Smart-Fill für Beziehung ({selfName} ↔ {targetName})
+              <i className="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+              Smart-Fill für Beziehung ({selfName} ↔ {targetName})
             </span>
             <button
               type="button"
@@ -328,14 +338,13 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
           </p>
 
           <div className="flex flex-col gap-1.5">
-            <input
-              type="text"
+            <AutoExpandingTextarea
               value={smartFillPrompt}
               onChange={e => setSmartFillPrompt(e.target.value)}
-              placeholder="Optionale Notiz / Anweisung (z. B. 'Erzfeinde seit Kindheitstagen, tiefes Misstrauen aber heimlicher Respekt...')"
-              className="w-full bg-slate-950 border border-amber-700/50 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-400"
+              placeholder="Optionale Notiz oder Anweisung (z. B. 'Erzfeinde seit Kindheitstagen, tiefes Misstrauen aber heimlicher Respekt...')"
+              className="w-full bg-slate-950 border border-amber-700/50 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-400 min-h-[38px]"
               onKeyDown={e => {
-                if (e.key === 'Enter' && !isSmartFilling) {
+                if (e.key === 'Enter' && !e.shiftKey && !isSmartFilling) {
                   e.preventDefault();
                   handleRelationshipSmartFill();
                 }
@@ -367,7 +376,7 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
                 ) : (
                   <>
                     <i className="fa-solid fa-wand-magic-sparkles text-xs"></i>
-                    <span>⚡ Smart-Fill ausführen</span>
+                    <span>Smart-Fill ausführen</span>
                   </>
                 )}
               </button>

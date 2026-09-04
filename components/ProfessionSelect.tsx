@@ -14,7 +14,7 @@ interface ProfessionSelectProps {
 export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
   value = "",
   onChange,
-  placeholder = "Beruf wählen oder eintragen...",
+  placeholder = "Beruf oder Rolle wählen...",
   selectClassName = "w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal",
   inputClassName = "w-full mt-2 bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal",
   showNobleChildrenButton = true
@@ -63,32 +63,40 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
             ))}
           </optgroup>
         ))}
-        <option value="__custom__">Eigener Beruf / Freitext eingeben...</option>
+        <option value="__custom__">Eigene Rolle / Freitext eintragen...</option>
       </select>
 
+      {isCustomMode && (
+        <input
+          type="text"
+          value={safeValue}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Bezeichnung oder Titel eintragen..."
+          className={inputClassName}
+        />
+      )}
+
       {showNobleChildrenButton && (
-        <>
-          <div className="flex items-center justify-between mt-1.5">
-            <button
-              type="button"
-              onClick={() => setShowNobleChildrenSubmenu(!showNobleChildrenSubmenu)}
-              className="text-[11px] font-semibold text-amber-400 hover:text-amber-300 transition flex items-center gap-1.5 cursor-pointer"
-            >
-              <i className="fa-solid fa-sitemap text-[10px]"></i>
-              <span>
-                {showNobleChildrenSubmenu ? 'Adelsnachkommen-Menü schließen' : 'Kinder von Adeligen & Kindertitel (z.B. Herzogstochter)...'}
-              </span>
-            </button>
-          </div>
+        <div className="mt-1.5">
+          <button
+            type="button"
+            onClick={() => setShowNobleChildrenSubmenu(!showNobleChildrenSubmenu)}
+            className="text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <i className={`fa-solid ${showNobleChildrenSubmenu ? 'fa-chevron-up' : 'fa-chevron-down'} text-[9px]`}></i>
+            <span>
+              {showNobleChildrenSubmenu ? 'Adelstitel ausblenden' : 'Adels- und Nachkommentitel auswählen'}
+            </span>
+          </button>
 
           {showNobleChildrenSubmenu && (
-            <div className="bg-slate-950 border border-slate-800/90 rounded-xl p-3 mt-2 space-y-3 shadow-md">
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 mt-2 space-y-3 shadow-md">
               <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
-                  Titel für Adelsnachkommen & Kinder
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                  Adels- und Standestitel
                 </span>
-                <span className="text-[10px] text-slate-400">
-                  Klicken zum Übernehmen
+                <span className="text-[10px] text-slate-500">
+                  Auswahl übernimmt den Titel
                 </span>
               </div>
 
@@ -109,7 +117,7 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
                             className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
                               isSelected
                                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
-                                : 'bg-slate-900/80 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
                             }`}
                           >
                             {title}
@@ -122,17 +130,7 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
               </div>
             </div>
           )}
-        </>
-      )}
-
-      {isCustomMode && (
-        <input
-          type="text"
-          value={safeValue}
-          onChange={e => onChange(e.target.value)}
-          placeholder="Eigener Beruf / Freitext..."
-          className={inputClassName}
-        />
+        </div>
       )}
     </div>
   );

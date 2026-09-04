@@ -16,6 +16,7 @@ import { formatDisplayLocationName } from '../utils/mapUtils';
 import { createOrganicIslandPoints } from './worldmap/worldMapData';
 import { formatPersonalityTraitsAsPrompt } from './PersonalityTraitsEditor';
 import { WorkManagementModal } from './WorkManagementModal';
+import { isClothingPlaceholder, isClothingItemTitle } from '../App';
 
 
 const baseEmotions = [
@@ -427,6 +428,12 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
   // Item creation modal state
   const [showCreateItemModal, setShowCreateItemModal] = useState(false);
+  
+  // KI-Gegner-Extraktion
+  const [aiExtractedEnemies, setAiExtractedEnemies] = useState<{id: string, name: string, type: 'npc'|'group', subtitle?: string}[]>([]);
+  const [isExtractingEnemies, setIsExtractingEnemies] = useState(false);
+  const [lastExtractedMessageId, setLastExtractedMessageId] = useState('');
+
   const [newItemName, setNewItemName] = useState('');
   const [newItemType, setNewItemType] = useState('Waffen');
   const [newItemRarity, setNewItemRarity] = useState('Gewöhnlich');
@@ -622,6 +629,8 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [isCombatMenuExpanded, setIsCombatMenuExpanded] = useState(() => adventure.combatState?.isCombatActive ?? false);
   const [activeCombatPowerSourceIdx, setActiveCombatPowerSourceIdx] = useState(0);
   const [activeSkillCategoryTab, setActiveSkillCategoryTab] = useState<'techniken' | 'ultimative' | 'transformationen'>('techniken');
+  const [skillSummonCounts, setSkillSummonCounts] = useState<Record<string, number>>({});
+  const [leftSidebarTab, setLeftSidebarTab] = useState<'allies' | 'enemies'>('allies');
   const [showSilhouetteModal, setShowSilhouetteModal] = useState(false);
   const [selectedEnemyId, setSelectedEnemyId] = useState<string>(() => adventure.combatState?.selectedEnemyId ?? '');
   const [selectedEnemyIds, setSelectedEnemyIds] = useState<string[]>(() => adventure.combatState?.selectedEnemyIds ?? (adventure.combatState?.selectedEnemyId ? [adventure.combatState.selectedEnemyId] : []));
@@ -819,64 +828,12 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
           });
         });
       } else if (o.count !== undefined && o.count > 6 && !isAlreadySplit) {
-        // Large horde (> 6): split into squads if > 10, or keep as single squad
-        if (o.count > 10) {
-          let remaining = o.count;
-          const cleanBase = o.name
-            .replace(/\s*[A-Z]$/g, '')
-            .replace(/\s*\([A-Z]\)$/g, '')
-            .replace(/\s*\(Gruppe\s+\d+\)$/g, '')
-            .replace(/\s*\d+er\s+Trupp/gi, '')
-            .trim();
-          
-          const targetSizes = [50, 25, 15, 5];
-          let sizeIndex = 0;
-          const parts: number[] = [];
-          
-          while (remaining > 0) {
-            if (remaining < 5) {
-              if (parts.length > 0) {
-                parts[parts.length - 1] += remaining;
-              } else {
-                parts.push(remaining);
-              }
-              remaining = 0;
-              break;
-            }
-            
-            let desiredSize = targetSizes[sizeIndex % targetSizes.length];
-            while (desiredSize > remaining) {
-              sizeIndex++;
-              desiredSize = targetSizes[sizeIndex % targetSizes.length];
-            }
-            
-            parts.push(desiredSize);
-            remaining -= desiredSize;
-            sizeIndex++;
-          }
-          
-          parts.sort((a, b) => b - a);
-          
-          parts.forEach((size, index) => {
-            const letter = String.fromCharCode(65 + index); // A, B, C, ...
-            const squadName = `${cleanBase} ${letter}`;
-            
-            const splitMaxHp = Math.round((o.maxHp / o.count!) * size);
-            const splitHp = Math.min(splitMaxHp, Math.round((o.hp / o.count!) * size));
-            
-            result.push({
-              ...o,
-              id: `${o.id}-squad-${letter}-${Math.random().toString(36).substr(2, 4)}`,
-              name: squadName,
-              count: size,
-              hp: splitHp,
-              maxHp: splitMaxHp,
-              isFodder: true
-            });
-          });
-        } else {
-          result.push(o);
-        }
+        // Large horde (> 6): Keep as single tactical mass unit with count (e.g. 50 Goblins)
+        // Spawns 1 TacticalGroup and individual TacticalEntities on the grid
+        result.push({
+          ...o,
+          isFodder: true
+        });
       } else {
         result.push(o);
       }
@@ -1595,7 +1552,12 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       { pattern: /\bzombies?\b/i, name: 'Zombies', role: 'Gruppe / Untote' },
       { pattern: /\bbestien?\b/i, name: 'Wilde Bestien', role: 'Gruppe / Kreaturen', excludeContext: /100-bestien|bestien-späher|bestien-pirat|bestien-bande|bestien-jäger/i },
       { pattern: /\bmonster\b/i, name: 'Wilde Monster', role: 'Kreaturen' },
-      { pattern: /\bangreifer?\b/i, name: 'Angreifer', role: 'Feindliche Gruppe' }
+      { pattern: /\bangreifer?\b/i, name: 'Angreifer', role: 'Feindliche Gruppe' },
+      { pattern: /\bspäher\b/i, name: 'Späher', role: 'Gegner / Aufklärung' },
+      { pattern: /\bkrieger\b/i, name: 'Krieger', role: 'Gegner / Kämpfer' },
+      { pattern: /\bvorhut(?:en)?\b/i, name: 'Vorhut', role: 'Gegner / Trupp' },
+      { pattern: /\b(?:pirat(?:en)?|piratenbande)\b/i, name: 'Piraten', role: 'Gruppe / Gesetzlose' },
+      { pattern: /\b(?:agent(?:en)?|assassin(?:en)?|ninja)\b/i, name: 'Agent / Assassine', role: 'Gegner' }
     ];
 
     dynamicHostileKeywords.forEach(kw => {
@@ -1636,16 +1598,88 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     return presentList;
   }, [adventure.npcs, adventure.loreDatabase, messages]);
 
+  // KI-Gegner-Extraktion (Auto-Detect via Gemini)
+  useEffect(() => {
+    if (isCombatMenuExpanded && !isCombatActive) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg && lastMsg.role === 'model' && lastMsg.id !== lastExtractedMessageId && !isExtractingEnemies) {
+        
+        const extract = async () => {
+          setIsExtractingEnemies(true);
+          try {
+            const prompt = `Analysiere den folgenden RPG-Text und extrahiere alle feindlichen Charaktere, Monster oder feindlichen Gruppen, die im Text als aktuell physisch anwesend beschrieben werden.
+Sei dabei so präzise und detailliert wie möglich:
+1. Nutze für "name" den genauen, beschreibenden Namen inklusive Adjektiven (z.B. "bunter Späher", "gehörnter Krieger mit Eisenkeule", "Piraten von Kaido").
+2. Setze "type" auf "npc" für Einzelpersonen oder "group" für Gruppen.
+3. Ergänze in "subtitle" Fraktionen, Zugehörigkeiten oder Rollen, wenn diese im Text erwähnt werden (z.B. "Kaidos Armee", "Piraten", "Aufklärung"). Wenn es eine Gruppe ist und eine genaue Anzahl im Text steht, erwähne diese im subtitle (z.B. "Kaidos Armee (2)", "Wolfsrudel (ca. 5)").
+Antworte AUSSCHLIESSLICH im JSON-Format: {"enemies": [{"name": "...", "type": "npc"|"group", "subtitle": "..."}]}
+Wenn keine Feinde anwesend sind, antworte mit {"enemies": []}.
+Text:
+"${lastMsg.text}"`;
+            
+            const response = await GeminiService.chat([{ id: '1', role: 'user', text: prompt }], "Du bist ein JSON-Daten-Extraktor für ein RPG.", false, "");
+            let jsonStr = response.text;
+            if (jsonStr.includes('```json')) {
+              jsonStr = jsonStr.split('```json')[1].split('```')[0];
+            } else if (jsonStr.includes('```')) {
+              jsonStr = jsonStr.split('```')[1].split('```')[0];
+            }
+            
+            const parsed = JSON.parse(jsonStr.trim());
+            if (parsed && Array.isArray(parsed.enemies)) {
+               const mapped = parsed.enemies.map((e: any, idx: number) => ({
+                 id: `ai-extracted-${Date.now()}-${idx}`,
+                 name: e.name || 'Unbekannter Gegner',
+                 type: e.type === 'group' ? 'group' : 'npc',
+                 subtitle: e.subtitle || (e.type === 'group' ? 'Erkannte Gruppe (KI)' : 'Erkannter Gegner (KI)')
+               }));
+               setAiExtractedEnemies(mapped);
+            } else {
+               setAiExtractedEnemies([]);
+            }
+          } catch (e) {
+            console.error("Fehler bei der automatischen KI-Gegner-Extraktion:", e);
+          } finally {
+            setIsExtractingEnemies(false);
+            setLastExtractedMessageId(lastMsg.id);
+          }
+        };
+        
+        extract();
+      }
+    }
+  }, [isCombatMenuExpanded, isCombatActive, messages, lastExtractedMessageId, isExtractingEnemies]);
+
+  const combinedDetectedEnemies = React.useMemo(() => {
+     // KI-Extrahierte Gegner priorisieren
+     const list: {id: string, name: string, type: 'npc'|'group'|'dynamic', subtitle?: string}[] = [...aiExtractedEnemies];
+     
+     // Generische Regex-Gegner nur hinzufügen, wenn sie nicht schon (ähnlich) von der KI gefunden wurden
+     detectedEnemies.forEach(regexE => {
+       const normRegex = regexE.name.toLowerCase().trim();
+       const isDuplicate = list.some(aiE => {
+         const normAi = aiE.name.toLowerCase().trim();
+         return normAi === normRegex || normAi.includes(normRegex) || normRegex.includes(normAi);
+       });
+       
+       if (!isDuplicate) {
+         list.push(regexE);
+       }
+     });
+     
+     return list;
+  }, [detectedEnemies, aiExtractedEnemies]);
+
   // Synchronize detected enemies into Codex (loreDatabase) as 'Gegner' entries automatically
   useEffect(() => {
-    if (!detectedEnemies || detectedEnemies.length === 0) return;
+    if (!combinedDetectedEnemies || combinedDetectedEnemies.length === 0) return;
 
     const currentAdventure = adventureRef.current || adventure;
     const currentLore = currentAdventure.loreDatabase || [];
     const newGegnerEntries: any[] = [];
     const newNotifications: any[] = [];
 
-    detectedEnemies.forEach(enemy => {
+    combinedDetectedEnemies.forEach(enemy => {
       const cleanName = enemy.name.trim();
       if (!cleanName || cleanName.toLowerCase() === 'widersacher') return;
 
@@ -3291,6 +3325,10 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       else if (catLower.includes('event') || catLower.includes('ereignis') || catLower.includes('quest') || catLower.includes('story')) category = 'Story & Quests';
       else if (catLower.includes('regel') || catLower.includes('gesetz')) category = 'Weltregeln';
 
+      if (category === 'Gegenstände' && isClothingPlaceholder(title)) {
+        continue;
+      }
+
       if (category === 'Weltkarte') {
         const synced = syncLocationToWorld(title, description, {});
         notifications.push({
@@ -3703,26 +3741,52 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
         if (eqIdx > -1) {
           let k = f.substring(0, eqIdx).trim().toLowerCase();
           const v = f.substring(eqIdx + 1).trim();
+          const lowerVal = v.toLowerCase();
+          const isClearValue = !v || ['none', 'keine', 'keines', 'kein', 'abgelegt', 'entfernt', 'ausgezogen', 'nichts', 'leer', '-', 'null'].includes(lowerVal);
 
-          // Handle armor
-          if (k.startsWith('armor.')) {
-            const slot = k.split('.')[1];
+          // Handle armor & clothing
+          if (k.startsWith('armor.') || k.startsWith('kleidung.') || k.startsWith('rüstung.') || k.startsWith('ruestung.')) {
+            let slot = k.split('.')[1] || '';
+            if (['kopf', 'head', 'helm', 'hut', 'mütze', 'muetze', 'stirnband'].includes(slot)) slot = 'head';
+            else if (['chest', 'brust', 'torso', 'oberkörper', 'oberkoerper', 'hemd', 'robe', 'mantel', 'kleid', 'wams'].includes(slot)) slot = 'chest';
+            else if (['hands', 'hände', 'haende', 'handschuhe', 'arme'].includes(slot)) slot = 'hands';
+            else if (['legs', 'beine', 'hose', 'rock', 'beinschutz'].includes(slot)) slot = 'legs';
+            else if (['feet', 'füße', 'fuesse', 'schuhe', 'stiefel'].includes(slot)) slot = 'feet';
+
             if (!updatedStructuredInventory.armor) updatedStructuredInventory.armor = {};
-            updatedStructuredInventory.armor[slot] = v;
+            if (isClearValue) {
+              updatedStructuredInventory.armor[slot] = '';
+            } else {
+              updatedStructuredInventory.armor[slot] = v;
+              if (slot === 'chest') {
+                if (!updatedPlayer.appearance) updatedPlayer.appearance = {} as any;
+                updatedPlayer.appearance.outfit = v;
+              }
+            }
           }
-          // Handle accessories
-          else if (k.startsWith('accessories.')) {
-            const slot = k.split('.')[1];
+          // Handle accessories & Schmuck
+          else if (k.startsWith('accessories.') || k.startsWith('schmuck.') || k.startsWith('accessoires.')) {
+            let slot = k.split('.')[1] || '';
+            if (['finger', 'ring'].includes(slot)) slot = 'finger';
+            else if (['neck', 'hals', 'kette', 'amulett', 'kragen'].includes(slot)) slot = 'neck';
+            else if (['wrist', 'handgelenke', 'handgelenk', 'armband', 'uhr'].includes(slot)) slot = 'wrist';
+            else if (['waist', 'taille', 'gürtel', 'guertel', 'schärpe', 'schaerpe'].includes(slot)) slot = 'waist';
+            else if (['back', 'rücken', 'ruecken', 'umhang', 'cape', 'flügel', 'fluegel', 'rucksack'].includes(slot)) slot = 'back';
+
             if (!updatedStructuredInventory.accessories) updatedStructuredInventory.accessories = {};
-            updatedStructuredInventory.accessories[slot] = v;
+            if (isClearValue) {
+              updatedStructuredInventory.accessories[slot] = '';
+            } else {
+              updatedStructuredInventory.accessories[slot] = v;
+            }
           }
-          // Handle weapons and generalItems with safeguard classification to avoid AI misclassifying them
-          else if (k.startsWith('weapons') || k.startsWith('generalitems')) {
-            const lowerVal = v.toLowerCase();
+          // Handle weapons and generalItems with safeguard classification
+          else if (k.startsWith('weapons') || k.startsWith('waffen') || k.startsWith('waffe') || k.startsWith('generalitems') || k.startsWith('general_items') || k.startsWith('tasche') || k.startsWith('gegenstände') || k.startsWith('gegenstaende') || k.startsWith('items') || k.startsWith('inventar')) {
             const weaponKeywords = ['schwert', 'bogen', 'dolch', 'klinge', 'degen', 'gewehr', 'pistole', 'lanze', 'speer', 'axt', 'tsuki no wa', 'säbel', 'katana', 'waffe', 'weapon', 'messer', 'schild'];
             const generalKeywords = ['brief', 'schlüssel', 'key', 'potion', 'trank', 'karte', 'map', 'buch', 'book', 'dokument', 'notiz', 'brieftasche', 'apfel', 'ring', 'halskette', 'schmuck', 'münze', 'gold', 'perle', 'edelstein', 'kristall', 'elixier'];
 
-            let targetField: 'weapons' | 'generalItems' = k.startsWith('weapons') ? 'weapons' : 'generalItems';
+            let isWpnExplicit = k.startsWith('weapons') || k.startsWith('waffen') || k.startsWith('waffe');
+            let targetField: 'weapons' | 'generalItems' = isWpnExplicit ? 'weapons' : 'generalItems';
             if (generalKeywords.some(kw => lowerVal.includes(kw))) {
               targetField = 'generalItems';
             } else if (weaponKeywords.some(kw => lowerVal.includes(kw))) {
@@ -3734,21 +3798,46 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
             }
 
             if (k.endsWith('+')) {
-              if (v && !updatedStructuredInventory[targetField].includes(v)) {
+              if (!isClearValue && !updatedStructuredInventory[targetField].some((item: string) => item.toLowerCase() === lowerVal)) {
                 updatedStructuredInventory[targetField].push(v);
               }
             } else if (k.endsWith('-')) {
-              updatedStructuredInventory[targetField] = updatedStructuredInventory[targetField].filter((item: string) => item.toLowerCase() !== v.toLowerCase());
+              updatedStructuredInventory[targetField] = updatedStructuredInventory[targetField].filter((item: string) => {
+                const l = item.toLowerCase();
+                return l !== lowerVal && !l.includes(lowerVal);
+              });
+              // Update owner status in Codex
+              const pName = (updatedPlayer.name || 'spieler').toLowerCase();
+              updatedLore.forEach(e => {
+                if (e.category === 'Gegenstände' && (e.title.toLowerCase() === lowerVal || e.title.toLowerCase().includes(lowerVal))) {
+                  if (e.details && e.details.owner?.toLowerCase() === pName) {
+                    e.details.owner = 'Abgelegt / Nicht im Besitz';
+                  }
+                }
+              });
             } else {
-              updatedStructuredInventory[targetField] = v ? v.split(',').map((item: string) => item.trim()).filter(Boolean) : [];
+              if (isClearValue) {
+                updatedStructuredInventory[targetField] = [];
+              } else {
+                updatedStructuredInventory[targetField] = v ? v.split(',').map((item: string) => item.trim()).filter(Boolean) : [];
+              }
             }
           }
-          // Handle money
-          else if (k === 'money') {
-            updatedStructuredInventory.money = parseInt(v, 10) || 0;
+          // Handle money (Vermögen & Finanzen)
+          else if (k === 'money' || k === 'geld' || k === 'vermögen' || k === 'vermoegen' || k === 'gold' || k === 'berry') {
+            const numMatch = v.match(/\d+/);
+            if (numMatch) {
+              updatedStructuredInventory.money = parseInt(numMatch[0], 10) || 0;
+            } else {
+              updatedStructuredInventory.money = parseInt(v, 10) || 0;
+            }
+            const txt = v.replace(/\d+/g, '').trim();
+            if (txt) {
+              updatedStructuredInventory.currencyLabel = txt;
+            }
           }
           // Handle currencyLabel
-          else if (k === 'currencylabel') {
+          else if (k === 'currencylabel' || k === 'currency' || k === 'währung' || k === 'waehrung') {
             updatedStructuredInventory.currencyLabel = v;
           }
         }
@@ -4176,42 +4265,9 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
   };
 
   const advanceGameTime = (currentStatus: StatusElement[]) => {
-    let newStatus = [...currentStatus];
-    
-    // Advance Time (fallback 5 mins per turn) if it exists
-    let zeitIdx = newStatus.findIndex(s => {
-      const l = s.label.toLowerCase();
-      return l === 'zeit' || l === 'uhrzeit' || l.includes('uhrzeit');
-    });
-    if (zeitIdx !== -1) {
-      const timeVal = newStatus[zeitIdx].value;
-      const timeMatch = timeVal.match(/(\d{1,2}):(\d{2})/);
-      if (timeMatch) {
-        const hours = parseInt(timeMatch[1]);
-        const minutes = parseInt(timeMatch[2]);
-        if (!isNaN(hours) && !isNaN(minutes)) {
-          let totalMinutes = hours * 60 + minutes + 5;
-          let newHours = Math.floor(totalMinutes / 60) % 24;
-          let newMinutes = totalMinutes % 60;
-          newStatus[zeitIdx] = { 
-            ...newStatus[zeitIdx], 
-            value: `${newHours.toString().padStart(2, '0')}:${newMinutes.toString().padStart(2, '0')}` 
-          };
-        }
-      }
-    }
-
-    // Decrease Stamina (-5% per turn) if it exists
-    let ausdauerIdx = newStatus.findIndex(s => s.label === 'Ausdauer');
-    if (ausdauerIdx !== -1) {
-      let staminaVal = parseInt(newStatus[ausdauerIdx].value);
-      if (!isNaN(staminaVal)) {
-        staminaVal = Math.max(0, staminaVal - 5);
-        newStatus[ausdauerIdx] = { ...newStatus[ausdauerIdx], value: `${staminaVal}%` };
-      }
-    }
-
-    return newStatus;
+    // Keep current status elements stable without hardcoded premature time jumps or artificial stamina drains.
+    // Realistic time progression is dynamically calculated based on narrative actions (seconds to minutes for dialogues/turns).
+    return [...currentStatus];
   };
 
   const sendActionText = async (textToSend: string, forceNextHp?: number, forceNextMp?: number) => {
@@ -4636,7 +4692,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           - DUPLIKATE STRENGSTENS VERMEIDEN: Achte penibel darauf, keine Einträge doppelt zu erstellen. Wenn ein Eintrag (ein Charakter, Gegner, Ort, Gegenstand etc.) bereits in der Lore-Datenbank existiert (oder ein sehr ähnlicher Name vorliegt), erstelle KEINEN neuen Eintrag. Du kannst und sollst das [[LORE_ADD: ...]] Format mit demselben Namen verwenden, um die Beschreibung eines bereits existierenden Eintrags zu bearbeiten/aktualisieren, aber erstelle ihn niemals neu als Duplikat!
           - GEGNER & HOSTILE GRUPPEN (MANDATORY): Sobald du im Storyverlauf (beim Spielstart, in der ersten Szene oder neuen Begegnungen) physisch anwesende "No-Name" Gegner, Einzelgegner oder feindselige Gruppen (wie Banditen, wilde Rudel, Wachen, feindliche Soldaten) einiffs, MUSST du zwingend sofort einen detaillierten Codex-Eintrag unter der Kategorie 'Gegner' erstellen! Verwende dazu das Format: [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]]. Dadurch werden diese Gegner strukturiert im Codex erfasst und für das Kampfvorbereitungs-Menü freigeschaltet.
           - GEGNER-FILTERUNG: Führe nur Gegner ein, die sich auch tatsächlich physisch in unmittelbarer Nähe des Spielers befinden. Verbündete (Gefährten, Freunde, Lehrer) oder politische Fraktionen sind KEINE Gegner und dürfen niemals als Kampfgegner gelistet werden.
-          - GEGENSTÄNDE & VERBOTENES WISSEN: Erstelle NIEMALS, absolut NIEMALS Einträge für gewöhnliche, alltägliche Gegenstände (wie Tisch, Lampe, Stift, Schlüssel, Papier). Nur legendäre, magische, plot-tragende Waffen, Ausrüstungsteile und Artefakte mit echtem Story-Impact eintragen! Wenn ein Gegenstand für den Spieler geschmiedet, gefunden oder ihm übergeben wird, MUSS dieser absolut perfekt zur Lore und dem Hintergrund des Settings passen (z.B. in "One Piece" ein Schwarzes Katana vom Rang "Drachenschwert", geschmiedet von dem Großvater des Spielers, der ein berühmter Meisterschmied ist). Denke dir einen epischen, faszinierenden und lore-getreuen Namen aus (z.B. "Kokuto Ryuzan" oder "Kusanagi") und beschreibe den Hintergrund detailreich! Trage den Gegenstand zwingend über [[LORE_ADD: Gegenstände | Name | Detailreiche Beschreibung inklusive Herkunft und Legende auf Deutsch]] in die Lore-Datenbank ein. Füge ihn zudem direkt per [[INVENTORY_SET: weapons+=Name]] oder [[INVENTORY_SET: generalItems+=Name]] dem Inventar des Spielers hinzu!
+          - GEGENSTÄNDE, KLEIDUNG & OUTFITS (STRENGES MANDAT):
+            1. Erstelle NIEMALS, absolut NIEMALS Einträge für gewöhnliche, alltägliche Gegenstände (wie Tisch, Lampe, Stift, Papier) oder einzelne Kleidungsstücke (wie "Kochhemd", "Schürze", "Stiefel", "Nachthemd", "Hose") oder Platzhalter-Zustände (wie "barfuß", "keine Kopfbedeckung").
+            2. Wenn der Spieler oder ein Charakter neue Kleidung erhält oder trägt, fasse alle Kleidungsstücke IMMER zwingend zu EINEM EINZIGEN zusammenhängenden Outfit zusammen (z. B. [[LORE_ADD: Gegenstände | Kochkluft | Ein zusammenhängendes Outfit bestehend aus Kochhemd, Schmutziger Lederschürze und Arbeitsstiefeln]] oder [[INVENTORY_SET: armor.chest=Kochkluft (Kochhemd, Lederschürze, Arbeitsstiefel)]]).
+            3. Nur legendäre, magische, plot-tragende Waffen, Artefakte oder zusammenhängende Outfits in den Codex eintragen! wenn ein Gegenstand/Waffe für den Spieler geschmiedet, gefunden oder ihm übergeben wird, MUSS dieser absolut perfekt zur Lore passen. Trage Gegenstände/Waffen über [[LORE_ADD: Gegenstände | Name | Detailreiche Beschreibung auf Deutsch]] in den Codex ein und füge sie per [[INVENTORY_SET: weapons+=Name]] oder [[INVENTORY_SET: generalItems+=Name]] dem Inventar hinzu!
           - VETO FÜR WELTREGELN & GEHEIMNISSE: Keine Spoiler oder verdeckten Pläne vorzeitig leaken!
           Nutze dazu das Format [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]] für Gegner oder passende Kategorien wie 'Weltkarte', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Story & Quests', 'Weltregeln', 'Charaktere'. Neue Gebiete oder Städte können auch per [[TERRITORY_ADD: Name | Typ | Übergeordnetes_Gebiet | Reisezeit | Beschreibung]] hinzugefügt werden. Wenn ein bereits existierender, aber bisher geheimer Lore-Fakt enthüllt wird, schalte ihn frei mit [[LORE_UNLOCK: Name]].
       15. ABSOLUTES VERBOT DES VERÄNDERNS ODER ÜBERSCHREIBENS VON VORHANDENEN CHARAKTEREN & BEZIEHUNGEN: Die KI darf während des Chats UNTER KEINEN UMSTÄNDEN Einträge von vorhandenen Charakteren (weder vom Spieler/Nutzer noch von existierenden NPCs oder bestehenden Codex-Charakteren) verändern, mutieren oder überschreiben! Dies gilt ausnahmslos für Charakterbögen, Biografien, Werte, Aussehen und vor allem für bestehende Beziehungen ('relationships') und Verhalten zu anderen ('conduct'). Alle vorhandenen Charakterdaten und Beziehungen wurden vom Nutzer fest vorgegeben und sind absolut UNANTASTBAR!
@@ -4644,25 +4703,40 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       17. STRENGES ZITIER- & WIEDERHOLUNGSVERBOT: Du darfst NIEMALS die Worte, Sätze, Aktionen, Fragen oder Ausrufe des Spielers zitieren, wiederholen, umformulieren, umschreiben oder kopieren (auch nicht als wörtliche Rede, Gedanken oder Einleitung). Der Spieler hat seine Nachricht bereits selbst geschrieben/gelesen und will sie unter keinen Umständen in deiner Antwort wiederholt sehen. Beginne deine Antwort direkt mit den unmittelbaren Konsequenzen, NPCs-Reaktionen oder dem weiteren physischen/verbalen Verlauf der Szene. Schreibe absolut keine Einleitung, Zusammenfassung oder Rekapitulation des Spielerbeitrags. Wirf den Leser mitten in die darauffolgende Handlung!
       18. STRENGER GEHEIMNIS- UND SPOILER-SCHUTZ BEI TARNUNGEN UND GEHEIMNISSEN: Erwähne niemals geheime Rollen, verborgene Pläne, verdeckte Zugehörigkeiten oder Undercover-Identitäten von Charakteren direkt oder indirekt in der Narration (z.B. wenn Himiko Frost als Lehrerin auftritt, darfst du sei unter keinen Umständen als "Undercover-Agentin" oder "vermeintliche Lehrerin" bezeichnen, oder durch verdächtige oder unnatürliche Formulierungen ihre Tarnung im Text gefährden, es sei denn, ihre Identität wurde im Handlungsverlauf für die Spielfigur bereits eindeutig und unumstößlich aufgedeckt). Für den Spieler muss sie sich absolut lückenlos und überzeugend wie eine echte Lehrerin verhalten.
       19. INTERAKTIONEN UND DIALOGE ZWISCHEN NPCS: Baue vermehrt lebendige, direkte Dialoge in deine Antworten ein. Lass die anwesenden NPCs nicht nur mit dem Spieler sprechen, sondern auch direkt untereinander interagieren, sich unterhalten, Meinungen austauschen, miteinander diskutieren, scherzen, sich absprechen oder streiten. NPCs sind eigenständige Personen mit Beziehungen zueinander und sollten im Chat aktiv und hörbar miteinander kommunizieren, um Szenen lebendiger und authentischer zu machen.
-      20. DYNAMISCHE UHRZEIT & SITUATIVER ZEITFORTFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Zeit=HH:MM]]):
-          Du bist dafür verantwortlich, dass pro Chat-Nachricht die Zeit in der Spielwelt realistisch vergeht! Schätze für JEDE Antwort die verstrichene Zeit basierend auf der Aktion des Spielers und den Ereignissen ein.
-          Gib in JEDER Antwort zwingend die neu berechnete Uhrzeit im Format [[STATUS: Zeit=HH:MM]] (oder Uhrzeit=HH:MM) an!
-          Richtwerte für den Zeitverlauf je nach Situation:
-          - Kurze Bemerkung / Kurzes Gespräch / Schnellfeuer-Dialog: +1 bis +5 Minuten
-          - Ausführlicher Dialog / Durchsuchen eines Raums / Kurzer Fußweg: +10 bis +30 Minuten
-          - Kampf / Akute Auseinandersetzung / Training / Langer Fußmarsch: +30 Minuten bis +2 Stunden
-          - Schlafen / Rast / Weite Wanderung oder Reise / Zeitsprung: +6 bis +12 Stunden (oder entsprechend der Reisedauer)
-          Berechne die neue Uhrzeit immer ausgehend von der bisherigen Uhrzeit im Status (z.B. von 06:15 nach kurzer Frage auf 06:18, oder nach einem Kampf auf 07:15) und gib sie im [[STATUS]] Block an.
+      20. DYNAMISCHE UHRZEIT & SITUATIVER ZEITFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Zeit=HH:MM]]):
+          Du bist dafür verantwortlich, dass pro Chat-Nachricht die Zeit in der Spielwelt realistisch und verhältnismäßig vergeht.
+          ACHTE PENIBEL DARAUF, DASS DIE UHRZEIT NICHT ZU SCHNELL VERGEHT! In einem Rollenspiel dauern die meisten Chat-Aktionen (wie Sprechen, eine Frage stellen, Nachdenken, ein kurzer Blick oder ein einzelner Angriff/Zug) nur wenige Sekunden bis maximal 1 Minute.
+          Gib in JEDER Antwort die neu berechnete Uhrzeit im Format [[STATUS: Zeit=HH:MM]] (oder Uhrzeit=HH:MM) an!
+          Realistische Richtwerte für den Zeitverlauf:
+          - Kurze Bemerkung / Dialog / Frage / Reaktion / einzelner Zug: +0 bis +1 Minute (die Uhrzeit ändert sich oft gar nicht oder nur um 1 Minute).
+          - Längeres Gespräch / Diskussion / kurzes Verweilen / Inspektion eines Objekts: +2 bis +5 Minuten.
+          - Gründliches Durchsuchen eines großen Raums / Spaziergang / Besorgungen: +10 bis +15 Minuten.
+          - Kampf / Auseinandersetzung: Dauert in der Regel 1 bis 3 Minuten (Schlagabtäusche laufen in Sekunden ab). Nur ausgedehnte Großschlachten dauern 15 bis 30 Minuten.
+          - Längere Reise / Fußmarsch zwischen weit entfernten Orten: Entsprechend der tatsächlichen Reisedauer (z.B. +1 bis +3 Stunden).
+          - Rast / Schlaf / bewusste Zeitsprünge: Entsprechend der Schlafdauer (z.B. +1 Stunde Pause, +8 Stunden Nachtruhe).
+          Berechne die neue Uhrzeit immer exakt ausgehend von der bisherigen Uhrzeit im Status (z.B. von 12:00 nach einer kurzen Frage auf 12:00 oder 12:01, nach einem kurzen Kampf auf 12:03) und gib sie im [[STATUS]] Block an.
       21. GEHEIMNISSE & VERBORGENES WISSEN (3-STUFEN-LOGIK - ABSOLUTES SPOILER- UND ENTHÜLLUNGSVERBOT): Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 ist eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden. Erst wenn der Spieler das Geheimnis im Chat gesteht, oder wenn NPCs durch gesammelte Indizien im Chat eine unumstößliche, logische Schlussfolgerung im Hier und Jetzt ziehen, darf dieses Wissen enthüllt werden. Jedes Meta-Wissen-Bleeding ist strengstens verboten!
       22. ABSOLUTES VERBOT DES VORZEITIGEN LORE-ENTHÜLLENS: Wenn ein Lore-Eintrag oder Fakt in der Lore-Datenbank mit '[STRENG GEHEIM:...]' markiert ist, darfst du diesen Fakt, Text oder Inhalt NIEMALS von dir aus im Chat erwähnen, andeuten, spoilern oder referenzieren! Er ist für die Spielfiguren und den Erzähler eine absolute Blackbox, bis der Spieler ihn selbst lüftet oder du ihn per [[LORE_UNLOCK: Name]] im Spielverlauf offiziell freischaltest. Halte dich penibel an dieses Verbot, um dem Spieler nicht die Spannung zu nehmen!
       23. ABSOLUTE UNANTASTBARKEIT BESTEHENDER BEZIEHUNGEN & VERHALTEN: Verändere oder überschreibe niemals Beziehungen ('relationships') oder das festgelegte Verhalten ('conduct', 'behavior') von bestehenden Charakteren. Alle vorgegebenen Beziehungs- und Verhaltensstrukturen sind fix und unveränderlich.
-      24. INVENTAR- & AUSRÜSTUNGSUPDATES: Wenn der Spieler im Verlauf der Geschichte neue Kleidung/Rüstung anzieht, sich umzieht, Waffen ausrüstet/ablegt, Schmuck/Accessoires anlegt oder sonstige Gegenstände in seine Tasche steckt, MUSST du sein Inventar im Logbuch sofort aktualisieren! Nutze dazu zwingend das Format [[INVENTORY_SET: Feld=Wert | Feld2=Wert]].
-          > Erlaubte Rüstungs-Felder (Kleidung & Rüstung): armor.head, armor.chest, armor.hands, armor.legs, armor.feet
-          > Erlaubte Schmuck-Felder (Schmuck & Accessoires): accessories.finger, accessories.wrist, accessories.waist, accessories.back, accessories.neck
-          > Waffen-Aktionen: weapons+=Waffenname (hinzufügen), weapons-=Waffenname (entfernen)
-          > Sonstige Gegenstände (Tasche): generalItems+=Gegenstandsname (hinzufügen), generalItems-=Gegenstandsname (entfernen)
-          > Vermögen: money=Zahl (z.B. money=150)
-          Beispiel: Wenn sich der Spieler umzieht und ein neues Hemd und ein Schwert erhält, gib aus: [[INVENTORY_SET: armor.chest=Weißes Leinenhemd | weapons+=Eisenschwert]]
+      24. INVENTAR- & AUSRÜSTUNGSUPDATES (SYNCHRONISATION ZUM CHAT - MANDATORY):
+          Wenn der Spieler oder die Handlung im Chat Gegenstände erhält, anlegt, wechselt, ablegt, kauft, verkauft, verbraucht oder verliert, MUSST du sein Inventar und seine Ausrüstung im Logbuch/HUD sofort und präzise aktualisieren! Nutze dazu zwingend das Format [[INVENTORY_SET: Feld=Wert | Feld2=Wert]].
+          > FINANZEN & VERMÖGEN: money=Zahl | currencylabel=Währung (z.B. [[INVENTORY_SET: money=150 | currencylabel=Berry]] oder [[STATUS: Vermögen=150 Berry]])
+          > KLEIDUNG & RÜSTUNG:
+            - Anlegen/Wechseln: armor.chest=Kleidungsstück (Ersetzt alte Kleidung an diesem Slot), armor.head=Kopfbedeckung, armor.hands=Handschuhe, armor.legs=Hose/Rock, armor.feet=Schuhe/Stiefel
+            - Ablegen/Ausziehen: armor.chest=none (oder armor.head=keine, armor.feet=abgelegt, etc.)
+          > SCHMUCK & ACCESSOIRES:
+            - Anlegen: accessories.finger=Ring, accessories.neck=Kette/Amulett, accessories.wrist=Armband/Uhr, accessories.waist=Gürtel, accessories.back=Umhang/Rucksack
+            - Ablegen: accessories.neck=none (oder accessories.finger=keine, etc.)
+          > WAFFEN / BEWAFFNUNG:
+            - Erhalten/Ziehen/Ausrüsten: weapons+=Waffenname (z.B. weapons+=Eisenschwert)
+            - Ablegen/Verlieren/Wegstecken/Verkaufen: weapons-=Waffenname (z.B. weapons-=Eisenschwert)
+          > SONSTIGE GEGENSTÄNDE (TASCHE):
+            - Finden/Kaufen/Einstecken: generalItems+=Gegenstandsname (z.B. generalItems+=Heiltrank)
+            - Verbrauchen/Verlieren/Abgeben: generalItems-=Gegenstandsname (z.B. generalItems-=Heiltrank)
+          Kombinierte Beispiele:
+          - Spieler zieht sich um & erhält Waffe: [[INVENTORY_SET: armor.chest=Schwarzer Ledermantel | armor.legs=Dunkle Stoffhose | weapons+=Silberner Dolch]]
+          - Spieler kauft Heiltrank für 20 Berry: [[INVENTORY_SET: generalItems+=Heiltrank | money=80]]
+          - Spieler legt Rüstung ab: [[INVENTORY_SET: armor.chest=none | armor.head=none]]
       25. ENTHÜLLTES / VERBORGENES WISSEN BEACHTEN: Achte penibel auf das "Enthülltes/Verborgenes Wissen" in den Event-Stationen. Wenn ein Story-Schritt/eine Station noch als "Ausstehend/Geplant" markiert ist, darfst du dieses Wissen auf KEINEN FALL vorzeitig im Chat verraten, andeuten, erwähnen oder enthüllen! Erst wenn die Hauptstory/Nebenquests diesen Schritt erreicht haben (Station ist als "Eingetreten" markiert), ist das Wissen aktiv und darf im Chat thematisiert oder offenbart werden.
       26. STRENGE ZEITLICHE KONSISTENZ & TEMPORALE LOGIK: Analysiere genau den zeitlichen Ablauf seit dem zentralen Katalysator-Ereignis (z.B. Unfall, Verwandlung, Erhalt von Kräften, Amnesie des Spielers). Wenn dieses Ereignis erst gestern, heute oder vor extrem kurzer Zeit stattfand, dürfen NPCs NIEMALS unlogische Dinge sagen wie 'Du hast dich in letzter Zeit verändert' (als wäre es ein wochenlanger Prozess gewesen). NPCs dürfen sich nicht so verhalten, als hätten sie die Veränderung bereits über einen langen Zeitraum beobachtet. Achte penibel darauf, dass NPCs nur das wissen und ansprechen können, was in der kurzen verstrichenen Zeitspanne logischerweise beobachtbar war! Sorge für 100% lückenlose zeitliche Logik!
       27. ABSOLUTES VERBOT DES AUSGEBENS VON KAMPAGNEN-WERTEN ODER STATS: Gib NIEMALS, unter keinen Umständen, Kampagnen-Werte, Attribute, Statuslisten, Progress-Bars, Werteveränderungen oder Status-Meldungen (wie "**KAMPAGNEN-WERTE**", "Haki: 0/5000" etc.) im ausgegebenen Text aus! Diese Werte werden rein im Hintergrund für dich übermittelt. Dein Text darf ausschließlich die cineastische Erzählung, Dialoge und atmosphärische Beschreibungen enthalten - komplett frei von technischen Wertelisten.
@@ -4726,96 +4800,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         chatHistory: nextChatHistory,
         structuredInventory: syncedInv,
         combatState: updatedCombatState
-      });
-
-      // Update the chronicle summary log asynchronously in background
-      GeminiService.extractChronicle(
-        adventure.prologue,
-        adventure.summaryLog || '',
-        nextChatHistory.slice(-4),
-        world.isNsfw
-      ).then(newSummary => {
-        const chronicleUpdatedState = {
-          ...adventureRef.current,
-          player: updatedPlayer,
-          npcs: updatedNpcs,
-          world: updatedWorld,
-          statusElements: syncedStatus,
-          loreDatabase: updatedLore,
-          chatHistory: nextChatHistory,
-          structuredInventory: syncedInv,
-          combatState: updatedCombatState,
-          ...(newSummary && newSummary.trim() ? { summaryLog: newSummary } : {})
-        };
-        
-        onUpdateAdventure(chronicleUpdatedState);
-
-        // Right after chronicle is done, let's extract new lore entries!
-        return GeminiService.extractNewLoreEntries(
-          nextChatHistory.slice(-2),
-          chronicleUpdatedState.loreDatabase || [],
-          world.isNsfw
-        );
-      }).then(newEntries => {
-        if (newEntries && newEntries.length > 0) {
-          const currentAdventureState = adventureRef.current || adventure;
-          const currentLore = [...(currentAdventureState.loreDatabase || [])].filter(l => l.category !== 'Orte' && (l.category as string) !== 'Weltkarte');
-          const addedNotifications: any[] = [];
-
-          newEntries.forEach((entry: any) => {
-            const title = entry.title?.trim();
-            const rawCat = (entry.category || 'Weltregeln').trim();
-            const description = entry.description?.trim();
-            if (!title || !description) return;
-
-            const isMapLocation = rawCat.toLowerCase().includes('ort') || rawCat.toLowerCase().includes('weltkarte') || rawCat.toLowerCase().includes('gebiet');
-
-            if (isMapLocation) {
-              const synced = syncLocationToWorldHelper(updatedWorld, title, description, entry.details || {});
-              addedNotifications.push({
-                id: Math.random().toString(),
-                type: 'add',
-                title: synced.travelTime ? `${title} (${synced.travelTime})` : title,
-                category: 'Weltkarte'
-              });
-              return;
-            }
-
-            const category = rawCat;
-            // Check if title already exists in currentLore
-            const exists = currentLore.some(e => 
-              e.category === category && isSimilarLoreTitle(e.title, title)
-            );
-            if (!exists) {
-              const newEntry = {
-                id: 'dyn-' + Math.random().toString(36).substr(2, 9),
-                category,
-                title,
-                description,
-                isUnlocked: true,
-                details: entry.details || {}
-              };
-              currentLore.push(newEntry as any);
-              addedNotifications.push({
-                id: Math.random().toString(),
-                type: 'add',
-                title,
-                category
-              });
-            }
-          });
-
-          if (addedNotifications.length > 0) {
-            setLoreNotifications(prev => [...prev, ...addedNotifications]);
-            onUpdateAdventure({
-              ...adventureRef.current,
-              world: updatedWorld,
-              loreDatabase: currentLore
-            });
-          }
-        }
-      }).catch(err => {
-        console.error("Chronik oder Lore Extraktion fehlgeschlagen:", err);
       });
     } catch (err: any) {
       console.error(err);
@@ -5664,11 +5648,12 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
 
     if (mpCost > 0 && availableRes < (totalCostInQueue + mpCost)) {
       setError(`Nicht genügend ${costResourceName || 'MP'} für diese Kombination!`);
-      return;
+      return null;
     }
     
+    const actionId = Math.random().toString(36).substr(2, 9);
     const newAct = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: actionId,
       actionType,
       actionDetail,
       dmgDealt,
@@ -5690,6 +5675,8 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       }
       return `${trimmed} ${actionStr}`;
     });
+    
+    return actionId;
   };
 
   const removeCombatActionFromQueue = (id: string) => {
@@ -5713,11 +5700,39 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
     } else {
       setInputText(formatCombatActionsQueue(next));
     }
+    
+    // Remove any summons that were placed by this action
+    if (adventure.combatState?.placedObjects) {
+      const hasSummonsToRemove = adventure.combatState.placedObjects.some(obj => (obj as any).sourceActionId === id);
+      if (hasSummonsToRemove) {
+        onUpdateAdventure({
+          ...adventure,
+          combatState: {
+            ...adventure.combatState,
+            placedObjects: adventure.combatState.placedObjects.filter(obj => (obj as any).sourceActionId !== id)
+          }
+        });
+      }
+    }
   };
 
   const clearCombatActionQueue = () => {
     setQueuedCombatActions([]);
-    setInputText('');
+    setInputText("");
+    
+    if (adventure.combatState?.placedObjects) {
+      const idsToRemove = queuedCombatActions.map(a => a.id);
+      const hasSummonsToRemove = adventure.combatState.placedObjects.some(obj => idsToRemove.includes((obj as any).sourceActionId));
+      if (hasSummonsToRemove) {
+        onUpdateAdventure({
+          ...adventure,
+          combatState: {
+            ...adventure.combatState,
+            placedObjects: adventure.combatState.placedObjects.filter(obj => !idsToRemove.includes((obj as any).sourceActionId))
+          }
+        });
+      }
+    }
   };
 
   const handleRestAction = (type: 'short' | 'long') => {
@@ -5767,11 +5782,11 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
           return { ...el, value: `${nextPct}%` };
         }
       }
-      if (labelLower === 'zeit' && type === 'long') {
-        // Sleep advances time by 8 hours
+      if ((labelLower === 'zeit' || labelLower === 'uhrzeit' || labelLower.includes('uhrzeit'))) {
         const timeParts = el.value.split(':');
         if (timeParts.length === 2) {
-          const hour = (parseInt(timeParts[0]) + 8) % 24;
+          const hoursToAdd = type === 'long' ? 8 : 1;
+          const hour = (parseInt(timeParts[0]) + hoursToAdd) % 24;
           const formattedHour = String(hour).padStart(2, '0');
           return { ...el, value: `${formattedHour}:${timeParts[1]}` };
         }
@@ -6412,7 +6427,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           - DUPLIKATE STRENGSTENS VERMEIDEN: Achte penibel darauf, keine Einträge doppelt zu erstellen. Wenn ein Eintrag (ein Charakter, Gegner, Ort, Gegenstand etc.) bereits in der Lore-Datenbank existiert (oder ein sehr ähnlicher Name vorliegt), erstelle KEINEN neuen Eintrag. Du kannst und sollst das [[LORE_ADD: ...]] Format mit demselben Namen verwenden, um die Beschreibung eines bereits existierenden Eintrags zu bearbeiten/aktualisieren, aber erstelle ihn niemals neu als Duplikat!
           - GEGNER & HOSTILE GRUPPEN (MANDATORY): Sobald du im Storyverlauf (beim Spielstart, in der ersten Szene oder neuen Begegnungen) physisch anwesende "No-Name" Gegner, Einzelgegner oder feindselige Gruppen (wie Banditen, wilde Rudel, Wachen, feindliche Soldaten) einführst, MUSST du zwingend sofort einen detaillierten Codex-Eintrag unter der Kategorie 'Gegner' erstellen! Verwende dazu das Format: [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]]. Dadurch werden diese Gegner strukturiert im Codex erfasst und für das Kampfvorbereitungs-Menü freigeschaltet.
           - GEGNER-FILTERUNG: Führe nur Gegner ein, die sich auch tatsächlich physisch in unmittelbarer Nähe des Spielers befinden. Verbündete (Gefährten, Freunde, Lehrer) oder politische Fraktionen sind KEINE Gegner und dürfen niemals als Kampfgegner gelistet werden.
-          - GEGENSTÄNDE & VERBOTENES WISSEN: Erstelle NIEMALS, absolut NIEMALS Einträge für gewöhnliche, alltägliche Gegenstände (wie Tisch, Lampe, Stift, Schlüssel, Papier). Nur legendäre, magische, plot-tragende Waffen, Ausrüstungsteile und Artefakte mit echtem Story-Impact eintragen! Wenn ein Gegenstand für den Spieler geschmiedet, gefunden oder ihm übergeben wird (oder einem NPC gehört), MUSS dieser absolut perfekt zur Lore und dem Hintergrund des Settings passen (z.B. in "One Piece" ein Schwarzes Katana vom Rang "Drachenschwert", geschmiedet von dem Großvater des Spielers, der ein Meisterschmied ist). Denke dir einen epischen, faszinierenden und lore-getreuen Namen aus (z.B. "Kokuto Ryuzan" oder "Kusanagi") und beschreibe den Hintergrund detailreich! Trage den Gegenstand zwingend mit Besitzerangabe über [[LORE_ADD: Gegenstände | Name | Besitzer: Spieler | Detailreiche Beschreibung inklusive Herkunft und Legende auf Deutsch]] (oder 'Besitzer: NPC-Name') in die Lore-Datenbank ein. Wenn er dem Spieler gehört, füge ihn zudem direkt per [[INVENTORY_SET: weapons+=Name]] oder [[INVENTORY_SET: generalItems+=Name]] dem Inventar des Spielers hinzu!
+          - GEGENSTÄNDE, KLEIDUNG & OUTFITS (STRENGES MANDAT):
+            1. Erstelle NIEMALS, absolut NIEMALS Einträge für gewöhnliche, alltägliche Gegenstände (wie Tisch, Lampe, Stift, Papier) oder einzelne Kleidungsstücke (wie "Kochhemd", "Schürze", "Stiefel", "Nachthemd", "Hose") oder Platzhalter-Zustände (wie "barfuß", "keine Kopfbedeckung").
+            2. Wenn der Spieler oder ein Charakter neue Kleidung erhält oder trägt, fasse alle Kleidungsstücke IMMER zwingend zu EINEM EINZIGEN zusammenhängenden Outfit zusammen (z. B. [[LORE_ADD: Gegenstände | Kochkluft | Ein zusammenhängendes Outfit bestehend aus Kochhemd, Schmutziger Lederschürze und Arbeitsstiefeln]] oder [[INVENTORY_SET: armor.chest=Kochkluft (Kochhemd, Lederschürze, Arbeitsstiefel)]]).
+            3. Nur legendäre, magische, plot-tragende Waffen, Artefakte oder zusammenhängende Outfits in den Codex eintragen! wenn ein Gegenstand/Waffe für den Spieler geschmiedet, gefunden oder ihm übergeben wird (oder einem NPC gehört), MUSS dieser absolut perfekt zur Lore passen. Trage Gegenstände/Waffen über [[LORE_ADD: Gegenstände | Name | Besitzer: Spieler | Detailreiche Beschreibung auf Deutsch]] in den Codex ein und füge sie per [[INVENTORY_SET: weapons+=Name]] oder [[INVENTORY_SET: generalItems+=Name]] dem Inventar hinzu!
           - VETO FÜR WELTREGELN & GEHEIMNISSE: Keine Spoiler oder verdeckten Pläne vorzeitig leaken!
           Nutze dazu das Format [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]] für Gegner oder passende Kategorien wie 'Weltkarte', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Story & Quests', 'Weltregeln', 'Charaktere'. Neue Gebiete oder Städte können auch per [[TERRITORY_ADD: Name | Typ | Übergeordnetes_Gebiet | Reisezeit | Beschreibung]] hinzugefügt werden. Wenn ein bereits existierender, aber bisher geheimer Lore-Fakt enthüllt wird, schalte ihn frei mit [[LORE_UNLOCK: Name]].
       15. ABSOLUTES VERBOT DES VERÄNDERNS ODER ÜBERSCHREIBENS VON VORHANDENEN CHARAKTEREN & BEZIEHUNGEN: Die KI darf während des Chats UNTER KEINEN UMSTÄNDEN Einträge von vorhandenen Charakteren (weder vom Spieler/Nutzer noch von existierenden NPCs oder bestehenden Codex-Charakteren) verändern, mutieren oder überschreiben! Dies gilt ausnahmslos für Charakterbögen, Biografien, Werte, Aussehen und vor allem für bestehende Beziehungen ('relationships') und Verhalten zu anderen ('conduct'). Alle vorhandenen Charakterdaten und Beziehungen wurden vom Nutzer fest vorgegeben und sind absolut UNANTASTBAR!
@@ -6420,25 +6438,40 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       17. STRENGES ZITIER- & WIEDERHOLUNGSVERBOT: Du darfst NIEMALS die Worte, Sätze, Aktionen, Fragen oder Ausrufe des Spielers zitieren, wiederholen, umformulieren, umschreiben oder kopieren (auch nicht als wörtliche Rede, Gedanken oder Einleitung). Der Spieler hat seine Nachricht bereits selbst geschrieben/gelesen und will sie unter keinen Umständen in deiner Antwort wiederholt sehen. Beginne deine Antwort direkt mit den unmittelbaren Konsequenzen, NPCs-Reaktionen oder dem weiteren physischen/verbalen Verlauf der Szene. Schreibe absolut keine Einleitung, Zusammenfassung oder Rekapitulation des Spielerbeitrags. Wirf den Leser mitten in die darauffolgende Handlung!
       18. STRENGER GEHEIMNIS- UND SPOILER-SCHUTZ BEI TARNUNGEN UND GEHEIMNISSEN: Erwähne niemals geheime Rollen, verborgene Pläne, verdeckte Zugehörigkeiten oder Undercover-Identitäten von Charakteren direkt oder indirekt in der Narration (z.B. wenn Himiko Frost als Lehrerin auftritt, darfst du sie unter keinen Umständen als "Undercover-Agentin" oder "vermeintliche Lehrerin" bezeichnen, oder durch verdächtige oder unnatürliche Formulierungen ihre Tarnung im Textgefährden, es sei denn, ihre Identität wurde im Handlungsverlauf für die Spielfigur bereits eindeutig und unumstößlich aufgedeckt). Für den Spieler muss sie sich absolut lückenlos und überzeugend wie eine echte Lehrerin verhalten.
       19. INTERAKTIONEN UND DIALOGE ZWISCHEN NPCS: Baue vermehrt lebendige, direkte Dialoge in deine Antworten ein. Lass die anwesenden NPCs nicht nur mit dem Spieler sprechen, sondern auch direkt untereinander interagieren, sich unterhalten, Meinungen austauschen, miteinander diskutieren, scherzen, sich absprechen oder streiten. NPCs sind eigenständige Personen mit Beziehungen zueinander und sollten im Chat aktiv und hörbar miteinander kommunizieren, um Szenen lebendiger und authentischer zu machen.
-      20. DYNAMISCHE UHRZEIT & SITUATIVER ZEITFORTFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Zeit=HH:MM]]):
-          Du bist dafür verantwortlich, dass pro Chat-Nachricht die Zeit in der Spielwelt realistisch vergeht! Schätze für JEDE Antwort die verstrichene Zeit basierend auf der Aktion des Spielers und den Ereignissen ein.
-          Gib in JEDER Antwort zwingend die neu berechnete Uhrzeit im Format [[STATUS: Zeit=HH:MM]] (oder Uhrzeit=HH:MM) an!
-          Richtwerte für den Zeitverlauf je nach Situation:
-          - Kurze Bemerkung / Kurzes Gespräch / Schnellfeuer-Dialog: +1 bis +5 Minuten
-          - Ausführlicher Dialog / Durchsuchen eines Raums / Kurzer Fußweg: +10 bis +30 Minuten
-          - Kampf / Akute Auseinandersetzung / Training / Langer Fußmarsch: +30 Minuten bis +2 Stunden
-          - Schlafen / Rast / Weite Wanderung oder Reise / Zeitsprung: +6 bis +12 Stunden (oder entsprechend der Reisedauer)
-          Berechne die neue Uhrzeit immer ausgehend von der bisherigen Uhrzeit im Status (z.B. von 06:15 nach kurzer Frage auf 06:18, oder nach einem Kampf auf 07:15) und gib sie im [[STATUS]] Block an.
+      20. DYNAMISCHE UHRZEIT & SITUATIVER ZEITFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Zeit=HH:MM]]):
+          Du bist dafür verantwortlich, dass pro Chat-Nachricht die Zeit in der Spielwelt realistisch und verhältnismäßig vergeht.
+          ACHTE PENIBEL DARAUF, DASS DIE UHRZEIT NICHT ZU SCHNELL VERGEHT! In einem Rollenspiel dauern die meisten Chat-Aktionen (wie Sprechen, eine Frage stellen, Nachdenken, ein kurzer Blick oder ein einzelner Angriff/Zug) nur wenige Sekunden bis maximal 1 Minute.
+          Gib in JEDER Antwort die neu berechnete Uhrzeit im Format [[STATUS: Zeit=HH:MM]] (oder Uhrzeit=HH:MM) an!
+          Realistische Richtwerte für den Zeitverlauf:
+          - Kurze Bemerkung / Dialog / Frage / Reaktion / einzelner Zug: +0 bis +1 Minute (die Uhrzeit ändert sich oft gar nicht oder nur um 1 Minute).
+          - Längeres Gespräch / Diskussion / kurzes Verweilen / Inspektion eines Objekts: +2 bis +5 Minuten.
+          - Gründliches Durchsuchen eines großen Raums / Spaziergang / Besorgungen: +10 bis +15 Minuten.
+          - Kampf / Auseinandersetzung: Dauert in der Regel 1 bis 3 Minuten (Schlagabtäusche laufen in Sekunden ab). Nur ausgedehnte Großschlachten dauern 15 bis 30 Minuten.
+          - Längere Reise / Fußmarsch zwischen weit entfernten Orten: Entsprechend der tatsächlichen Reisedauer (z.B. +1 bis +3 Stunden).
+          - Rast / Schlaf / bewusste Zeitsprünge: Entsprechend der Schlafdauer (z.B. +1 Stunde Pause, +8 Stunden Nachtruhe).
+          Berechne die neue Uhrzeit immer exakt ausgehend von der bisherigen Uhrzeit im Status (z.B. von 12:00 nach einer kurzen Frage auf 12:00 oder 12:01, nach einem kurzen Kampf auf 12:03) und gib sie im [[STATUS]] Block an.
       21. GEHEIMNISSE & VERBORGENES WISSEN (3-STUFEN-LOGIK - ABSOLUTES SPOILER- UND ENTHÜLLUNGSVERBOT): Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 is eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden. Erst wenn der Spieler das Geheimnis im Chat gesteht, oder wenn NPCs durch gesammelte Indizien im Chat eine unumstößliche, logische Schlussfolgerung im Hier und Jetzt ziehen, darf dieses Wissen enthüllt werden. Jedes Meta-Wissen-Bleeding is strengstens verboten!
       22. ABSOLUTES VERBOT DES VORZEITIGEN LORE-ENTHÜLLENS: Wenn ein Lore-Eintrag oder Fakt in der Lore-Datenbank mit '[STRENG GEHEIM:...]' markiert ist, darfst du diesen Fakt, Text oder Inhalt NIEMALS von dir aus im Chat erwähnen, andeuten, spoilern oder referenzieren! Er ist für die Spielfiguren und den Erzähler eine absolute Blackbox, bis der Spieler ihn selbst lüftet oder du ihn per [[LORE_UNLOCK: Name]] im Spielverlauf offiziell freischaltest. Halte dich penibel an dieses Verbot, um dem Spieler nicht die Spannung zu nehmen!
       23. ABSOLUTE UNANTASTBARKEIT BESTEHENDER BEZIEHUNGEN & VERHALTEN: Verändere oder überschreibe niemals Beziehungen ('relationships') oder das festgelegte Verhalten ('conduct', 'behavior') von bestehenden Charakteren. Alle vorgegebenen Beziehungs- und Verhaltensstrukturen sind fix und unveränderlich.
-      24. INVENTAR- & AUSRÜSTUNGSUPDATES: Wenn der Spieler im Verlauf der Geschichte neue Kleidung/Rüstung anzieht, sich umzieht, Waffen ausrüstet/ablegt, Schmuck/Accessoires anlegt oder sonstige Gegenstände in seine Tasche steckt, MUSST du sein Inventar im Logbuch sofort aktualisieren! Nutze dazu zwingend das Format [[INVENTORY_SET: Feld=Wert | Feld2=Wert]].
-          > Erlaubte Rüstungs-Felder (Kleidung & Rüstung): armor.head, armor.chest, armor.hands, armor.legs, armor.feet
-          > Erlaubte Schmuck-Felder (Schmuck & Accessoires): accessories.finger, accessories.wrist, accessories.waist, accessories.back, accessories.neck
-          > Waffen-Aktionen: weapons+=Waffenname (hinzufügen), weapons-=Waffenname (entfernen)
-          > Sonstige Gegenstände (Tasche): generalItems+=Gegenstandsname (hinzufügen), generalItems-=Gegenstandsname (entfernen)
-          > Vermögen: money=Zahl (z.B. money=150)
-          Beispiel: Wenn sich der Spieler umzieht und ein neues Hemd und ein Schwert erhält, gib aus: [[INVENTORY_SET: armor.chest=Weißes Leinenhemd | weapons+=Eisenschwert]]
+      24. INVENTAR- & AUSRÜSTUNGSUPDATES (SYNCHRONISATION ZUM CHAT - MANDATORY):
+          Wenn der Spieler oder die Handlung im Chat Gegenstände erhält, anlegt, wechselt, ablegt, kauft, verkauft, verbraucht oder verliert, MUSST du sein Inventar und seine Ausrüstung im Logbuch/HUD sofort und präzise aktualisieren! Nutze dazu zwingend das Format [[INVENTORY_SET: Feld=Wert | Feld2=Wert]].
+          > FINANZEN & VERMÖGEN: money=Zahl | currencylabel=Währung (z.B. [[INVENTORY_SET: money=150 | currencylabel=Berry]] oder [[STATUS: Vermögen=150 Berry]])
+          > KLEIDUNG & RÜSTUNG:
+            - Anlegen/Wechseln: armor.chest=Kleidungsstück (Ersetzt alte Kleidung an diesem Slot), armor.head=Kopfbedeckung, armor.hands=Handsuche, armor.legs=Hose/Rock, armor.feet=Schuhe/Stiefel
+            - Ablegen/Ausziehen: armor.chest=none (oder armor.head=keine, armor.feet=abgelegt, etc.)
+          > SCHMUCK & ACCESSOIRES:
+            - Anlegen: accessories.finger=Ring, accessories.neck=Kette/Amulett, accessories.wrist=Armband/Uhr, accessories.waist=Gürtel, accessories.back=Umhang/Rucksack
+            - Ablegen: accessories.neck=none (oder accessories.finger=keine, etc.)
+          > WAFFEN / BEWAFFNUNG:
+            - Erhalten/Ziehen/Ausrüsten: weapons+=Waffenname (z.B. weapons+=Eisenschwert)
+            - Ablegen/Verlieren/Wegstecken/Verkaufen: weapons-=Waffenname (z.B. weapons-=Eisenschwert)
+          > SONSTIGE GEGENSTÄNDE (TASCHE):
+            - Finden/Kaufen/Einstecken: generalItems+=Gegenstandsname (z.B. generalItems+=Heiltrank)
+            - Verbrauchen/Verlieren/Abgeben: generalItems-=Gegenstandsname (z.B. generalItems-=Heiltrank)
+          Kombinierte Beispiele:
+          - Spieler zieht sich um & erhält Waffe: [[INVENTORY_SET: armor.chest=Schwarzer Ledermantel | armor.legs=Dunkle Stoffhose | weapons+=Silberner Dolch]]
+          - Spieler kauft Heiltrank für 20 Berry: [[INVENTORY_SET: generalItems+=Heiltrank | money=80]]
+          - Spieler legt Rüstung ab: [[INVENTORY_SET: armor.chest=none | armor.head=none]]
       25. ENTHÜLLTES / VERBORGENES WISSEN BEACHTEN: Achte penibel auf das "Enthülltes/Verborgenes Wissen" in den Event-Stationen. Wenn ein Story-Schritt/eine Station noch als "Ausstehend/Geplant" markiert ist, darfst du dieses Wissen auf KEINEN FALL vorzeitig im Chat verraten, andeuten, erwähnen oder enthüllen! Erst wenn die Hauptstory/Nebenquests diesen Schritt erreicht haben (Station ist als "Eingetreten" markiert), ist das Wissen aktiv und darf im Chat thematisiert oder offenbart werden.
       26. STRENGE ZEITLICHE KONSISTENZ & TEMPORALE LOGIK: Analysiere genau den zeitlichen Ablauf seit dem zentralen Katalysator-Ereignis (z.B. Unfall, Verwandlung, Erhalt von Kräften, Amnesie des Spielers). Wenn dieses Ereignis erst gestern, heute oder vor extrem kurzer Zeit stattfand, dürfen NPCs NIEMALS unlogische Dinge sagen wie 'Du hast dich in letzter Zeit verändert' (als wäre es ein wochenlanger Prozess gewesen). NPCs dürfen sich nicht so verhalten, als hätten sie die Veränderung bereits über einen langen Zeitraum beobachtet. Achte penibel darauf, dass NPCs nur das wissen und ansprechen können, was in der kurzen verstrichenen Zeitspanne logischerweise beobachtbar war! Sorge für 100% lückenlose zeitliche Logik!
       27. ABSOLUTES VERBOT DES AUSGEBENS VON KAMPAGNEN-WERTEN ODER STATS: Gib NIEMALS, unter keinen Umständen, Kampagnen-Werte, Attribute, Statuslisten, Progress-Bars, Werteveränderungen oder Status-Meldungen (wie "**KAMPAGNEN-WERTE**", "Haki: 0/5000" etc.) im ausgegebenen Text aus! Diese Werte werden rein im Hintergrund für dich übermittelt. Dein Text darf ausschließlich die cineastische Erzählung, Dialoge und atmosphärische Beschreibungen enthalten - komplett frei von technischen Wertelisten.
@@ -6504,96 +6537,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         chatHistory: finalMessages,
         structuredInventory: syncedInv,
         combatState: updatedCombatState
-      });
-
-      // Update the chronicle summary log asynchronously in background
-      GeminiService.extractChronicle(
-        adventure.prologue,
-        adventure.summaryLog || '',
-        finalMessages.slice(-4),
-        world.isNsfw
-      ).then(newSummary => {
-        const chronicleUpdatedState = {
-          ...adventureRef.current,
-          player: updatedPlayer,
-          npcs: updatedNpcs,
-          world: updatedWorld,
-          statusElements: syncedStatus,
-          loreDatabase: updatedLore,
-          chatHistory: finalMessages,
-          structuredInventory: syncedInv,
-          combatState: updatedCombatState,
-          ...(newSummary && newSummary.trim() ? { summaryLog: newSummary } : {})
-        };
-        
-        onUpdateAdventure(chronicleUpdatedState);
-
-        // Right after chronicle is done, let's extract new lore entries!
-        return GeminiService.extractNewLoreEntries(
-          finalMessages.slice(-2),
-          chronicleUpdatedState.loreDatabase || [],
-          world.isNsfw
-        );
-      }).then(newEntries => {
-        if (newEntries && newEntries.length > 0) {
-          const currentAdventureState = adventureRef.current || adventure;
-          const currentLore = [...(currentAdventureState.loreDatabase || [])].filter(l => l.category !== 'Orte' && (l.category as string) !== 'Weltkarte');
-          const addedNotifications: any[] = [];
-
-          newEntries.forEach((entry: any) => {
-            const title = entry.title?.trim();
-            const rawCat = (entry.category || 'Weltregeln').trim();
-            const description = entry.description?.trim();
-            if (!title || !description) return;
-
-            const isMapLocation = rawCat.toLowerCase().includes('ort') || rawCat.toLowerCase().includes('weltkarte') || rawCat.toLowerCase().includes('gebiet');
-
-            if (isMapLocation) {
-              const synced = syncLocationToWorldHelper(updatedWorld, title, description, entry.details || {});
-              addedNotifications.push({
-                id: Math.random().toString(),
-                type: 'add',
-                title: synced.travelTime ? `${title} (${synced.travelTime})` : title,
-                category: 'Weltkarte'
-              });
-              return;
-            }
-
-            const category = rawCat;
-            // Check if title already exists in currentLore
-            const exists = currentLore.some(e => 
-              e.category === category && isSimilarLoreTitle(e.title, title)
-            );
-            if (!exists) {
-              const newEntry = {
-                id: 'dyn-' + Math.random().toString(36).substr(2, 9),
-                category,
-                title,
-                description,
-                isUnlocked: true,
-                details: entry.details || {}
-              };
-              currentLore.push(newEntry as any);
-              addedNotifications.push({
-                id: Math.random().toString(),
-                type: 'add',
-                title,
-                category
-              });
-            }
-          });
-
-          if (addedNotifications.length > 0) {
-            setLoreNotifications(prev => [...prev, ...addedNotifications]);
-            onUpdateAdventure({
-              ...adventureRef.current,
-              world: updatedWorld,
-              loreDatabase: currentLore
-            });
-          }
-        }
-      }).catch(err => {
-        console.error("Chronik oder Lore Extraktion fehlgeschlagen:", err);
       });
     } catch (err: any) {
       console.error(err);
@@ -7446,9 +7389,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             <div ref={chatEndRef} />
           </div>
 
+          <div className="absolute bottom-0 left-0 right-0 p-3 pb-6 bg-gradient-to-t from-slate-950 to-transparent z-20">
           {/* Aufklappbares Dialog-Steuerpanel */}
           {isDialogueMenuExpanded && (
-            <div id="dialogue-control-menu" className="bg-slate-900/95 border-2 border-amber-500/40 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-sm w-[calc(100vw-32px)] absolute bottom-24 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+            <div id="dialogue-control-menu" className="bg-slate-900/95 border-2 border-amber-500/40 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
               {/* Header */}
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                 <div className="flex items-center gap-2">
@@ -7619,7 +7563,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
           {/* Aufklappbares JRPG Kampf-Steuerpanel */}
           {isCombatMenuExpanded && (
-            <div id="jrpg-combat-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-sm w-[calc(100vw-32px)] absolute bottom-24 left-4 animate-in slide-in-from-bottom duration-200 z-30">
+            <div id="jrpg-combat-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1 left-4 animate-in slide-in-from-bottom duration-200 z-30">
               {/* Kopfzeile */}
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                 <div className="flex items-center gap-2">
@@ -7644,8 +7588,14 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
                 {/* Erkannte anwesende Gegner und Gruppen */}
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                  {detectedEnemies.length > 0 ? (
-                    detectedEnemies.map(enemy => (
+                  {isExtractingEnemies && combinedDetectedEnemies.length === 0 && (
+                    <div className="text-center py-3 text-[10px] text-slate-400 italic bg-slate-900/40 rounded-xl border border-slate-800 animate-pulse">
+                      <i className="fa-solid fa-microchip text-amber-500 mr-2"></i>
+                      KI analysiert Text nach Gegnern...
+                    </div>
+                  )}
+                  {combinedDetectedEnemies.length > 0 ? (
+                    combinedDetectedEnemies.map(enemy => (
                       <button
                         key={enemy.id}
                         onClick={() => {
@@ -7663,7 +7613,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           </span>
                           <div>
                             <div className="text-xs font-bold text-slate-200">
-                              {enemy.name} {enemy.type === 'group' && (() => {
+                              {enemy.name} {enemy.type === 'group' && !enemy.id.startsWith('ai-extracted') && (() => {
                                 const count = parseGroupCountFromText(enemy.name, messages.map(m => m.text || '').join(' '));
                                 return count ? `(Gruppe von ca. ${count})` : '(Gruppe)';
                               })()}
@@ -7676,11 +7626,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         <i className="fa-solid fa-chevron-right text-[10px] text-red-500/60 group-hover:translate-x-0.5 transition-transform"></i>
                       </button>
                     ))
-                  ) : (
+                  ) : !isExtractingEnemies ? (
                     <div className="text-center py-3 text-[10px] text-slate-500 italic bg-slate-950/40 rounded-xl border border-slate-900">
                       Keine anwesenden Bedrohungen im Chat erkannt.
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Trennlinie */}
@@ -7717,7 +7667,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             </div>
           )}
 
-          <div className="absolute bottom-0 left-0 right-0 p-3 pb-6 bg-gradient-to-t from-slate-950 to-transparent z-20">
+
             {error && (
               <div className="mb-2 p-2 bg-red-950/90 border border-red-800/40 rounded-xl text-red-200 text-xs flex justify-between items-center shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-bottom-1 duration-200 gap-2">
                 <span className="flex-1 pr-2">{error}</span>
@@ -7996,229 +7946,562 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         /* SPEZIELLES DEDIZIERTES KAMPFFELD (MULTI-PANEL COMBAT STAGE) */
         <div className="flex-1 flex flex-col md:flex-row p-3 gap-3 overflow-hidden z-10 relative bg-slate-950/40">
           
-          {/* LINKS: LISTE DER VERBÜNDETEN (ALLIES) */}
-          <div className="flex-shrink-0 md:w-64 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col gap-4 shadow-xl backdrop-blur-sm overflow-y-auto max-h-[30vh] md:max-h-full">
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-2 shrink-0">
-              <span className="p-1 px-1.5 bg-emerald-500/15 text-emerald-400 font-extrabold uppercase text-[9px] rounded-lg tracking-wider">Allies</span>
-              <span className="text-xs font-bold text-slate-300 font-sans tracking-wide">Verbündete</span>
-            </div>
+          {/* LINKS: LISTE DER VERBÜNDETEN (ALLIES) & GEGNER (FOES) */}
+          <div className="flex-shrink-0 md:w-64 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col gap-4 shadow-xl backdrop-blur-sm overflow-y-auto max-h-[30vh] md:max-h-full custom-scrollbar">
             
-            {/* Spieler Status Card */}
-            <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-3.5 space-y-3.5">
-              <div className="flex items-center gap-2.5">
-                <span className="text-emerald-500 text-sm"></span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-extrabold text-white truncate">{adventure.player.name}</div>
-                  <div className="text-[9px] text-slate-400 uppercase font-bold mt-1 tracking-wider">Aktive Kraftquelle wählen:</div>
-                  {adventure.player.powerSources && adventure.player.powerSources.length > 0 ? (
-                    <div className="flex flex-col gap-1 mt-1 max-h-[80px] overflow-y-auto custom-scrollbar">
-                      {adventure.player.powerSources.map((ps, psIdx) => ps.powerName && (
-                        <button
-                          key={ps.id || psIdx}
-                          type="button"
-                          onClick={() => {
-                            setActiveCombatPowerSourceIdx(psIdx);
-                          }}
-                          className={`text-left text-[10px] font-bold rounded-lg px-2 py-1 transition-all flex items-center justify-between border ${
-                            activeCombatPowerSourceIdx === psIdx
-                              ? 'bg-amber-500/15 border-amber-500 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
-                              : 'bg-slate-900/45 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                          }`}
-                        >
-                          <span className="flex items-center gap-1 truncate mr-1">
-                            <i className={`fa-solid fa-crown text-[8px] ${activeCombatPowerSourceIdx === psIdx ? 'text-amber-400' : 'text-slate-500'}`}></i>
-                            <span className="truncate">{ps.powerName} <span className="text-slate-500 font-normal text-[8.5px]">({ps.source})</span></span>
+            {/* Top Navigation Tabs: Verbündete / Gegner */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-950/80 border border-slate-800 rounded-xl shrink-0">
+              <button
+                type="button"
+                onClick={() => setLeftSidebarTab('allies')}
+                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  leftSidebarTab === 'allies'
+                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 border border-transparent'
+                }`}
+              >
+                <span className="p-0.5 px-1 bg-emerald-500/20 text-emerald-400 font-extrabold uppercase text-[8px] rounded tracking-wider">Allies</span>
+                <span className="truncate">Verbündete</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLeftSidebarTab('enemies')}
+                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  leftSidebarTab === 'enemies'
+                    ? 'bg-red-500/15 text-red-300 border border-red-500/30 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50 border border-transparent'
+                }`}
+              >
+                <span className="p-0.5 px-1 bg-red-500/20 text-red-400 font-extrabold uppercase text-[8px] rounded tracking-wider">Foes</span>
+                <span className="truncate">Gegner</span>
+                {opponents.length > 0 && (
+                  <span className="text-[8.5px] bg-red-500/30 text-red-200 px-1.5 py-0.5 rounded-full font-mono font-bold leading-none">
+                    {opponents.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {leftSidebarTab === 'allies' ? (
+              <>
+                <div className="flex items-center gap-2 border-b border-slate-800 pb-2 shrink-0">
+                  <span className="p-1 px-1.5 bg-emerald-500/15 text-emerald-400 font-extrabold uppercase text-[9px] rounded-lg tracking-wider">Allies</span>
+                  <span className="text-xs font-bold text-slate-300 font-sans tracking-wide">Verbündete</span>
+                </div>
+                
+                {/* Spieler Status Card */}
+                <div className="bg-slate-950/60 border border-slate-850 rounded-xl p-3.5 space-y-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-emerald-500 text-sm"></span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-extrabold text-white truncate">{adventure.player.name}</div>
+                      <div className="text-[9px] text-slate-400 uppercase font-bold mt-1 tracking-wider">Aktive Kraftquelle wählen:</div>
+                      {adventure.player.powerSources && adventure.player.powerSources.length > 0 ? (
+                        <div className="flex flex-col gap-1 mt-1 max-h-[80px] overflow-y-auto custom-scrollbar">
+                          {adventure.player.powerSources.map((ps, psIdx) => ps.powerName && (
+                            <button
+                              key={ps.id || psIdx}
+                              type="button"
+                              onClick={() => {
+                                setActiveCombatPowerSourceIdx(psIdx);
+                              }}
+                              className={`text-left text-[10px] font-bold rounded-lg px-2 py-1 transition-all flex items-center justify-between border ${
+                                activeCombatPowerSourceIdx === psIdx
+                                  ? 'bg-amber-500/15 border-amber-500 text-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.2)]'
+                                  : 'bg-slate-900/45 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                              }`}
+                            >
+                              <span className="flex items-center gap-1 truncate mr-1">
+                                <i className={`fa-solid fa-crown text-[8px] ${activeCombatPowerSourceIdx === psIdx ? 'text-amber-400' : 'text-slate-500'}`}></i>
+                                <span className="truncate">{ps.powerName} <span className="text-slate-500 font-normal text-[8.5px]">({ps.source})</span></span>
+                              </span>
+                              {activeCombatPowerSourceIdx === psIdx && (
+                                <span className="text-[8px] bg-amber-500 text-slate-950 px-1 py-0.5 rounded font-extrabold uppercase shrink-0">AKTIV</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ) : adventure.player.powerName ? (
+                        <div className="text-[10px] text-amber-500 font-bold truncate flex items-center gap-1 mt-1">
+                          <i className="fa-solid fa-crown text-[8px]"></i>
+                          <span>{adventure.player.powerName}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  
+                  {/* HP Bar */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-mono text-slate-400">
+                      <span className="font-bold text-emerald-400">{adventure.world.healthLabel || 'Gesundheit'}</span>
+                      <span>{playerHp}/{playerMaxHp}</span>
+                    </div>
+                    <div className="h-3 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
+                        style={{ width: `${Math.min(100, Math.max(0, (playerHp / playerMaxHp) * 100))}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Cost Resources (e.g. MP, SP, Stamina) */}
+                  {adventure.world.costResources && adventure.world.costResources.length > 0 ? (
+                    <div className="space-y-3.5 pt-2 border-t border-slate-900/60">
+                      {adventure.world.costResources.map((res, index) => {
+                        const radarName = res.radarPowerName;
+                        const cPower = radarName ? getPowerLevel(radarName) : null;
+                        
+                        const isPrimary = index === 0;
+                        const isBeginning = messages.length <= 2;
+                        const max = isPrimary ? playerMaxMp : (cPower?.value ?? res.baseMax ?? 100);
+                        const val = isPrimary 
+                          ? (isBeginning ? playerMaxMp : playerMp)
+                          : (cPower?.value ?? max);
+
+                        const matchingAbility = adventure.player.abilities?.find(
+                          a => (a.cost || '').trim().toLowerCase() === res.name.trim().toLowerCase()
+                        );
+
+                        return (
+                          <div key={res.id || index} className="space-y-1.5">
+                            <div className="flex justify-between items-end text-xs font-mono text-slate-400">
+                              <div className="flex flex-col">
+                                {matchingAbility && (
+                                  <span className="font-extrabold text-amber-500 uppercase tracking-wider text-[9.5px] leading-none mb-0.5">
+                                    {matchingAbility.source}
+                                  </span>
+                                )}
+                                <span className="font-bold text-cyan-400 leading-none">{res.name}</span>
+                              </div>
+                              <span className="font-semibold text-slate-300">{val}/{max}</span>
+                            </div>
+                            <div className="h-2.5 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-300 shadow-[0_0_8px_rgba(6,182,212,0.3)]"
+                                style={{ width: `${Math.min(100, Math.max(0, (val / max) * 100))}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 pt-2 border-t border-slate-900/60">
+                      <div className="flex justify-between text-xs font-mono text-slate-400">
+                        <span className="font-bold text-blue-400">MP / Fokus</span>
+                        <span>{playerMp}/{playerMaxMp}</span>
+                      </div>
+                      <div className="h-2.5 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-blue-600 to-sky-400 transition-all duration-300 shadow-[0_0_8px_rgba(37,99,235,0.3)]"
+                          style={{ width: `${Math.min(100, Math.max(0, (playerMp / playerMaxMp) * 100))}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Mini Silhouette Trigger inside player card */}
+                  <div className="border-t border-slate-900/60 pt-3.5 mt-1">
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <i className="fa-solid fa-child-body text-indigo-400"></i> Silhouette
+                      </span>
+                      {(() => {
+                        const stateObj = (adventure.player.appearance as any).silhouetteState;
+                        let woundCount = 0;
+                        if (stateObj && stateObj.injuries) {
+                          woundCount = (Object.values(stateObj.injuries) as any[]).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0);
+                        }
+                        return woundCount > 0 ? (
+                          <span className="text-[8.5px] bg-red-500/15 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20 font-bold animate-pulse">
+                            {woundCount} Wunde(n)
                           </span>
-                          {activeCombatPowerSourceIdx === psIdx && (
-                            <span className="text-[8px] bg-amber-500 text-slate-950 px-1 py-0.5 rounded font-extrabold uppercase shrink-0">AKTIV</span>
-                          )}
-                        </button>
-                      ))}
+                        ) : (
+                          <span className="text-[8.5px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
+                            Unverletzt
+                          </span>
+                        );
+                      })()}
                     </div>
-                  ) : adventure.player.powerName ? (
-                    <div className="text-[10px] text-amber-500 font-bold truncate flex items-center gap-1 mt-1">
-                      <i className="fa-solid fa-crown text-[8px]"></i>
-                      <span>{adventure.player.powerName}</span>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-              
-              {/* HP Bar */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-mono text-slate-400">
-                  <span className="font-bold text-emerald-400">{adventure.world.healthLabel || 'Gesundheit'}</span>
-                  <span>{playerHp}/{playerMaxHp}</span>
-                </div>
-                <div className="h-3 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-300 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
-                    style={{ width: `${Math.min(100, Math.max(0, (playerHp / playerMaxHp) * 100))}%` }}
-                  ></div>
-                </div>
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowSilhouetteModal(true)}
+                      className="w-full py-1.5 px-3 bg-slate-900/80 hover:bg-slate-850 border border-slate-800/80 hover:border-slate-700/80 text-indigo-400 hover:text-indigo-300 font-bold rounded-lg text-[9.5px] transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <i className="fa-solid fa-heart-pulse"></i> Silhouette & Status
+                    </button>
+                  </div>
 
-              {/* Cost Resources (e.g. MP, SP, Stamina) */}
-              {adventure.world.costResources && adventure.world.costResources.length > 0 ? (
-                <div className="space-y-3.5 pt-2 border-t border-slate-900/60">
-                  {adventure.world.costResources.map((res, index) => {
-                    const radarName = res.radarPowerName;
-                    const cPower = radarName ? getPowerLevel(radarName) : null;
+                </div>
+
+                {/* Other friendly party members */}
+                <div className="flex-1 space-y-4">
+                  {(() => {
+                    const activeCompanions = (adventure.npcs || [])
+                      .filter(n => !n.isHostile)
+                      .filter(isNpcCurrentlyPresent)
+                      .filter(n => !opponents.some(o => {
+                        const oName = o.name.toLowerCase().trim();
+                        const nName = n.name.toLowerCase().trim();
+                        return o.id === n.id || oName === nName || oName.includes(nName) || nName.includes(oName);
+                      }));
                     
-                    const isPrimary = index === 0;
-                    const isBeginning = messages.length <= 2;
-                    const max = isPrimary ? playerMaxMp : (cPower?.value ?? res.baseMax ?? 100);
-                    const val = isPrimary 
-                      ? (isBeginning ? playerMaxMp : playerMp)
-                      : (cPower?.value ?? max);
+                    if (activeCompanions.length === 0) {
+                      return (
+                        <div className="space-y-1.5">
+                          <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Gefährten</div>
+                          <div className="text-[10px] text-slate-500 italic px-1 leading-snug">
+                            Keine Gefährten in dieser Szene anwesend.
+                          </div>
+                        </div>
+                      );
+                    }
 
-                    const matchingAbility = adventure.player.abilities?.find(
-                      a => (a.cost || '').trim().toLowerCase() === res.name.trim().toLowerCase()
-                    );
+                    const pFaction = adventure.player.appearance?.faction?.trim().toLowerCase();
 
                     return (
-                      <div key={res.id || index} className="space-y-1.5">
-                        <div className="flex justify-between items-end text-xs font-mono text-slate-400">
-                          <div className="flex flex-col">
-                            {matchingAbility && (
-                              <span className="font-extrabold text-amber-500 uppercase tracking-wider text-[9.5px] leading-none mb-0.5">
-                                {matchingAbility.source}
-                              </span>
-                            )}
-                            <span className="font-bold text-cyan-400 leading-none">{res.name}</span>
-                          </div>
-                          <span className="font-semibold text-slate-300">{val}/{max}</span>
-                        </div>
-                        <div className="h-2.5 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-gradient-to-r from-cyan-600 to-cyan-400 transition-all duration-300 shadow-[0_0_8px_rgba(6,182,212,0.3)]"
-                            style={{ width: `${Math.min(100, Math.max(0, (val / max) * 100))}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="space-y-1.5 pt-2 border-t border-slate-900/60">
-                  <div className="flex justify-between text-xs font-mono text-slate-400">
-                    <span className="font-bold text-blue-400">MP / Fokus</span>
-                    <span>{playerMp}/{playerMaxMp}</span>
-                  </div>
-                  <div className="h-2.5 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-blue-600 to-sky-400 transition-all duration-300 shadow-[0_0_8px_rgba(37,99,235,0.3)]"
-                      style={{ width: `${Math.min(100, Math.max(0, (playerMp / playerMaxMp) * 100))}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
+                      <div className="space-y-2">
+                        <div className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Anwesende Gefährten</div>
+                        {activeCompanions.map(npc => {
+                          const npcFaction = npc.appearance?.faction?.trim();
+                          const isAllyFaction = pFaction && npcFaction && npcFaction.toLowerCase() === pFaction;
+                          const isExplicitAlly = npc.role?.toLowerCase().includes('gefährte') || 
+                                               npc.role?.toLowerCase().includes('verbündet') ||
+                                               npc.role?.toLowerCase().includes('freund') ||
+                                               npc.role?.toLowerCase().includes('mentor');
+                          
+                          const showAsAlliance = isAllyFaction || isExplicitAlly;
 
-              {/* Mini Silhouette Trigger inside player card */}
-              <div className="border-t border-slate-900/60 pt-3.5 mt-1">
-                <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
-                    <i className="fa-solid fa-child-body text-indigo-400"></i> Silhouette
-                  </span>
-                  {(() => {
-                    const stateObj = (adventure.player.appearance as any).silhouetteState;
-                    let woundCount = 0;
-                    if (stateObj && stateObj.injuries) {
-                      woundCount = (Object.values(stateObj.injuries) as any[]).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0);
-                    }
-                    return woundCount > 0 ? (
-                      <span className="text-[8.5px] bg-red-500/15 text-red-400 px-1.5 py-0.5 rounded border border-red-500/20 font-bold animate-pulse">
-                        {woundCount} Wunde(n)
-                      </span>
-                    ) : (
-                      <span className="text-[8.5px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
-                        Unverletzt
-                      </span>
+                          return (
+                            <div key={npc.id} className="bg-slate-950/40 border border-slate-850 rounded-lg p-2 flex items-center gap-2">
+                              {npc.image ? (
+                                <img src={npc.image} className="w-6 h-6 rounded-full object-cover border border-slate-800 shrink-0" />
+                              ) : (
+                                <span className="text-xs"></span>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[11px] font-bold text-slate-300 truncate">{npc.name}</div>
+                                <div className="text-[9px] text-slate-500 truncate leading-none">
+                                  {npcFaction ? ` ${npcFaction}` : npc.role || 'Verbündeter'}
+                                </div>
+                              </div>
+                              {showAsAlliance ? (
+                                <span className="text-[7.5px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-extrabold uppercase shrink-0">Bündnis</span>
+                              ) : (
+                                <span className="text-[7.5px] bg-sky-500/10 text-sky-400 border border-sky-500/30 px-1.5 py-0.5 rounded font-extrabold uppercase shrink-0">Gefährte</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     );
                   })()}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowSilhouetteModal(true)}
-                  className="w-full py-1.5 px-3 bg-slate-900/80 hover:bg-slate-850 border border-slate-800/80 hover:border-slate-700/80 text-indigo-400 hover:text-indigo-300 font-bold rounded-lg text-[9.5px] transition-all flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  <i className="fa-solid fa-heart-pulse"></i> Silhouette & Status
-                </button>
-              </div>
-
-            </div>
-
-            {/* Other friendly party members */}
-            <div className="flex-1 space-y-4">
-              {(() => {
-                const activeCompanions = (adventure.npcs || [])
-                  .filter(n => !n.isHostile)
-                  .filter(isNpcCurrentlyPresent)
-                  .filter(n => !opponents.some(o => {
-                    const oName = o.name.toLowerCase().trim();
-                    const nName = n.name.toLowerCase().trim();
-                    return o.id === n.id || oName === nName || oName.includes(nName) || nName.includes(oName);
-                  }));
-                
-                if (activeCompanions.length === 0) {
-                  return (
-                    <div className="space-y-1.5">
-                      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Gefährten</div>
-                      <div className="text-[10px] text-slate-500 italic px-1 leading-snug">
-                        Keine Gefährten in dieser Szene anwesend.
-                      </div>
-                    </div>
-                  );
-                }
-
-                const pFaction = adventure.player.appearance?.faction?.trim().toLowerCase();
+              </>
+            ) : (
+              /* GEGNER & BEDROHUNGEN TAB */
+              (() => {
+                const activeEnemy = opponents.find(o => selectedEnemyIds.includes(o.id) || o.id === selectedEnemyId) || opponents[0];
+                const activeNpc = activeEnemy ? findNpcByIdOrName(activeEnemy.id, activeEnemy.name) : null;
+                const currentHp = activeEnemy ? activeEnemy.hp : enemyHp;
+                const currentMaxHp = activeEnemy ? activeEnemy.maxHp : enemyMaxHp;
+                const isTargeted = activeEnemy ? (selectedEnemyIds.includes(activeEnemy.id) || selectedEnemyId === activeEnemy.id) : false;
 
                 return (
-                  <div className="space-y-2">
-                    <div className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Anwesende Gefährten</div>
-                    {activeCompanions.map(npc => {
-                      const npcFaction = npc.appearance?.faction?.trim();
-                      const isAllyFaction = pFaction && npcFaction && npcFaction.toLowerCase() === pFaction;
-                      const isExplicitAlly = npc.role?.toLowerCase().includes('gefährte') || 
-                                           npc.role?.toLowerCase().includes('verbündet') ||
-                                           npc.role?.toLowerCase().includes('freund') ||
-                                           npc.role?.toLowerCase().includes('mentor');
-                      
-                      const showAsAlliance = isAllyFaction || isExplicitAlly;
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1 px-1.5 bg-red-500/15 text-red-400 font-extrabold uppercase text-[9px] rounded-lg tracking-wider">Foes</span>
+                        <span className="text-xs font-bold text-slate-300 font-sans tracking-wide">Gegner</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddOpponentForm(!showAddOpponentForm)}
+                        className="text-[9.5px] font-bold text-slate-400 hover:text-red-400 flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded bg-slate-950/60 border border-slate-800"
+                        title="Gegner erfassen"
+                      >
+                        <i className="fa-solid fa-plus text-[8px]"></i>
+                        <span>Erfassen</span>
+                      </button>
+                    </div>
 
-                      return (
-                        <div key={npc.id} className="bg-slate-950/40 border border-slate-850 rounded-lg p-2 flex items-center gap-2">
-                          {npc.image ? (
-                            <img src={npc.image} className="w-6 h-6 rounded-full object-cover border border-slate-800" />
+                    {/* Add Opponent inline form */}
+                    {showAddOpponentForm && (
+                      <div className="bg-slate-950/90 border border-red-500/30 rounded-xl p-3 space-y-2.5 shadow-lg animate-in fade-in duration-200">
+                        <div className="text-[10px] font-extrabold text-red-400 uppercase tracking-wider flex justify-between items-center">
+                          <span>Neuen Gegner erfassen</span>
+                          <button type="button" onClick={() => setShowAddOpponentForm(false)} className="text-slate-500 hover:text-slate-300">
+                            <i className="fa-solid fa-xmark text-xs"></i>
+                          </button>
+                        </div>
+                        
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] text-slate-400 font-bold uppercase">Name</label>
+                          <input
+                            type="text"
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-red-500"
+                            placeholder="z.B. Quinn, Elara, Banditen..."
+                            value={newOpponentName}
+                            onChange={e => setNewOpponentName(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-slate-400 font-bold uppercase">HP</label>
+                            <input
+                              type="number"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-white text-xs outline-none focus:border-red-500"
+                              value={newOpponentHp}
+                              onChange={e => setNewOpponentHp(Math.max(1, parseInt(e.target.value) || 100))}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-slate-400 font-bold uppercase">Trupp (optional)</label>
+                            <input
+                              type="text"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-white text-xs outline-none focus:border-red-500"
+                              placeholder="z.B. 5"
+                              value={newOpponentCount}
+                              onChange={e => setNewOpponentCount(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleAddReinforcement}
+                          disabled={!newOpponentName.trim()}
+                          className="w-full py-1.5 bg-red-600/80 hover:bg-red-500 disabled:opacity-50 text-white font-bold rounded-lg text-xs transition-colors"
+                        >
+                          Hinzufügen
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Hauptgegner / Anvisiertes Ziel Status Card */}
+                    {activeEnemy ? (
+                      <div className="bg-slate-950/60 border border-red-900/40 rounded-xl p-3.5 space-y-3.5">
+                        <div className="flex items-center gap-2.5">
+                          {activeNpc?.image ? (
+                            <img src={activeNpc.image} className="w-8 h-8 rounded-full object-cover border border-red-500/40 shrink-0" />
                           ) : (
-                            <span className="text-xs"></span>
+                            <div className="w-8 h-8 rounded-full bg-red-950/60 border border-red-800/60 flex items-center justify-center text-red-400 shrink-0 text-xs">
+                              <i className="fa-solid fa-skull"></i>
+                            </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <div className="text-[11px] font-bold text-slate-300 truncate">{npc.name}</div>
-                            <div className="text-[9px] text-slate-500 truncate leading-none">
-                              {npcFaction ? ` ${npcFaction}` : npc.role || 'Verbündeter'}
+                            <div className="flex items-center justify-between gap-1">
+                              <div className="text-sm font-extrabold text-white truncate">
+                                {activeEnemy.name}
+                                {activeEnemy.count !== undefined && activeEnemy.count > 1 && (
+                                  <span className="ml-1 text-xs text-red-400 font-mono font-bold">(x{activeEnemy.count})</span>
+                                )}
+                              </div>
+                              {isTargeted ? (
+                                <span className="text-[8px] bg-red-500/20 text-red-400 border border-red-500/40 px-1.5 py-0.5 rounded font-extrabold uppercase shrink-0">
+                                  Ziel
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => selectOpponentAsTarget(activeEnemy.id)}
+                                  className="text-[8px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded font-bold uppercase shrink-0"
+                                >
+                                  Anvisieren
+                                </button>
+                              )}
+                            </div>
+                            <div className="text-[9px] text-slate-400 truncate mt-0.5">
+                              {activeNpc?.appearance?.faction ? activeNpc.appearance.faction : activeEnemy.role || 'Feindlicher Kämpfer'}
                             </div>
                           </div>
-                          {showAsAlliance ? (
-                            <span className="text-[7.5px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-extrabold uppercase shrink-0">Bündnis</span>
-                          ) : (
-                            <span className="text-[7.5px] bg-sky-500/10 text-sky-400 border border-sky-500/30 px-1.5 py-0.5 rounded font-extrabold uppercase shrink-0">Gefährte</span>
-                          )}
                         </div>
-                      );
-                    })}
+
+                        {/* HP Bar */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs font-mono text-slate-400">
+                            <span className="font-bold text-red-400">{adventure.world.healthLabel || 'Gesundheit'}</span>
+                            <span>{currentHp}/{currentMaxHp}</span>
+                          </div>
+                          <div className="h-3 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-red-600 to-rose-400 transition-all duration-300 shadow-[0_0_8px_rgba(239,68,68,0.3)]"
+                              style={{ width: `${Math.min(100, Math.max(0, (currentHp / currentMaxHp) * 100))}%` }}
+                            ></div>
+                          </div>
+                        </div>
+
+                        {/* Kraftquelle / Spezial-Fokus */}
+                        {activeNpc?.powerName || activeNpc?.powerSources?.[0]?.powerName ? (
+                          <div className="space-y-1.5 pt-2 border-t border-slate-900/60">
+                            <div className="flex justify-between text-xs font-mono text-slate-400">
+                              <span className="font-bold text-amber-400">Kraftquelle</span>
+                              <span className="text-slate-300 font-sans text-[10px] truncate max-w-[130px]">
+                                {activeNpc.powerName || activeNpc.powerSources?.[0]?.powerName}
+                              </span>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {/* Status & Verwundungen */}
+                        <div className="border-t border-slate-900/60 pt-3.5 mt-1">
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1.5">
+                              <i className="fa-solid fa-shield-halved text-red-400"></i> Status
+                            </span>
+                            {currentHp <= 0 ? (
+                              <span className="text-[8.5px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30 font-bold">
+                                Besiegt
+                              </span>
+                            ) : currentHp < currentMaxHp * 0.35 ? (
+                              <span className="text-[8.5px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30 font-bold animate-pulse">
+                                Schwer verletzt
+                              </span>
+                            ) : currentHp < currentMaxHp * 0.75 ? (
+                              <span className="text-[8.5px] bg-yellow-500/15 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/20 font-bold">
+                                Angeschlagen
+                              </span>
+                            ) : (
+                              <span className="text-[8.5px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
+                                Kampfbereit
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-3.5 text-center text-slate-500 text-xs">
+                        Kein Gegner ausgewählt.
+                      </div>
+                    )}
+
+                    {/* Anwesende Gegner Liste */}
+                    <div className="flex-1 space-y-4">
+                      {opponents.length === 0 ? (
+                        <div className="space-y-2">
+                          <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Gegner</div>
+                          <div className="text-[10px] text-slate-500 italic px-1 leading-snug">
+                            Keine aktiven Gegner in dieser Szene erfasst.
+                          </div>
+                          {/* Schnellvorschlag aus anwesenden feindlichen NPCs */}
+                          {(() => {
+                            const presentHostiles = (adventure.npcs || []).filter(n => n.isHostile && isNpcCurrentlyPresent(n));
+                            if (presentHostiles.length === 0) return null;
+                            return (
+                              <div className="space-y-1 pt-1">
+                                <div className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider px-1">Aus Szene erfassen:</div>
+                                {presentHostiles.map(hn => (
+                                  <button
+                                    key={hn.id}
+                                    type="button"
+                                    onClick={() => {
+                                      const hMax = getNPCMaxHp(hn);
+                                      const newOpp = {
+                                        id: hn.id,
+                                        name: hn.name,
+                                        hp: hMax,
+                                        maxHp: hMax,
+                                        role: hn.role || 'Bedrohung',
+                                        isFodder: false
+                                      };
+                                      setOpponents(prev => [...prev, newOpp]);
+                                      setSelectedEnemyId(hn.id);
+                                      setSelectedEnemyIds([hn.id]);
+                                      setEnemyHp(hMax);
+                                      setEnemyMaxHp(hMax);
+                                    }}
+                                    className="w-full text-left text-[10px] font-bold rounded-lg px-2 py-1 bg-red-950/30 hover:bg-red-900/40 text-red-300 border border-red-800/40 transition-colors flex items-center justify-between"
+                                  >
+                                    <span className="truncate">{hn.name}</span>
+                                    <span className="text-[8px] bg-red-500/20 text-red-300 px-1 py-0.5 rounded font-extrabold">+ Hinzufügen</span>
+                                  </button>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest px-1 flex justify-between items-center">
+                            <span>Anwesende Gegner ({opponents.length})</span>
+                          </div>
+                          {opponents.map(opp => {
+                            const oppNpc = findNpcByIdOrName(opp.id, opp.name);
+                            const isCurrentTarget = selectedEnemyIds.includes(opp.id) || selectedEnemyId === opp.id;
+                            const oppFaction = oppNpc?.appearance?.faction?.trim();
+
+                            return (
+                              <div
+                                key={opp.id}
+                                onClick={() => selectOpponentAsTarget(opp.id)}
+                                className={`border rounded-lg p-2 flex items-center gap-2 cursor-pointer transition-all ${
+                                  isCurrentTarget
+                                    ? 'bg-red-950/30 border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.15)]'
+                                    : 'bg-slate-950/40 border-slate-850 hover:border-slate-700'
+                                }`}
+                              >
+                                {oppNpc?.image ? (
+                                  <img src={oppNpc.image} className="w-6 h-6 rounded-full object-cover border border-slate-800 shrink-0" />
+                                ) : (
+                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[10px] ${
+                                    isCurrentTarget ? 'bg-red-500/20 text-red-400' : 'bg-slate-900 text-slate-400'
+                                  }`}>
+                                    <i className="fa-solid fa-skull"></i>
+                                  </div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <div className="text-[11px] font-bold text-slate-300 truncate">
+                                      {opp.name}
+                                      {opp.count !== undefined && opp.count > 1 && (
+                                        <span className="ml-1 text-[9px] text-red-400 font-mono font-bold">x{opp.count}</span>
+                                      )}
+                                    </div>
+                                    <span className="text-[9px] font-mono text-slate-400 shrink-0">
+                                      {opp.hp}/{opp.maxHp}
+                                    </span>
+                                  </div>
+                                  {/* Mini health bar */}
+                                  <div className="h-1 bg-slate-900 rounded-full overflow-hidden mt-1">
+                                    <div
+                                      className="h-full bg-red-500 transition-all duration-300"
+                                      style={{ width: `${Math.min(100, Math.max(0, (opp.hp / opp.maxHp) * 100))}%` }}
+                                    ></div>
+                                  </div>
+                                  <div className="text-[9px] text-slate-500 truncate leading-none mt-1">
+                                    {oppFaction ? oppFaction : opp.role || 'Gegner'}
+                                  </div>
+                                </div>
+                                {isCurrentTarget ? (
+                                  <span className="text-[7.5px] bg-red-500/20 text-red-400 border border-red-500/40 px-1.5 py-0.5 rounded font-extrabold uppercase shrink-0">
+                                    Ziel
+                                  </span>
+                                ) : (
+                                  <span className="text-[7.5px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
+                                    Wählen
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
-              })()}
-            </div>
+              })()
+            )}
+
           </div>
 
           {/* MITTE: ENGE BEGEGNUNG CHAT LOG & RPG EINGABEDECK */}
           <div className="flex-1 flex flex-col bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm">
-            {/* Split Container: 55% Narrative Chat Log / 45% Tactical Radar Map */}
+            {/* Split Container: 42% Narrative Chat Log / 58% Tactical Radar Map & Gegner-Liste */}
             <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
-              {/* Left Column (55% on desktop): Narrativer Kampf-Verlauf */}
-              <div className="flex-1 lg:w-[55%] flex flex-col min-h-0 overflow-y-auto p-4 pr-2.5 space-y-4 border-b lg:border-b-0 lg:border-r border-slate-800">
+              {/* Left Column (42% on desktop): Narrativer Kampf-Verlauf */}
+              <div className="flex-1 lg:w-[42%] xl:w-[40%] flex flex-col min-h-0 overflow-y-auto p-4 pr-2.5 space-y-4 border-b lg:border-b-0 lg:border-r border-slate-800">
                 <div className="text-center pb-2 border-b border-slate-850">
                   <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase"> Narrativer Kampf-Verlauf </span>
                 </div>
@@ -8265,15 +8548,298 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Right Column (45% on desktop): Taktische Node-Karte */}
-              <div className="h-[280px] lg:h-full lg:w-[45%] shrink-0 overflow-hidden flex flex-col p-2 bg-slate-950/20">
-                <TacticalCombatMap
-                  adventure={adventure}
-                  onUpdateAdventure={onUpdateAdventure}
-                  messages={messages}
-                  isCombatActive={isCombatActive}
-                  opponents={opponents}
-                />
+              {/* Right Column (58% on desktop): Taktischer Radar & Gegner-Liste */}
+              <div className="h-[300px] lg:h-full lg:w-[58%] xl:w-[60%] shrink-0 overflow-hidden flex flex-col lg:flex-row gap-2.5 p-2 bg-slate-950/20">
+                {/* TACTICAL RADAR */}
+                <div className="flex-1 h-[220px] lg:h-full min-w-0 overflow-hidden flex flex-col">
+                  <TacticalCombatMap
+                    adventure={adventure}
+                    onUpdateAdventure={onUpdateAdventure}
+                    messages={messages}
+                    isCombatActive={isCombatActive}
+                    opponents={opponents}
+                  />
+                </div>
+
+                {/* GEGNER-LISTE (rechts neben dem TACTICAL RADAR) */}
+                <div className="w-full lg:w-[230px] xl:w-[260px] h-[200px] lg:h-full overflow-y-auto bg-slate-950/90 border border-slate-800 rounded-2xl p-3 shrink-0 flex flex-col backdrop-blur-md shadow-2xl custom-scrollbar">
+                  {(() => {
+                    const activeEnemy = opponents.find(o => selectedEnemyIds.includes(o.id) || o.id === selectedEnemyId) || opponents[0];
+                    const activeNpc = activeEnemy ? findNpcByIdOrName(activeEnemy.id, activeEnemy.name) : null;
+                    const currentHp = activeEnemy ? activeEnemy.hp : enemyHp;
+                    const currentMaxHp = activeEnemy ? activeEnemy.maxHp : enemyMaxHp;
+                    const isTargeted = activeEnemy ? (selectedEnemyIds.includes(activeEnemy.id) || selectedEnemyId === activeEnemy.id) : false;
+
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="p-0.5 px-1 bg-red-500/15 text-red-400 font-extrabold uppercase text-[8.5px] rounded tracking-wider shrink-0">Foes</span>
+                            <span className="text-xs font-bold text-slate-200 font-sans tracking-wide truncate">Gegner-Liste</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowAddOpponentForm(!showAddOpponentForm)}
+                            className="text-[9px] font-bold text-slate-400 hover:text-red-400 flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 shrink-0"
+                            title="Gegner erfassen"
+                          >
+                            <i className="fa-solid fa-plus text-[8px]"></i>
+                            <span>Erfassen</span>
+                          </button>
+                        </div>
+
+                        {/* Add Opponent inline form */}
+                        {showAddOpponentForm && (
+                          <div className="bg-slate-950/90 border border-red-500/30 rounded-xl p-2.5 space-y-2 shadow-lg animate-in fade-in duration-200">
+                            <div className="text-[9.5px] font-extrabold text-red-400 uppercase tracking-wider flex justify-between items-center">
+                              <span>Neuen Gegner erfassen</span>
+                              <button type="button" onClick={() => setShowAddOpponentForm(false)} className="text-slate-500 hover:text-slate-300">
+                                <i className="fa-solid fa-xmark text-xs"></i>
+                              </button>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <label className="text-[8.5px] text-slate-400 font-bold uppercase">Name</label>
+                              <input
+                                type="text"
+                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-white text-[11px] outline-none focus:border-red-500"
+                                placeholder="z.B. Banditen, Wache..."
+                                value={newOpponentName}
+                                onChange={e => setNewOpponentName(e.target.value)}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <div className="space-y-0.5">
+                                <label className="text-[8.5px] text-slate-400 font-bold uppercase">HP</label>
+                                <input
+                                  type="number"
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1 text-white text-[11px] outline-none focus:border-red-500"
+                                  value={newOpponentHp}
+                                  onChange={e => setNewOpponentHp(Math.max(1, parseInt(e.target.value) || 100))}
+                                />
+                              </div>
+                              <div className="space-y-0.5">
+                                <label className="text-[8.5px] text-slate-400 font-bold uppercase">Trupp</label>
+                                <input
+                                  type="text"
+                                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1 text-white text-[11px] outline-none focus:border-red-500"
+                                  placeholder="z.B. 5"
+                                  value={newOpponentCount}
+                                  onChange={e => setNewOpponentCount(e.target.value)}
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleAddReinforcement}
+                              disabled={!newOpponentName.trim()}
+                              className="w-full py-1 bg-red-600/80 hover:bg-red-500 disabled:opacity-50 text-white font-bold rounded-lg text-[10px] transition-colors"
+                            >
+                              Hinzufügen
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Hauptgegner / Anvisiertes Ziel Status Card */}
+                        {activeEnemy ? (
+                          <div className="bg-slate-950/60 border border-red-900/40 rounded-xl p-2.5 space-y-2">
+                            <div className="flex items-center gap-2">
+                              {activeNpc?.image ? (
+                                <img src={activeNpc.image} className="w-7 h-7 rounded-full object-cover border border-red-500/40 shrink-0" />
+                              ) : (
+                                <div className="w-7 h-7 rounded-full bg-red-950/60 border border-red-800/60 flex items-center justify-center text-red-400 shrink-0 text-xs">
+                                  <i className="fa-solid fa-skull"></i>
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <div className="text-[11px] font-extrabold text-white truncate">
+                                    {activeEnemy.name}
+                                    {activeEnemy.count !== undefined && activeEnemy.count > 1 && (
+                                      <span className="ml-1 text-[9px] text-red-400 font-mono font-bold">(x{activeEnemy.count})</span>
+                                    )}
+                                  </div>
+                                  {isTargeted ? (
+                                    <span className="text-[7.5px] bg-red-500/20 text-red-400 border border-red-500/40 px-1 py-0.5 rounded font-extrabold uppercase shrink-0">
+                                      Ziel
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => selectOpponentAsTarget(activeEnemy.id)}
+                                      className="text-[7.5px] bg-slate-800 hover:bg-slate-700 text-slate-300 px-1 py-0.5 rounded font-bold uppercase shrink-0"
+                                    >
+                                      Anvisieren
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="text-[8.5px] text-slate-400 truncate leading-none mt-0.5">
+                                  {activeNpc?.appearance?.faction ? activeNpc.appearance.faction : activeEnemy.role || 'Feindlicher Kämpfer'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* HP Bar */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[9.5px] font-mono text-slate-400">
+                                <span className="font-bold text-red-400">{adventure.world.healthLabel || 'Gesundheit'}</span>
+                                <span>{currentHp}/{currentMaxHp}</span>
+                              </div>
+                              <div className="h-2 bg-slate-900 border border-slate-800 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-red-600 to-rose-400 transition-all duration-300 shadow-[0_0_8px_rgba(239,68,68,0.3)]"
+                                  style={{ width: `${Math.min(100, Math.max(0, (currentHp / currentMaxHp) * 100))}%` }}
+                                ></div>
+                              </div>
+                            </div>
+
+                            {/* Status */}
+                            <div className="border-t border-slate-900/60 pt-1.5 flex justify-between items-center">
+                              <span className="text-[8.5px] text-slate-400 uppercase font-bold tracking-wider flex items-center gap-1">
+                                <i className="fa-solid fa-shield-halved text-red-400"></i> Status
+                              </span>
+                              {currentHp <= 0 ? (
+                                <span className="text-[8px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30 font-bold">
+                                  Besiegt
+                                </span>
+                              ) : currentHp < currentMaxHp * 0.35 ? (
+                                <span className="text-[8px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded border border-amber-500/30 font-bold animate-pulse">
+                                  Schwer verletzt
+                                </span>
+                              ) : currentHp < currentMaxHp * 0.75 ? (
+                                <span className="text-[8px] bg-yellow-500/15 text-yellow-400 px-1.5 py-0.5 rounded border border-yellow-500/20 font-bold">
+                                  Angeschlagen
+                                </span>
+                              ) : (
+                                <span className="text-[8px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-bold">
+                                  Kampfbereit
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-950/40 border border-slate-800 rounded-xl p-2.5 text-center text-slate-500 text-[10px]">
+                            Kein Gegner ausgewählt.
+                          </div>
+                        )}
+
+                        {/* Anwesende Gegner Liste */}
+                        <div className="space-y-1.5">
+                          {opponents.length === 0 ? (
+                            <div className="space-y-1.5">
+                              <div className="text-[8.5px] font-bold text-slate-500 uppercase tracking-widest px-0.5">Gegner</div>
+                              <div className="text-[9.5px] text-slate-500 italic px-0.5 leading-snug">
+                                Keine aktiven Gegner in dieser Szene erfasst.
+                              </div>
+                              {(() => {
+                                const presentHostiles = (adventure.npcs || []).filter(n => n.isHostile && isNpcCurrentlyPresent(n));
+                                if (presentHostiles.length === 0) return null;
+                                return (
+                                  <div className="space-y-1 pt-1">
+                                    <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider px-0.5">Aus Szene erfassen:</div>
+                                    {presentHostiles.map(hn => (
+                                      <button
+                                        key={hn.id}
+                                        type="button"
+                                        onClick={() => {
+                                          const hMax = getNPCMaxHp(hn);
+                                          const newOpp = {
+                                            id: hn.id,
+                                            name: hn.name,
+                                            hp: hMax,
+                                            maxHp: hMax,
+                                            role: hn.role || 'Bedrohung',
+                                            isFodder: false
+                                          };
+                                          setOpponents(prev => [...prev, newOpp]);
+                                          setSelectedEnemyId(hn.id);
+                                          setSelectedEnemyIds([hn.id]);
+                                          setEnemyHp(hMax);
+                                          setEnemyMaxHp(hMax);
+                                        }}
+                                        className="w-full text-left text-[9.5px] font-bold rounded-lg px-1.5 py-1 bg-red-950/30 hover:bg-red-900/40 text-red-300 border border-red-800/40 transition-colors flex items-center justify-between"
+                                      >
+                                        <span className="truncate">{hn.name}</span>
+                                        <span className="text-[7.5px] bg-red-500/20 text-red-300 px-1 py-0.5 rounded font-extrabold">+ Hinzufügen</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <div className="text-[8.5px] font-extrabold text-slate-500 uppercase tracking-widest px-0.5 flex justify-between items-center">
+                                <span>Anwesende Gegner ({opponents.length})</span>
+                              </div>
+                              {opponents.map(opp => {
+                                const oppNpc = findNpcByIdOrName(opp.id, opp.name);
+                                const isCurrentTarget = selectedEnemyIds.includes(opp.id) || selectedEnemyId === opp.id;
+                                const oppFaction = oppNpc?.appearance?.faction?.trim();
+
+                                return (
+                                  <div
+                                    key={opp.id}
+                                    onClick={() => selectOpponentAsTarget(opp.id)}
+                                    className={`border rounded-lg p-1.5 flex items-center gap-1.5 cursor-pointer transition-all ${
+                                      isCurrentTarget
+                                        ? 'bg-red-950/30 border-red-500/50 shadow-[0_0_10px_rgba(239,68,68,0.15)]'
+                                        : 'bg-slate-950/40 border-slate-850 hover:border-slate-700'
+                                    }`}
+                                  >
+                                    {oppNpc?.image ? (
+                                      <img src={oppNpc.image} className="w-5 h-5 rounded-full object-cover border border-slate-800 shrink-0" />
+                                    ) : (
+                                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[9px] ${
+                                        isCurrentTarget ? 'bg-red-500/20 text-red-400' : 'bg-slate-900 text-slate-400'
+                                      }`}>
+                                        <i className="fa-solid fa-skull"></i>
+                                      </div>
+                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <div className="text-[10px] font-bold text-slate-300 truncate">
+                                          {opp.name}
+                                          {opp.count !== undefined && opp.count > 1 && (
+                                            <span className="ml-1 text-[8.5px] text-red-400 font-mono font-bold">x{opp.count}</span>
+                                          )}
+                                        </div>
+                                        <span className="text-[8.5px] font-mono text-slate-400 shrink-0">
+                                          {opp.hp}/{opp.maxHp}
+                                        </span>
+                                      </div>
+                                      {/* Mini health bar */}
+                                      <div className="h-1 bg-slate-900 rounded-full overflow-hidden mt-0.5">
+                                        <div
+                                          className="h-full bg-red-500 transition-all duration-300"
+                                          style={{ width: `${Math.min(100, Math.max(0, (opp.hp / opp.maxHp) * 100))}%` }}
+                                        ></div>
+                                      </div>
+                                      <div className="text-[8.5px] text-slate-500 truncate leading-none mt-0.5">
+                                        {oppFaction ? oppFaction : opp.role || 'Gegner'}
+                                      </div>
+                                    </div>
+                                    {isCurrentTarget ? (
+                                      <span className="text-[7px] bg-red-500/20 text-red-400 border border-red-500/40 px-1 py-0.5 rounded font-extrabold uppercase shrink-0">
+                                        Ziel
+                                      </span>
+                                    ) : (
+                                      <span className="text-[7px] bg-slate-800 text-slate-400 px-1 py-0.5 rounded font-bold uppercase shrink-0">
+                                        Wählen
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
 
@@ -8973,7 +9539,24 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                   mpCost = Math.max(5, Math.floor(mpCost * campaignDiscountFactor));
                                 }
 
-                                const hasEnoughRes = resInfo.value >= mpCost;
+                                const isSummonTech = 
+                                  skillObj.type === 'Beschwörung' || 
+                                  skillObj.applications?.includes('Beschwörung') || 
+                                  skill.toLowerCase().includes('beschwör') || 
+                                  skill.toLowerCase().includes('doppelgänger') || 
+                                  skill.toLowerCase().includes('illusion') || 
+                                  skill.toLowerCase().includes('klon') ||
+                                  skill.toLowerCase().includes('geist');
+
+                                const maxByResource = mpCost > 0 ? Math.floor(resInfo.value / mpCost) : 10;
+                                const maxDefined = skillObj.summonCount !== undefined ? skillObj.summonCount : 10;
+                                const maxPossible = Math.max(1, Math.min(20, maxByResource > 0 ? maxByResource : 1, maxDefined));
+
+                                const currentChosen = skillSummonCounts[skill] !== undefined ? skillSummonCounts[skill] : 2;
+                                const countToSpawn = isSummonTech ? Math.min(Math.max(1, currentChosen), maxPossible) : 1;
+                                const finalMpCost = isSummonTech ? (mpCost * countToSpawn) : mpCost;
+
+                                const hasEnoughRes = resInfo.value >= finalMpCost;
 
                                 const activeSourceLevelName = activeCombatPowerSource.source;
                                 const activeSourcePower = activeSourceLevelName ? (adventure.player.campaignPowerLevels?.[activeSourceLevelName]?.value ?? 0) : 0;
@@ -9007,7 +9590,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                   <button
                                     key={`${skill}-${idx}`}
                                     onClick={() => {
-                                      handleCombatAction('skill', skill, dmg, mpCost, isSkillHeal, costName);
+                                      const actionId = handleCombatAction('skill', isSummonTech ? `${skill} (${countToSpawn}x)` : skill, dmg, finalMpCost, isSkillHeal, costName);
                                       if (skillObj.abilityCategory === 'Transformationen' && skillObj.abilityId) {
                                         const updatedPlayer = {
                                           ...adventure.player,
@@ -9022,16 +9605,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                         });
                                       }
 
-                                      const isSummonTech = 
-                                        skillObj.type === 'Beschwörung' || 
-                                        skillObj.applications?.includes('Beschwörung') || 
-                                        skill.toLowerCase().includes('beschwör') || 
-                                        skill.toLowerCase().includes('doppelgänger') || 
-                                        skill.toLowerCase().includes('illusion') || 
-                                        skill.toLowerCase().includes('klon');
-
-                                      if (isSummonTech) {
-                                        const countToSpawn = skillObj.summonCount !== undefined ? skillObj.summonCount : 2;
+                                      if (isSummonTech && actionId) {
                                         const currentCombatState = adventure.combatState || {
                                           isCombatActive: true,
                                           selectedEnemyId: '',
@@ -9081,7 +9655,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                             description: `Beschworene Einheit / Klon aus "${skill}"`,
                                             rules: `Klon/Beschwörung (Aktiv)`,
                                             isSummon: true,
-                                            summonOwner: adventure.player?.name || 'Spieler'
+                                            summonOwner: adventure.player?.name || 'Spieler',
+                                            sourceActionId: actionId
                                           });
                                         }
 
@@ -9097,8 +9672,33 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                     className={`text-left p-2 rounded-lg text-xs font-semibold border bg-slate-900/60 border-slate-800/80 hover:border-indigo-500 hover:bg-indigo-950/20 text-slate-200 transition-all flex flex-col justify-between shadow-md hover:shadow-indigo-500/10 active:scale-95 duration-100 cursor-pointer ${!hasEnoughRes ? 'opacity-40 cursor-not-allowed' : ''}`}
                                     disabled={!hasEnoughRes || isLoading}
                                   >
-                                    <div className="font-bold truncate text-[10.5px] text-slate-200 w-full" title={skill}>
-                                      {skill}
+                                    <div className="flex items-center justify-between w-full gap-1">
+                                      <div className="font-bold truncate text-[10.5px] text-slate-200" title={skill}>
+                                        {skill}
+                                      </div>
+                                      {isSummonTech && (
+                                        <div 
+                                          className="flex items-center gap-1 shrink-0 bg-slate-950/90 border border-indigo-500/50 rounded px-1.5 py-0.5"
+                                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                        >
+                                          <span className="text-[9px] text-slate-400 font-medium select-none">Anzahl:</span>
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            max={maxPossible}
+                                            value={countToSpawn}
+                                            onChange={(e) => {
+                                              e.stopPropagation();
+                                              const val = parseInt(e.target.value) || 1;
+                                              const clamped = Math.max(1, Math.min(maxPossible, val));
+                                              setSkillSummonCounts(prev => ({ ...prev, [skill]: clamped }));
+                                            }}
+                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                                            className="w-7 bg-slate-900 text-center text-amber-300 font-mono font-bold text-[10px] outline-none rounded border border-slate-700/80 py-0 px-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:border-indigo-400"
+                                            title={`Maximal ${maxPossible} Einheiten möglich`}
+                                          />
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="flex justify-between items-center mt-1.5 pt-1 border-t border-slate-800/40 text-[9.5px] font-mono w-full">
                                       <span className={
@@ -9110,10 +9710,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                               ? "text-amber-400 font-extrabold" 
                                               : "text-rose-400 font-extrabold"))
                                       }>
-                                        {effectLabel}
+                                        {isSummonTech ? `~${dmg} Dmg (${countToSpawn}x)` : effectLabel}
                                       </span>
                                       <span className="text-indigo-400 font-bold shrink-0">
-                                        {mpCost} {costName || 'MP'}
+                                        {finalMpCost} {costName || 'MP'}
                                       </span>
                                     </div>
                                   </button>
@@ -9671,6 +10271,36 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           adventure={adventure}
           onUpdateAdventure={onUpdateAdventure}
         />
+      )}
+
+      {showSilhouetteModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-child-body text-indigo-400 text-sm"></i>
+                <span className="font-extrabold text-white text-sm">Körper-Silhouette & Physischer Status</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSilhouetteModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-sm"></i>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              <BodySilhouette
+                player={adventure.player}
+                loreDatabase={adventure.loreDatabase}
+                npcs={adventure.npcs}
+                onUpdateLore={updatedLore => onUpdateAdventure({ ...adventure, loreDatabase: updatedLore })}
+                onUpdateNpcs={updatedNpcs => onUpdateAdventure({ ...adventure, npcs: updatedNpcs })}
+                onUpdatePlayer={updatedPlayer => onUpdateAdventure({ ...adventure, player: updatedPlayer })}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

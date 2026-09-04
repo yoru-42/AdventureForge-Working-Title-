@@ -613,7 +613,10 @@ export const syncHoldingRolesFromLoreMembers = (
       const existing = updatedRoles[existingRoleIndex];
       let roleChanged = false;
 
-      if (existing.name !== jobTitle && jobTitle !== 'Mitarbeiter' && jobTitle !== 'Mitglied') {
+      // Only assign default jobTitle if existing role has no name or generic placeholder
+      // DO NOT overwrite custom roles/titles set by the user!
+      if ((!existing.name || !existing.name.trim() || existing.name === 'Mitarbeiter' || existing.name === 'Mitglied') && 
+          jobTitle && jobTitle !== 'Mitarbeiter' && jobTitle !== 'Mitglied') {
         existing.name = jobTitle;
         roleChanged = true;
       }
@@ -669,4 +672,115 @@ export const syncHoldingRolesFromLoreMembers = (
   });
 
   return { updatedRoles, changed };
+};
+
+/**
+ * Bidirectionally synchronizes character roles (in LoreDatabase, Player, NPCs)
+ * and Holding Roles (in EconomyHolding.roles).
+ */
+export const syncCharacterAndHoldingRoles = (
+  holdings: EconomyHolding[],
+  loreDatabase: LoreEntry[],
+  player?: any,
+  npcs?: any[]
+): {
+  updatedHoldings: EconomyHolding[];
+  updatedLoreDatabase: LoreEntry[];
+  updatedPlayer?: any;
+  updatedNpcs?: any[];
+  changed: boolean;
+} => {
+  let changed = false;
+  let updatedHoldings = (holdings || []).map(h => ({ ...h, roles: [...(h.roles || [])] }));
+  let updatedLoreDatabase = [...(loreDatabase || [])];
+  let updatedPlayer = player ? { ...player } : undefined;
+  let updatedNpcs = npcs ? [...npcs] : undefined;
+
+  updatedHoldings.forEach(holding => {
+    holding.roles.forEach((r, idx) => {
+      const assignedName = (r.assignedToName || '').trim();
+      if (!assignedName) return;
+
+      const normAssigned = assignedName.toLowerCase();
+      const isPlayer = normAssigned === 'spieler' || normAssigned === 'nutzer' || (updatedPlayer?.name && normAssigned === updatedPlayer.name.trim().toLowerCase());
+      const roleTitle = (r.name || '').trim();
+
+      // Case 1: Holding role has a specific title
+      if (roleTitle && roleTitle !== 'Mitarbeiter' && roleTitle !== 'Mitglied' && roleTitle !== 'Neue Position') {
+        // Sync to Player
+        if (isPlayer && updatedPlayer) {
+          if (updatedPlayer.profession !== roleTitle || updatedPlayer.role !== roleTitle) {
+            updatedPlayer.profession = roleTitle;
+            updatedPlayer.role = roleTitle;
+            changed = true;
+          }
+        }
+
+        // Sync to LoreDatabase character
+        updatedLoreDatabase = updatedLoreDatabase.map(l => {
+          if (l.category === 'Charaktere' || l.category === 'Gegner') {
+            const isMatch = (r.assignedCharacterId && l.id === r.assignedCharacterId) ||
+              (l.title && l.title.trim().toLowerCase() === normAssigned);
+            if (isMatch) {
+              const d = { ...(l.details || {}) };
+              if (d.role !== roleTitle || d.profession !== roleTitle || d.jobTitle !== roleTitle) {
+                d.role = roleTitle;
+                d.profession = roleTitle;
+                d.jobTitle = roleTitle;
+                changed = true;
+                return { ...l, details: d };
+              }
+            }
+          }
+          return l;
+        });
+
+        // Sync to NPCs
+        if (updatedNpcs) {
+          updatedNpcs = updatedNpcs.map(npc => {
+            const isMatch = (r.assignedCharacterId && npc.id === r.assignedCharacterId) ||
+              (npc.name && npc.name.trim().toLowerCase() === normAssigned);
+            if (isMatch) {
+              let npcChanged = false;
+              if (npc.profession !== roleTitle) { npc.profession = roleTitle; npcChanged = true; }
+              if (npc.role !== roleTitle) { npc.role = roleTitle; npcChanged = true; }
+              if (npc.details?.role !== roleTitle || npc.details?.profession !== roleTitle) {
+                npc.details = { ...(npc.details || {}), role: roleTitle, profession: roleTitle };
+                npcChanged = true;
+              }
+              if (npcChanged) changed = true;
+            }
+            return npc;
+          });
+        }
+      } else {
+        // Case 2: Holding role title is blank/generic - sync from Character
+        let charRole = '';
+        if (isPlayer && updatedPlayer) {
+          charRole = updatedPlayer.profession || updatedPlayer.role || '';
+        } else {
+          const charLore = updatedLoreDatabase.find(l => 
+            (l.category === 'Charaktere' || l.category === 'Gegner') &&
+            ((r.assignedCharacterId && l.id === r.assignedCharacterId) || (l.title && l.title.trim().toLowerCase() === normAssigned))
+          );
+          if (charLore?.details) {
+            charRole = charLore.details.role || charLore.details.profession || charLore.details.jobTitle || '';
+          }
+        }
+
+        if (charRole && charRole.trim() && charRole !== r.name) {
+          holding.roles[idx] = { ...r, name: charRole.trim() };
+          changed = true;
+        }
+      }
+    });
+  });
+
+  return {
+    updatedHoldings,
+    updatedLoreDatabase,
+    updatedPlayer,
+    updatedNpcs,
+    changed
+  };
 };

@@ -443,11 +443,16 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
           let generatedAbilities = keepExistingDetails ? (currentDetails.abilities || []) : [];
           if (data.abilities && Array.isArray(data.abilities)) {
-            const mappedAbilities = data.abilities.map((abil: any, aIndex: number) => ({
-              id: `${Date.now()}-${aIndex}-${Math.random().toString(36).substr(2, 5)}`,
-              name: abil.name || 'Fähigkeit',
-              category: abil.category || 'Standard',
-              source: abil.source || data.powerSource || '',
+            const mappedAbilities = data.abilities.map((abil: any, aIndex: number) => {
+              let cat = abil.category;
+              if (!cat || cat === 'Standard' || cat === 'Kernfähigkeit') {
+                cat = 'Techniken';
+              }
+              return {
+                id: `${Date.now()}-${aIndex}-${Math.random().toString(36).substr(2, 5)}`,
+                name: abil.name || 'Fähigkeit',
+                category: cat,
+                source: abil.source || data.powerSource || '',
               cost: abil.cost || data.powerCost || '',
               description: abil.description || abil.skills || '',
               techniques: abil.techniques || (abil.techniqueList ? abil.techniqueList.map((t: any) => t.name).join(', ') : ''),
@@ -484,7 +489,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
                     subtype: t.subtype || ''
                   }))
                 : []
-            }));
+            };
+          });
 
             if (keepExistingDetails && currentDetails.abilities && currentDetails.abilities.length > 0) {
               generatedAbilities = [...currentDetails.abilities, ...mappedAbilities];
@@ -2763,6 +2769,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
               onCraftingSkillsChange={val => updateDetail('craftingSkills', val)}
               jobTitle={getDetail('jobTitle', '')}
               onJobTitleChange={val => updateDetail('jobTitle', val)}
+              authorities={getDetail<string[]>('authorities', [])}
+              onAuthoritiesChange={val => updateDetail('authorities', val)}
               professionDescription={getDetail('professionDescription', '')}
               onProfessionDescriptionChange={val => updateDetail('professionDescription', val)}
               secondaryProfessions={getDetail<any[]>('secondaryProfessions', [])}

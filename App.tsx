@@ -6,8 +6,136 @@ import GameView from './components/GameView';
 import UserProfileEditor from './components/UserProfileEditor';
 import { BodySilhouette } from './components/BodySilhouette';
 import { GeminiService } from './services/geminiService';
+import { StorageService } from './lib/storageService';
+import { syncCharacterAndHoldingRoles } from './lib/economySync';
 
 const USER_ID = "local-user-123";
+
+export function isClothingPlaceholder(title?: string): boolean {
+  if (!title) return true;
+  const lower = title.trim().toLowerCase();
+  if (!lower || lower === '-' || lower === 'none' || lower === 'empty' || lower === 'leer' || lower === 'nichts') return true;
+
+  const placeholders = [
+    'barfuß', 'barfuss', 'barefoot',
+    'keine kopfbedeckung', 'ohne kopfbedeckung', 'keine mütze', 'kein helm', 'kein hut',
+    'keine kleidung', 'nackt', 'unbekleidet',
+    'kein', 'keine', 'keines', 'ohne',
+    'kein schmuck', 'ohne schmuck', 'kein schuhwerk', 'ohne schuhe',
+    'keine oberbekleidung', 'keine hose', 'ohne hemd', 'ohne rüstung', 'ohne rustung'
+  ];
+  return placeholders.some(p => lower === p || lower.startsWith(p + ' ') || lower.endsWith(' ' + p));
+}
+
+export function isClothingItemTitle(title?: string, itemType?: string): boolean {
+  if (!title) return false;
+  const lowerTitle = title.trim().toLowerCase();
+  const lowerType = (itemType || '').trim().toLowerCase();
+
+  if (isClothingPlaceholder(lowerTitle)) return false;
+
+  if (lowerType.includes('rüstung') || lowerType.includes('kleidung') || lowerType.includes('outfit')) {
+    return true;
+  }
+
+  // Exclude weapons
+  const weaponKeywords = ['schwert', 'bogen', 'dolch', 'klinge', 'degen', 'gewehr', 'pistole', 'lanze', 'speer', 'axt', 'tsuki no wa', 'säbel', 'katana', 'waffe', 'weapon', 'messer', 'schild', 'hammer'];
+  if (weaponKeywords.some(kw => lowerTitle.includes(kw))) {
+    return false;
+  }
+
+  const clothingKeywords = [
+    'hemd', 'stiefel', 'schürze', 'schuerze', 'nachthemd', 'hose', 'mantel', 'robe', 'gewand',
+    'kleid', 'schuhe', 'mütze', 'muetze', 'hut', 'oberteil', 'unterteil', 'kleidung', 'outfit',
+    'sandalen', 'wams', 'tunik', 'tunika', 'rock', 'lederkluft', 'kochkluft', 'arbeitsbekleidung',
+    'rüstung', 'panzer', 'beinschienen'
+  ];
+  return clothingKeywords.some(kw => lowerTitle.includes(kw));
+}
+
+export function consolidateLoreOutfits(loreList: any[], playerName?: string): { cleanedLore: any[]; changed: boolean } {
+  if (!loreList || !Array.isArray(loreList)) return { cleanedLore: [], changed: false };
+
+  let changed = false;
+  const nonPlaceholderLore: any[] = [];
+
+  // 1. Filter out placeholders
+  for (const entry of loreList) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (entry.category === 'Gegenstände' && isClothingPlaceholder(entry.title)) {
+      changed = true;
+      continue;
+    }
+    nonPlaceholderLore.push(entry);
+  }
+
+  // 2. Identify individual clothing items by owner
+  const clothingByOwner = new Map<string, any[]>();
+  const otherLore: any[] = [];
+
+  for (const entry of nonPlaceholderLore) {
+    if (entry.category === 'Gegenstände' && isClothingItemTitle(entry.title, entry.details?.itemType)) {
+      const owner = (entry.details?.owner || playerName || 'Spieler').trim();
+      const ownerKey = owner.toLowerCase();
+      if (!clothingByOwner.has(ownerKey)) {
+        clothingByOwner.set(ownerKey, []);
+      }
+      clothingByOwner.get(ownerKey)!.push(entry);
+    } else {
+      otherLore.push(entry);
+    }
+  }
+
+  const finalLore = [...otherLore];
+
+  // 3. Consolidate clothing items into single Outfit entry per owner
+  clothingByOwner.forEach((items, ownerKey) => {
+    if (items.length === 0) return;
+
+    const existingOutfit = items.find(i => {
+      const t = (i.title || '').toLowerCase();
+      return t.includes('outfit') || t.includes('kluft') || t.includes('garderobe') || t.startsWith('kleidung');
+    });
+
+    if (items.length === 1 && existingOutfit) {
+      finalLore.push(items[0]);
+    } else {
+      changed = true;
+      const ownerName = items[0]?.details?.owner || playerName || 'Spieler';
+      const allItemTitles = Array.from(new Set(items.map(i => i.title.trim()).filter(Boolean)));
+
+      const outfitTitle = existingOutfit?.title || (allItemTitles.length === 1 ? `Outfit: ${allItemTitles[0]}` : `Outfit (${ownerName})`);
+      const outfitDesc = `Vollständiges Outfit bestehend aus: ${allItemTitles.join(', ')}.`;
+
+      const consolidatedEntry = existingOutfit ? {
+        ...existingOutfit,
+        title: outfitTitle,
+        description: outfitDesc,
+        details: {
+          ...(existingOutfit.details || {}),
+          owner: ownerName,
+          itemType: 'Rüstung / Kleidung',
+          rarity: existingOutfit.details?.rarity || 'Gewöhnlich'
+        }
+      } : {
+        id: 'dyn-itm-outfit-' + Math.random().toString(36).substr(2, 9),
+        category: 'Gegenstände',
+        title: outfitTitle,
+        description: outfitDesc,
+        isUnlocked: true,
+        details: {
+          owner: ownerName,
+          itemType: 'Rüstung / Kleidung',
+          rarity: 'Gewöhnlich'
+        }
+      };
+
+      finalLore.push(consolidatedEntry);
+    }
+  });
+
+  return { cleanedLore: finalLore, changed };
+}
 
 const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<GameViewMode>(GameViewMode.HOME);
@@ -15,8 +143,8 @@ const App: React.FC = () => {
   const [adventures, setAdventures] = useState<Adventure[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
     try {
-      const saved = localStorage.getItem('userProfile');
-      return saved ? JSON.parse(saved) : {
+      const saved = StorageService.getItemSync<UserProfile>('userProfile');
+      return saved ? saved : {
         name: '',
         bio: '',
         preferredRole: '',
@@ -57,125 +185,130 @@ const App: React.FC = () => {
 
   // Initiales Laden
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('adventures');
-      if (saved) {
-        const loadedAdventures: Adventure[] = JSON.parse(saved);
-        setAdventures(loadedAdventures);
+    let isMounted = true;
+    const loadInitialData = async () => {
+      try {
+        const savedAdventures = await StorageService.getItem<Adventure[]>('adventures');
+        if (savedAdventures && savedAdventures.length > 0 && isMounted) {
+          setAdventures(savedAdventures);
 
-        // Async background optimization to shrink large images (e.g., length > 120,000)
-        setTimeout(async () => {
-          let hasOptimized = false;
-          const optimized = await Promise.all(loadedAdventures.map(async (adv) => {
-            let advChanged = false;
-            
-            // Compress player portrait
-            if (adv.player?.image && adv.player.image.startsWith('data:') && adv.player.image.length > 120000) {
-              try {
-                const compressed = await GeminiService.compressImageBase64(adv.player.image, 512, 0.65);
-                if (compressed !== adv.player.image) {
-                  adv.player.image = compressed;
-                  advChanged = true;
-                }
-              } catch (e) {
-                console.error("Failed to compress player image", e);
-              }
-            }
-
-            // Compress initial player portrait
-            if (adv.initialPlayer?.image && adv.initialPlayer.image.startsWith('data:') && adv.initialPlayer.image.length > 120000) {
-              try {
-                const compressed = await GeminiService.compressImageBase64(adv.initialPlayer.image, 512, 0.65);
-                if (compressed !== adv.initialPlayer.image) {
-                  adv.initialPlayer.image = compressed;
-                  advChanged = true;
-                }
-              } catch (e) {
-                console.error("Failed to compress initial player image", e);
-              }
-            }
-
-            // Compress NPCs portraits
-            if (adv.npcs && adv.npcs.length > 0) {
-              const updatedNpcs = await Promise.all(adv.npcs.map(async (npc) => {
-                if (npc.image && npc.image.startsWith('data:') && npc.image.length > 120000) {
-                  try {
-                    const compressed = await GeminiService.compressImageBase64(npc.image, 512, 0.65);
-                    if (compressed !== npc.image) {
-                      advChanged = true;
-                      return { ...npc, image: compressed };
-                    }
-                  } catch (e) {
-                    console.error("Failed to compress NPC image", e);
+          // Async background optimization to shrink large images (e.g., length > 120,000)
+          setTimeout(async () => {
+            let hasOptimized = false;
+            const optimized = await Promise.all(savedAdventures.map(async (adv) => {
+              let advChanged = false;
+              
+              // Compress player portrait
+              if (adv.player?.image && adv.player.image.startsWith('data:') && adv.player.image.length > 120000) {
+                try {
+                  const compressed = await GeminiService.compressImageBase64(adv.player.image, 512, 0.65);
+                  if (compressed !== adv.player.image) {
+                    adv.player.image = compressed;
+                    advChanged = true;
                   }
+                } catch (e) {
+                  console.error("Failed to compress player image", e);
                 }
-                return npc;
-              }));
-              if (advChanged) {
-                adv.npcs = updatedNpcs;
               }
-            }
 
-            // Compress initial NPCs portraits
-            if (adv.initialNpcs && adv.initialNpcs.length > 0) {
-              const updatedInitialNpcs = await Promise.all(adv.initialNpcs.map(async (npc) => {
-                if (npc.image && npc.image.startsWith('data:') && npc.image.length > 120000) {
-                  try {
-                    const compressed = await GeminiService.compressImageBase64(npc.image, 512, 0.65);
-                    if (compressed !== npc.image) {
-                      advChanged = true;
-                      return { ...npc, image: compressed };
-                    }
-                  } catch (e) {
-                    console.error("Failed to compress initial NPC image", e);
+              // Compress initial player portrait
+              if (adv.initialPlayer?.image && adv.initialPlayer.image.startsWith('data:') && adv.initialPlayer.image.length > 120000) {
+                try {
+                  const compressed = await GeminiService.compressImageBase64(adv.initialPlayer.image, 512, 0.65);
+                  if (compressed !== adv.initialPlayer.image) {
+                    adv.initialPlayer.image = compressed;
+                    advChanged = true;
                   }
+                } catch (e) {
+                  console.error("Failed to compress initial player image", e);
                 }
-                return npc;
-              }));
-              if (advChanged) {
-                adv.initialNpcs = updatedInitialNpcs;
               }
-            }
 
-            if (advChanged) {
-              hasOptimized = true;
-            }
-            return adv;
-          }));
+              // Compress NPCs portraits
+              if (adv.npcs && adv.npcs.length > 0) {
+                const updatedNpcs = await Promise.all(adv.npcs.map(async (npc) => {
+                  if (npc.image && npc.image.startsWith('data:') && npc.image.length > 120000) {
+                    try {
+                      const compressed = await GeminiService.compressImageBase64(npc.image, 512, 0.65);
+                      if (compressed !== npc.image) {
+                        advChanged = true;
+                        return { ...npc, image: compressed };
+                      }
+                    } catch (e) {
+                      console.error("Failed to compress NPC image", e);
+                    }
+                  }
+                  return npc;
+                }));
+                if (advChanged) {
+                  adv.npcs = updatedNpcs;
+                }
+              }
 
-          if (hasOptimized) {
-            console.log("LocalStorage adventures successfully optimized and compressed!");
-            setAdventures(optimized);
-            localStorage.setItem('adventures', JSON.stringify(optimized));
-          }
-        }, 1500);
+              // Compress initial NPCs portraits
+              if (adv.initialNpcs && adv.initialNpcs.length > 0) {
+                const updatedInitialNpcs = await Promise.all(adv.initialNpcs.map(async (npc) => {
+                  if (npc.image && npc.image.startsWith('data:') && npc.image.length > 120000) {
+                    try {
+                      const compressed = await GeminiService.compressImageBase64(npc.image, 512, 0.65);
+                      if (compressed !== npc.image) {
+                        advChanged = true;
+                        return { ...npc, image: compressed };
+                      }
+                    } catch (e) {
+                      console.error("Failed to compress initial NPC image", e);
+                    }
+                  }
+                  return npc;
+                }));
+                if (advChanged) {
+                  adv.initialNpcs = updatedInitialNpcs;
+                }
+              }
+
+              if (advChanged) {
+                hasOptimized = true;
+              }
+              return adv;
+            }));
+
+            if (hasOptimized && isMounted) {
+              console.log("StorageService adventures successfully optimized and compressed!");
+              setAdventures(optimized);
+              await StorageService.setItem('adventures', optimized);
+            }
+          }, 1500);
+        }
+
+        const savedProfile = await StorageService.getItem<UserProfile>('userProfile');
+        if (savedProfile && isMounted) {
+          setUserProfile(savedProfile);
+        }
+      } catch (e) {
+        console.error("Fehler beim Laden der Abenteuer:", e);
       }
-    } catch (e) {
-      console.error("Fehler beim Laden der Abenteuer:", e);
-      setError("Gespeicherte Abenteuer konnten nicht geladen werden.");
-    }
+    };
+    loadInitialData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Automatisches Speichern bei Änderungen
   useEffect(() => {
     if (adventures.length > 0) {
-      try {
-        localStorage.setItem('adventures', JSON.stringify(adventures));
-        setError(null);
-      } catch (e) {
-        if (e instanceof DOMException && (e.code === 22 || e.name === 'QuotaExceededError')) {
-          setError("Speicher voll! Bitte lösche alte Abenteuer oder verwende kleinere Bilder.");
-          console.error("LocalStorage Quota exceeded");
-        } else {
-          setError("Ein Fehler beim Speichern ist aufgetreten.");
-        }
-      }
+      StorageService.setItem('adventures', adventures)
+        .then(() => setError(null))
+        .catch(e => {
+          console.warn("Auto-save failed in StorageService:", e);
+        });
     }
   }, [adventures]);
 
   const saveProfile = (profile: UserProfile) => {
     setUserProfile(profile);
-    localStorage.setItem('userProfile', JSON.stringify(profile));
+    StorageService.setItem('userProfile', profile);
     setViewMode(GameViewMode.HOME);
   };
 
@@ -211,9 +344,9 @@ const App: React.FC = () => {
       setAdventures(newAdventures);
       setCurrentAdventure(adventure);
       
-      localStorage.setItem('adventures', JSON.stringify(newAdventures));
+      StorageService.setItem('adventures', newAdventures);
     } catch (e) {
-      console.warn("Auto-save failed to write to localStorage:", e);
+      console.warn("Auto-save failed to write to StorageService:", e);
     }
   };
 
@@ -318,23 +451,23 @@ const App: React.FC = () => {
       cleanedLore.push(entry);
     });
 
+    const { cleanedLore: consolidatedLore } = consolidateLoreOutfits(cleanedLore, target.player?.name);
+
     const cleanedAdventure: Adventure = {
       ...target,
-      loreDatabase: cleanedLore,
+      loreDatabase: consolidatedLore,
       ...(target.initialLoreDatabase ? {
         initialLoreDatabase: target.initialLoreDatabase.filter((initEntry: any) =>
-          cleanedLore.some((c: any) => c.id === initEntry.id || c.title === initEntry.title)
+          consolidatedLore.some((c: any) => c.id === initEntry.id || c.title === initEntry.title)
         )
       } : {})
     };
 
     setAdventures(prev => {
       const updated = prev.map(a => a.id === cleanedAdventure.id ? cleanedAdventure : a);
-      try {
-        localStorage.setItem('adventures', JSON.stringify(updated));
-      } catch (e) {
+      StorageService.setItem('adventures', updated).catch(e => {
         console.error("Fehler beim Speichern der bereinigten Abenteuer:", e);
-      }
+      });
       return updated;
     });
 
@@ -450,7 +583,7 @@ const App: React.FC = () => {
         if (!name) return;
         const trimmed = name.trim();
         const lower = trimmed.toLowerCase();
-        if (!trimmed || lower === 'keine' || lower === 'keines' || lower === 'kein' || lower === 'empty') return;
+        if (!trimmed || isClothingPlaceholder(trimmed)) return;
 
         const existsIdx = updatedLore.findIndex(e => e.category === 'Gegenstände' && e.title.trim().toLowerCase() === lower);
         if (existsIdx > -1) {
@@ -494,15 +627,17 @@ const App: React.FC = () => {
       if (Array.isArray(updatedAdv.structuredInventory.generalItems)) {
         updatedAdv.structuredInventory.generalItems.forEach((itm: string) => ensureItemInCodex(itm, false));
       }
-      if (updatedAdv.structuredInventory.armor) {
-        Object.values(updatedAdv.structuredInventory.armor).forEach((itm: any) => {
-          if (typeof itm === 'string') ensureItemInCodex(itm, false);
-        });
-      }
       if (updatedAdv.structuredInventory.accessories) {
         Object.values(updatedAdv.structuredInventory.accessories).forEach((itm: any) => {
           if (typeof itm === 'string') ensureItemInCodex(itm, false);
         });
+      }
+
+      // Consolidate lore outfits and remove placeholders
+      const { cleanedLore: consolidatedLore, changed: outfitChanged } = consolidateLoreOutfits(updatedLore, pName);
+      if (outfitChanged || changed) {
+        updatedLore = consolidatedLore;
+        changed = true;
       }
 
       if (changed) {
@@ -551,6 +686,33 @@ const App: React.FC = () => {
       }
     }
 
+    // Synchronize character professions & holding roles
+    if (finalAdv.world?.economyConfig?.holdings || finalAdv.loreDatabase) {
+      const holdings = finalAdv.world?.economyConfig?.holdings || [];
+      const loreDb = finalAdv.loreDatabase || [];
+      const player = finalAdv.player;
+      const npcs = finalAdv.npcs;
+
+      const { updatedHoldings, updatedLoreDatabase, updatedPlayer, updatedNpcs, changed: rolesSynced } = 
+        syncCharacterAndHoldingRoles(holdings, loreDb, player, npcs);
+
+      if (rolesSynced) {
+        finalAdv = {
+          ...finalAdv,
+          loreDatabase: updatedLoreDatabase,
+          player: updatedPlayer || finalAdv.player,
+          npcs: updatedNpcs || finalAdv.npcs,
+          world: {
+            ...finalAdv.world,
+            economyConfig: finalAdv.world?.economyConfig ? {
+              ...finalAdv.world.economyConfig,
+              holdings: updatedHoldings
+            } : undefined
+          }
+        };
+      }
+    }
+
     setAdventures(prev => prev.map(a => a.id === finalAdv.id ? finalAdv : a));
     setCurrentAdventure(finalAdv);
   };
@@ -564,7 +726,7 @@ const App: React.FC = () => {
     if (!adventureToDelete) return;
     const filtered = adventures.filter(a => a.id !== adventureToDelete);
     setAdventures(filtered);
-    localStorage.setItem('adventures', JSON.stringify(filtered));
+    StorageService.setItem('adventures', filtered);
     if (currentAdventure?.id === adventureToDelete) setCurrentAdventure(null);
     setAdventureToDelete(null);
     setError(null);
@@ -997,23 +1159,23 @@ const App: React.FC = () => {
                   <div className="flex gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80 w-full sm:w-auto">
                     <button
                       onClick={() => setStatsSubTab('resources')}
-                      className={`flex-1 sm:flex-initial px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      className={`flex-1 sm:flex-initial px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                         statsSubTab === 'resources'
                           ? 'bg-slate-900 border border-slate-700/60 text-indigo-400 shadow-sm'
                           : 'bg-transparent border-transparent text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      ⚔️ Ressourcen & Zuordnung
+                      <i className="fa-solid fa-bolt text-[10px]"></i> Ressourcen & Zuordnung
                     </button>
                     <button
                       onClick={() => setStatsSubTab('radar')}
-                      className={`flex-1 sm:flex-initial px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      className={`flex-1 sm:flex-initial px-3 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                         statsSubTab === 'radar'
                           ? 'bg-slate-900 border border-slate-700/60 text-indigo-400 shadow-sm'
                           : 'bg-transparent border-transparent text-slate-400 hover:text-slate-200'
                       }`}
                     >
-                      📊 Radar-Werte
+                      <i className="fa-solid fa-chart-pie text-[10px]"></i> Radar-Werte
                     </button>
                   </div>
                 </div>
@@ -1490,12 +1652,12 @@ const App: React.FC = () => {
                               )}
                             </div>
                             
-                            <span className="text-[9.5px] px-2 py-0.5 rounded-full font-extrabold uppercase border bg-slate-900 shrink-0 select-none border-slate-800 text-slate-400">
-                              {logic === 'ep' && '⚡ EP'}
-                              {logic === 'training' && '🏋️ Training'}
-                              {logic === 'milestone' && '🏆 Meilenstein'}
-                              {logic === 'static' && '🔒 Statisch'}
-                            </span>
+                              <span className="text-[9.5px] px-2 py-0.5 rounded-full font-extrabold uppercase border bg-slate-900 shrink-0 select-none border-slate-800 text-slate-400">
+                                {logic === 'ep' && 'EP'}
+                                {logic === 'training' && 'Training'}
+                                {logic === 'milestone' && 'Meilenstein'}
+                                {logic === 'static' && 'Statisch'}
+                              </span>
                           </div>
 
                           {logic === 'ep' && (
@@ -1592,7 +1754,9 @@ const App: React.FC = () => {
                           {logic === 'milestone' && (
                             <div className="space-y-2 pt-1">
                               <div className="bg-slate-900/50 border border-slate-850 p-2.5 rounded-xl text-[10.5px] text-slate-300">
-                                <span className="font-extrabold text-amber-500 uppercase tracking-wide mr-1 block mb-0.5">🏆 Nächste Bedingung:</span>
+                                <span className="font-extrabold text-amber-500 uppercase tracking-wide mr-1 inline-flex items-center gap-1 mb-0.5">
+                                  <i className="fa-solid fa-flag-checkered text-[10px]"></i> Nächste Bedingung:
+                                </span>
                                 <span className="italic">"{tech.milestoneRequirement || 'Erreiche den nächsten großen Meilenstein in der Story.'}"</span>
                               </div>
                               <div className="flex gap-2 pt-1">
@@ -1625,7 +1789,9 @@ const App: React.FC = () => {
                             <div className="space-y-2 pt-1">
                               {tech.staticCost && (
                                 <div className="bg-slate-900/50 border border-slate-850 p-2.5 rounded-xl text-[10.5px] text-slate-300">
-                                  <span className="font-extrabold text-indigo-400 uppercase tracking-wide mr-1 block mb-0.5">🔒 Upgrade-Voraussetzung:</span>
+                                  <span className="font-extrabold text-indigo-400 uppercase tracking-wide mr-1 inline-flex items-center gap-1 mb-0.5">
+                                    <i className="fa-solid fa-lock text-[10px]"></i> Upgrade-Voraussetzung:
+                                  </span>
                                   <span className="italic">"{tech.staticCost}"</span>
                                 </div>
                               )}

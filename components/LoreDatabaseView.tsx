@@ -3908,7 +3908,9 @@ const LoreDatabaseView: React.FC<Props> = ({
                           const val = Math.max(4, Math.min(50, parseInt(e.target.value) || 10));
                           setMapGridSizes(prev => {
                             const next = { ...prev, [mapZoomLevel]: { ...prev[mapZoomLevel], width: val } };
-                            localStorage.setItem('adventureforge_map_grid_sizes', JSON.stringify(next));
+                            try {
+                              localStorage.setItem('adventureforge_map_grid_sizes', JSON.stringify(next));
+                            } catch (_) {}
                             return next;
                           });
                         }}
@@ -3926,7 +3928,9 @@ const LoreDatabaseView: React.FC<Props> = ({
                           const val = Math.max(4, Math.min(50, parseInt(e.target.value) || 10));
                           setMapGridSizes(prev => {
                             const next = { ...prev, [mapZoomLevel]: { ...prev[mapZoomLevel], height: val } };
-                            localStorage.setItem('adventureforge_map_grid_sizes', JSON.stringify(next));
+                            try {
+                              localStorage.setItem('adventureforge_map_grid_sizes', JSON.stringify(next));
+                            } catch (_) {}
                             return next;
                           });
                         }}

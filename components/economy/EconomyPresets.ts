@@ -50,6 +50,21 @@ export const STANDARD_AUTHORITIES = [
   'Betriebsbeschlüsse fassen'
 ];
 
+export const AUTHORITY_DUTIES_MAP: Record<string, string> = {
+  'Tagesgeschäft leiten': 'Operative Leitung und Koordination des laufenden Tagesgeschäfts',
+  'Preise festlegen': 'Festlegung und Überwachung der Preis- und Gebührenstrukturen',
+  'Personal einstellen & entlassen': 'Personalplanung, Rekrutierung und Mitarbeiterführung',
+  'Aufgaben & Pflichten delegieren': 'Zuweisung, Steuerung und Überprüfung von Arbeitsaufgaben',
+  'Aufträge vergeben & annehmen': 'Prüfung, Vergabe und Abnahme von Arbeits- und Lieferaufträgen',
+  'Lagerbestände & Einkauf verwalten': 'Warenwirtschaft, Bestandskontrolle und Rohstoffbeschaffung',
+  'Budget & Finanzen freigeben': 'Finanzkontrolle, Buchungsprüfung und Freigabe von Betriebsmitteln',
+  'Ausbauten & Upgrades anordnen': 'Planung und Beaufsichtigung baulicher Erweiterungen und Reparaturen',
+  'Hausrecht & Sicherheit durchsetzen': 'Sicherheitskontrollen, Durchsetzung der Ordnung und des Hausrechts',
+  'Gewinne entnehmen': 'Abrechnung und Verwaltung von Betriebsüberschüssen',
+  'Verhandlungen führen': 'Verhandlungsführung mit Handelspartnern, Kunden und Behörden',
+  'Betriebsbeschlüsse fassen': 'Entscheidungsfindung bei betrieblichen Grundsatzfragen'
+};
+
 export const getHoldingPresets = (type: EconomyHolding['type']): {
   resources: EconomyResource[];
   tasks: EconomyTask[];

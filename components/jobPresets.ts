@@ -286,6 +286,39 @@ export const JOB_CATEGORIES: JobCategory[] = [
     ]
   },
   {
+    category: "Adel & Herrschaftstitel",
+    jobs: [
+      "Herzogstochter",
+      "Herzogsohn",
+      "Erbherzogstochter",
+      "Erbherzog",
+      "Grafentochter",
+      "Grafensohn",
+      "Komtesse",
+      "Erbgräfin",
+      "Erbgraf",
+      "Baronstochter",
+      "Baronssohn",
+      "Freiin",
+      "Freiherr (Nachkomme)",
+      "Prinzessin",
+      "Prinz",
+      "Königstochter",
+      "Königssohn",
+      "Fürstentochter",
+      "Fürstensohn",
+      "Erbprinzessin",
+      "Erbprinz",
+      "Erbtochter",
+      "Erbsohn",
+      "Edelfräulein",
+      "Junker",
+      "Lordstochter",
+      "Lordsohn",
+      "Adelsnachkomme"
+    ]
+  },
+  {
     category: "Abenteuerberufe",
     jobs: [
       "Abenteurer",

@@ -51,8 +51,37 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
 
   const handleUpdateRole = (idx: number, updates: Partial<EconomyRole>) => {
     const updated = [...(holding.roles || [])];
-    updated[idx] = { ...updated[idx], ...updates };
+    const oldRole = updated[idx];
+    const newRole = { ...oldRole, ...updates };
+    updated[idx] = newRole;
+
     onUpdateHolding(holding.id, { roles: updated });
+
+    // Immediate Codex character sync if role name or assignee changed
+    const assignedName = (newRole.assignedToName || '').trim().toLowerCase();
+    const newRoleTitle = (newRole.name || '').trim();
+
+    if (assignedName && newRoleTitle && newRoleTitle !== 'Mitarbeiter' && newRoleTitle !== 'Mitglied' && newRoleTitle !== 'Neue Position') {
+      const existingLoreChar = loreDatabase.find(l =>
+        (l.category === 'Charaktere' || l.category === 'Gegner') &&
+        ((newRole.assignedCharacterId && l.id === newRole.assignedCharacterId) || (l.title && l.title.trim().toLowerCase() === assignedName))
+      );
+
+      if (existingLoreChar && onAddCodexEntry) {
+        const currentDetails = existingLoreChar.details || {};
+        if (currentDetails.role !== newRoleTitle || currentDetails.profession !== newRoleTitle) {
+          onAddCodexEntry({
+            ...existingLoreChar,
+            details: {
+              ...currentDetails,
+              role: newRoleTitle,
+              profession: newRoleTitle,
+              jobTitle: newRoleTitle
+            }
+          });
+        }
+      }
+    }
   };
 
   const handleRemoveRole = (idx: number) => {
@@ -250,25 +279,26 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Rolle / Titel</label>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Rolle / Titel</label>
                     <ProfessionSelect
                       value={role.name || ''}
                       onChange={val => handleUpdateRole(idx, { name: val })}
-                      placeholder="Rolle / Titel wählen..."
+                      placeholder="Rolle oder Titel wählen..."
+                      showNobleChildrenButton={false}
                       selectClassName="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-amber-500 transition"
                       inputClassName="w-full mt-1.5 bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs font-bold text-white outline-none focus:border-amber-500 transition"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Besetzt durch</label>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Besetzt durch</label>
                     <CharacterAssigneeSelect
                       value={role.assignedToName || ''}
                       onChange={val => handleUpdateRole(idx, { assignedToName: val })}
                       loreDatabase={loreDatabase}
                       npcs={npcs}
                       holding={holding}
-                      placeholder="Besetzt durch wählen..."
+                      placeholder="Person auswählen oder eintragen..."
                     />
                   </div>
 
@@ -278,7 +308,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                       type="text"
                       value={role.workplaceArea || ''}
                       onChange={e => handleUpdateRole(idx, { workplaceArea: e.target.value })}
-                      placeholder="z.B. Weinkeller, Herrenhaus"
+                      placeholder="Räumlichkeit oder Einsatzort"
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500"
                     />
                   </div>
@@ -289,13 +319,13 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                       type="text"
                       value={role.superiorRole || ''}
                       onChange={e => handleUpdateRole(idx, { superiorRole: e.target.value })}
-                      placeholder="z.B. Wirt, Verwalter"
+                      placeholder="Vorgesetzte Instanz oder Rolle"
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500"
                     />
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Gehalt (Gold)</label>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Gehalt / Lohn (Gold)</label>
                     <input
                       type="number"
                       value={role.salary || 0}
@@ -304,9 +334,19 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                     />
                   </div>
 
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Aufgaben & Pflichten</label>
+                    <AutoExpandingTextarea
+                      value={(role.responsibilities || []).join('\n')}
+                      onChange={e => handleUpdateRole(idx, { responsibilities: e.target.value.split('\n').filter(Boolean) })}
+                      placeholder="Aufgaben und Verantwortungsbereiche dieser Position (eine pro Zeile)..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[44px]"
+                    />
+                  </div>
+
                   {/* Authorities selector */}
                   <div className="space-y-1.5 pt-2 border-t border-slate-900">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Befugnisse:</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Befugnisse & Weisungsrechte:</span>
                     <div className="flex flex-wrap gap-1">
                       {STANDARD_AUTHORITIES.slice(0, 6).map(auth => {
                         const has = (role.authorities || []).includes(auth);
@@ -315,11 +355,11 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                             key={auth}
                             type="button"
                             onClick={() => handleToggleRoleAuthority(idx, auth)}
-                            className={`px-2.5 py-1 rounded-md text-[10px] font-semibold border transition-all cursor-pointer ${
-                              has ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-900 text-slate-500 border-slate-800 hover:text-slate-300'
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border transition-all cursor-pointer ${
+                              has ? 'bg-amber-950/30 text-amber-300 border-amber-500/40' : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
                             }`}
                           >
-                            {has ? '✓ ' : '+ '} {auth}
+                            {auth}
                           </button>
                         );
                       })}
@@ -340,7 +380,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
               <i className="fa-solid fa-people-group"></i> 2. Namenlose Personalgruppen & Bedienstete ({staffGroups.length})
             </h5>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Definiere Gruppen von Bediensteten (z.B. "8 Mägde", "6 Wachen", "4 Köche"). Jedes Mitglied kann bei Bedarf direkt in einen vollwertigen Lore-Charakter aufgewertet werden!
+              Gruppen von Bediensteten und Hilfskräften definieren. Mitglieder können bei Bedarf direkt zu Charakteren aufgewertet werden.
             </p>
           </div>
         </div>
@@ -416,7 +456,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                       type="text"
                       value={group.workplaceArea || ''}
                       onChange={e => handleUpdateStaffGroup(group.id, { workplaceArea: e.target.value })}
-                      placeholder="z.B. Großküche, Stall, Außenbereich"
+                      placeholder="Räumlichkeit oder Arbeitsbereich angeben"
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500"
                     />
                   </div>
@@ -444,13 +484,12 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Hauptaufgaben & Pflichten (kommagetrennt)</label>
-                    <input
-                      type="text"
-                      value={(group.duties || []).join(', ')}
-                      onChange={e => handleUpdateStaffGroup(group.id, { duties: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
-                      placeholder="z.B. Tische säubern, Frühstück servieren, Botengänge"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Hauptaufgaben & Pflichten</label>
+                    <AutoExpandingTextarea
+                      value={(group.duties || []).join('\n')}
+                      onChange={e => handleUpdateStaffGroup(group.id, { duties: e.target.value.split('\n').filter(Boolean) })}
+                      placeholder="Aufgaben und Pflichten dieser Personalgruppe (eine pro Zeile)..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[44px]"
                     />
                   </div>
                 </div>
@@ -501,7 +540,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                 </div>
 
                 <div className="p-3 bg-emerald-500/10 rounded-xl text-xs text-emerald-300 border border-emerald-500/20">
-                  ✓ Der Charakter wurde erfolgreich zu den Einzelrollen von {holding.name} hinzugefügt und im Codex registriert!
+                  Der Charakter wurde erfolgreich zu den Einzelrollen von {holding.name} hinzugefügt und im Codex registriert.
                 </div>
 
                 <button
@@ -524,7 +563,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                     type="text"
                     value={characterNameSuggestion}
                     onChange={e => setCharacterNameSuggestion(e.target.value)}
-                    placeholder="z.B. Elsa Schneider oder leer lassen für KI-Vorschlag"
+                    placeholder="Name eingeben oder leer lassen für automatischen Vorschlag"
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500"
                   />
                 </div>
@@ -534,7 +573,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
                   <AutoExpandingTextarea
                     value={upgradeFocusPrompt}
                     onChange={e => setUpgradeFocusPrompt(e.target.value)}
-                    placeholder="z.B. soll sehr neugierig sein und viele Gerüchte kennen..."
+                    placeholder="Vorgaben oder Persönlichkeitsmerkmale für den Charakter beschreiben..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
                   />
                 </div>

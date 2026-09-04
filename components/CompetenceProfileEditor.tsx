@@ -6,6 +6,65 @@ import AutoExpandingTextarea from './AutoExpandingTextarea';
 import EverydaySkillsSelect from './EverydaySkillsSelect';
 import CompetenceProficiencyWidget from './CompetenceProficiencyWidget';
 import { getDutiesForProfessionAndLevel, DUTIES_BY_ARCHETYPE } from './professionDuties';
+import { STANDARD_AUTHORITIES, AUTHORITY_DUTIES_MAP } from './economy/EconomyPresets';
+
+const normalizeForCompare = (s: string) =>
+  s.trim().toLowerCase().replace(/^[-*•]\s*/, '').replace(/\s+/g, ' ');
+
+const isDutyInText = (text: string, duty: string): boolean => {
+  if (!text || !duty) return false;
+  const normDuty = normalizeForCompare(duty);
+  const lines = text.split('\n');
+  return lines.some(line => {
+    const normLine = normalizeForCompare(line);
+    if (!normLine) return false;
+    return normLine.includes(normDuty) || (normDuty.length > 15 && normLine.length > 15 && normDuty.includes(normLine));
+  });
+};
+
+const toggleDutyInText = (text: string, duty: string): string => {
+  const normDuty = normalizeForCompare(duty);
+  const lines = text.split('\n');
+  const exists = lines.some(line => {
+    const normLine = normalizeForCompare(line);
+    if (!normLine) return false;
+    return normLine.includes(normDuty) || (normDuty.length > 15 && normLine.length > 15 && normDuty.includes(normLine));
+  });
+
+  if (exists) {
+    const remaining = lines.filter(line => {
+      const normLine = normalizeForCompare(line);
+      if (!normLine) return true;
+      return !(normLine.includes(normDuty) || (normDuty.length > 15 && normLine.length > 15 && normDuty.includes(normLine)));
+    });
+    return remaining.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  } else {
+    const cleanDuty = duty.trim().replace(/^[-*•]\s*/, '');
+    const bullet = `- ${cleanDuty}`;
+    return text.trim() ? `${text.trim()}\n${bullet}` : bullet;
+  }
+};
+
+const addAllDutiesToText = (currentText: string, duties: string[]): string => {
+  let res = currentText;
+  duties.forEach(d => {
+    if (!isDutyInText(res, d)) {
+      const cleanDuty = d.trim().replace(/^[-*•]\s*/, '');
+      res = res.trim() ? `${res.trim()}\n- ${cleanDuty}` : `- ${cleanDuty}`;
+    }
+  });
+  return res;
+};
+
+const removeAllDutiesFromText = (currentText: string, duties: string[]): string => {
+  let res = currentText;
+  duties.forEach(d => {
+    if (isDutyInText(res, d)) {
+      res = toggleDutyInText(res, d);
+    }
+  });
+  return res;
+};
 
 interface CompetenceProfileEditorProps {
   profession: string;
@@ -16,6 +75,8 @@ interface CompetenceProfileEditorProps {
   onCraftingSkillsChange: (val: string) => void;
   jobTitle: string;
   onJobTitleChange: (val: string) => void;
+  authorities?: string[];
+  onAuthoritiesChange?: (val: string[]) => void;
   professionDescription: string;
   onProfessionDescriptionChange: (val: string) => void;
 
@@ -54,6 +115,8 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
   onCraftingSkillsChange,
   jobTitle,
   onJobTitleChange,
+  authorities = [],
+  onAuthoritiesChange,
   professionDescription,
   onProfessionDescriptionChange,
 
@@ -90,14 +153,22 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
     ? getDutiesForProfessionAndLevel(profession, professionLevel)
     : [];
 
+  const authorityDuties = authorities.map(auth => ({
+    auth,
+    duty: AUTHORITY_DUTIES_MAP[auth] || `${auth} im Betrieb operativ ausführen und überwachen`
+  }));
+
+  const allSuggestedInText = suggestedDuties.length > 0 && suggestedDuties.every(d => isDutyInText(professionDescription, d));
+  const allAuthoritiesInText = authorityDuties.length > 0 && authorityDuties.every(item => isDutyInText(professionDescription, item.duty));
+
+  const dutyLineCount = professionDescription
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0).length;
+
   const handleApplyDuties = () => {
     if (suggestedDuties.length === 0) return;
-    const formatted = suggestedDuties.map(d => `- ${d}`).join('\n');
-    if (professionDescription.trim()) {
-      onProfessionDescriptionChange(professionDescription.trim() + '\n\n' + formatted);
-    } else {
-      onProfessionDescriptionChange(formatted);
-    }
+    onProfessionDescriptionChange(addAllDutiesToText(professionDescription, suggestedDuties));
   };
 
   const handleApplyCatalogSelection = () => {
@@ -109,28 +180,16 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
     const duties = archetype.levelDuties[catalogLevel] || [];
     if (duties.length === 0) return;
 
-    const formattedDuties = duties.map(d => `- ${d}`).join('\n');
-
     if (catalogTarget.type === 'main') {
       onProfessionLevelChange(catalogLevel);
-      
-      const existing = professionDescription || '';
-      const updated = existing.trim() 
-        ? existing.trim() + '\n\n' + formattedDuties 
-        : formattedDuties;
-      onProfessionDescriptionChange(updated);
+      onProfessionDescriptionChange(addAllDutiesToText(professionDescription || '', duties));
     } else if (catalogTarget.type === 'secondary' && catalogTarget.index !== undefined) {
       const idx = catalogTarget.index;
       const sec = secondaryProfessions[idx];
       if (sec) {
-        const existing = sec.description || '';
-        const updated = existing.trim() 
-          ? existing.trim() + '\n\n' + formattedDuties 
-          : formattedDuties;
-        
         handleUpdateSecondaryProfession(idx, {
           professionLevel: catalogLevel,
-          description: updated
+          description: addAllDutiesToText(sec.description || '', duties)
         });
       }
     }
@@ -212,19 +271,8 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
           />
         </div>
 
-        {/* FLOW ARROW 1 */}
-        <div className="flex items-center justify-center py-1">
-          <div className="flex items-center gap-2 text-slate-600 text-xs font-mono">
-            <span className="h-3 w-[1px] bg-slate-800"></span>
-            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
-              ↓ Ausbildungsgrad & Beherrschung
-            </span>
-            <span className="h-3 w-[1px] bg-slate-800"></span>
-          </div>
-        </div>
-
         {/* 2. BERUFSLEVEL / AUSBILDUNGSGRAD */}
-        <div className="flex flex-col gap-1.5">
+        <div className="pt-3 border-t border-slate-800/60 flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">
               2. Berufslevel / Ausbildungsgrad
@@ -234,7 +282,7 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
           <ProfessionLevelSelect
             value={professionLevel}
             onChange={onProfessionLevelChange}
-            placeholder="Berufslevel oder Ausbildungsgrad wählen..."
+            placeholder="Ausbildungsgrad oder Stufe wählen..."
           />
         </div>
 
@@ -252,107 +300,218 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
           showPromotionConditions={true}
         />
 
-        {/* FLOW ARROW 2 */}
-        <div className="flex items-center justify-center py-1">
-          <div className="flex items-center gap-2 text-slate-600 text-xs font-mono">
-            <span className="h-3 w-[1px] bg-slate-800"></span>
-            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
-              ↓ Qualifikationen & Fertigkeiten
-            </span>
-            <span className="h-3 w-[1px] bg-slate-800"></span>
-          </div>
-        </div>
-
         {/* 3. FÄHIGKEITEN */}
-        <div className="flex flex-col gap-1.5">
+        <div className="pt-3 border-t border-slate-800/60 flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">
-              3. Berufliche Fähigkeiten & Fertigkeiten
+              3. Berufliche Fähigkeiten & Handwerk
             </label>
-            <span className="text-[10px] text-slate-500 font-medium">Handwerk & Fachkenntnisse</span>
+            <span className="text-[10px] text-slate-500 font-medium">Fachkenntnisse</span>
           </div>
           <AutoExpandingTextarea
             value={craftingSkills}
             onChange={e => onCraftingSkillsChange(e.target.value)}
-            placeholder="Spezifische berufliche Fähigkeiten, Fertigkeiten, Handwerk und Fachkenntnisse"
-            className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[65px]"
+            placeholder="Spezifische Fertigkeiten, handwerkliche Techniken und Fachkenntnisse eintragen"
+            className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[60px]"
           />
         </div>
 
-        {/* FLOW ARROW 3 */}
-        <div className="flex items-center justify-center py-1">
-          <div className="flex items-center gap-2 text-slate-600 text-xs font-mono">
-            <span className="h-3 w-[1px] bg-slate-800"></span>
-            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
-              ↓ Position & Rang
-            </span>
-            <span className="h-3 w-[1px] bg-slate-800"></span>
-          </div>
-        </div>
-
         {/* 4. POSITION */}
-        <div className="flex flex-col gap-1.5">
+        <div className="pt-3 border-t border-slate-800/60 flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">
-              4. Position, Titel & Rang
+              4. Betriebliche Position, Titel & Rang
             </label>
-            <span className="text-[10px] text-slate-500 font-medium">Funktion in Betrieb / Gilde</span>
+            <span className="text-[10px] text-slate-500 font-medium">Funktion in Betrieb oder Organisation</span>
           </div>
           <input
             type="text"
             value={jobTitle}
             onChange={e => onJobTitleChange(e.target.value)}
-            placeholder="Position, Titel, Rang oder Funktion in Betrieb oder Organisation"
+            placeholder="Position, Amt, Titel oder Rangbezeichnung"
             className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-medium"
           />
         </div>
 
-        {/* FLOW ARROW 4 */}
-        <div className="flex items-center justify-center py-1">
-          <div className="flex items-center gap-2 text-slate-600 text-xs font-mono">
-            <span className="h-3 w-[1px] bg-slate-800"></span>
-            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">
-              ↓ Aufgaben & Pflichten
-            </span>
-            <span className="h-3 w-[1px] bg-slate-800"></span>
+        {/* 5. BEFUGNISSE & HANDLUNGSRECHTE */}
+        {onAuthoritiesChange && (
+          <div className="pt-3 border-t border-slate-800/60 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider block">
+                  5. Befugnisse & Weisungsrechte
+                </label>
+                <span className="text-[10px] text-slate-500 font-medium">Entscheidungsrechte im Wirtschafts- und Managementsystem</span>
+              </div>
+              {authorities.length > 0 && (
+                <span className="text-[10px] text-amber-400 font-mono font-medium">
+                  {authorities.length} zugewiesen
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+              {STANDARD_AUTHORITIES.map(auth => {
+                const has = authorities.includes(auth);
+                return (
+                  <button
+                    key={auth}
+                    type="button"
+                    onClick={() => {
+                      const next = has
+                        ? authorities.filter(a => a !== auth)
+                        : [...authorities, auth];
+                      onAuthoritiesChange(next);
+                    }}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-medium border text-left flex items-center justify-between transition cursor-pointer ${
+                      has
+                        ? 'bg-amber-950/20 border-amber-500/40 text-amber-200'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    <span className="truncate">{auth}</span>
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase shrink-0 ${has ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-900 text-slate-600'}`}>
+                      {has ? 'Aktiv' : 'Aus'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* 5. VERANTWORTLICHKEITEN */}
-        <div className="flex flex-col gap-1.5">
+        {/* 6. AUFGABEN, PFLICHTEN & ARBEITSALLTAG */}
+        <div className="pt-3 border-t border-slate-800/60 flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">
-              5. Verantwortlichkeiten & Arbeitsalltag
-            </label>
-            <span className="text-[10px] text-slate-500 font-medium">Tägliche Pflichten</span>
+            <div>
+              <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">
+                {onAuthoritiesChange ? '6.' : '5.'} Aufgaben, Pflichten & Arbeitsalltag
+              </label>
+              <span className="text-[10px] text-slate-500 font-medium block">
+                Tägliche Routine, Pflichten und Arbeitsabläufe
+              </span>
+            </div>
+            {dutyLineCount > 0 && (
+              <span className="text-[10px] text-slate-400 font-mono bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                {dutyLineCount} {dutyLineCount === 1 ? 'Eintrag' : 'Einträge'}
+              </span>
+            )}
           </div>
+
           <AutoExpandingTextarea
             value={professionDescription}
             onChange={e => onProfessionDescriptionChange(e.target.value)}
-            placeholder="Beschreibung der täglichen beruflichen Aufgaben, Pflichten und Verantwortungsbereiche"
-            className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[70px]"
+            placeholder="Beschreibung der täglichen Aufgaben, Pflichten und Arbeitsabläufe"
+            className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner min-h-[72px]"
           />
 
-          {/* Live-Vorschläge für Aufgaben & Pflichten */}
-          {profession && professionLevel && suggestedDuties.length > 0 && (
-            <div className="bg-slate-950/40 border border-slate-800/60 rounded-xl p-3.5 space-y-2 mt-1">
-              <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                <span>Vorgeschlagene Aufgaben für {profession} ({professionLevel})</span>
-                <button
-                  type="button"
-                  onClick={handleApplyDuties}
-                  className="text-[10px] text-amber-500 hover:text-amber-400 hover:underline transition-all font-bold cursor-pointer uppercase tracking-wider"
-                >
-                  In Arbeitsalltag übernehmen
-                </button>
-              </div>
-              <ul className="list-disc list-inside space-y-1 text-xs text-slate-400 leading-normal">
-                {suggestedDuties.map((duty, idx) => (
-                  <li key={idx} className="marker:text-slate-600 pl-1">
-                    {duty}
-                  </li>
-                ))}
-              </ul>
+          {/* VORSCHLÄGE & AUFGABEN-MODULE */}
+          {(suggestedDuties.length > 0 || authorityDuties.length > 0) && (
+            <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3.5 space-y-3 mt-1">
+              {/* Vorgeschlagene Aufgaben aus Beruf & Ausbildungsgrad */}
+              {suggestedDuties.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    <span>Vorschläge für {profession} ({professionLevel})</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (allSuggestedInText) {
+                          onProfessionDescriptionChange(removeAllDutiesFromText(professionDescription, suggestedDuties));
+                        } else {
+                          onProfessionDescriptionChange(addAllDutiesToText(professionDescription, suggestedDuties));
+                        }
+                      }}
+                      className="text-[10px] text-amber-500 hover:text-amber-400 transition font-bold cursor-pointer uppercase tracking-wider"
+                    >
+                      {allSuggestedInText ? 'Alle entfernen' : 'Alle übernehmen'}
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {suggestedDuties.map((duty, idx) => {
+                      const active = isDutyInText(professionDescription, duty);
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => onProfessionDescriptionChange(toggleDutyInText(professionDescription, duty))}
+                          className={`w-full p-2.5 rounded-xl text-xs text-left border flex items-center justify-between gap-3 transition cursor-pointer ${
+                            active
+                              ? 'bg-amber-950/20 border-amber-500/40 text-amber-200'
+                              : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          <span className="leading-snug">{duty}</span>
+                          <span
+                            className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider shrink-0 transition ${
+                              active
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-slate-800 text-slate-400 border border-slate-700'
+                            }`}
+                          >
+                            {active ? 'Übernommen' : '+ Hinzufügen'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Aufgaben aus zugewiesenen Befugnissen */}
+              {authorityDuties.length > 0 && (
+                <div className={`space-y-2 ${suggestedDuties.length > 0 ? 'pt-3 border-t border-slate-800/70' : ''}`}>
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    <span>Aufgaben aus Befugnissen ({authorityDuties.length})</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allAuthDutyTexts = authorityDuties.map(a => a.duty);
+                        if (allAuthoritiesInText) {
+                          onProfessionDescriptionChange(removeAllDutiesFromText(professionDescription, allAuthDutyTexts));
+                        } else {
+                          onProfessionDescriptionChange(addAllDutiesToText(professionDescription, allAuthDutyTexts));
+                        }
+                      }}
+                      className="text-[10px] text-amber-500 hover:text-amber-400 transition font-bold cursor-pointer uppercase tracking-wider"
+                    >
+                      {allAuthoritiesInText ? 'Alle entfernen' : 'Alle übernehmen'}
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {authorityDuties.map(({ auth, duty }, idx) => {
+                      const active = isDutyInText(professionDescription, duty);
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => onProfessionDescriptionChange(toggleDutyInText(professionDescription, duty))}
+                          className={`w-full p-2.5 rounded-xl text-xs text-left border flex items-center justify-between gap-3 transition cursor-pointer ${
+                            active
+                              ? 'bg-amber-950/20 border-amber-500/40 text-amber-200'
+                              : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 leading-snug">
+                            <span className="text-[9px] font-mono text-amber-400/90 uppercase tracking-wide bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 shrink-0">
+                              {auth}
+                            </span>
+                            <span>{duty}</span>
+                          </div>
+                          <span
+                            className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase tracking-wider shrink-0 transition ${
+                              active
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-slate-800 text-slate-400 border border-slate-700'
+                            }`}
+                          >
+                            {active ? 'Übernommen' : '+ Hinzufügen'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -491,34 +650,69 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
                     />
 
                     {/* Live-Vorschläge für Nebenberuf */}
-                    {sec.profession && sec.professionLevel && (
-                      <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-2.5 space-y-1.5 mt-1.5">
-                        <div className="flex items-center justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wide">
-                          <span>Vorgeschlagene Aufgaben</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const duties = getDutiesForProfessionAndLevel(sec.profession || '', sec.professionLevel || '');
-                              if (duties.length === 0) return;
-                              const formatted = duties.map(d => `- ${d}`).join('\n');
-                              const existing = sec.description || '';
-                              const updated = existing.trim() ? existing.trim() + '\n\n' + formatted : formatted;
-                              handleUpdateSecondaryProfession(idx, { description: updated });
-                            }}
-                            className="text-[9px] text-amber-500 hover:text-amber-400 hover:underline font-bold cursor-pointer uppercase tracking-wider"
-                          >
-                            Übernehmen
-                          </button>
+                    {sec.profession && sec.professionLevel && (() => {
+                      const secDuties = getDutiesForProfessionAndLevel(sec.profession || '', sec.professionLevel || '');
+                      if (secDuties.length === 0) return null;
+                      const secDesc = sec.description || '';
+                      const allSecInText = secDuties.every(d => isDutyInText(secDesc, d));
+
+                      return (
+                        <div className="bg-slate-900/50 border border-slate-800/70 rounded-xl p-2.5 space-y-2 mt-1.5">
+                          <div className="flex items-center justify-between text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                            <span>Vorschläge für {sec.profession} ({sec.professionLevel})</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (allSecInText) {
+                                  handleUpdateSecondaryProfession(idx, {
+                                    description: removeAllDutiesFromText(secDesc, secDuties)
+                                  });
+                                } else {
+                                  handleUpdateSecondaryProfession(idx, {
+                                    description: addAllDutiesToText(secDesc, secDuties)
+                                  });
+                                }
+                              }}
+                              className="text-[9px] text-amber-500 hover:text-amber-400 transition font-bold cursor-pointer uppercase tracking-wider"
+                            >
+                              {allSecInText ? 'Alle entfernen' : 'Alle übernehmen'}
+                            </button>
+                          </div>
+                          <div className="space-y-1">
+                            {secDuties.map((duty, dIdx) => {
+                              const active = isDutyInText(secDesc, duty);
+                              return (
+                                <button
+                                  key={dIdx}
+                                  type="button"
+                                  onClick={() => {
+                                    handleUpdateSecondaryProfession(idx, {
+                                      description: toggleDutyInText(secDesc, duty)
+                                    });
+                                  }}
+                                  className={`w-full p-2 rounded-lg text-[11px] text-left border flex items-center justify-between gap-2 transition cursor-pointer ${
+                                    active
+                                      ? 'bg-amber-950/20 border-amber-500/40 text-amber-200'
+                                      : 'bg-slate-950 border-slate-800/80 text-slate-300 hover:border-slate-700 hover:text-white'
+                                  }`}
+                                >
+                                  <span className="leading-snug">{duty}</span>
+                                  <span
+                                    className={`text-[8px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider shrink-0 transition ${
+                                      active
+                                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                                    }`}
+                                  >
+                                    {active ? 'Übernommen' : '+ Hinzufügen'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-400 leading-normal">
-                          {getDutiesForProfessionAndLevel(sec.profession || '', sec.professionLevel || '').map((duty, dIdx) => (
-                            <li key={dIdx} className="marker:text-slate-600 pl-0.5">
-                              {duty}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

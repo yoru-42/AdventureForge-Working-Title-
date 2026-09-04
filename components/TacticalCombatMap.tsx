@@ -1,6 +1,19 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PlacedCombatObject, Territory } from '../types';
+import { 
+  PlacedCombatObject, 
+  Territory, 
+  TacticalFormation, 
+  TacticalDirection, 
+  TacticalEntity, 
+  TacticalGroup, 
+  CombatState 
+} from '../types';
+import { 
+  spawnTacticalGroup, 
+  changeTacticalGroupFormation, 
+  splitTacticalGroup 
+} from '../utils/tacticalEngine';
 import { formatDisplayLocationName } from '../utils/mapUtils';
 
 interface NPC {
@@ -44,6 +57,32 @@ interface TacticalCombatMapProps {
   isCombatActive: boolean;
   opponents: Opponent[];
 }
+
+const TACTICAL_FORMATIONS: { id: TacticalFormation; label: string }[] = [
+  { id: 'line', label: 'Linie' },
+  { id: 'column', label: 'Kolonne' },
+  { id: 'wedge', label: 'Keil' },
+  { id: 'square', label: 'Quadrat' },
+  { id: 'circle', label: 'Kreis' },
+  { id: 'loose', label: 'Locker' },
+  { id: 'swarm', label: 'Schwarm' },
+  { id: 'spread', label: 'Verteilt' },
+  { id: 'defensive_line', label: 'Verteidigung' },
+  { id: 'archer_line', label: 'Schützen' },
+  { id: 'wall', label: 'Mauer' },
+  { id: 'scattered', label: 'Gestreut' }
+];
+
+const TACTICAL_DIRECTIONS: { id: TacticalDirection; label: string }[] = [
+  { id: 'north', label: 'Norden' },
+  { id: 'south', label: 'Süden' },
+  { id: 'east', label: 'Osten' },
+  { id: 'west', label: 'Westen' },
+  { id: 'northeast', label: 'Nordost' },
+  { id: 'northwest', label: 'Nordwest' },
+  { id: 'southeast', label: 'Südost' },
+  { id: 'southwest', label: 'Südwest' }
+];
 
 export const isBuildingObject = (obj: any): boolean => {
   if (!obj) return false;
@@ -1482,9 +1521,9 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
   opponents: rawOpponents
 }) => {
   const loreDatabase: LoreNode[] = adventure.loreDatabase || [];
-  const combatState = adventure.combatState || {};
+  const combatState: CombatState = adventure.combatState || {};
   const gridWidth = combatState.gridWidth || 30;
-  const gridHeight = combatState.gridHeight || 30;
+  const gridHeight = combatState.gridHeight || 20;
   const maxX = gridWidth - 1;
   const maxY = gridHeight - 1;
 
@@ -1717,10 +1756,141 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
   // References for tracking previous state to fire changes
   const prevMsgCountRef = useRef(messages.length);
 
+  // Tactical Formations & Group Management State
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  const tacticalEntities: Record<string, TacticalEntity> = combatState.tacticalEntities || {};
+  const tacticalGroups: Record<string, TacticalGroup> = combatState.tacticalGroups || {};
+
+  const allTacticalGroups = Object.values(tacticalGroups);
+  const activeTacticalGroup = (selectedGroupId && tacticalGroups[selectedGroupId]) 
+    ? tacticalGroups[selectedGroupId] 
+    : allTacticalGroups[0] || null;
+
+  // Auto-spawn tactical entities for opponents with count > 1 (e.g. 50 Goblins)
+  useEffect(() => {
+    if (!isCombatActive) return;
+    const currentGroups = combatState.tacticalGroups || {};
+    let currentState: CombatState = { ...combatState };
+    let hasChanges = false;
+
+    opponents.forEach(opp => {
+      if (opp.count && opp.count > 1) {
+        const cleanName = opp.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+        const exists = Object.values(currentGroups).some(g => {
+          const gClean = g.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+          return gClean.includes(cleanName) || cleanName.includes(gClean);
+        });
+
+        if (!exists) {
+          const res = spawnTacticalGroup({
+            combatState: currentState,
+            groupName: opp.name,
+            count: opp.count,
+            formation: 'loose',
+            direction: 'south',
+            spawnSource: opp.spawnSource || 'point',
+            unitDisplayName: opp.name.replace(/\s*\d+x?$/, '').trim(),
+            baseHp: opp.hp ? Math.max(10, Math.round(opp.hp / opp.count)) : 50
+          });
+          currentState = res.updatedCombatState;
+          hasChanges = true;
+        }
+      }
+    });
+
+    if (hasChanges && onUpdateAdventure) {
+      onUpdateAdventure((prev: any) => ({
+        ...prev,
+        combatState: currentState
+      }));
+    }
+  }, [opponents, isCombatActive]);
+
+  const handleTacticalFormationSelect = (newFormation: TacticalFormation) => {
+    if (!activeTacticalGroup) return;
+    try {
+      const res = changeTacticalGroupFormation({
+        combatState,
+        groupId: activeTacticalGroup.id,
+        newFormation,
+        newDirection: activeTacticalGroup.direction || 'south'
+      });
+      onUpdateAdventure((prev: any) => ({
+        ...prev,
+        combatState: res.updatedCombatState
+      }));
+    } catch (err) {
+      console.error('Fehler beim Formations-Wechsel:', err);
+    }
+  };
+
+  const handleTacticalDirectionSelect = (newDirection: TacticalDirection) => {
+    if (!activeTacticalGroup) return;
+    try {
+      const res = changeTacticalGroupFormation({
+        combatState,
+        groupId: activeTacticalGroup.id,
+        newFormation: activeTacticalGroup.formation || 'loose',
+        newDirection
+      });
+      onUpdateAdventure((prev: any) => ({
+        ...prev,
+        combatState: res.updatedCombatState
+      }));
+    } catch (err) {
+      console.error('Fehler beim Richtungs-Wechsel:', err);
+    }
+  };
+
+  const handleTacticalSplit = (count: number = 20) => {
+    if (!activeTacticalGroup || activeTacticalGroup.unitIds.length <= count) return;
+    try {
+      const res = splitTacticalGroup({
+        combatState,
+        sourceGroupId: activeTacticalGroup.id,
+        countToSplit: count,
+        newGroupName: `${activeTacticalGroup.name} Flanke`,
+        newFormation: 'wedge',
+        newCenter: {
+          x: Math.min(gridWidth - 3, Math.max(2, (activeTacticalGroup.center?.x || 15) - 6)),
+          y: activeTacticalGroup.center?.y || 10
+        }
+      });
+      onUpdateAdventure((prev: any) => ({
+        ...prev,
+        combatState: res.updatedCombatState
+      }));
+      setSelectedGroupId(res.newGroup.id);
+    } catch (err) {
+      console.error('Fehler beim Aufteilen des Verbands:', err);
+    }
+  };
+
+  const handleQuickSpawnGoblins = () => {
+    try {
+      const res = spawnTacticalGroup({
+        combatState,
+        groupName: 'Goblin-Horde',
+        count: 50,
+        formation: 'loose',
+        direction: 'south',
+        unitDisplayName: 'Goblin'
+      });
+      onUpdateAdventure((prev: any) => ({
+        ...prev,
+        combatState: res.updatedCombatState
+      }));
+      setSelectedGroupId(res.group.id);
+    } catch (err) {
+      console.error('Fehler beim Aufstellen der Test-Horde:', err);
+    }
+  };
+
   // --- MINI-MAP PROCEDURAL RPG-MAKER BACKGROUND GRID ---
   const miniMapTiles = useMemo(() => {
     const gridWidth = combatState.gridWidth || 30;
-    const gridHeight = combatState.gridHeight || 30;
+    const gridHeight = combatState.gridHeight || 20;
     
     // Seed and details
     const worldTitle = adventure.worldTitle || adventure.worldSetting?.title || '';
@@ -3048,6 +3218,87 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
               </button>
             </div>
 
+            {/* TACTICAL FORMATION HUD BAR */}
+            <div className="absolute top-2 right-2 z-30 bg-slate-950/90 border border-slate-700/80 rounded-xl px-2 py-1.5 flex items-center gap-2 backdrop-blur-md shadow-2xl max-w-[92vw] overflow-x-auto select-none">
+              {allTacticalGroups.length > 0 ? (
+                <>
+                  {/* Active Group Selector / Badge */}
+                  {allTacticalGroups.length > 1 ? (
+                    <select
+                      value={activeTacticalGroup?.id || ''}
+                      onChange={(e) => setSelectedGroupId(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 text-amber-300 font-bold text-[9px] rounded-lg px-2 py-1 outline-none cursor-pointer"
+                    >
+                      {allTacticalGroups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name} ({g.unitIds.length})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[9px] font-bold">
+                      <span>{activeTacticalGroup?.name}</span>
+                      <span className="font-mono text-[8px] opacity-80">({activeTacticalGroup?.unitIds.length})</span>
+                    </div>
+                  )}
+
+                  {/* Formation Selector Dropdown */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-[8px] uppercase tracking-wider text-slate-400 font-bold">Formation:</span>
+                    <select
+                      value={activeTacticalGroup?.formation || 'loose'}
+                      onChange={(e) => handleTacticalFormationSelect(e.target.value as TacticalFormation)}
+                      className="bg-slate-900 border border-amber-500/50 text-amber-200 font-bold text-[9px] rounded-lg px-2 py-1 outline-none cursor-pointer"
+                    >
+                      {TACTICAL_FORMATIONS.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Direction Selector Dropdown */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-[8px] uppercase tracking-wider text-slate-400 font-bold">Richtung:</span>
+                    <select
+                      value={activeTacticalGroup?.direction || 'south'}
+                      onChange={(e) => handleTacticalDirectionSelect(e.target.value as TacticalDirection)}
+                      className="bg-slate-900 border border-slate-700 text-slate-200 font-bold text-[9px] rounded-lg px-1.5 py-1 outline-none cursor-pointer"
+                    >
+                      {TACTICAL_DIRECTIONS.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Split Button if >= 10 units */}
+                  {activeTacticalGroup && activeTacticalGroup.unitIds.length >= 10 && (
+                    <button
+                      type="button"
+                      onClick={() => handleTacticalSplit(Math.min(20, Math.floor(activeTacticalGroup.unitIds.length / 2)))}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[8.5px] font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap"
+                      title="Spaltet Einheiten ab, um eine Flanke zu bilden"
+                    >
+                      Aufteilen
+                    </button>
+                  )}
+                </>
+              ) : (
+                /* Quick test spawn horde button */
+                <button
+                  type="button"
+                  onClick={handleQuickSpawnGoblins}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-slate-950 text-[9px] font-black rounded-lg transition-all cursor-pointer whitespace-nowrap shadow-sm"
+                  title="Spawnt eine Test-Horde mit 50 Einheiten im Raster"
+                >
+                  50 Goblins aufstellen
+                </button>
+              )}
+            </div>
+
             {/* Time of Day Overlay */}
             {combatState.timeOfDay && combatState.timeOfDay !== 'day' && (
               <div className={`absolute inset-0 z-10 pointer-events-none transition-opacity duration-1000 ${
@@ -3309,6 +3560,62 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
                 );
               })}
 
+              {/* RENDER INDIVIDUAL TACTICAL SQUAD ENTITIES (FORMATIONS) */}
+              {Object.values(tacticalEntities).map((entity) => {
+                const group = entity.groupId ? tacticalGroups[entity.groupId] : null;
+                const isSelected = selectedToken === entity.id;
+                const pos = entity.position;
+                if (!pos) return null;
+
+                const isSelectedGroup = activeTacticalGroup?.id === entity.groupId;
+
+                return (
+                  <motion.div
+                    key={`tactical-entity-${entity.id}`}
+                    style={{
+                      left: `${pos.x * (100 / gridWidth)}%`,
+                      top: `${pos.y * (100 / gridHeight)}%`,
+                      width: `${100 / gridWidth}%`,
+                      height: `${100 / gridHeight}%`
+                    }}
+                    className="absolute p-0.5 z-20 flex items-center justify-center pointer-events-auto"
+                    layout
+                    transition={{ type: 'spring', stiffness: 220, damping: 22 }}
+                  >
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedToken(isSelected ? null : entity.id);
+                        if (entity.groupId) setSelectedGroupId(entity.groupId);
+                      }}
+                      className={`w-full h-full rounded-full flex items-center justify-center text-[9px] sm:text-[11px] font-bold border cursor-pointer select-none relative group transition-all duration-300 ${
+                        isSelected 
+                          ? 'scale-125 ring-4 ring-amber-500/50 z-30 border-amber-400 bg-red-600 shadow-[0_0_14px_rgba(245,158,11,0.9)]' 
+                          : isSelectedGroup
+                            ? 'ring-2 ring-red-400/40 bg-red-700/90 border-red-400 hover:scale-115'
+                            : 'bg-red-800/80 border-red-500/80 hover:scale-110'
+                      }`}
+                    >
+                      {getCharacterSprite(entity.displayName, 'enemy', selectedSetting)}
+
+                      {/* Index badge */}
+                      <span className="absolute -bottom-1 -right-1 bg-slate-950/90 text-amber-300 font-mono text-[6.5px] px-0.5 py-0.1 rounded border border-slate-700 pointer-events-none">
+                        {entity.assignedSlotIndex !== undefined ? entity.assignedSlotIndex + 1 : ''}
+                      </span>
+
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-[8.5px] font-extrabold shadow-lg pointer-events-none whitespace-nowrap border scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100 transition-all z-50 duration-200 bg-slate-950 text-red-200 border-red-800">
+                        {entity.displayName} #{entity.assignedSlotIndex !== undefined ? entity.assignedSlotIndex + 1 : ''} {group ? `• ${group.name} [${group.formation || 'Locker'}]` : ''} ({pos.x}, {pos.y})
+                      </div>
+
+                      {isSelected && (
+                        <span className="absolute -inset-0.5 rounded-full animate-ping border border-amber-500 opacity-70"></span>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
+
               {/* RENDER TOKENS FOR CHARACTERS */}
               {Object.entries(initializedPositions).map(([name, pos]) => {
                 const isPlayer = name === playerName;
@@ -3320,6 +3627,16 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
                 const isSelected = selectedToken === name;
 
                 if (!pos || (!isPlayer && !isCompanion && !isEnemy)) return null;
+
+                // If this enemy squad already has individual tactical entities rendered, skip the redundant single token
+                const hasTacticalRepresentation = Object.values(tacticalGroups).some(g => {
+                  const gName = g.name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+                  const nName = name.toLowerCase().replace(/[^a-z0-9]+/g, '');
+                  return gName.includes(nName) || nName.includes(gName);
+                });
+                if (hasTacticalRepresentation && !isPlayer && !isCompanion) {
+                  return null;
+                }
 
                 // Color themes for different token allegiances
                 let tokenColor = 'bg-slate-900 border-slate-700 text-slate-300';

@@ -69,12 +69,12 @@ export const HoldingPositionTab: React.FC<HoldingPositionTabProps> = ({
         {myRole ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Arbeitsbereich / Quartier</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Arbeitsbereich / Aufenthaltsort</label>
               <input
                 type="text"
                 value={myRole.workplaceArea || ''}
                 onChange={e => handleUpdateMyRole({ workplaceArea: e.target.value })}
-                placeholder="z.B. Meisterstube, Schankraum"
+                placeholder="Räumlichkeit oder Arbeitsbereich"
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-white outline-none focus:border-amber-500"
               />
             </div>
@@ -85,13 +85,13 @@ export const HoldingPositionTab: React.FC<HoldingPositionTabProps> = ({
                 type="text"
                 value={myRole.superiorRole || ''}
                 onChange={e => handleUpdateMyRole({ superiorRole: e.target.value })}
-                placeholder="z.B. Eigentümer, Gildenrat (oder leer für Höchstrangig)"
+                placeholder="Rolle oder Person der nächsthöheren Instanz"
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-xs text-slate-200 outline-none focus:border-amber-500"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Gehalt / Entnahme</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Vergütung / Lohn</label>
               <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-xl p-1.5 px-3">
                 <input
                   type="number"
@@ -101,6 +101,16 @@ export const HoldingPositionTab: React.FC<HoldingPositionTabProps> = ({
                 />
                 <span className="text-amber-400 text-xs font-bold">Gold</span>
               </div>
+            </div>
+
+            <div className="space-y-1 md:col-span-3">
+              <label className="text-[10px] font-bold text-slate-400 uppercase">Aufgaben & Verantwortungsbereiche</label>
+              <AutoExpandingTextarea
+                value={(myRole.responsibilities || []).join('\n')}
+                onChange={e => handleUpdateMyRole({ responsibilities: e.target.value.split('\n').filter(Boolean) })}
+                placeholder="Tägliche Aufgaben, Pflichten und Arbeitsabläufe in dieser Rolle (eine Aufgabe pro Zeile)"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500 min-h-[50px]"
+              />
             </div>
           </div>
         ) : (

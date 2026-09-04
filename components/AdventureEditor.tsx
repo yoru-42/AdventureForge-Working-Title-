@@ -1487,12 +1487,18 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       setPlayer(prev => {
         let generatedAbilities = prev.abilities || [];
         if (data.abilities && Array.isArray(data.abilities)) {
+          const defaultPsId = activePowerSource?.id || playerPowerSourcesList[0]?.id || 'ps-1';
           const mappedAbilities = data.abilities.map((abil: any, aIndex: number) => {
             const techniques = abil.techniques || (abil.techniqueList ? abil.techniqueList.map((t: any) => t.name).join(', ') : '');
+            let cat = abil.category;
+            if (!cat || cat === 'Standard' || cat === 'Kernfähigkeit') {
+              cat = 'Techniken';
+            }
             return {
               id: `${Date.now()}-${aIndex}-${Math.random().toString(36).substr(2, 5)}`,
               name: abil.name || 'Fähigkeit',
-              category: abil.category || 'Standard',
+              category: cat,
+              powerSourceId: abil.powerSourceId || defaultPsId,
               source: abil.source || data.powerSource || '',
               cost: abil.cost || data.powerCost || '',
               description: abil.description || abil.skills || '',
@@ -5439,7 +5445,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                                     {/* Effekt */}
                                     <div className="flex flex-col gap-1">
                                       <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Effekt</label>
-                                      <textarea 
+                                      <AutoExpandingTextarea 
                                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white min-h-[60px] text-xs outline-none focus:border-amber-500" 
                                         placeholder="z.B. Erhöht die Verteidigung um 15%..." 
                                         value={ability.description || ''} 
@@ -5468,21 +5474,23 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                                       />
                                     </div>
                                   </div>
-                                ) : (activeAbilityTab !== 'Techniken' && activeAbilityTab !== 'Ultimative Techniken') ? (
+                                ) : (
                                   <div className="grid grid-cols-1 gap-3">
                                     {/* Name */}
                                     <div className="flex flex-col gap-1">
-                                      <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Name der Kraft / Fähigkeit</label>
+                                      <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">
+                                        {activeAbilityTab === 'Transformationen' ? 'Name der Verwandlung / Form' : 'Name der Fähigkeit / Technik'}
+                                      </label>
                                       <input 
                                         type="text"
                                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 font-semibold"
-                                        placeholder="z.B. Feuerball, Eiserner Wille, Heilsame Aura..."
+                                        placeholder={activeAbilityTab === 'Transformationen' ? 'z.B. Reine Esper-Form, Kinder-Form...' : 'z.B. Feuerball, Elementarmanipulation...'}
                                         value={ability.name || ''}
                                         onChange={e => {
                                           const val = e.target.value;
                                           setPlayer({
                                             ...player,
-                                            abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, name: val } : a)
+                                            abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, name: val, transformName: activeAbilityTab === 'Transformationen' ? (a.transformName || val) : a.transformName } : a)
                                           });
                                         }}
                                       />
@@ -5490,10 +5498,12 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
                                     {/* Beschreibung */}
                                     <div className="flex flex-col gap-1">
-                                      <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Beschreibung / Effekt</label>
-                                      <textarea 
+                                      <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">
+                                        {activeAbilityTab === 'Transformationen' ? 'Funktionsweise, Auslöser & Grenzen' : 'Beschreibung / Effekt'}
+                                      </label>
+                                      <AutoExpandingTextarea 
                                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white min-h-[60px] text-xs outline-none focus:border-amber-500" 
-                                        placeholder="z.B. Erschafft ein mächtiges Schutzschild oder verringert den erlittenen Schaden um 20%..." 
+                                        placeholder={activeAbilityTab === 'Transformationen' ? 'z.B. Zeitlich begrenzte Nutzung durch hohen Energieverbrauch, verwandelt sich in Kinder-Form bei Erschöpfung...' : 'z.B. Erschafft ein mächtiges Schutzschild oder fügt Flächenschaden zu...'} 
                                         value={ability.description || ''} 
                                         onChange={e => setPlayer({
                                           ...player,
@@ -5503,239 +5513,385 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                                     </div>
 
                                     {activeAbilityTab === 'Transformationen' && (
-                                      <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-slate-800/60">
-                                        <label className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                                          <i className="fa-solid fa-masks-theater text-xs"></i>
-                                          <span>KI-Wahrnehmung & Öffentliche Identität</span>
-                                        </label>
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setPlayer({
-                                                ...player,
-                                                abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformIdentityPerception: 'bekannt' } : a)
-                                              });
-                                            }}
-                                            className={`p-2 rounded-lg border text-left transition-all text-xs cursor-pointer ${
-                                              (ability.transformIdentityPerception || 'bekannt') === 'bekannt'
-                                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold ring-1 ring-emerald-500/30'
-                                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
-                                            }`}
-                                          >
-                                            <div className="font-extrabold flex items-center gap-1">
-                                              <span>👤</span> Bekannt
-                                            </div>
-                                            <p className="text-[9.5px] font-normal text-slate-400 mt-0.5">
-                                              NPCs erkennen {player.name || 'den Spieler'}.
-                                            </p>
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setPlayer({
-                                                ...player,
-                                                abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformIdentityPerception: 'getrennt' } : a)
-                                              });
-                                            }}
-                                            className={`p-2 rounded-lg border text-left transition-all text-xs cursor-pointer ${
-                                              (ability.transformIdentityPerception || 'bekannt') === 'getrennt'
-                                                ? 'bg-purple-500/20 border-purple-500 text-purple-300 font-bold ring-1 ring-purple-500/30'
-                                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
-                                            }`}
-                                          >
-                                            <div className="font-extrabold flex items-center gap-1">
-                                              <span>🎭</span> Getrennt
-                                            </div>
-                                            <p className="text-[9.5px] font-normal text-slate-400 mt-0.5">
-                                              Fremde Geheimidentität / Alter Ego.
-                                            </p>
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              setPlayer({
-                                                ...player,
-                                                abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformIdentityPerception: 'koerpertausch' } : a)
-                                              });
-                                            }}
-                                            className={`p-2 rounded-lg border text-left transition-all text-xs cursor-pointer ${
-                                              (ability.transformIdentityPerception || 'bekannt') === 'koerpertausch'
-                                                ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold ring-1 ring-amber-500/30'
-                                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
-                                            }`}
-                                          >
-                                            <div className="font-extrabold flex items-center gap-1">
-                                              <span>🔄</span> Körpertausch
-                                            </div>
-                                            <p className="text-[9.5px] font-normal text-slate-400 mt-0.5">
-                                              Codex-Charakter übertragen.
-                                            </p>
-                                          </button>
-                                        </div>
-
-                                        {/* KÖRPERTAUSCH CODEX AUSWAHL IM ABILITY EDITOR */}
-                                        {(ability.transformIdentityPerception || 'bekannt') === 'koerpertausch' && (
-                                          <div className="mt-2 p-2.5 bg-amber-950/20 border border-amber-500/30 rounded-lg space-y-2 text-xs">
-                                            <div className="flex items-center justify-between gap-2">
-                                              <label className="text-[10px] font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1">
-                                                <span>📚</span> Codex-Charakter auswählen:
-                                              </label>
-                                              {ability.transformSwappedCharacterName && (
-                                                <span className="text-[9.5px] text-amber-400 font-bold">
-                                                  Aktuell: {ability.transformSwappedCharacterName}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <select
-                                              value={ability.transformSwappedCharacterId || ''}
-                                              onChange={(e) => {
-                                                const selectedId = e.target.value;
-                                                const targetCodex = (loreDatabase || []).find((l: any) => (l.id || `codex-${l.title}`) === selectedId);
-                                                const targetNpc = (npcs || []).find((n: any) => (n.id || `npc-${n.name}`) === selectedId);
-                                                const target = targetCodex || targetNpc;
-
-                                                if (target) {
-                                                  const d = (target as any).details || (target as any).appearance || target;
-                                                  const targetName = (target as any).title || (target as any).name || 'Charakter';
-                                                  const targetGender = d.gender || 'Weiblich';
-                                                  const targetRace = d.race || 'Mensch';
-                                                  const targetHeight = d.height ? String(d.height) : '170';
-                                                  const targetBuild = d.build || 'Schlank';
-                                                  const targetCup = d.cupSize || '-';
-
-                                                  setPlayer({
-                                                    ...player,
-                                                    abilities: currentAbilities.map(a => a.id === ability.id ? {
-                                                      ...a,
-                                                      transformIdentityPerception: 'koerpertausch',
-                                                      transformSwappedCharacterId: selectedId,
-                                                      transformSwappedCharacterName: targetName,
-                                                      transformSwappedCharacterSource: targetCodex ? 'codex' : 'npc',
-                                                      transformName: `Körpertausch: ${targetName}`,
-                                                      transformGender: targetGender,
-                                                      transformRace: targetRace,
-                                                      transformHeight: targetHeight,
-                                                      transformBuild: targetBuild,
-                                                      transformCupSize: targetCup,
-                                                      transformHairColor: d.hairColor || '',
-                                                      transformEyeColor: d.eyeColor || '',
-                                                      transformOutfit: d.outfit || '',
-                                                      transformLooks: d.looks || ''
-                                                    } : a)
-                                                  });
-
-                                                  const charAName = player.name || 'Hauptcharakter';
-                                                  const charAId = (player as any).id || 'player_id';
-                                                  const reciprocalTransId = `trans_swap_reciprocal_${charAId || charAName.replace(/\s+/g, '_')}`;
-                                                  const reciprocalTrans: any = {
-                                                    id: reciprocalTransId,
-                                                    name: `Körpertausch: ${charAName}`,
-                                                    category: 'Transformationen',
-                                                    transformName: `Körpertausch: ${charAName}`,
-                                                    transformIdentityPerception: 'koerpertausch',
-                                                    transformSwappedCharacterId: charAId,
-                                                    transformSwappedCharacterName: charAName,
-                                                    transformGender: player.appearance?.gender || (player as any).gender || 'Weiblich',
-                                                    transformRace: player.appearance?.race || (player as any).race || 'Mensch',
-                                                    transformRaceFeatures: player.appearance?.raceFeatures || '',
-                                                    transformAge: player.appearance?.age || (player as any).age || '20',
-                                                    transformBuild: player.appearance?.build || (player as any).build || 'Schlank',
-                                                    transformHeight: player.appearance?.height || (player as any).height || '170',
-                                                    transformMeasurements: player.appearance?.measurements || '',
-                                                    transformCupSize: player.appearance?.cupSize || (player as any).cupSize || '-',
-                                                    transformHairColor: player.appearance?.hairColor || (player as any).hairColor || '',
-                                                    transformEyeColor: player.appearance?.eyeColor || (player as any).eyeColor || '',
-                                                    transformOutfit: player.appearance?.outfit || (player as any).outfit || '',
-                                                    transformLooks: player.appearance?.looks || (player as any).looks || '',
-                                                    transformRole: player.role || ''
-                                                  };
-
-                                                  if (targetCodex) {
-                                                    setLoreDatabase(prev => prev.map(entry => {
-                                                      if (entry.id === targetCodex.id || (entry.title && entry.title.trim().toLowerCase() === targetName.trim().toLowerCase())) {
-                                                        const entryDetails = entry.details || {};
-                                                        const existingAbilities = entryDetails.abilities || [];
-                                                        let newAbilities = [...existingAbilities];
-                                                        const idx = newAbilities.findIndex((a: any) => 
-                                                          a.id === reciprocalTransId || 
-                                                          a.name === `Körpertausch: ${charAName}` ||
-                                                          (a.category === 'Transformationen' && a.transformSwappedCharacterName?.trim().toLowerCase() === charAName.trim().toLowerCase())
-                                                        );
-                                                        if (idx >= 0) {
-                                                          newAbilities[idx] = { ...newAbilities[idx], ...reciprocalTrans };
-                                                        } else {
-                                                          newAbilities.push(reciprocalTrans);
-                                                        }
-                                                        return {
-                                                          ...entry,
-                                                          details: {
-                                                            ...entryDetails,
-                                                            abilities: newAbilities
-                                                          }
-                                                        };
-                                                      }
-                                                      return entry;
-                                                    }));
-                                                  } else if (targetNpc) {
-                                                    setNpcs(prev => prev.map(npc => {
-                                                      if (npc.id === targetNpc.id || (npc.name && npc.name.trim().toLowerCase() === targetName.trim().toLowerCase())) {
-                                                        const existingAbilities = npc.abilities || [];
-                                                        let newAbilities = [...existingAbilities];
-                                                        const idx = newAbilities.findIndex((a: any) => 
-                                                          a.id === reciprocalTransId || 
-                                                          a.name === `Körpertausch: ${charAName}`
-                                                        );
-                                                        if (idx >= 0) {
-                                                          newAbilities[idx] = { ...newAbilities[idx], ...reciprocalTrans };
-                                                        } else {
-                                                          newAbilities.push(reciprocalTrans);
-                                                        }
-                                                        return {
-                                                          ...npc,
-                                                          abilities: newAbilities
-                                                        };
-                                                      }
-                                                      return npc;
-                                                    }));
-                                                  }
-                                                }
+                                      <div className="flex flex-col gap-3 mt-2 pt-2 border-t border-slate-800/60">
+                                        {/* KI-Wahrnehmung & Öffentliche Identität */}
+                                        <div className="flex flex-col gap-2">
+                                          <label className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                                            <i className="fa-solid fa-masks-theater text-xs text-amber-500"></i>
+                                            <span>KI-Wahrnehmung & Öffentliche Identität</span>
+                                          </label>
+                                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setPlayer({
+                                                  ...player,
+                                                  abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformIdentityPerception: 'bekannt' } : a)
+                                                });
                                               }}
-                                              className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 focus:border-amber-400 focus:outline-none"
+                                              className={`p-2.5 rounded-lg border text-left transition-all text-xs cursor-pointer ${
+                                                (ability.transformIdentityPerception || 'bekannt') === 'bekannt'
+                                                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold ring-1 ring-emerald-500/30'
+                                                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                                              }`}
                                             >
-                                              <option value="">-- Charakter aus Codex / NPC wählen --</option>
-                                              {player && player.name && (
-                                                <optgroup label="Nutzer / Hauptcharakter">
-                                                  <option value={(player as any).id || 'main_player_user'}>
-                                                    👤 {player.name} (Nutzer / Hauptcharakter)
-                                                  </option>
+                                              <div className="font-extrabold flex items-center gap-1.5">
+                                                <i className="fa-solid fa-user text-emerald-400"></i>
+                                                <span>Bekannt</span>
+                                              </div>
+                                              <p className="text-[9.5px] font-normal text-slate-400 mt-0.5">
+                                                NPCs erkennen {player.name || 'den Charakter'}.
+                                              </p>
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setPlayer({
+                                                  ...player,
+                                                  abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformIdentityPerception: 'getrennt' } : a)
+                                                });
+                                              }}
+                                              className={`p-2.5 rounded-lg border text-left transition-all text-xs cursor-pointer ${
+                                                (ability.transformIdentityPerception || 'bekannt') === 'getrennt'
+                                                  ? 'bg-purple-500/20 border-purple-500 text-purple-300 font-bold ring-1 ring-purple-500/30'
+                                                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                                              }`}
+                                            >
+                                              <div className="font-extrabold flex items-center gap-1.5">
+                                                <i className="fa-solid fa-masks-theater text-purple-400"></i>
+                                                <span>Getrennt</span>
+                                              </div>
+                                              <p className="text-[9.5px] font-normal text-slate-400 mt-0.5">
+                                                Geheimidentität / Unbekannte Gestalt.
+                                              </p>
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setPlayer({
+                                                  ...player,
+                                                  abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformIdentityPerception: 'koerpertausch' } : a)
+                                                });
+                                              }}
+                                              className={`p-2.5 rounded-lg border text-left transition-all text-xs cursor-pointer ${
+                                                (ability.transformIdentityPerception || 'bekannt') === 'koerpertausch'
+                                                  ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold ring-1 ring-amber-500/30'
+                                                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-900'
+                                              }`}
+                                            >
+                                              <div className="font-extrabold flex items-center gap-1.5">
+                                                <i className="fa-solid fa-arrows-rotate text-amber-400"></i>
+                                                <span>Körpertausch</span>
+                                              </div>
+                                              <p className="text-[9.5px] font-normal text-slate-400 mt-0.5">
+                                                Codex-Charakter übertragen.
+                                              </p>
+                                            </button>
+                                          </div>
+
+                                          {/* KÖRPERTAUSCH CODEX AUSWAHL */}
+                                          {(ability.transformIdentityPerception || 'bekannt') === 'koerpertausch' && (
+                                            <div className="mt-2 p-2.5 bg-amber-950/20 border border-amber-500/30 rounded-lg space-y-2 text-xs">
+                                              <div className="flex items-center justify-between gap-2">
+                                                <label className="text-[10px] font-extrabold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                                                  <i className="fa-solid fa-book-bookmark text-amber-400"></i>
+                                                  <span>Codex-Charakter auswählen:</span>
+                                                </label>
+                                                {ability.transformSwappedCharacterName && (
+                                                  <span className="text-[9.5px] text-amber-400 font-bold">
+                                                    Aktuell: {ability.transformSwappedCharacterName}
+                                                  </span>
+                                                )}
+                                              </div>
+                                              <select
+                                                value={ability.transformSwappedCharacterId || ''}
+                                                onChange={(e) => {
+                                                  const selectedId = e.target.value;
+                                                  const targetCodex = (loreDatabase || []).find((l: any) => (l.id || `codex-${l.title}`) === selectedId);
+                                                  const targetNpc = (npcs || []).find((n: any) => (n.id || `npc-${n.name}`) === selectedId);
+                                                  const target = targetCodex || targetNpc;
+
+                                                  if (target) {
+                                                    const d = (target as any).details || (target as any).appearance || target;
+                                                    const targetName = (target as any).title || (target as any).name || 'Charakter';
+                                                    const targetGender = d.gender || 'Weiblich';
+                                                    const targetRace = d.race || 'Mensch';
+                                                    const targetHeight = d.height ? String(d.height) : '170';
+                                                    const targetBuild = d.build || 'Schlank';
+                                                    const targetCup = d.cupSize || '-';
+
+                                                    setPlayer({
+                                                      ...player,
+                                                      abilities: currentAbilities.map(a => a.id === ability.id ? {
+                                                        ...a,
+                                                        transformIdentityPerception: 'koerpertausch',
+                                                        transformSwappedCharacterId: selectedId,
+                                                        transformSwappedCharacterName: targetName,
+                                                        transformSwappedCharacterSource: targetCodex ? 'codex' : 'npc',
+                                                        transformName: `Körpertausch: ${targetName}`,
+                                                        transformGender: targetGender,
+                                                        transformRace: targetRace,
+                                                        transformHeight: targetHeight,
+                                                        transformBuild: targetBuild,
+                                                        transformCupSize: targetCup,
+                                                        transformHairColor: d.hairColor || '',
+                                                        transformEyeColor: d.eyeColor || '',
+                                                        transformOutfit: d.outfit || '',
+                                                        transformLooks: d.looks || ''
+                                                      } : a)
+                                                    });
+                                                  }
+                                                }}
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 focus:border-amber-400 focus:outline-none"
+                                              >
+                                                <option value="">-- Charakter aus Codex / NPC wählen --</option>
+                                                {player && player.name && (
+                                                  <optgroup label="Nutzer / Hauptcharakter">
+                                                    <option value={(player as any).id || 'main_player_user'}>
+                                                      {player.name} (Nutzer / Hauptcharakter)
+                                                    </option>
+                                                  </optgroup>
+                                                )}
+                                                <optgroup label="Codex-Charaktere">
+                                                  {(loreDatabase || [])
+                                                    .filter((l: any) => l.category === 'Charaktere' || l.category === 'Gegner' || l.details?.gender || l.details?.role)
+                                                    .map((l: any) => (
+                                                      <option key={l.id || l.title} value={l.id || `codex-${l.title}`}>
+                                                        {l.title || l.details?.name} {l.details?.role ? `(${l.details.role})` : ''}
+                                                      </option>
+                                                    ))}
                                                 </optgroup>
-                                              )}
-                                              <optgroup label="Codex-Charaktere">
-                                                {(loreDatabase || [])
-                                                  .filter((l: any) => l.category === 'Charaktere' || l.category === 'Gegner' || l.details?.gender || l.details?.role)
-                                                  .map((l: any) => (
-                                                    <option key={l.id || l.title} value={l.id || `codex-${l.title}`}>
-                                                      {l.title || l.details?.name} {l.details?.role ? `(${l.details.role})` : ''}
+                                                <optgroup label="NPCs">
+                                                  {(npcs || []).map((n: any) => (
+                                                    <option key={n.id || n.name} value={n.id || `npc-${n.name}`}>
+                                                      {n.name} {n.role ? `(${n.role})` : ''}
                                                     </option>
                                                   ))}
-                                              </optgroup>
-                                              <optgroup label="NPCs">
-                                                {(npcs || []).map((n: any) => (
-                                                  <option key={n.id || n.name} value={n.id || `npc-${n.name}`}>
-                                                    {n.name} {n.role ? `(${n.role})` : ''}
-                                                  </option>
-                                                ))}
-                                              </optgroup>
-                                            </select>
+                                                </optgroup>
+                                              </select>
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Transformiertes Aussehen, Kleidung & Details */}
+                                        <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 space-y-3 mt-1">
+                                          <div className="text-[10px] font-extrabold text-amber-500 uppercase tracking-wider flex items-center gap-1.5">
+                                            <i className="fa-solid fa-sparkles text-amber-400"></i>
+                                            <span>Verwandeltes Aussehen & Details</span>
                                           </div>
-                                        )}
+
+                                          {/* Aussehen & Erscheinung */}
+                                          <div className="flex flex-col gap-1">
+                                            <label className="text-[9px] text-slate-400 font-bold uppercase">Form-Aussehen & Merkmale</label>
+                                            <AutoExpandingTextarea
+                                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 min-h-[50px]"
+                                              placeholder="z.B. Leuchtender Körper, magenta-flammendes Haar, glühende rosa Augen..."
+                                              value={ability.transformLooks || ''}
+                                              onChange={e => {
+                                                const val = e.target.value;
+                                                setPlayer({
+                                                  ...player,
+                                                  abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformLooks: val } : a)
+                                                });
+                                              }}
+                                            />
+                                          </div>
+
+                                          {/* Kleidung & Ausrüstungsverhalten */}
+                                          <div className="flex flex-col gap-1">
+                                            <label className="text-[9px] text-slate-400 font-bold uppercase">Kleidung & Ausrüstungsverhalten</label>
+                                            <AutoExpandingTextarea
+                                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 min-h-[50px]"
+                                              placeholder="z.B. Kleidung verschwindet während Verwandlung (nackt) und erscheint bei Rückverwandlung wieder / Kleidung behält Originalgröße..."
+                                              value={ability.transformOutfit || ''}
+                                              onChange={e => {
+                                                const val = e.target.value;
+                                                setPlayer({
+                                                  ...player,
+                                                  abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformOutfit: val } : a)
+                                                });
+                                              }}
+                                            />
+                                          </div>
+
+                                          {/* Rassenmerkmale / Physische Veränderungen */}
+                                          <div className="flex flex-col gap-1">
+                                            <label className="text-[9px] text-slate-400 font-bold uppercase">Rassenmerkmale / Physische Veränderungen</label>
+                                            <AutoExpandingTextarea
+                                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 min-h-[45px]"
+                                              placeholder="z.B. Rosa Fell, spitze Ohren, Krallen an Händen und Füßen..."
+                                              value={ability.transformRaceFeatures || ''}
+                                              onChange={e => {
+                                                const val = e.target.value;
+                                                setPlayer({
+                                                  ...player,
+                                                  abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformRaceFeatures: val } : a)
+                                                });
+                                              }}
+                                            />
+                                          </div>
+
+                                          {/* Parameter Grid: Alter, Größe, Statur, Rasse, Haare, Augen, Körbchen */}
+                                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                                            <div className="flex flex-col gap-1">
+                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Alter</label>
+                                              <input
+                                                type="text"
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500"
+                                                placeholder="z.B. 24 / Kind (8)"
+                                                value={ability.transformAge || ''}
+                                                onChange={e => {
+                                                  const val = e.target.value;
+                                                  setPlayer({
+                                                    ...player,
+                                                    abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformAge: val } : a)
+                                                  });
+                                                }}
+                                              />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1">
+                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Größe</label>
+                                              <input
+                                                type="text"
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500"
+                                                placeholder="z.B. 175 cm"
+                                                value={ability.transformHeight || ''}
+                                                onChange={e => {
+                                                  const val = e.target.value;
+                                                  setPlayer({
+                                                    ...player,
+                                                    abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformHeight: val } : a)
+                                                  });
+                                                }}
+                                              />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1">
+                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Statur</label>
+                                              <input
+                                                type="text"
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500"
+                                                placeholder="z.B. Schlank / Zierlich"
+                                                value={ability.transformBuild || ''}
+                                                onChange={e => {
+                                                  const val = e.target.value;
+                                                  setPlayer({
+                                                    ...player,
+                                                    abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformBuild: val } : a)
+                                                  });
+                                                }}
+                                              />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1">
+                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Rasse</label>
+                                              <input
+                                                type="text"
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500"
+                                                placeholder="z.B. Esper-Hybrid"
+                                                value={ability.transformRace || ''}
+                                                onChange={e => {
+                                                  const val = e.target.value;
+                                                  setPlayer({
+                                                    ...player,
+                                                    abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformRace: val } : a)
+                                                  });
+                                                }}
+                                              />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1">
+                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Haarfarbe</label>
+                                              <input
+                                                type="text"
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500"
+                                                placeholder="z.B. Magenta"
+                                                value={ability.transformHairColor || ''}
+                                                onChange={e => {
+                                                  const val = e.target.value;
+                                                  setPlayer({
+                                                    ...player,
+                                                    abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformHairColor: val } : a)
+                                                  });
+                                                }}
+                                              />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1">
+                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Augenfarbe</label>
+                                              <input
+                                                type="text"
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500"
+                                                placeholder="z.B. Rosa glühend"
+                                                value={ability.transformEyeColor || ''}
+                                                onChange={e => {
+                                                  const val = e.target.value;
+                                                  setPlayer({
+                                                    ...player,
+                                                    abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformEyeColor: val } : a)
+                                                  });
+                                                }}
+                                              />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1">
+                                              <label className="text-[9px] text-slate-400 font-bold uppercase">Körbchengröße</label>
+                                              <input
+                                                type="text"
+                                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500"
+                                                placeholder="z.B. D / -"
+                                                value={ability.transformCupSize || ''}
+                                                onChange={e => {
+                                                  const val = e.target.value;
+                                                  setPlayer({
+                                                    ...player,
+                                                    abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformCupSize: val } : a)
+                                                  });
+                                                }}
+                                              />
+                                            </div>
+
+                                            <div className="flex items-center gap-4 pt-4">
+                                              <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={!!ability.transformWings}
+                                                  onChange={e => {
+                                                    const checked = e.target.checked;
+                                                    setPlayer({
+                                                      ...player,
+                                                      abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformWings: checked } : a)
+                                                    });
+                                                  }}
+                                                  className="rounded bg-slate-900 border-slate-700 text-amber-500"
+                                                />
+                                                <span className="text-[10px] font-bold uppercase">Flügel</span>
+                                              </label>
+                                              <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={!!ability.transformHorns}
+                                                  onChange={e => {
+                                                    const checked = e.target.checked;
+                                                    setPlayer({
+                                                      ...player,
+                                                      abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, transformHorns: checked } : a)
+                                                    });
+                                                  }}
+                                                  className="rounded bg-slate-900 border-slate-700 text-amber-500"
+                                                />
+                                                <span className="text-[10px] font-bold uppercase">Hörner</span>
+                                              </label>
+                                            </div>
+                                          </div>
+                                        </div>
                                       </div>
                                     )}
                                   </div>
-                                ) : null}
+                                )}
 
                                 {/* Techniken */}
                                 {activeAbilityTab !== 'Passive Fähigkeiten' && (
@@ -6418,6 +6574,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       onCraftingSkillsChange={val => setPlayer({ ...player, craftingSkills: val })}
                       jobTitle={player.jobTitle || ''}
                       onJobTitleChange={val => setPlayer({ ...player, jobTitle: val })}
+                      authorities={player.authorities || []}
+                      onAuthoritiesChange={val => setPlayer({ ...player, authorities: val })}
                       professionDescription={player.professionDescription || ''}
                       onProfessionDescriptionChange={val => setPlayer({ ...player, professionDescription: val })}
                       secondaryProfessions={player.secondaryProfessions || []}

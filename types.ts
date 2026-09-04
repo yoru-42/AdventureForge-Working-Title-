@@ -473,6 +473,7 @@ export interface SecondaryProfession {
   experiencePoints?: number;
   experienceText?: string;
   promotionConditions?: string;
+  authorities?: string[];
 }
 
 export interface Character {
@@ -497,6 +498,7 @@ export interface Character {
   professionLevel?: string;
   secondaryProfessions?: SecondaryProfession[];
   jobTitle?: string;
+  authorities?: string[];
   professionDescription?: string;
   professionProficiencyScore?: number;
   professionExperiencePoints?: number;
@@ -1519,6 +1521,7 @@ export interface CombatState {
   tacticalCommands?: TacticalCommand[];
   tacticalRound?: number;
   tacticalMode?: boolean;
+  fireTurnCount?: number;
 }
 
 export type TacticalFormation =
@@ -1534,6 +1537,26 @@ export type TacticalFormation =
   | 'archer_line'
   | 'wall'
   | 'scattered';
+
+export type TacticalDirection =
+  | 'north'
+  | 'south'
+  | 'east'
+  | 'west'
+  | 'northeast'
+  | 'northwest'
+  | 'southeast'
+  | 'southwest';
+
+export type TacticalSpawnSource =
+  | 'point'
+  | 'area'
+  | 'forest_edge'
+  | 'map_edge'
+  | 'building'
+  | 'road'
+  | 'ship'
+  | 'around_entity';
 
 export interface TacticalEntity {
   id: string;
@@ -1553,6 +1576,10 @@ export interface TacticalEntity {
   morale?: number;
   movementPoints?: number;
   actionPoints?: number;
+  hp?: number;
+  maxHp?: number;
+  isLeader?: boolean;
+  assignedSlotIndex?: number;
   metadata?: Record<string, any>;
 }
 
@@ -1562,6 +1589,14 @@ export interface TacticalGroup {
   factionId?: string;
   unitIds: string[];
   formation?: TacticalFormation;
+  direction?: TacticalDirection;
+  requestedCount?: number;
+  spawnedCount?: number;
+  spawnSource?: TacticalSpawnSource | string;
+  center?: {
+    x: number;
+    y: number;
+  };
   leaderId?: string; // TacticalEntity ID
   targetId?: string; // TacticalEntity oder TacticalGroup ID
   targetPosition?: {

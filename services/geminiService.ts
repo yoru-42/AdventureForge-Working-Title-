@@ -68,14 +68,14 @@ STRENGSTE REGELN FÜR DIE BIOGRAFIE:
 export const CHARACTER_BIO_7_QUESTIONS_PROMPT = CHARACTER_BIO_8_QUESTIONS_PROMPT;
 
 export class GeminiService {
-  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 3, initialDelay = 1500): Promise<Response> {
+  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 1, initialDelay = 1500): Promise<Response> {
     let attempt = 0;
     let delay = initialDelay;
     while (true) {
       try {
         attempt++;
         const res = await fetch(url, options);
-        if (!res.ok && (res.status === 502 || res.status === 503 || res.status === 504 || res.status === 429) && attempt <= maxRetries) {
+        if (!res.ok && (res.status === 502 || res.status === 503 || res.status === 504) && attempt <= maxRetries) {
           console.warn(`[Gemini Client Fetch] HTTP ${res.status}, retrying attempt ${attempt}/${maxRetries} in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
           delay *= 1.5;
@@ -236,7 +236,7 @@ export class GeminiService {
     ];
   }
 
-  private static async callWithRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
+  private static async callWithRetry<T>(fn: () => Promise<T>, retries = 1, delay = 1000): Promise<T> {
     try {
       return await fn();
     } catch (error: any) {
@@ -310,10 +310,19 @@ export class GeminiService {
         finalSystemInstruction = `${finalSystemInstruction}\n\nCHRONIK DER BISHERIGEN WICHTIGEN EREIGNISSE (Kompakte Zusammenfassende Erinnerung):\n${summaryLog}\n`;
       }
 
-      const contents = historyToPass.map(msg => ({
+      let contents = historyToPass.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.text }]
       }));
+
+      // Trim trailing model turns so request always ends with a user turn
+      while (contents.length > 0 && contents[contents.length - 1].role === 'model') {
+        contents.pop();
+      }
+
+      if (contents.length === 0) {
+        contents = [{ role: 'user', parts: [{ text: 'Setze die Geschichte fort.' }] }];
+      }
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -489,7 +498,7 @@ WICHTIG (SPIELER-AUTONOMIE & KRAFTAUSBRUCHS-VERBOT):
 WICHTIG: Antworte NUR mit dem generierten Prologtext. Keinen JSON-Wrapper, kein "Hier ist dein Prolog", kein Markdown außer normalem Text mit Absätzen.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
       });
 
@@ -602,7 +611,7 @@ ANWEISUNGEN:
   Du als Erzähler darfst NIEMALS wörtliche Zitate oder Aussagen des Spielers/Nutzers in deiner Beschreibung oder Narration wiederholen oder nachplappern. NPCs dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich darauf beziehen.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: "Startszene generieren",
         config: {
           systemInstruction,
@@ -744,10 +753,7 @@ ANWEISUNGEN:
         }
       },
       required: [
-        "targetCharacter", "type", "relationshipStatus", "dependency", "fearIntimidation", "addressFromSelfToTarget", "addressFromTargetToSelf",
-        "behavior", "aiDirectives", "perceptionSelfToTarget", "perceptionTargetToSelf",
-        "secretsAndMotives", "boundariesAndTaboos", "sharedPast", "keyMemories",
-        "valuesSelfToTarget", "valuesTargetToSelf", "keyEvents"
+        "targetCharacter", "type", "relationshipStatus"
       ]
     };
   }
@@ -911,8 +917,12 @@ ANWEISUNGEN:
           items: {
             type: Type.OBJECT,
             properties: {
-              name: { type: Type.STRING, description: "Name der Fähigkeit oder der Transformation (z.B. 'Gum-Gum-Frucht' oder 'Super-Saiyajin-Transformation' oder 'Dämonenform')." },
-              category: { type: Type.STRING, enum: ["Standard", "Transformationen"], description: "Die Kategorie der Fähigkeit. Nutze 'Transformationen' zwingend für Verwandlungen, formverändernde Zustände (Gears, Super-Saiyajin, etc.) oder Gestaltwechsel!" },
+              name: { type: Type.STRING, description: "Name der Fähigkeit, Technik oder Transformation (z.B. 'Elementarmanipulation', 'Schutzbarrieren', 'Dimensionsrisse', 'Reine Esper-Form')." },
+              category: { 
+                type: Type.STRING, 
+                enum: ["Passive Fähigkeiten", "Techniken", "Ultimative Techniken", "Transformationen", "Talente"], 
+                description: "Die genaue Kategorie der Fähigkeit: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen' oder 'Talente'." 
+              },
               source: { type: Type.STRING, description: "Die Kraftquelle für diese Fähigkeit (z.B. Willenskraft, Mana, Ausdauer)." },
               cost: { type: Type.STRING, description: "Die Ressourcenkosten für die Nutzung (z.B. MP, Ausdauer, Wut)." },
               description: { type: Type.STRING, description: "Eine detaillierte Beschreibung der Kräfte oder der transformierten Gestalt." },
@@ -998,25 +1008,121 @@ ANWEISUNGEN:
 
   static sanitizeAndRepairTransformations(char: any): any {
     if (!char || typeof char !== 'object') return char;
-    const abilities = char.abilities || [];
+    const rawAbilities: any[] = Array.isArray(char.abilities) ? [...char.abilities] : [];
     const baseApp = char.appearance || {};
 
-    const updatedAbilities = abilities.map((ab: any) => {
-      const nameLower = (ab.name || ab.transformName || '').toLowerCase();
-      const descLower = (ab.description || '').toLowerCase();
-      const isTransCategory = ab.category === 'Transformationen' || ab.type === 'Transformation';
-      const isTransName = nameLower.includes('transformation') || nameLower.includes('metamorphose') || nameLower.includes('gestalt') || nameLower.includes('verjüng') || nameLower.includes('jungbrunn') || nameLower.includes('werwolf') || nameLower.includes('bestie') || nameLower.includes('riese') || nameLower.includes('dämon') || nameLower.includes('form') || nameLower.includes('fluch');
+    const existingNames = new Set(rawAbilities.map((a: any) => (a.name || '').toLowerCase().trim()).filter(Boolean));
 
-      if (!isTransCategory && !isTransName) return ab;
+    // 1. Extract any techniques from top-level techniqueList if they don't already exist as standalone abilities
+    if (char.techniqueList && Array.isArray(char.techniqueList)) {
+      char.techniqueList.forEach((tech: any) => {
+        const tName = (tech.name || '').trim();
+        if (tName && !existingNames.has(tName.toLowerCase())) {
+          existingNames.add(tName.toLowerCase());
+          const tType = (tech.type || '').toLowerCase();
+          const tDesc = tech.description || '';
+          const tNameLower = tName.toLowerCase();
+          
+          let cat = 'Techniken';
+          if (tType === 'transformation' || tNameLower.includes('form') || tNameLower.includes('metamorphose')) {
+            cat = 'Transformationen';
+          } else if (tNameLower.includes('passiv') || tNameLower.includes('empathie') || tNameLower.includes('wiederherstellung') || tNameLower.includes('aura') || tNameLower.includes('immunität') || tDesc.toLowerCase().includes('passiv')) {
+            cat = 'Passive Fähigkeiten';
+          } else if (tNameLower.includes('ultimativ') || tNameLower.includes('explosion') || tNameLower.includes('dimensionsriss') || tNameLower.includes('finisher') || tNameLower.includes('vollständige') || (tech.tier && tech.tier.includes('4'))) {
+            cat = 'Ultimative Techniken';
+          } else if (tNameLower.includes('talent') || tNameLower.includes('fokus') || tNameLower.includes('begabung')) {
+            cat = 'Talente';
+          }
+
+          rawAbilities.push({
+            name: tName,
+            category: cat,
+            source: char.powerSource || '',
+            cost: tech.costValue ? `${tech.costValue} ${tech.costResourceName || ''}`.trim() : (char.powerCost || ''),
+            description: tDesc,
+            techniqueList: [tech],
+            techniques: tName
+          });
+        }
+      });
+    }
+
+    // 2. Extract sub-techniques from inside transformation / container abilities if they are standalone combat powers
+    rawAbilities.forEach((ab: any) => {
+      if (ab.techniqueList && Array.isArray(ab.techniqueList)) {
+        ab.techniqueList.forEach((tech: any) => {
+          const tName = (tech.name || '').trim();
+          const tNameLower = tName.toLowerCase();
+          // Skip generic activation / return moves
+          if (tNameLower === 'aktivierung' || tNameLower === 'zurückverwandlung' || tNameLower === 'deaktivierung' || tNameLower === 'rückverwandlung') return;
+
+          if (tName && !existingNames.has(tNameLower)) {
+            existingNames.add(tNameLower);
+            const tType = (tech.type || '').toLowerCase();
+            const tDesc = tech.description || '';
+
+            let cat = 'Techniken';
+            if (tType === 'transformation' || tNameLower.endsWith('-form') || tNameLower.endsWith(' form')) {
+              cat = 'Transformationen';
+            } else if (tNameLower.includes('passiv') || tNameLower.includes('empathie') || tNameLower.includes('wiederherstellung') || tNameLower.includes('aura') || tNameLower.includes('immunität') || tDesc.toLowerCase().includes('passiv')) {
+              cat = 'Passive Fähigkeiten';
+            } else if (tNameLower.includes('ultimativ') || tNameLower.includes('explosion') || tNameLower.includes('dimensionsriss') || tNameLower.includes('finisher') || tNameLower.includes('vollständige elementarkontrolle') || (tech.tier && tech.tier.includes('4'))) {
+              cat = 'Ultimative Techniken';
+            } else if (tNameLower.includes('talent') || tNameLower.includes('fokus') || tNameLower.includes('begabung')) {
+              cat = 'Talente';
+            }
+
+            rawAbilities.push({
+              name: tName,
+              category: cat,
+              source: ab.source || char.powerSource || '',
+              cost: tech.costValue ? `${tech.costValue} ${tech.costResourceName || ''}`.trim() : (ab.cost || char.powerCost || ''),
+              description: tDesc || `Fähigkeit von ${ab.name || 'Charakter'}: ${tName}`,
+              techniqueList: [tech],
+              techniques: tName
+            });
+          }
+        });
+      }
+    });
+
+    const updatedAbilities = rawAbilities.map((ab: any) => {
+      const nameLower = (ab.name || ab.transformName || '').toLowerCase().trim();
+      const descLower = (ab.description || '').toLowerCase();
+
+      // Check if it is a true transformation
+      const isTransCategory = ab.category === 'Transformationen';
+      const isStrictFormName = /\b(transformation|metamorphose|gestaltwechsel|verwandlung|werwolf|dämonenform|esper-form|kinder-form|kinderform|super-saiyajin|bestienform)\b/i.test(nameLower) 
+        || nameLower.endsWith('-form') || nameLower.endsWith(' form');
+      
+      const isKnownCombatTechnique = nameLower.includes('manipulation') || nameLower.includes('berührung') || nameLower.includes('telekinese') || nameLower.includes('barriere') || nameLower.includes('schild') || nameLower.includes('riss') || nameLower.includes('levitation') || nameLower.includes('absorption') || nameLower.includes('unterdrückung') || nameLower.includes('explosion') || nameLower.includes('strahl') || nameLower.includes('kugel') || nameLower.includes('hieb') || nameLower.includes('stoß') || nameLower.includes('wiederherstellung') || nameLower.includes('empathie') || nameLower.includes('heilung');
+
+      const isTrueTransformation = (isTransCategory || isStrictFormName) && !isKnownCombatTechnique;
+
+      if (!isTrueTransformation) {
+        let category = ab.category;
+        if (!category || category === 'Standard' || category === 'Kernfähigkeit' || category === 'Transformationen') {
+          if (nameLower.includes('passiv') || nameLower.includes('empathie') || nameLower.includes('wiederherstellung') || nameLower.includes('regen') || nameLower.includes('immunität') || descLower.includes('passiv') || descLower.includes('empathie') || descLower.includes('dauerhaft')) {
+            category = 'Passive Fähigkeiten';
+          } else if (nameLower.includes('ultimativ') || nameLower.includes('explosion') || nameLower.includes('dimensionsriss') || nameLower.includes('finisher') || nameLower.includes('vollständige elementarkontrolle') || descLower.includes('ultimativ') || descLower.includes('extrem')) {
+            category = 'Ultimative Techniken';
+          } else if (nameLower.includes('talent') || nameLower.includes('fokus') || nameLower.includes('begabung') || nameLower.includes('meditation') || descLower.includes('talent')) {
+            category = 'Talente';
+          } else {
+            category = 'Techniken';
+          }
+        }
+        return { ...ab, category };
+      }
 
       const repaired = { ...ab, category: 'Transformationen' };
 
-      const isYouth = nameLower.includes('jungbrunn') || nameLower.includes('verjüng') || nameLower.includes('kind') || descLower.includes('jungbrunn') || descLower.includes('verjüng') || descLower.includes('metamorphose');
+      const isYouth = nameLower.includes('jungbrunn') || nameLower.includes('verjüng') || nameLower.includes('kind') || descLower.includes('jungbrunn') || descLower.includes('verjüng') || descLower.includes('kinder form') || descLower.includes('kinder-form') || descLower.includes('kinderform');
       const isGiant = nameLower.includes('riese') || nameLower.includes('koloss') || nameLower.includes('giant') || descLower.includes('riese') || descLower.includes('koloss');
       const isBeast = nameLower.includes('bestie') || nameLower.includes('beast') || nameLower.includes('dämon') || nameLower.includes('werwolf');
 
       if (!repaired.transformAge) {
-        if (isYouth) repaired.transformAge = '8-10 Jahre (Verjüngt)';
+        if (isYouth) repaired.transformAge = '6-8 Jahre (Kinder-Form)';
         else if (descLower.includes('greis') || descLower.includes('alt')) repaired.transformAge = '80 Jahre';
         else repaired.transformAge = baseApp.age || 'Unverändert';
       }
@@ -1029,13 +1135,13 @@ ANWEISUNGEN:
       }
 
       if (!repaired.transformHeight) {
-        if (isYouth) repaired.transformHeight = '125 cm';
+        if (isYouth) repaired.transformHeight = '115 cm';
         else if (isGiant) repaired.transformHeight = '380 cm';
         else repaired.transformHeight = baseApp.height || '175 cm';
       }
 
       if (!repaired.transformWeight) {
-        if (isYouth) repaired.transformWeight = '28 kg';
+        if (isYouth) repaired.transformWeight = '24 kg';
         else if (isGiant) repaired.transformWeight = '450 kg';
         else repaired.transformWeight = baseApp.weight || '75 kg';
       }
@@ -1047,13 +1153,19 @@ ANWEISUNGEN:
 
       if (!repaired.transformLooks) {
         repaired.transformLooks = isYouth 
-          ? 'Kindliche, verjüngte Gesichtszüge durch die Jungbrunn-Metamorphose' 
+          ? 'Kindliche, verjüngte Gesichtszüge durch Erschöpfung oder Metamorphose' 
           : `Körperliche Veränderung und Entfaltung im Zustand von "${ab.name || 'Transformation'}"`;
       }
 
       if (!repaired.transformOutfit) {
-        const baseOutfit = baseApp.outfit || 'Standardkleidung';
-        repaired.transformOutfit = `${baseOutfit} (Passt sich elastisch der veränderten Größe der Form an)`;
+        if (descLower.includes('nackt') || descLower.includes('verschwinden')) {
+          repaired.transformOutfit = 'Kleidung verschwindet während der Verwandlung (in dieser Form nackt) und kehrt nach der Rückverwandlung wieder zurück';
+        } else if (descLower.includes('normale größe') || descLower.includes('behält ihre normale größe') || descLower.includes('schlotter')) {
+          repaired.transformOutfit = 'Normale Kleidung behält Originalgröße und fällt am kindlichen Körper zu weit aus';
+        } else {
+          const baseOutfit = baseApp.outfit || 'Standardkleidung';
+          repaired.transformOutfit = `${baseOutfit} (Passt sich elastisch der veränderten Größe der Form an)`;
+        }
       }
 
       return repaired;
@@ -1125,7 +1237,7 @@ ANWEISUNGEN:
          - Beschreibe in 'currentSituation', wie der Charakter heute mit dieser Verwandlung lebt und wie sie sein aktuelles Leben bestimmt.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1212,7 +1324,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema(world.campaignPowerSettings);
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1279,7 +1391,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema(world.campaignPowerSettings);
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1404,7 +1516,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema();
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -1605,7 +1717,7 @@ ANWEISUNGEN:
       Die Generierung muss inhaltlich hochqualitativ, spielmechanisch schlüssig und perfekt auf das Genre (Fantasy, Sci-Fi, Cyberpunk, Slice of Life, etc.) abgestimmt sein!`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -1776,7 +1888,7 @@ Generiere basierend darauf ein detailliertes Geografie- und Weltschöpfungs-Mode
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -2416,7 +2528,7 @@ ${customInstruction ? `--- ZUSÄTZLICHE NUTZERANWEISUNG ---\n${customInstruction
 Gib deine Antwort als Valides JSON zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -3135,7 +3247,7 @@ Jedes Terrain-Objekt in der Liste MUSS folgenden Aufbau haben:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3272,7 +3384,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3401,7 +3513,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3497,7 +3609,7 @@ Gib eine JSON-Struktur zurück mit einer Liste von Unterregionen, jede mit:
 Erstelle für jedes dieser 3-4 Unterregionen spannenden Content, der perfekt zur Lore passt und die Welt tiefgründiger macht.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3615,7 +3727,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3728,7 +3840,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3834,7 +3946,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3936,22 +4048,34 @@ Achte penibel darauf, Fähigkeiten & Kräfte (skills) und Kosten/Verbrauch sowie
 ### AUSSEHEN (MANDATORISCH):
 Befülle im 'appearance'-Objekt das Feld 'looks' detailliert mit dem Gesichtsaussehen, Haarstil und besonderen Merkmalen im untransformierten Zustand. Grenzer dies sauber von 'outfit' (Kleidung) und 'raceFeatures' (nicht-menschliche physische Rassemerkmale) ab!
 
-### ABILITIES, TRANSFORMATIONEN & KÖRPERLICHE VERÄNDERUNGEN (STRENGES DREIFACHES GEBOT):
-Befülle zwingend die 'abilities'-Liste mit allen Fähigkeiten des Charakters (Spezialkräfte, Magie, Kampfkünste, Teufelskräfte, etc.).
-Falls ein Charakter die Fähigkeit besitzt, sich zu verwandeln, seine Gestalt zu ändern oder eine temporäre Transformation zu aktivieren ODER falls der Eingabetext oder die Welten-Beschreibung eine Formänderung, Verwandlung, Metamorphose, körperliche Mutation oder einen Fluch beschreibt (z.B. vom Menschen zum Dämon/Drachen/Vampir/Bestie, Gears, Super-Saiyajin, Werwolf, etc.):
+### ABILITIES, TECHNIKEN & TRANSFORMATIONEN (MANDATORISCHE KATEGORISIERUNG & VOLLSTÄNDIGKEIT):
+Befülle zwingend die 'abilities'-Liste mit ALLEN Kräften, Fähigkeiten, Standardfähigkeiten, passiven Eigenschaften, Kampftechniken, Barrieren und Verwandlungen des Charakters. ES DARF ABSOLUT NICHTS WEGGELASSEN WERDEN!
+
+WICHTIGSTE DIRECTIVE FÜR DIE ERSTELLUNG:
+- JEDE EINZELNE genannte oder ableitbare Kraft, Kampftechnik, Barriere, Fähigkeit oder Gestalt (z.B. "Elementarmanipulation", "Heilende Berührung", "Begrenzte Telekinese", "Empathie", "Schutzbarrieren", "Vollständige Elementarkontrolle", "Dimensionsrisse", "Levitation", "Absorption", "Unterdrückung", "Gewaltige Energieexplosionen", "Vollständige körperliche Wiederherstellung", "Reine Esper-Form") MUSS ALS EIGENSTÄNDIGER EINTRAG im Array 'abilities' mit der jeweils passenden Kategorie existieren!
+- STRENGES VERBOT: Fasse die Kampftechniken NICHT nur als Text in einem einzigen Sammelblock oder nur innerhalb einer Transformation zusammen. Wenn 8 Techniken genannt werden, MÜSSEN 8 separate Einträge im 'abilities'-Array mit ihren eigenen Namen, Beschreibungen und Kosten erstellt werden!
+
+KATEGORIE-ZUORDNUNG FÜR JEDEN EINTRAG IM 'abilities'-ARRAY ('category'):
+1. 'Passive Fähigkeiten': Für passive Eigenschaften, dauerhafte Wahrnehmung, Empathie, Sinneswahrnehmung, Immunitäten oder Regeneration (z.B. "Empathie", "Vollständige körperliche Wiederherstellung").
+2. 'Techniken': Für aktive Grundkräfte, Fertigkeiten, Zauber, Barrieren, Heilung, Telekinese, Elementarmanipulation, Levitation, Absorption, Unterdrückung.
+3. 'Ultimative Techniken': Für mächtige Finisher, verheerende Großangriffe oder Extremkräfte (z.B. "Gewaltige Energieexplosionen", "Dimensionsrisse", "Vollständige Elementarkontrolle").
+4. 'Transformationen': Für echte Verwandlungen, Metamorphosen, Formen oder Erschöpfungszustände (z.B. "Reine Esper-Form").
+5. 'Talente': Für spezielle Begabungen, Esper-Fokus, Meditation.
+
+BEI TRANSFORMATIONEN (FORMEN & GESTALTWECHSEL):
+Falls ein Charakter die Fähigkeit besitzt, sich zu verwandeln, seine Gestalt zu ändern oder der Text Verwandlungen/Formen beschreibt (z.B. "Reine Esper-Form", "Kinder-Form" bei Erschöpfung):
 1. WAS ER DAVOR WAR (Ursprünglicher Zustand):
-   - Die Bio ('bio') und das untransformierte 'appearance'-Objekt ('race', 'looks', 'build', 'hairColor', 'eyeColor', etc.) MÜSSEN zwingend seinen ursprünglichen Zustand VOR der Verwandlung beschreiben (seine ursprüngliche Herkunft, altes Aussehen, Name/Rolle, wie die Verwandlung stattfand).
-2. WELCHE BEZIEHUNGEN ER MIT WEM HATTE (Vorgeschichte & Beziehungs-Dynamik):
-   - In den Beziehungs-Feldern ('relationship', 'conduct' und bei Codex-Beziehungen) MUSS explizit herausgestellt werden, welche Beziehungen er VOR der Transformation mit wem hatte (Familie, alte Gefährten, Verlobte, Lehrmeister, Rivalen) UND wie sich diese Beziehungen durch die körperliche Veränderung entwickelt haben (z. B. ob alte Freunde ihn in der neuen Gestalt nicht mehr erkennen, ihn für tot halten, seine neue Form als Monster fürchten/jagen oder versuchen, ihm bei der Heilung zu helfen).
-3. DIE NEUE TRANSFORMATION / DER TRANSFORMATIONS-ZUSTAND:
-   - Erstelle zwingend einen Eintrag in der 'abilities'-Liste mit 'category: "Transformationen"'.
-   - Befülle im transformierten Zustand alle 'transform...'-Felder ('transformName', 'transformRole', 'transformLooks', 'transformOutfit', 'transformRace', 'transformRaceFeatures' wie Flügel, Hörner, Schuppen, Klauen, Aura, etc.)!
-   - WICHTIG ZUR KLEIDUNG (z.B. ONE PIECE / ZOAN-LOGIK): Passen sich Kleidungsstücke bei Transformationen elastisch dem neuen Körper an (sie dehnen sich oder passen sich der veränderten Gestalt an). Setze im Feld 'transformOutfit' daher NIEMALS 'keine' oder 'nackt' ein, sondern beschreibe, wie sich die Kleidung anpasst.
-   - ERSTELLE AKTIVIERUNGS- UND ZURÜCKVERWANDLUNGS-TECHNIKEN: Jede Transformations-Ability MUSS unter 'techniqueList' Techniken zur Aktivierung (z.B. "Transformation aktivieren") UND zur Deaktivierung/Zurückverwandlung (z.B. "Zurückverwandlung") besitzen!
+   - Die Bio ('bio') und das untransformierte 'appearance'-Objekt ('race', 'looks', 'build', 'hairColor', 'eyeColor', etc.) MÜSSEN seinen Zustand VOR der Verwandlung beschreiben.
+2. WELCHE BEZIEHUNGEN ER MIT WEM HATTE:
+   - In den Beziehungs-Feldern beschreiben, welche Beziehungen vor und nach Verwandlungen bestehen.
+3. DIE TRANSFORMATIONEN / FORMEN:
+   - Erstelle für JEDE erwähnte Gestalt oder Form (z.B. die "Reine Esper-Form" UND auch den Erschöpfungszustand "Kinder-Form") einen EIGENEN Eintrag in 'abilities' mit 'category: "Transformationen"'.
+   - Befülle alle Transformations-Felder extrem detailreich ('transformName', 'transformRole', 'transformLooks', 'transformOutfit', 'transformRace', 'transformRaceFeatures', 'transformHairColor', 'transformEyeColor', 'transformAge', 'transformHeight', 'transformBuild', 'activationCondition')!
+   - WICHTIG ZUR KLEIDUNG BEI TRANSFORMATIONEN: Falls der Freitext angibt, dass Kleidung verschwindet/sie nackt ist und nach der Rückverwandlung wieder auftaucht (wie bei manchen magischen Transformationen/Quirks), oder dass Kleidung die normale Größe behält (z.B. bei einer Kinderform schlottert/zu groß ist), beschreibe dieses Verhalten EXAKT so im Feld 'transformOutfit'! Falls nichts Spezifisches erwähnt wird, passt sich die Kleidung elastisch an.
+   - ERSTELLE TECHNIKEN DER FORM: Jede Transformation MUSS unter 'techniqueList' Techniken zur Aktivierung (Typ 'Transformation'), die spezifischen Spezialkräfte während der Form und eine Zurückverwandlungs-Technik besitzen!
    - Trage in 'currentSituation' ein, wie der Charakter heute mit dieser Verwandlung lebt.
 
-Erfinde zudem für jede Ability eine Liste von konkreten Techniken/Attacken (techniqueList) - für JEDE Technik gib einen prägnanten Namen und eine genaue Erklärung (Effekt, was genau die Technik macht, Typ wie 'Angriff', 'Transformation', 'Verteidigung', 'Support') an! Erstelle mindestens 2 bis 4 coole Techniken pro Ability.
-Zusätzlich befülle das Feld 'techniques' mit den Namen dieser Techniken als kommagetrennte Liste.`;
+Befülle zudem für jede Ability und für den Charakter das Feld 'techniqueList' mit konkreten Techniken/Attacken und 'techniques' mit kommagetrennten Namen!`;
 
       if (worldContext) {
         contextPrompt = `### WELTBESCHREIBUNG ODER ZEITLINIEN-PROMPT (Kontext für die Erstellung):
@@ -4048,7 +4172,7 @@ ${existingCodexCharacters.map(c => `- Name: "${c.name}"
       contextPrompt += `\n\nText: "${text}"\n`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4366,7 +4490,7 @@ ${JSON.stringify(cleanedExisting, null, 2)}`;
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4433,7 +4557,7 @@ ${JSON.stringify(existingCore, null, 2)}\n`;
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4977,7 +5101,7 @@ Beantworte für die Fraktion zwingend und ausführlich auf Deutsch die folgenden
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5167,7 +5291,7 @@ Du MUSST ein valides JSON-Objekt zurückgeben mit genau einem Feld "entries", we
 Antworte AUSSCHLIESSLICH mit diesem validen JSON-Objekt. Keine Einleitung, kein Outro, kein Markdown wie \`\`\`json.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5347,7 +5471,7 @@ ${entriesToUse.slice(0, 35).map((l: any) => `- [${l.category || 'Codex'}] ${l.ti
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5435,7 +5559,7 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -5517,7 +5641,7 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
       });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -5703,7 +5827,7 @@ Gib das Ergebnis streng im geforderten JSON-Format zurück, bestehend aus einer 
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5716,11 +5840,20 @@ Gib das Ergebnis streng im geforderten JSON-Format zurück, bestehend aus einer 
     });
   }
 
+  private static lastChronicleTime = 0;
+  private static lastLoreTime = 0;
+
   static async extractChronicle(prologue: string, currentChronicle: string, recentMessages: ChatMessage[], isNsfw?: boolean): Promise<string> {
-    return this.callWithRetry(async () => {
-      const ai = this.getAI();
-      
-      const prompt = `Du bist ein literarischer Chronist. Deine Aufgabe ist es, eine kurze, prägnante Chronik (Zusammenfassung der wichtigsten Ereignisse auf Deutsch) des bisherigen Spielgeschehens zu erstellen oder eine vorhandene mit den neuesten Ereignissen zu aktualisieren.
+    const now = Date.now();
+    if (now - this.lastChronicleTime < 45000) {
+      return currentChronicle || '';
+    }
+    this.lastChronicleTime = now;
+    try {
+      return await this.callWithRetry(async () => {
+        const ai = this.getAI();
+        
+        const prompt = `Du bist ein literarischer Chronist. Deine Aufgabe ist es, eine kurze, prägnante Chronik (Zusammenfassung der wichtigsten Ereignisse auf Deutsch) des bisherigen Spielgeschehens zu erstellen oder eine vorhandene mit den neuesten Ereignissen zu aktualisieren.
 
 PROLOG:
 ${prologue || ''}
@@ -5733,16 +5866,20 @@ ${recentMessages.map(m => `${m.role === 'user' ? 'Spieler' : 'DM'}: ${m.text}`).
 
 Schreibe die aktualisierte Chronik als zusammenhängenden, packenden Text auf Deutsch. Halte sie kurz (maximal 150-200 Wörter). Konzentriere dich nur auf wichtige Enthüllungen, getroffene Entscheidungen, bereiste Orte oder dramatische Wendungen. Nenne niemals geheime Rollen oder Tarnungen, bevor sie nicht im Text absolut zweifelsfigurlich und zweifelsfrei enthüllt wurden! Antworte NUR mit dem reinen Text der Chronik (kein Intro, kein Outro, keine Einleitung wie "Hier ist die Chronik...").`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: {
-          safetySettings: isNsfw ? this.getSafetySettings() : undefined
-        }
-      });
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            safetySettings: isNsfw ? this.getSafetySettings() : undefined
+          }
+        });
 
-      return (response.text || '').trim();
-    });
+        return (response.text || '').trim();
+      }, 2, 1000);
+    } catch (err: any) {
+      console.warn("[Gemini Background Chronicle] Optional extraction skipped:", err?.message || err);
+      return currentChronicle || '';
+    }
   }
 
   static async extractNewLoreEntries(
@@ -5750,17 +5887,23 @@ Schreibe die aktualisierte Chronik als zusammenhängenden, packenden Text auf De
     existingLore: LoreEntry[],
     isNsfw?: boolean
   ): Promise<any[]> {
-    return this.callWithRetry(async () => {
-      const ai = this.getAI();
-      
-      const existingTitles = existingLore.map(l => `${l.category}: ${l.title}`).join('\n');
-      const existingPlacesInfo = existingLore
-        .filter(l => (l.category as string) === 'Orte' || (l.category as string) === 'Weltkarte')
-        .map(p => `- Ort: "${p.title}" | Ebene: ${p.details?.mapLevel || 'Unbekannt'} | Parent: "${p.details?.parentPlaceId || ''}" | Koordinaten: x=${p.details?.coordinates?.x || 0}, y=${p.details?.coordinates?.y || 0}`)
-        .join('\n');
-      
-      const prompt = `Analysiere die folgenden jüngsten Chat-Nachrichten eines Rollenspiels und vergleiche die darin erwähnten Elemente (Charaktere, Orte/Gebiete, Fraktionen, Gegenstände, Verbotenes Wissen, Gegner, Weltregeln) mit der Liste der bereits existierenden Einträge im Codex.
-      
+    const now = Date.now();
+    if (now - this.lastLoreTime < 45000) {
+      return [];
+    }
+    this.lastLoreTime = now;
+    try {
+      return await this.callWithRetry(async () => {
+        const ai = this.getAI();
+        
+        const existingTitles = existingLore.map(l => `${l.category}: ${l.title}`).join('\n');
+        const existingPlacesInfo = existingLore
+          .filter(l => (l.category as string) === 'Orte' || (l.category as string) === 'Weltkarte')
+          .map(p => `- Ort: "${p.title}" | Ebene: ${p.details?.mapLevel || 'Unbekannt'} | Parent: "${p.details?.parentPlaceId || ''}" | Koordinaten: x=${p.details?.coordinates?.x || 0}, y=${p.details?.coordinates?.y || 0}`)
+          .join('\n');
+        
+        const prompt = `Analysiere die folgenden jüngsten Chat-Nachrichten eines Rollenspiels und vergleiche die darin erwähnten Elemente (Charaktere, Orte/Gebiete, Fraktionen, Gegenstände, Verbotenes Wissen, Gegner, Weltregeln) mit der Liste der bereits existierenden Einträge im Codex.
+        
 Falls neue Elemente eingeführt, erwähnt oder benannt wurden, die NICHT in der Liste der existierenden Titel stehen (oder eine Variante davon sind), erstelle für jedes neue Element einen passenden Eintrag für unsere Lore-Datenbank (Codex).
 Gegenstände, die der Spieler erhält oder besitzt, sollten der Kategorie 'Gegenstände' zugeordnet werden. Neue wichtige Gebiete, Städte, Inseln oder Orte der Kategorie 'Weltkarte'. Neue wichtige Personen der Kategorie 'Charaktere'. Monster oder Feinde der Kategorie 'Gegner'. Fraktionen der Kategorie 'Fraktionen'. Geheimnisse, verbotene Wahrheiten oder Spoiler der Kategorie 'Verbotenes Wissen'.
 
@@ -5789,7 +5932,8 @@ Wenn du einen neuen Ort erstellst, musst du im Feld "details" zwingend vollstän
 2. KEINE FLÜCHTIGEN ODER TRIVIALEN ERWÄHNUNGEN: Wenn ein Ort nur im Vorbeigehen genannt wird (z. B. "er läuft über den Flur", "sie blickt aus dem Fenster", "er geht in die Küche"), ein Charakter nur ein namenloser Statist ist (z. B. "der Lehrer", "ein Polizist", "die Schüler") oder ein Gegenstand ein alltäglicher Gebrauchsgegenstand ist (z. B. "ein Stift", "das Mathebuch", "die Schultasche", "eine Tasse Kaffee"), darfst du dafür KEINEN Eintrag anlegen!
 3. KEINE GEWÖHNLICHEN ALLTAGSDINGE: Nur legendäre, magische, technologisch hochentwickelte oder handlungsentscheidende Gegenstände erhalten einen Eintrag.
 4. EINZELNE PERSONEN & SPEZIFISCHE ORTE: Nur namentlich genannte oder für die Story essenzielle Charaktere/Orte erhalten einen Eintrag.
-5. Im Zweifelsfall erstelle KEINEN Eintrag. Antworte lieber mit einem leeren Array [], anstatt flüchtige Details zu erfassen!
+5. KLEIDUNG & OUTFITS (MANDATORY): Erstelle NIEMALS separate Einträge für einzelne Kleidungsstücke (wie "Kochhemd", "Schürze", "Stiefel", "Nachthemd", "Hose") oder Platzhalter-Zustände (wie "barfuß", "keine Kopfbedeckung", "keine"). Wenn der Spieler oder ein Charakter Kleidung erhält oder trägt, fasse alle Kleidungsstücke IMMER direkt zu EINEM EINZIGEN zusammenhängenden Outfit-Eintrag zusammen (z.B. "Kochkluft (Kochhemd, Lederschürze, Arbeitsstiefel)").
+6. Im Zweifelsfall erstelle KEINEN Eintrag. Antworte lieber mit einem leeren Array [], anstatt flüchtige Details zu erfassen!
 
 Bestehende Codex-Einträge (Format: Kategorie: Name):
 ${existingTitles || '(Keine bisherigen Einträge vorhanden)'}
@@ -5820,29 +5964,33 @@ Gib das Ergebnis als ein valides JSON-Array von Objekten aus. Jedes Objekt muss 
 ]
 WICHTIG: Antworte AUSSCHLIESSLICH mit dem validen JSON-Array. Keine Einleitung, kein Outro, kein Markdown wie \`\`\`json oder \`\`\`. Wenn keine neuen Elemente gefunden werden, antworte mit einem leeren Array: []`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        config: {
-          responseMimeType: "application/json",
-          safetySettings: isNsfw ? this.getSafetySettings() : undefined
-        }
-      });
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            responseMimeType: "application/json",
+            safetySettings: isNsfw ? this.getSafetySettings() : undefined
+          }
+        });
 
-      const text = (response.text || '').trim();
-      if (!text || text === '[]') return [];
-      
-      try {
-        const parsed = this.parseJSONSafely(text, []);
-        if (Array.isArray(parsed)) {
-          return parsed;
+        const text = (response.text || '').trim();
+        if (!text || text === '[]') return [];
+        
+        try {
+          const parsed = this.parseJSONSafely(text, []);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
+          return [];
+        } catch (e) {
+          console.warn("Fehler beim Parsen der extrahierten Lore-Einträge:", e);
+          return [];
         }
-        return [];
-      } catch (e) {
-        console.error("Fehler beim Parsen der extrahierten Lore-Einträge:", e);
-        return [];
-      }
-    });
+      }, 2, 1000);
+    } catch (err: any) {
+      console.warn("[Gemini Background Lore] Optional extraction skipped:", err?.message || err);
+      return [];
+    }
   }
 
   static async harmonizeWorldWithSecrets(
@@ -5927,7 +6075,7 @@ Gib das Ergebnis als valides JSON-Objekt zurück mit genau dieser Struktur:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -6150,7 +6298,7 @@ Gib ausschließlich valides JSON mit folgenden vier Listen zurück:
 GIB NUR DAS REINE JSON-OBJEKT ZURÜCK, KEINE TEXTERKLÄRUNGEN DRUMHERUM!`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -6425,7 +6573,7 @@ Generiere ein detailliertes JSON Array von Objekten mit folgenden Feldern:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6611,7 +6759,7 @@ WICHTIG:
 - Gib ein valides JSON-Objekt zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6663,7 +6811,7 @@ Gib ein JSON-Objekt mit folgenden Feldern zurück:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6703,7 +6851,7 @@ Gib ein JSON Array mit Objekten zurück:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6769,7 +6917,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6832,7 +6980,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6890,7 +7038,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6934,7 +7082,7 @@ Anweisung: ${instruction}
 Gib ein JSON-Objekt mit passenden Namenslisten für verschiedene Elementtypen zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -7202,7 +7350,7 @@ NUTZER-AUFTRAG:
 
       // 1. Initial Plan Generation
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: `${systemPrompt}\n\n${promptContext}`,
         config: {
           responseMimeType: 'application/json',
@@ -7258,7 +7406,7 @@ NUTZER-AUFTRAG:
 
         try {
           const correctionResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-flash-latest',
             contents: `${systemPrompt}\n\n${promptContext}\n\n${correctionPrompt}`,
             config: {
               responseMimeType: 'application/json',
@@ -7342,7 +7490,7 @@ REGELN FÜR DIE TEILZONEN:
 5. Beschreibe prägnant Gefahrenstufe, Besonderheiten (Strömungen, Seemonster, Windstille) und Atmosphäre.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -7510,7 +7658,7 @@ ${keepExistingDetails && Object.keys(existingDetails).length > 0 ? `### BESTEHEN
    - Verwende neutrale, präzise und stimmungsvolle Beschreibungen. Keine Platzhalter. Keine Emojis in den Inhalten.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: prompt,
         config: {
           responseMimeType: "application/json",

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Character, Appearance } from '../types';
 import { BodyConditionsManager } from './BodyConditionsManager';
 import { TransformationIntensityCard } from './TransformationIntensityCard';
+import { StorageService } from '../lib/storageService';
 import { 
   resolveBodyAppearance,
   incrementTransformationIntensity,
@@ -107,12 +108,9 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
     // 0. From main player / user
     let mainPlayerObj: any = null;
     try {
-      const saved = localStorage.getItem('adventures');
-      if (saved) {
-        const advs = JSON.parse(saved);
-        if (advs[0]?.player?.name) {
-          mainPlayerObj = advs[0].player;
-        }
+      const advs = StorageService.getItemSync<any[]>('adventures');
+      if (advs && advs[0]?.player?.name) {
+        mainPlayerObj = advs[0].player;
       }
     } catch (e) {
       // ignore
@@ -261,9 +259,8 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
     // Fallback: Check localStorage if no entries in props
     if (list.length === 0) {
       try {
-        const saved = localStorage.getItem('adventures');
-        if (saved) {
-          const advs = JSON.parse(saved);
+        const advs = StorageService.getItemSync<any[]>('adventures');
+        if (advs && advs.length > 0) {
           const currentAdv = advs[0];
           if (currentAdv?.loreDatabase) {
             currentAdv.loreDatabase.forEach((entry: any) => {
@@ -331,9 +328,8 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
   const allPartnerCharacters = React.useMemo(() => {
     const list = [...availableCodexCharacters];
     try {
-      const saved = localStorage.getItem('adventures');
-      if (saved) {
-        const advs = JSON.parse(saved);
+      const advs = StorageService.getItemSync<any[]>('adventures');
+      if (advs && advs.length > 0) {
         const currentAdv = advs[0];
         if (currentAdv?.player && currentAdv.player.name) {
           const mainP = currentAdv.player;
