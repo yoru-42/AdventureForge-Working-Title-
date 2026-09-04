@@ -833,8 +833,8 @@ const App: React.FC = () => {
                   {searchTerm ? "Keine Treffer in deinen Abenteuern." : "Noch keine eigenen Welten geschmiedet."}
                 </p>
               )}
-              {myAdventures.map(adv => (
-                <div key={adv.id} onClick={() => { setCurrentAdventure(adv); setViewMode(GameViewMode.PLAY); }} className="group p-4 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-between hover:border-amber-500/50 transition-all cursor-pointer relative overflow-hidden">
+              {myAdventures.map((adv, aIdx) => (
+                <div key={adv.id ? `my-adv-${adv.id}-${aIdx}` : `my-adv-${aIdx}`} onClick={() => { setCurrentAdventure(adv); setViewMode(GameViewMode.PLAY); }} className="group p-4 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-between hover:border-amber-500/50 transition-all cursor-pointer relative overflow-hidden">
                   <div className="flex items-center gap-4 relative z-10">
                     <div className="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center text-amber-500 border border-amber-500/20">
                       {adv.player.image ? <img src={adv.player.image} className="w-full h-full object-cover rounded-lg" /> : <i className="fa-solid fa-scroll"></i>}
@@ -865,8 +865,8 @@ const App: React.FC = () => {
                    {searchTerm ? "Keine Welten gefunden." : "Die Bibliothek ist aktuell leer..."}
                 </p>
               )}
-              {publicLibrary.map(adv => (
-                <div key={adv.id} className="p-4 bg-slate-900/50 border border-slate-800 rounded-2xl flex items-center justify-between hover:bg-slate-800/50 transition-colors">
+              {publicLibrary.map((adv, pIdx) => (
+                <div key={adv.id ? `pub-adv-${adv.id}-${pIdx}` : `pub-adv-${pIdx}`} className="p-4 bg-slate-900/50 border border-slate-800 rounded-2xl flex items-center justify-between hover:bg-slate-800/50 transition-colors">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-400 border border-indigo-500/20"><i className="fa-solid fa-earth-europe"></i></div>
                     <div>
@@ -1086,11 +1086,11 @@ const App: React.FC = () => {
                     <div className="grid grid-cols-1 gap-2">
                       {currentAdventure.player.abilities
                         .filter(a => a.category === 'Transformationen')
-                        .map(ability => {
+                        .map((ability, abIdx) => {
                           const isActive = currentAdventure.player.appearance?.activeTransformationId === ability.id;
                           return (
                             <div 
-                              key={ability.id} 
+                              key={ability.id ? `trans-${ability.id}-${abIdx}` : `trans-${abIdx}`} 
                               className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 ${
                                 isActive 
                                   ? 'bg-purple-950/20 border-purple-500/50 shadow-[0_0_10px_rgba(168,85,247,0.15)]' 
@@ -1292,7 +1292,7 @@ const App: React.FC = () => {
                           </div>
 
                           {/* Cost Resources Cards */}
-                          {costResources.map(res => {
+                          {costResources.map((res, rIdx) => {
                             let resValue = res.baseMax ?? 100;
                             let resPotentialMax = res.baseMax ?? 100;
 
@@ -1315,7 +1315,7 @@ const App: React.FC = () => {
                             const costPercentage = Math.min(100, resPotentialMax > 0 ? (resValue / resPotentialMax) * 100 : 100);
 
                             return (
-                              <div key={res.id} className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 space-y-3 shadow-md">
+                              <div key={res.id ? `res-${res.id}-${rIdx}` : `res-${rIdx}`} className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 space-y-3 shadow-md">
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
                                     <span className="text-cyan-400 text-sm">⚡</span> {res.name}
@@ -1348,7 +1348,7 @@ const App: React.FC = () => {
                           })}
 
                           {/* Custom Resource Mappings Cards (e.g. Qi, Fokus, Wut) */}
-                          {customResourceMappings.map(mapping => {
+                          {customResourceMappings.map((mapping, mIdx) => {
                             let val = mapping.baseMax ?? 100;
                             let max = mapping.baseMax ?? 100;
                             
@@ -1363,7 +1363,7 @@ const App: React.FC = () => {
                             const percentage = Math.min(100, max > 0 ? (val / max) * 100 : 100);
 
                             return (
-                              <div key={mapping.id} className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 space-y-3 shadow-md">
+                              <div key={mapping.id ? `resmap-${mapping.id}-${mIdx}` : `resmap-${mIdx}`} className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 space-y-3 shadow-md">
                                 <div className="flex justify-between items-center">
                                   <div className="space-y-0.5">
                                     <span className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
@@ -1403,7 +1403,7 @@ const App: React.FC = () => {
                           })}
 
                           {/* Custom Stat Allocations Cards */}
-                          {customStatAllocations.map(alloc => {
+                          {customStatAllocations.map((alloc, aIdx) => {
                             let val = 0;
                             let max = 0;
                             
@@ -1418,7 +1418,7 @@ const App: React.FC = () => {
                             const percentage = Math.min(100, max > 0 ? (val / max) * 100 : 100);
 
                             return (
-                              <div key={alloc.id} className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 space-y-3 shadow-md">
+                              <div key={alloc.id ? `statalloc-${alloc.id}-${aIdx}` : `statalloc-${aIdx}`} className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 space-y-3 shadow-md">
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
                                     <span className="text-purple-400 text-sm">{alloc.icon || '✊'}</span> {alloc.label}

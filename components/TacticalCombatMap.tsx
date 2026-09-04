@@ -12,7 +12,11 @@ import {
 import { 
   spawnTacticalGroup, 
   changeTacticalGroupFormation, 
-  splitTacticalGroup 
+  splitTacticalGroup,
+  executeTacticalCommand,
+  moveTacticalEntity,
+  moveTacticalGroup,
+  parseTacticalCommandsFromText
 } from '../utils/tacticalEngine';
 import { formatDisplayLocationName } from '../utils/mapUtils';
 
@@ -1758,6 +1762,7 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
 
   // Tactical Formations & Group Management State
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [isGroupMoveMode, setIsGroupMoveMode] = useState<boolean>(false);
 
   const tacticalEntities: Record<string, TacticalEntity> = combatState.tacticalEntities || {};
   const tacticalGroups: Record<string, TacticalGroup> = combatState.tacticalGroups || {};
@@ -2844,103 +2849,109 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
         return obj;
       });
 
-      // D) Character Movement (Player, Companions, Opponents)
-      // 1. Player
-      const playerPos = updatedPositions[playerName] || { x: 10, y: 15 };
-      if (!movedEntities.has(playerName)) {
-        let targetX = playerPos.x;
-        let targetY = playerPos.y;
+      // D) Tactical Movement & Command Execution Engine
+      let currentCombat: CombatState = {
+        ...combatState,
+        positions: updatedPositions,
+        placedObjects: updatedPlacedObjects,
+        tiles: nextTiles,
+        fireTurnCount: updatedFireTurn,
+        weather: updatedWeather,
+        timeOfDay: updatedTimeOfDay
+      };
 
-        // If in combat, move towards nearest active opponent
-        const activeOpponents = opponents.filter(o => (updatedPositions[o.name] || true));
-        if (activeOpponents.length > 0) {
-          const firstOpp = activeOpponents[0];
-          const oppPos = updatedPositions[firstOpp.name] || { x: 18, y: 11 };
-          const dist = Math.hypot(oppPos.x - playerPos.x, oppPos.y - playerPos.y);
-
-          if (dist > 1.5) {
-            const stepX = oppPos.x > playerPos.x ? 1 : oppPos.x < playerPos.x ? -1 : 0;
-            const stepY = oppPos.y > playerPos.y ? 1 : oppPos.y < playerPos.y ? -1 : 0;
-            targetX = Math.min(maxX, Math.max(0, playerPos.x + stepX));
-            targetY = Math.min(maxY, Math.max(0, playerPos.y + stepY));
-          } else {
-            // Maneuver around opponent
-            targetX = Math.min(maxX, Math.max(0, playerPos.x + (Math.random() > 0.5 ? 1 : -1)));
+      // 1. Process structured TacticalCommands from chat / AI
+      const parsedTacticalCmds = parseTacticalCommandsFromText(msgText, currentCombat);
+      if (parsedTacticalCmds.length > 0) {
+        for (const cmd of parsedTacticalCmds) {
+          const cmdResult = executeTacticalCommand(currentCombat, cmd);
+          if (cmdResult.success) {
+            currentCombat = cmdResult.updatedCombatState;
+            updatedPositions = { ...(currentCombat.positions || updatedPositions) };
+            hasGridChanges = true;
           }
-        } else {
-          // Free navigation
-          targetX = Math.min(maxX, Math.max(0, playerPos.x + headingDx));
-          targetY = Math.min(maxY, Math.max(0, playerPos.y + headingDy));
-        }
-
-        if (targetX !== playerPos.x || targetY !== playerPos.y) {
-          updatedPositions[playerName] = { x: targetX, y: targetY };
-          hasGridChanges = true;
-          movedEntities.add(playerName);
         }
       }
 
-      // 2. Companions
-      companions.forEach((comp, cIdx) => {
-        if (!movedEntities.has(comp.name)) {
-          const cPos = updatedPositions[comp.name] || { x: playerPos.x - 1, y: playerPos.y + cIdx };
-          const pCurrent = updatedPositions[playerName] || playerPos;
-          const distToPlayer = Math.hypot(pCurrent.x - cPos.x, pCurrent.y - cPos.y);
+      // 2. Legacy Character Movement (DISABLED by default; only active if legacyAutoMove is explicitly true)
+      if (combatState.legacyAutoMove && !combatState.tacticalMode) {
+        // Player
+        const playerPos = updatedPositions[playerName] || { x: 10, y: 15 };
+        if (!movedEntities.has(playerName)) {
+          let targetX = playerPos.x;
+          let targetY = playerPos.y;
 
-          let newCX = cPos.x;
-          let newCY = cPos.y;
+          const activeOpponents = opponents.filter(o => (updatedPositions[o.name] || true));
+          if (activeOpponents.length > 0) {
+            const firstOpp = activeOpponents[0];
+            const oppPos = updatedPositions[firstOpp.name] || { x: 18, y: 11 };
+            const dist = Math.hypot(oppPos.x - playerPos.x, oppPos.y - playerPos.y);
 
-          if (distToPlayer > 3) {
-            // Move back close to player
-            const stepX = pCurrent.x > cPos.x ? 1 : pCurrent.x < cPos.x ? -1 : 0;
-            const stepY = pCurrent.y > cPos.y ? 1 : pCurrent.y < cPos.y ? -1 : 0;
-            newCX = Math.min(maxX, Math.max(0, cPos.x + stepX));
-            newCY = Math.min(maxY, Math.max(0, cPos.y + stepY));
-          } else {
-            // Advance with team
-            newCX = Math.min(maxX, Math.max(0, cPos.x + headingDx));
-            newCY = Math.min(maxY, Math.max(0, cPos.y + headingDy));
+            if (dist > 1.5) {
+              const stepX = oppPos.x > playerPos.x ? 1 : oppPos.x < playerPos.x ? -1 : 0;
+              const stepY = oppPos.y > playerPos.y ? 1 : oppPos.y < playerPos.y ? -1 : 0;
+              targetX = Math.min(maxX, Math.max(0, playerPos.x + stepX));
+              targetY = Math.min(maxY, Math.max(0, playerPos.y + stepY));
+            }
           }
 
-          if (newCX !== cPos.x || newCY !== cPos.y) {
-            updatedPositions[comp.name] = { x: newCX, y: newCY };
+          if (targetX !== playerPos.x || targetY !== playerPos.y) {
+            updatedPositions[playerName] = { x: targetX, y: targetY };
             hasGridChanges = true;
-            movedEntities.add(comp.name);
+            movedEntities.add(playerName);
           }
         }
-      });
 
-      // 3. Opponents / Enemies
-      opponents.forEach((opp, oIdx) => {
-        if (!movedEntities.has(opp.name)) {
-          const oppPos = updatedPositions[opp.name] || { x: 18 + Math.floor(oIdx / 3), y: 11 + (oIdx % 4) };
-          const pCurrent = updatedPositions[playerName] || playerPos;
-          const distToPlayer = Math.hypot(pCurrent.x - oppPos.x, pCurrent.y - oppPos.y);
+        // Companions
+        companions.forEach((comp, cIdx) => {
+          if (!movedEntities.has(comp.name)) {
+            const cPos = updatedPositions[comp.name] || { x: (updatedPositions[playerName]?.x || 10) - 1, y: (updatedPositions[playerName]?.y || 15) + cIdx };
+            const pCurrent = updatedPositions[playerName] || { x: 10, y: 15 };
+            const distToPlayer = Math.hypot(pCurrent.x - cPos.x, pCurrent.y - cPos.y);
 
-          let newOX = oppPos.x;
-          let newOY = oppPos.y;
+            let newCX = cPos.x;
+            let newCY = cPos.y;
 
-          if (distToPlayer > 1.5) {
-            // Advance towards player to engage in battle!
-            const stepX = pCurrent.x > oppPos.x ? 1 : pCurrent.x < oppPos.x ? -1 : 0;
-            const stepY = pCurrent.y > oppPos.y ? 1 : pCurrent.y < oppPos.y ? -1 : 0;
-            newOX = Math.min(maxX, Math.max(0, oppPos.x + stepX));
-            newOY = Math.min(maxY, Math.max(0, oppPos.y + stepY));
-          } else {
-            // Flank or maneuver adjacent to player
-            const flankOffsets = [[0,1], [0,-1], [1,0], [-1,0], [1,1], [-1,-1]];
-            const off = flankOffsets[oIdx % flankOffsets.length];
-            newOX = Math.min(maxX, Math.max(0, pCurrent.x + off[0]));
-            newOY = Math.min(maxY, Math.max(0, pCurrent.y + off[1]));
+            if (distToPlayer > 3) {
+              const stepX = pCurrent.x > cPos.x ? 1 : pCurrent.x < cPos.x ? -1 : 0;
+              const stepY = pCurrent.y > cPos.y ? 1 : pCurrent.y < cPos.y ? -1 : 0;
+              newCX = Math.min(maxX, Math.max(0, cPos.x + stepX));
+              newCY = Math.min(maxY, Math.max(0, cPos.y + stepY));
+            }
+
+            if (newCX !== cPos.x || newCY !== cPos.y) {
+              updatedPositions[comp.name] = { x: newCX, y: newCY };
+              hasGridChanges = true;
+              movedEntities.add(comp.name);
+            }
           }
+        });
 
-          if (newOX !== oppPos.x || newOY !== oppPos.y) {
-            updatedPositions[opp.name] = { x: newOX, y: newOY };
-            hasGridChanges = true;
-            movedEntities.add(opp.name);
+        // Opponents / Enemies
+        opponents.forEach((opp, oIdx) => {
+          if (!movedEntities.has(opp.name)) {
+            const oppPos = updatedPositions[opp.name] || { x: 18 + Math.floor(oIdx / 3), y: 11 + (oIdx % 4) };
+            const pCurrent = updatedPositions[playerName] || { x: 10, y: 15 };
+            const distToPlayer = Math.hypot(pCurrent.x - oppPos.x, pCurrent.y - oppPos.y);
+
+            let newOX = oppPos.x;
+            let newOY = oppPos.y;
+
+            if (distToPlayer > 1.5) {
+              const stepX = pCurrent.x > oppPos.x ? 1 : pCurrent.x < oppPos.x ? -1 : 0;
+              const stepY = pCurrent.y > oppPos.y ? 1 : pCurrent.y < oppPos.y ? -1 : 0;
+              newOX = Math.min(maxX, Math.max(0, oppPos.x + stepX));
+              newOY = Math.min(maxY, Math.max(0, oppPos.y + stepY));
+            }
+
+            if (newOX !== oppPos.x || newOY !== oppPos.y) {
+              updatedPositions[opp.name] = { x: newOX, y: newOY };
+              hasGridChanges = true;
+              movedEntities.add(opp.name);
+            }
           }
-        }
-      });
+        });
+      }
 
       // Save updated positions and placed objects back to adventure state
       if (hasGridChanges || needsPosUpdate) {
@@ -2956,7 +2967,7 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
           ...adventure,
           ...syncResult,
           combatState: {
-            ...combatState,
+            ...currentCombat,
             positions: updatedPositions,
             placedObjects: updatedPlacedObjects,
             tiles: nextTiles,
@@ -3037,7 +3048,48 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
       return;
     }
 
+    if (isGroupMoveMode && activeTacticalGroup) {
+      const moveRes = executeTacticalCommand(combatState, {
+        id: `cmd_user_group_${Date.now()}`,
+        type: 'move_group',
+        groupId: activeTacticalGroup.id,
+        targetPosition: { x, y },
+        formation: activeTacticalGroup.formation,
+        source: 'player',
+        status: 'pending'
+      });
+
+      if (moveRes.success) {
+        onUpdateAdventure({
+          ...adventure,
+          combatState: moveRes.updatedCombatState
+        });
+        setIsGroupMoveMode(false);
+      }
+      return;
+    }
+
     if (selectedToken) {
+      if (tacticalEntities[selectedToken]) {
+        const moveRes = executeTacticalCommand(combatState, {
+          id: `cmd_user_ent_${Date.now()}`,
+          type: 'move_entity',
+          entityId: selectedToken,
+          targetPosition: { x, y },
+          source: 'player',
+          status: 'pending'
+        });
+
+        if (moveRes.success) {
+          onUpdateAdventure({
+            ...adventure,
+            combatState: moveRes.updatedCombatState
+          });
+          setSelectedToken(null);
+          return;
+        }
+      }
+
       const updated = {
         ...initializedPositions,
         [selectedToken]: { x, y }
@@ -3274,6 +3326,22 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
                     </select>
                   </div>
 
+                  {/* Move Group Button */}
+                  {activeTacticalGroup && (
+                    <button
+                      type="button"
+                      onClick={() => setIsGroupMoveMode(prev => !prev)}
+                      className={`px-2 py-1 text-[8.5px] font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap border ${
+                        isGroupMoveMode
+                          ? 'bg-amber-500/30 border-amber-400 text-amber-200 shadow-sm'
+                          : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
+                      }`}
+                      title="Gruppe auf ein beliebiges Zielfeld im Raster bewegen"
+                    >
+                      {isGroupMoveMode ? 'Zielfeld wählen...' : 'Marschieren'}
+                    </button>
+                  )}
+
                   {/* Split Button if >= 10 units */}
                   {activeTacticalGroup && activeTacticalGroup.unitIds.length >= 10 && (
                     <button
@@ -3481,7 +3549,7 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
               </AnimatePresence>
               
               {/* RENDER PLACED MAP OBJECTS */}
-              {(locationPlacedObjects || []).map((obj: PlacedCombatObject) => {
+              {(locationPlacedObjects || []).map((obj: PlacedCombatObject, oIdx: number) => {
                 const isSelected = selectedPlacedObjectId === obj.id;
                 const isSummonObj = obj.isSummon || obj.category === 'Beschwörung & Illusion';
                 const isRuined = obj.isDestroyed || obj.condition === 'ruined';
@@ -3489,7 +3557,7 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
 
                 return (
                   <motion.div
-                    key={`placed-${obj.id}`}
+                    key={`placed-${obj.id || oIdx}-${oIdx}`}
                     style={{
                       left: `${obj.x * (100 / gridWidth)}%`,
                       top: `${obj.y * (100 / gridHeight)}%`,
@@ -3903,13 +3971,13 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
                   );
                 }
 
-                return currentNodes.map(node => {
+                return currentNodes.map((node, nodeIdx) => {
                   const coords = node.details?.coordinates || { x: 50, y: 50 };
                   const isPlayerLocation = !!node.details?.isActiveTarget;
 
                   return (
                     <div
-                      key={node.id}
+                      key={node.id ? `node-${node.id}-${nodeIdx}` : `node-${nodeIdx}`}
                       style={{ left: `${coords.x}%`, top: `${coords.y}%` }}
                       className="absolute -translate-x-1/2 -translate-y-1/2 z-10 group"
                     >

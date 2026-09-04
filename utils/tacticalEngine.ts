@@ -1004,3 +1004,24 @@ export function validateTacticalState(combatState: CombatState): {
     errors
   };
 }
+
+// Re-export Movement and Pathfinding Engine functions
+export {
+  findPath,
+  getTerrainMovementCost,
+  deriveDirectionFromVector,
+  moveTacticalEntity,
+  moveTacticalGroup,
+  executeTacticalCommand,
+  processTacticalCommandQueue,
+  parseTacticalCommandsFromText
+} from './tacticalMovementEngine';
+export type {
+  FindPathParams,
+  PathResult,
+  MoveEntityParams,
+  MoveEntityResult,
+  MoveGroupParams,
+  MoveGroupResult,
+  ExecuteCommandResult
+} from './tacticalMovementEngine';

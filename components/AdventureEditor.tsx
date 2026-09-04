@@ -166,7 +166,7 @@ const progressionRatesConfig: Record<string, Array<{ id: string; label: string; 
 };
 
 const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initialData, mode, userId, userProfile }) => {
-  const adventureIdRef = useRef<string>(mode === GameViewMode.JOIN_CUSTOM_CHAR ? Date.now().toString() : (initialData?.id || Date.now().toString()));
+  const adventureIdRef = useRef<string>(mode === GameViewMode.JOIN_CUSTOM_CHAR ? `adv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}` : (initialData?.id || `adv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`));
   const [step, setStep] = useState(mode === GameViewMode.JOIN_CUSTOM_CHAR ? 6 : 1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingChar, setIsGeneratingChar] = useState(false);
@@ -951,7 +951,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
             );
 
         mappedAbilities = [{
-          id: Date.now().toString(),
+          id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           source: charData.powerSource || '',
           cost: charData.powerCost || '',
           description: charData.skills || '',
@@ -1592,7 +1592,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           }
         } else if (data.skills || data.powerSource) {
           const newAbil = {
-            id: Date.now().toString(),
+            id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
             source: data.powerSource || '',
             cost: data.powerCost || '',
             description: data.skills || '',
@@ -5364,7 +5364,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                             abilities: [
                               ...(player.abilities || []),
                               {
-                                id: Date.now().toString(),
+                                id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
                                 name: '',
                                 category: activeAbilityTab,
                                 source: globalSource,
@@ -5921,7 +5921,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                                         };
                                         const progLogic = activeWorld.techniqueProgressionLogic || 'ep';
                                         const newTech: any = {
-                                          id: Date.now().toString(),
+                                          id: `tech-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
                                           name: '',
                                           type: 'Angriff',
                                           subtype: rule.defaultSubtype,

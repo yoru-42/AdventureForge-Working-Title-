@@ -4273,7 +4273,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
   const sendActionText = async (textToSend: string, forceNextHp?: number, forceNextMp?: number) => {
     if (!textToSend.trim()) return;
     
-    const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text: textToSend };
+    const userMsg: ChatMessage = { id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'user', text: textToSend };
     const updatedMessages = [...messages, userMsg];
     setMessages(updatedMessages);
     setIsLoading(true);
@@ -4579,7 +4579,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         Der Kampf und die Erkundung werden visuell auf einem interaktiven Taktik-Raster dargestellt.
         Du MUSST die Positionen der Figuren, Transportmittel (Schiffe, Boote, Kutschen, Reittiere) und das Terrain live verändern, um deine erzählerischen Handlungen exakt widerzuspiegeln!
         - Nutze im [[STATUS]] Block folgende Befehle für Map-Updates:
-          * Bewegung von Figuren & Transportmitteln: [[STATUS: Position_Name=X,Y]] (z.B. [[STATUS: Position_Spieler=12,15]] oder [[STATUS: Position_${opponents[0]?.name || 'Gegner'}=18,11]] oder [[STATUS: Position_Galleone=10,10]]). X und Y sind Koordinaten von 0 bis 29.
+          * Bewegung von Figuren & Transportmitteln: [[STATUS: Position_Name=X,Y]] (z.B. [[STATUS: Position_Spieler=12,15]] oder [[STATUS: Position_${opponents[0]?.name || 'Gegner'}=18,11]] oder [[STATUS: Position_Galleone=10,10]]). X und Y sind Raster-Koordinaten.
+          * Taktische Truppen- & Gruppenbewegung: [[STATUS: MoveGroup_Name=X,Y]] (z.B. [[STATUS: MoveGroup_Goblins=15,12]] oder [[STATUS: MoveGroup_Piraten=10,8]]). Das A*-Pathfinding berechnet automatisch den optimalen, hindernisfreien Weg unter Beibehaltung der Formation!
           * Wetter-System: [[STATUS: Weather=Typ]] (Wähle aus: regen, sturm, schnee, nebel, klar). Das Wetter legt eine visuelle Ebene über die Map und beeinflusst erzählerisch die Modifikatoren (z.B. verlangsamte Bewegung, schlechtere Sicht, Blitzschäden)!
           * Tageszeit-System: [[STATUS: Time=Typ]] (Wähle aus: morning, day, evening, night). Die Tageszeit ändert die Lichtstimmung auf der Karte und beeinflusst Sichtweite und Heimlichkeit!
           * Terrain-Effekte ändern: [[STATUS: Terrain_X_Y=Typ]] (z.B. [[STATUS: Terrain_14_15=feuer]] um Felder in Brand zu setzen, oder eis, magma, dampf, ash (verbrannte Erde), obsidian).
@@ -4763,7 +4764,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         setLoreNotifications(prev => [...prev, ...notifications]);
       }
 
-      const newModelMsg: ChatMessage = { id: Date.now().toString(), role: 'model', text: finalCleanedText };
+      const newModelMsg: ChatMessage = { id: `model-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'model', text: finalCleanedText };
       setMessages(prev => [...prev, newModelMsg]);
       const nextChatHistory: ChatMessage[] = [...updatedMessages, newModelMsg];
       
@@ -4834,10 +4835,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
     }
   }, [adventure.npcs, dialogueSpeakerId, dialogueTargetId]);
 
-  const handleSendDialogue = async () => {
+  const handleSendDialogue = async (textOverride?: string | React.MouseEvent<any>) => {
     if (isLoading) return;
     
-    const text = inputText.trim();
+    const text = (typeof textOverride === 'string' ? textOverride : inputText).trim();
     if (dialogueType === 'user_npc' && !text) return;
     
     const npcList = adventure.npcs || [];
@@ -4931,7 +4932,7 @@ REGELN FÜR DEINE ANTWORT (STRENG EINZUHALTEN):
     }
 
     const userMsg: ChatMessage = {
-      id: Date.now().toString(),
+      id: `dialogue-user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       role: 'user',
       text: userDisplayMsgText,
       isDialogue: true,
@@ -4969,7 +4970,7 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       const rawText = response.text || '';
       
       const newModelMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: `dialogue-model-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         role: 'model',
         text: rawText.trim(),
         isDialogue: true,
@@ -4995,9 +4996,10 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
     }
   };
 
-  const handleSend = async () => {
-    if (!inputText.trim()) return;
-    const text = inputText;
+  const handleSend = async (textOverride?: string | React.MouseEvent<any>) => {
+    const rawText = (typeof textOverride === 'string' ? textOverride : inputText).trim();
+    if (!rawText) return;
+    const text = rawText;
     setInputText('');
 
     let nextHp = playerHp;
@@ -6500,7 +6502,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         setLoreNotifications(prev => [...prev, ...notifications]);
       }
 
-      const newModelMsg: ChatMessage = { id: Date.now().toString(), role: 'model', text: finalCleanedText };
+      const newModelMsg: ChatMessage = { id: `regen-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'model', text: finalCleanedText };
       const finalMessages: ChatMessage[] = [...historyToUse, newModelMsg];
       setMessages(finalMessages);
       
@@ -6602,7 +6604,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
       const imageUrl = await GeminiService.generateImage(prompt, world.isNsfw);
       if (imageUrl) {
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'model', text: 'Die Welt nimmt Gestalt an...', image: imageUrl }]);
+        setMessages(prev => [...prev, { id: `visual-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'model', text: 'Die Welt nimmt Gestalt an...', image: imageUrl }]);
       }
     } catch (err) {
       console.error(err);
@@ -6681,9 +6683,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       {/* Floating Lore-Updates Notifications */}
       {loreNotifications.length > 0 && (
         <div className="absolute top-[88px] right-4 z-50 flex flex-col gap-2 max-w-xs pointer-events-none">
-          {loreNotifications.map(notif => (
+          {loreNotifications.map((notif, notifIdx) => (
             <div 
-              key={notif.id} 
+              key={notif.id ? `notif-${notif.id}-${notifIdx}` : `notif-${notifIdx}`} 
               className="bg-amber-950/90 border border-amber-500/30 text-amber-100 px-3.5 py-2.5 rounded-xl text-xs shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-right duration-300 pointer-events-auto backdrop-blur-md"
             >
               <span className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg">
@@ -7327,7 +7329,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               const isRegeneratable = isLastMessage && isModelMsg && msg.id !== 'prologue-msg' && msg.id !== 'first-msg';
 
               return (
-                <div key={msg.id || `chat-msg-${idx}`} className="flex flex-col gap-1">
+                <div key={msg.id ? `chat-msg-${msg.id}-${idx}` : `chat-msg-${idx}`} className="flex flex-col gap-1">
                   <div className={`flex items-end ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-3 animate-in fade-in duration-300 relative`}>
                     <div className={`max-w-[85%] rounded-2xl shadow-xl overflow-hidden relative ${msg.role === 'user' ? 'bg-amber-600 text-white rounded-tr-none p-4 text-[15px] md:text-[16px]' : 'bg-slate-900/90 border border-slate-800 text-slate-200 rounded-tl-none italic'}`}>
                       {msg.image && <img src={msg.image} className="w-full aspect-video object-cover mb-3" />}
@@ -7471,8 +7473,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       onChange={(e) => setDialogueSpeakerId(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50"
                     >
-                      {adventure.npcs.map(npc => (
-                        <option key={npc.id} value={npc.id}>
+                      {adventure.npcs.map((npc, nIdx) => (
+                        <option key={npc.id ? `dlg-npc-${npc.id}-${nIdx}` : `dlg-npc-${nIdx}`} value={npc.id}>
                           {npc.nickname || npc.name} ({npc.role})
                         </option>
                       ))}
@@ -7496,8 +7498,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         onChange={(e) => setDialogueSpeakerId(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500/50"
                       >
-                        {adventure.npcs?.map(npc => (
-                          <option key={npc.id} value={npc.id} disabled={npc.id === dialogueTargetId}>
+                        {adventure.npcs?.map((npc, nIdx) => (
+                          <option key={npc.id ? `spkA-${npc.id}-${nIdx}` : `spkA-${nIdx}`} value={npc.id} disabled={npc.id === dialogueTargetId}>
                             {npc.nickname || npc.name}
                           </option>
                         ))}
@@ -7510,8 +7512,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         onChange={(e) => setDialogueTargetId(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500/50"
                       >
-                        {adventure.npcs?.map(npc => (
-                          <option key={npc.id} value={npc.id} disabled={npc.id === dialogueSpeakerId}>
+                        {adventure.npcs?.map((npc, nIdx) => (
+                          <option key={npc.id ? `spkB-${npc.id}-${nIdx}` : `spkB-${nIdx}`} value={npc.id} disabled={npc.id === dialogueSpeakerId}>
                             {npc.nickname || npc.name}
                           </option>
                         ))}
@@ -7529,11 +7531,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Teilnehmer wählen (Mehrfachauswahl):</label>
                   <div className="space-y-1.5 max-h-32 overflow-y-auto bg-slate-950/80 p-2 rounded-xl border border-slate-850">
                     {adventure.npcs && adventure.npcs.length > 0 ? (
-                      adventure.npcs.map(npc => {
+                      adventure.npcs.map((npc, nIdx) => {
                         const isChecked = dialogueGroupSelectedIds.includes(npc.id);
                         return (
                           <button
-                            key={npc.id}
+                            key={npc.id ? `grp-${npc.id}-${nIdx}` : `grp-${nIdx}`}
                             type="button"
                             onClick={() => {
                               if (isChecked) {
@@ -7595,9 +7597,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     </div>
                   )}
                   {combinedDetectedEnemies.length > 0 ? (
-                    combinedDetectedEnemies.map(enemy => (
+                    combinedDetectedEnemies.map((enemy, enIdx) => (
                       <button
-                        key={enemy.id}
+                        key={enemy.id ? `det-enemy-${enemy.id}-${enIdx}` : `det-enemy-${enIdx}`}
                         onClick={() => {
                           if (enemy.type === 'npc') {
                             startCombat(enemy.id, enemy.name);
@@ -8509,7 +8511,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 {messages.slice(-12).map((msg, idx) => {
                   const isUser = msg.role === 'user';
                   return (
-                    <div key={msg.id || `combat-msg-${idx}`} className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-300`}>
+                    <div key={msg.id ? `combat-msg-${msg.id}-${idx}` : `combat-msg-${idx}`} className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in duration-300`}>
                       <div className={`max-w-[96%] w-full rounded-xl shadow-md p-3.5 text-[14px] md:text-[15px] text-slate-300 ${
                         isUser 
                           ? 'bg-amber-600/15 border border-amber-500/20 rounded-tr-none text-amber-200' 
@@ -10270,6 +10272,16 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           onClose={() => setShowWorkMenu(false)}
           adventure={adventure}
           onUpdateAdventure={onUpdateAdventure}
+          onSendChatMessage={(text: string) => {
+            if (isDialogueActive) {
+              handleSendDialogue(text);
+            } else {
+              handleSend(text);
+            }
+          }}
+          onSetInputText={(text: string) => {
+            setInputText(text);
+          }}
         />
       )}
 

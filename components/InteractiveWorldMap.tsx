@@ -1180,7 +1180,7 @@ export const InteractiveWorldMap: React.FC<InteractiveWorldMapProps> = ({
       return [
         ...prevLore,
         {
-          id: Date.now().toString(),
+          id: `loc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           category: 'Orte',
           title: selectedTerritory.name,
           description: selectedTerritory.description,

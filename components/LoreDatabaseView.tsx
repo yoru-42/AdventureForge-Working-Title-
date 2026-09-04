@@ -957,7 +957,7 @@ const LoreDatabaseView: React.FC<Props> = ({
       const y = Math.max(0, Math.min(mapHeight, Math.round(((e.clientY - rect.top - panOffset.y) / mapScale / rect.height) * mapHeight)));
       
       const newEffect = {
-        id: Date.now().toString(),
+        id: `eff-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         type: activePlacingEffect,
         x,
         y,
@@ -1538,7 +1538,7 @@ const LoreDatabaseView: React.FC<Props> = ({
     } else {
       newLore = [...lore, { 
         ...finalForm, 
-        id: Date.now().toString(), 
+        id: `lore-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, 
         category: targetCategory,
         isUnlocked: finalForm.isUnlocked !== false 
       } as LoreEntry];
@@ -1888,7 +1888,7 @@ const LoreDatabaseView: React.FC<Props> = ({
       let generatedAbilities = prev.details?.abilities;
       if ((cat === 'Charaktere' || cat === 'Gegner') && (data.details?.skills || data.details?.powerSource)) {
         const newAbil = {
-          id: Date.now().toString(),
+          id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           source: data.details.powerSource || '',
           cost: data.details.powerCost || '',
           description: data.details.skills || '',

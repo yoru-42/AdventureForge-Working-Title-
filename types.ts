@@ -529,6 +529,8 @@ export interface Character {
   originalIdentity?: Partial<Character>; // Dauerhaft gesicherte Ursprüngliche Gestalt (Geburtsidentität & früheres Leben)
   emotionState?: UserEmotionState; // Aktuelle Emotion & Tonart des Nutzers
   physicalChangeHistory?: PhysicalChangeHistoryEntry[]; // Protokollierte körperliche Veränderungen
+  tasks?: EconomyTask[]; // Persönliche rollenspezifische Aufgaben
+  duties?: EconomyDuty[]; // Rollenspezifische wiederkehrende Pflichten
 }
 
 export interface NPC extends Character {
@@ -1521,6 +1523,7 @@ export interface CombatState {
   tacticalCommands?: TacticalCommand[];
   tacticalRound?: number;
   tacticalMode?: boolean;
+  legacyAutoMove?: boolean;
   fireTurnCount?: number;
 }
 
@@ -1611,15 +1614,19 @@ export interface TacticalGroup {
 
 export type TacticalCommandType = 
   | 'move'
+  | 'move_entity'
   | 'move_group'
   | 'formation'
+  | 'formation_move'
+  | 'stop'
+  | 'hold'
   | 'attack'
   | 'defend'
   | 'retreat'
+  | 'follow'
+  | 'move_to_entity'
   | 'split_group'
   | 'merge_group'
-  | 'follow'
-  | 'hold'
   | 'flee';
 
 export interface TacticalCommand {

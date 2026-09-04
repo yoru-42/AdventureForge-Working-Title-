@@ -7067,6 +7067,76 @@ REGELN:
     });
   }
 
+  static async deriveRoleTasksFromChat(
+    player: Character,
+    roleTitle: string,
+    station: string,
+    recentChatSnippets: string[],
+    holding?: EconomyHolding
+  ): Promise<EconomyTask[]> {
+    return this.callWithRetry(async () => {
+      const ai = this.getAI();
+      const chatContext = recentChatSnippets.slice(-6).join('\n---\n');
+
+      const prompt = `Analysiere die aktuelle Spielsituation und die Rolle des Nutzers:
+Nutzer-Rolle/Amt: "${roleTitle}"
+Dienstort/Station: "${station}"
+Nutzer-Name: "${player.name}"
+Beruf/Klasse: "${player.profession || player.role || 'Unbekannt'}"
+${holding ? `Betrieb/Herrschaftsbereich: "${holding.name}" (${holding.type})` : ''}
+
+LETZTE CHAT-NACHRICHTEN:
+${chatContext || 'Keine bisherigen Nachrichten.'}
+
+AUFGABE:
+Ermittle 2 bis 4 konkrete, handlungsrelevante Aufgaben für den Spieler, die sich direkt aus seiner Rolle (z.B. König, Koch, Tavernenwirt, Wachsoldat, Magier) und dem aktuellen Geschehen ableiten.
+Wenn der Spieler beispielsweise König ist: Befehle erteilen, Petitionen prüfen, Gesandte empfangen, Truppen anweisen.
+Wenn der Spieler Koch ist: Speisen zubereiten, Vorräte prüfen, Gehilfen anweisen, Vorkosten.
+Wenn der Spieler Wirt ist: Ausschank leiten, Gäste betreuen, Streitigkeiten schlichten, Kasse zählen.
+Wenn der Spieler Soldat/Wächter ist: Tor sichern, Patrouillieren, Bericht an Vorgesetzten.
+
+REGELN:
+- Absolut KEINE Emojis verwenden!
+- Neutrale, präzise Formulierungen.
+- JSON-Array mit Objekten:
+  - title: Prägnanter Aufgabentitel
+  - description: 1-2 Sätze Handlungsanweisung oder Fragestellung
+  - priority: "low", "medium", "high" oder "urgent"
+  - deadline: Zeitangabe (z.B. "Sofort", "Vor dem Abend", "Heute")
+  - requiredResources: Optionale Angabe
+  - generatedReason: Kurzer Grund (z.B. "Aus aktuellem Gesprächsverlauf")
+`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-flash-latest',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response.text || '[]');
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed.map((item: any, idx: number): EconomyTask => ({
+        id: `task-chat-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        title: item.title || `Aufgabe ${idx + 1}`,
+        description: item.description || '',
+        status: 'pending',
+        priority: (['low', 'medium', 'high', 'urgent'].includes(item.priority) ? item.priority : 'medium') as any,
+        deadline: item.deadline || 'Heute',
+        progress: 0,
+        requiredResources: item.requiredResources || '',
+        reward: '',
+        assigneeName: player.name,
+        taskType: 'generated',
+        canDelegate: true,
+        generatedByAI: true,
+        generatedReason: item.generatedReason || 'Aus Spielverlauf abgeleitet'
+      }));
+    });
+  }
+
   static async generateWorldQuickEnrichment(
     worldTitle: string,
     genres: string[],
@@ -7798,4 +7868,5 @@ export const generateHoldingActivityLog = async (world: WorldSetting, holding: E
 export const generateSubtasksForOrder = GeminiService.generateSubtasksForOrder.bind(GeminiService);
 export const generateTaskFromDuty = GeminiService.generateTaskFromDuty.bind(GeminiService);
 export const suggestOperationalTasks = GeminiService.suggestOperationalTasks.bind(GeminiService);
+export const deriveRoleTasksFromChat = GeminiService.deriveRoleTasksFromChat.bind(GeminiService);
 

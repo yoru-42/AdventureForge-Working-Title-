@@ -2607,7 +2607,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
                     updateDetail('abilities', [
                       ...currentAbilities,
                       {
-                        id: Date.now().toString(),
+                        id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
                         name: '',
                         category: activeAbilityTab,
                         source: globalSource,
