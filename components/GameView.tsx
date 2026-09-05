@@ -4778,7 +4778,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           - Stufe 3 (Schnell / Magisch): Schnittwunden/Prellungen schließen sich in Minuten bis Stunden. Knochenbrüche in 1-2 Tagen. Stark beschleunigte HP- & Ausdauer-Erholung (+50%).
           - Stufe 4 (Extrem / Erwacht): Wunden schließen sich direkt im Kampf oder in wenigen Minuten. Starke In-Fight Regeneration & Erholung nach schwerem Schaden (+100%).
           - Stufe 5 (Übernatürlich / Unsterblich): Sofortige Gewebe- & Knochenregeneration. Kontinuierliche HP- & Ressourcen-Auffüllung.
-          - Die KI und der Spieler können den Heilfaktor bei Transformationen oder Ereignissen im Status anpassen: [[STATUS: healingFactor=X]] (wobei X = 1 bis 5).`;
+          - Die KI und der Spieler können den Heilfaktor bei Transformationen oder Ereignissen im Status anpassen: [[STATUS: healingFactor=X]] (wobei X = 1 bis 5).
+      30. BODENSTÄNDIGE CHARAKTERE & WELTENTWICKLUNG (GLAUBWÜRDIGE HINTERGRÜNDE):
+          - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
+          - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
+          - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
       
       const response = await GeminiService.chat(updatedMessages, systemInstruction, world.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
@@ -6514,7 +6518,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           - Stufe 3 (Schnell / Magisch): Schnittwunden/Prellungen schließen sich in Minuten bis Stunden. Knochenbrüche in 1-2 Tagen. Stark beschleunigte HP- & Ausdauer-Erholung (+50%).
           - Stufe 4 (Extrem / Erwacht): Wunden schließen sich direkt im Kampf oder in wenigen Minuten. Starke In-Fight Regeneration & Erholung nach schwerem Schaden (+100%).
           - Stufe 5 (Übernatürlich / Unsterblich): Sofortige Gewebe- & Knochenregeneration. Kontinuierliche HP- & Ressourcen-Auffüllung.
-          - Die KI und der Spieler können den Heilfaktor bei Transformationen oder Ereignissen im Status anpassen: [[STATUS: healingFactor=X]] (wobei X = 1 bis 5).`;
+          - Die KI und der Spieler können den Heilfaktor bei Transformationen oder Ereignissen im Status anpassen: [[STATUS: healingFactor=X]] (wobei X = 1 bis 5).
+      30. BODENSTÄNDIGE CHARAKTERE & WELTENTWICKLUNG (GLAUBWÜRDIGE HINTERGRÜNDE):
+          - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
+          - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
+          - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
 
       setMessages(historyToUse);
 

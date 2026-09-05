@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { jsonrepair } from "jsonrepair";
 import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
-import { CANON_PROTECTION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
+import { CANON_PROTECTION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
 import {
   executeDrawingPlan,
   validateDrawingPlanAndGeometries,
@@ -297,11 +297,11 @@ export class GeminiService {
       // The systemInstruction already contains all world, player and NPC profile info.
       const maxHistoryCount = 12;
       let historyToPass = history;
-      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}`;
+      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}`;
 
       if (history.length > maxHistoryCount) {
         if (history[0] && history[0].text) {
-          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
+          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
         }
         historyToPass = history.slice(-maxHistoryCount);
       }
@@ -494,6 +494,9 @@ WICHTIG (SPIELER-AUTONOMIE & KRAFTAUSBRUCHS-VERBOT):
 - Du darfst NIEMALS beschreiben, was der Spieler/sein Charakter fühlt, denkt, spürt, empfindet oder wie sein Körper unwillkürlich reagiert (z. B. kein "kühles Prickeln unter der Haut", kein "Eis in deinen Adern").
 - Es ist strengstens verboten zu schreiben: "Du spürst, wie sich eine eisige Kälte in deiner Brust ausbreitet", "lässt dein Herz einen Schlag aussetzen", "Deine Hände umklammern fester...", "Du spürst, wie die Farbe aus deinem Gesicht weicht", "deine Kräfte brechen unkontrolliert heraus" oder Ähnliches.
 - Beschreibe ausschließlich die äußere Welt, die Lage der Umgebung, die Atmosphäre, die NPCs und die objektiven Umstände. Der Spieler hat die absolute und alleinige Kontrolle über seine Gefühle, seinen Körper, seine Mächte und seine Reaktionen!
+- GLAUBWÜRDIGKEIT, ALLTÄGLICHKEIT & BODENSTÄNDIGKEIT (KI-REGEL):
+  Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe. Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
+  Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
 
 WICHTIG: Antworte NUR mit dem generierten Prologtext. Keinen JSON-Wrapper, kein "Hier ist dein Prolog", kein Markdown außer normalem Text mit Absätzen.`;
 
@@ -608,7 +611,10 @@ ANWEISUNGEN:
   Es ist absolut verboten zu schreiben: "Du spürst eine eisige Kälte", "dein Herz setzt einen Schlag aus", "deine Knöchel werden weiß", "deine Hände umklammern fester", "du spürst, wie die Farbe weicht", "deine Kräfte brechen heraus" oder Ähnliches.
   Beschreibe nur die äußere, objektive Welt und das Verhalten von NPCs. Der Spieler hat die absolute und alleinige Hoheit über seine Gedanken, unwillkürlichen Körperreaktionen, Gefühle, Mächte und Taten!
 - ABSOLUTES ZITIERVERBOT DES NUTZERS:
-  Du als Erzähler darfst NIEMALS wörtliche Zitate oder Aussagen des Spielers/Nutzers in deiner Beschreibung oder Narration wiederholen oder nachplappern. NPCs dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich darauf beziehen.`;
+  Du als Erzähler darfst NIEMALS wörtliche Zitate oder Aussagen des Spielers/Nutzers in deiner Beschreibung oder Narration wiederholen oder nachplappern. NPCs dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich darauf beziehen.
+- GLAUBWÜRDIGKEIT, ALLTÄGLICHKEIT & BODENSTÄNDIGKEIT (KI-REGEL):
+  Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe. Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
+  Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-flash-latest',
@@ -1226,6 +1232,11 @@ ANWEISUNGEN:
       
       ${CHARACTER_BIO_7_QUESTIONS_PROMPT}
       
+      ### KI-REGEL: GLAUBWÜRDIGKEIT, ALLTÄGLICHKEIT & BODENSTÄNDIGKEIT:
+      - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
+      - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
+      - Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
+      
       ### WICHTIG FÜR TRANSFORMATIONEN & KÖRPERLICHE VERÄNDERUNGEN (SCHRITT 1 ZU SCHRITT 6 LOGIK):
       Falls die Welten-Beschreibung (${world.description}), der Prolog oder die Charakter-Daten eine Transformation, Metamorphose, körperliche Mutation, Fluch oder Gestaltwechsel beschreiben oder nahelegen (z.B. vom Menschen zum Dämon/Drachen/Vampir/Bestie, Gears, Werwolf, Magie-Transformation):
       1. WAS ER DAVOR WAR (Ursprünglicher Zustand):
@@ -1311,6 +1322,12 @@ ANWEISUNGEN:
       
       ${CHARACTER_BIO_7_QUESTIONS_PROMPT}
       
+      ### KI-REGEL: GLAUBWÜRDIGKEIT, ALLTÄGLICHKEIT & BODENSTÄNDIGKEIT:
+      - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
+      - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
+      - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen.
+      - Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
+      
       ### STRENGSTES VERBOT VON WISSEN ÜBER DEN SPIELER (CODEX IST VERGANGENHEIT):
       - Alles im Codex und die Biografie des NPCs repräsentieren ausschließlich die VERGANGENHEIT (Vorgeschichte vor dem Abenteuer).
       - Der NPC darf unter 'currentSituation', 'bio', 'relationship', 'relationships' oder Geheimnissen absolut KEINERLEI Wissen über die gegenwärtige/aktuelle Situation des Spielers oder seine aktuellen Aktivitäten besitzen! Er hat ihn in der Regel noch nie getroffen und weiß unmöglich über seine aktuelle Lage Bescheid. Ihre Beziehungen/Begegnungen fangen erst im Hier und Jetzt an.
@@ -1378,6 +1395,12 @@ ANWEISUNGEN:
       Jeder NPC braucht Kleidung, Bio, Situation, Fähigkeiten/Kräfte, Kraftquelle, Kraftkosten, Techniken, eine Persönlichkeit, ein Ziel, das Genaue Geschlecht (Männlich oder Weiblich), und (falls der Charakter weiblich ist oder gender 'Weiblich' ist) eine passende Körbchengröße (cupSize). Bei männlichen Charakteren setze bei cupSize '-' ein. Zudem MUSS jeder NPC eine definierte Beziehung zu anderen (relationship) sowie ein Verhaltensmuster anderen gegenüber (conduct) besitzen. Alles auf DEUTSCH.
       
       ${CHARACTER_BIO_7_QUESTIONS_PROMPT}
+      
+      ### KI-REGEL: GLAUBWÜRDIGKEIT, ALLTÄGLICHKEIT & BODENSTÄNDIGKEIT:
+      - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
+      - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
+      - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen.
+      - Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
       
       ### STRENGSTES VERBOT VON WISSEN ÜBER DEN SPIELER (CODEX IST VERGANGENHEIT):
       - Alles in der Bio, den Beziehungen und der Situation der NPCs repräsentiert die VERGANGENHEIT vor Beginn des Spiels. Sie dürfen den Spieler noch nicht getroffen haben (außer es gibt eine gemeinsame Vergangenheit wie Familie) und dürfen KEINERLEI Wissen über die gegenwärtige Situation des Spielers besitzen. Sie dürfen nicht über seine aktuelle Lage oder seine aktuellen Aktivitäten Bescheid wissen!

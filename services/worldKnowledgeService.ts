@@ -34,6 +34,18 @@ export const CANON_PROTECTION_DIRECTIVE = `
 4. UNBEKANNT BLEIBT UNBEKANNT: Regionen oder Zusammenhänge, die noch nicht erforscht oder definiert sind, dürfen nicht eigenmächtig als fester Kanon zementiert werden.
 `;
 
+export const GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE = `
+### KI-REGEL: GLAUBWÜRDIGKEIT, ALLTÄGLICHKEIT & BODENSTÄNDIGKEIT:
+1. INTERESSANT BEDEUTET NICHT AUTOMATISCH AUSSERGEWÖHNLICH:
+   - Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe für Charaktere, NPCs, Orte und Ereignisse.
+   - Erzeuge KEINE geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch explizite Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diese Figur vorgesehen sind.
+2. GEWÖHNLICHES LEBEN ALS NORMALITÄT:
+   - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist.
+   - Die allermeisten Bewohner dürfen und sollen ein gewöhnliches Leben mit alltäglichen Beschäftigungen und Sorgen führen.
+3. ORGANISCHE BEDEUTUNG & ENTWICKLUNG:
+   - Nur Charaktere mit entsprechender tatsächlicher Bedeutung, spezifischer Motivation, konkreter Beziehung zum Spieler oder echter Ereignisentwicklung im Spielgeschehen sollen zu zentralen Figuren werden.
+`;
+
 export class WorldKnowledgeService {
   /**
    * Evaluates if sourceNew has higher or equal priority over sourceOld
