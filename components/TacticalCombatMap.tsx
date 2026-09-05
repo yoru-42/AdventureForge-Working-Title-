@@ -2873,85 +2873,8 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
         }
       }
 
-      // 2. Legacy Character Movement (DISABLED by default; only active if legacyAutoMove is explicitly true)
-      if (combatState.legacyAutoMove && !combatState.tacticalMode) {
-        // Player
-        const playerPos = updatedPositions[playerName] || { x: 10, y: 15 };
-        if (!movedEntities.has(playerName)) {
-          let targetX = playerPos.x;
-          let targetY = playerPos.y;
-
-          const activeOpponents = opponents.filter(o => (updatedPositions[o.name] || true));
-          if (activeOpponents.length > 0) {
-            const firstOpp = activeOpponents[0];
-            const oppPos = updatedPositions[firstOpp.name] || { x: 18, y: 11 };
-            const dist = Math.hypot(oppPos.x - playerPos.x, oppPos.y - playerPos.y);
-
-            if (dist > 1.5) {
-              const stepX = oppPos.x > playerPos.x ? 1 : oppPos.x < playerPos.x ? -1 : 0;
-              const stepY = oppPos.y > playerPos.y ? 1 : oppPos.y < playerPos.y ? -1 : 0;
-              targetX = Math.min(maxX, Math.max(0, playerPos.x + stepX));
-              targetY = Math.min(maxY, Math.max(0, playerPos.y + stepY));
-            }
-          }
-
-          if (targetX !== playerPos.x || targetY !== playerPos.y) {
-            updatedPositions[playerName] = { x: targetX, y: targetY };
-            hasGridChanges = true;
-            movedEntities.add(playerName);
-          }
-        }
-
-        // Companions
-        companions.forEach((comp, cIdx) => {
-          if (!movedEntities.has(comp.name)) {
-            const cPos = updatedPositions[comp.name] || { x: (updatedPositions[playerName]?.x || 10) - 1, y: (updatedPositions[playerName]?.y || 15) + cIdx };
-            const pCurrent = updatedPositions[playerName] || { x: 10, y: 15 };
-            const distToPlayer = Math.hypot(pCurrent.x - cPos.x, pCurrent.y - cPos.y);
-
-            let newCX = cPos.x;
-            let newCY = cPos.y;
-
-            if (distToPlayer > 3) {
-              const stepX = pCurrent.x > cPos.x ? 1 : pCurrent.x < cPos.x ? -1 : 0;
-              const stepY = pCurrent.y > cPos.y ? 1 : pCurrent.y < cPos.y ? -1 : 0;
-              newCX = Math.min(maxX, Math.max(0, cPos.x + stepX));
-              newCY = Math.min(maxY, Math.max(0, cPos.y + stepY));
-            }
-
-            if (newCX !== cPos.x || newCY !== cPos.y) {
-              updatedPositions[comp.name] = { x: newCX, y: newCY };
-              hasGridChanges = true;
-              movedEntities.add(comp.name);
-            }
-          }
-        });
-
-        // Opponents / Enemies
-        opponents.forEach((opp, oIdx) => {
-          if (!movedEntities.has(opp.name)) {
-            const oppPos = updatedPositions[opp.name] || { x: 18 + Math.floor(oIdx / 3), y: 11 + (oIdx % 4) };
-            const pCurrent = updatedPositions[playerName] || { x: 10, y: 15 };
-            const distToPlayer = Math.hypot(pCurrent.x - oppPos.x, pCurrent.y - oppPos.y);
-
-            let newOX = oppPos.x;
-            let newOY = oppPos.y;
-
-            if (distToPlayer > 1.5) {
-              const stepX = pCurrent.x > oppPos.x ? 1 : pCurrent.x < oppPos.x ? -1 : 0;
-              const stepY = pCurrent.y > oppPos.y ? 1 : pCurrent.y < oppPos.y ? -1 : 0;
-              newOX = Math.min(maxX, Math.max(0, oppPos.x + stepX));
-              newOY = Math.min(maxY, Math.max(0, oppPos.y + stepY));
-            }
-
-            if (newOX !== oppPos.x || newOY !== oppPos.y) {
-              updatedPositions[opp.name] = { x: newOX, y: newOY };
-              hasGridChanges = true;
-              movedEntities.add(opp.name);
-            }
-          }
-        });
-      }
+      // Tactical movement happens strictly and exclusively through the Movement Engine.
+      // Legacy character auto-movement toward opponents has been disabled to prevent conflicting state updates.
 
       // Save updated positions and placed objects back to adventure state
       if (hasGridChanges || needsPosUpdate) {

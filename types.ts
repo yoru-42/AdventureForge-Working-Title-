@@ -1600,6 +1600,11 @@ export interface TacticalGroup {
     x: number;
     y: number;
   };
+  anchorPosition?: {
+    x: number;
+    y: number;
+  };
+  facingDirection?: TacticalDirection;
   leaderId?: string; // TacticalEntity ID
   targetId?: string; // TacticalEntity oder TacticalGroup ID
   targetPosition?: {

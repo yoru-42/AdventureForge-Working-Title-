@@ -190,6 +190,32 @@ const App: React.FC = () => {
       try {
         const savedAdventures = await StorageService.getItem<Adventure[]>('adventures');
         if (savedAdventures && savedAdventures.length > 0 && isMounted) {
+          
+          // --- Data Sanitization: Recursive ID deduplicator ---
+          // Fixes React duplicate key errors from old bugs generating duplicate IDs
+          const deduplicateIds = (obj: any) => {
+            if (Array.isArray(obj)) {
+              const seenIds = new Set();
+              for (let i = 0; i < obj.length; i++) {
+                if (obj[i] && typeof obj[i] === 'object') {
+                  if (obj[i].id !== undefined) {
+                    if (seenIds.has(obj[i].id)) {
+                      obj[i].id = `${obj[i].id}-${Math.random().toString(36).substr(2, 5)}`;
+                    }
+                    seenIds.add(obj[i].id);
+                  }
+                  deduplicateIds(obj[i]);
+                }
+              }
+            } else if (obj !== null && typeof obj === 'object') {
+              for (const key of Object.keys(obj)) {
+                deduplicateIds(obj[key]);
+              }
+            }
+          };
+          deduplicateIds(savedAdventures);
+          // --- End Data Sanitization ---
+
           setAdventures(savedAdventures);
 
           // Async background optimization to shrink large images (e.g., length > 120,000)

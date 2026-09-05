@@ -504,12 +504,23 @@ export const CharacterLoreForm: React.FC<Props> = ({
           const nextSecrets3 = data.secretsStage3 !== undefined ? data.secretsStage3 : (keepExistingDetails ? (prev.secretsStage3 || currentDetails.secretsStage3 || '') : '');
           const nextKnowledge = data.knowledge !== undefined ? data.knowledge : (keepExistingDetails ? (prev.knowledge || currentDetails.knowledge || '') : '');
 
+          const finalRole = data.role || data.profession || currentDetails.role || currentDetails.profession || '';
+          const finalProfession = data.profession || data.role || currentDetails.profession || currentDetails.role || '';
+
           const newDetails = keepExistingDetails ? {
             ...currentDetails,
             callName: generatedName || currentDetails.callName || finalTitle,
             nickname: data.nickname || currentDetails.nickname || '',
             rufName: data.rufName || currentDetails.rufName || generatedName || '',
-            role: data.role || currentDetails.role || '',
+            role: finalRole,
+            profession: finalProfession || finalRole,
+            professionLevel: data.professionLevel || currentDetails.professionLevel || '',
+            secondaryProfessions: data.secondaryProfessions || currentDetails.secondaryProfessions || [],
+            jobTitle: data.jobTitle || currentDetails.jobTitle || '',
+            professionDescription: data.professionDescription || currentDetails.professionDescription || '',
+            craftingSkills: data.craftingSkills || currentDetails.craftingSkills || '',
+            talents: data.talents || currentDetails.talents || '',
+            everydaySkills: data.everydaySkills || currentDetails.everydaySkills || '',
             gender: data.appearance?.gender || currentDetails.gender || 'Unbekannt',
             age: data.appearance?.age || currentDetails.age || '',
             build: data.appearance?.build || currentDetails.build || '',
@@ -550,7 +561,15 @@ export const CharacterLoreForm: React.FC<Props> = ({
             callName: generatedName || finalTitle,
             nickname: data.nickname || '',
             rufName: data.rufName || data.nickname || generatedName || '',
-            role: data.role || '',
+            role: data.role || data.profession || '',
+            profession: data.profession || data.role || '',
+            professionLevel: data.professionLevel || '',
+            secondaryProfessions: data.secondaryProfessions || [],
+            jobTitle: data.jobTitle || '',
+            professionDescription: data.professionDescription || '',
+            craftingSkills: data.craftingSkills || '',
+            talents: data.talents || '',
+            everydaySkills: data.everydaySkills || '',
             gender: data.appearance?.gender || 'Unbekannt',
             age: data.appearance?.age || '',
             build: data.appearance?.build || '',
@@ -1108,12 +1127,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   Rolle / Beruf
                 </label>
                 <ProfessionSelect
-                  value={getDetail('role', '')} 
+                  value={getDetail('role', '') || getDetail('profession', '')} 
                   onChange={val => {
                     updateDetail('role', val);
-                    if (!getDetail('profession', '')) {
-                      updateDetail('profession', val);
-                    }
+                    updateDetail('profession', val);
                   }}
                   placeholder="Beruf wählen oder eintragen..." 
                 />

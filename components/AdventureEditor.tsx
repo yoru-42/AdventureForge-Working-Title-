@@ -489,10 +489,16 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     let p: Character;
     if (initialData?.player) {
       p = { ...initialData.player };
+      // Synchronize role and profession so they always match
+      const synchronizedRole = p.role || p.profession || '';
+      p.role = synchronizedRole;
+      p.profession = synchronizedRole;
     } else if (userProfile) {
+      const prefRole = userProfile.preferredRole || '';
       p = {
         name: userProfile.name,
-        role: userProfile.preferredRole,
+        role: prefRole,
+        profession: prefRole,
         personality: '',
         bio: userProfile.bio,
         currentSituation: '',
@@ -1713,13 +1719,23 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         };
 
         const generatedPlayerName = (data.name?.trim()) || (data.callName?.trim()) || (data.rufName?.trim()) || '';
+        const finalRole = data.role || data.profession || (keepExistingPlayerDetails ? (prev.role || prev.profession || '') : '');
+        const finalProfession = data.profession || data.role || (keepExistingPlayerDetails ? (prev.profession || prev.role || '') : '');
 
         return {
           ...prev,
           name: keepExistingPlayerDetails && prev.name ? prev.name : (generatedPlayerName || (prev.name && prev.name.length < 50 ? prev.name : 'Neuer Spieler-Charakter')),
           nickname: data.nickname || (keepExistingPlayerDetails ? prev.nickname : ''),
           rufName: data.rufName || data.nickname || generatedPlayerName || (keepExistingPlayerDetails ? prev.rufName : ''),
-          role: data.role || (keepExistingPlayerDetails ? prev.role : ''),
+          role: finalRole,
+          profession: finalProfession || finalRole,
+          professionLevel: data.professionLevel || (keepExistingPlayerDetails ? prev.professionLevel : ''),
+          secondaryProfessions: data.secondaryProfessions || (keepExistingPlayerDetails ? prev.secondaryProfessions : []),
+          jobTitle: data.jobTitle || (keepExistingPlayerDetails ? prev.jobTitle : ''),
+          professionDescription: data.professionDescription || (keepExistingPlayerDetails ? prev.professionDescription : ''),
+          craftingSkills: data.craftingSkills || (keepExistingPlayerDetails ? prev.craftingSkills : ''),
+          talents: data.talents || (keepExistingPlayerDetails ? prev.talents : ''),
+          everydaySkills: data.everydaySkills || (keepExistingPlayerDetails ? prev.everydaySkills : ''),
           personality: finalPersonality,
           personalityArchetype: finalArchetype,
           personalityTraits: finalTraits,
@@ -1999,9 +2015,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
   const getPlayerRole = () => {
     if (activeTransformation) {
-      return activeTransformation.transformRole || player.role || '';
+      return activeTransformation.transformRole || player.role || player.profession || '';
     }
-    return player.role || '';
+    return player.role || player.profession || '';
   };
 
   const getAppearanceValue = (field: keyof typeof player.appearance) => {
@@ -2100,7 +2116,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       );
       setPlayer({ ...player, abilities: updatedAbilities });
     } else {
-      setPlayer({ ...player, role: val });
+      setPlayer(prev => ({ ...prev, role: val, profession: val }));
     }
   };
 
@@ -4120,9 +4136,6 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       value={getPlayerRole()} 
                       onChange={val => {
                         updatePlayerRole(val);
-                        if (!player.profession) {
-                          setPlayer(prev => ({ ...prev, profession: val }));
-                        }
                       }}
                       placeholder="Beruf wählen oder eintragen..." 
                     />
@@ -6559,7 +6572,18 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
                     <CompetenceProfileEditor
                       profession={player.profession || player.role || ''}
-                      onProfessionChange={val => setPlayer({ ...player, profession: val, role: player.role || val })}
+                      onProfessionChange={val => {
+                        if (activeTransformation) {
+                          const updatedAbilities = (player.abilities || []).map(a => 
+                            a.id === activeTransformation.id 
+                              ? { ...a, transformRole: val } 
+                              : a
+                          );
+                          setPlayer(prev => ({ ...prev, profession: val, abilities: updatedAbilities }));
+                        } else {
+                          setPlayer(prev => ({ ...prev, profession: val, role: val }));
+                        }
+                      }}
                       professionLevel={player.professionLevel || ''}
                       onProfessionLevelChange={val => setPlayer({ ...player, professionLevel: val })}
                       professionProficiencyScore={player.professionProficiencyScore || 0}

@@ -17,6 +17,8 @@ import { createOrganicIslandPoints } from './worldmap/worldMapData';
 import { formatPersonalityTraitsAsPrompt } from './PersonalityTraitsEditor';
 import { WorkManagementModal } from './WorkManagementModal';
 import { isClothingPlaceholder, isClothingItemTitle } from '../App';
+import { spawnTacticalGroup } from '../utils/tacticalEngine';
+import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
 
 
 const baseEmotions = [
@@ -4033,6 +4035,48 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       }
     }
 
+    // -------------------------------------------------------------
+    // Tactical Engine Integration: Spawning & Tactical Commands
+    // -------------------------------------------------------------
+    if (updatedCombatState) {
+      // 1. Process explicit Spawn tags: [[STATUS: Spawn_Group=Count_aus_Source]]
+      const spawnRegex = /(?:Spawn|SpawnGroup)_([^\s=,]+)\s*=\s*(\d+)(?:_aus_([^\s,\]]+))?(?:[,\s]+(?:formation|form)=([a-zA-Z_]+))?/gi;
+      let spawnMatch;
+      while ((spawnMatch = spawnRegex.exec(text)) !== null) {
+        const groupName = spawnMatch[1].replace(/_/g, ' ').trim();
+        const count = parseInt(spawnMatch[2], 10) || 50;
+        const source = spawnMatch[3] || 'Wald';
+        const form = (spawnMatch[4] || 'wedge') as any;
+
+        const currentGroups = updatedCombatState.tacticalGroups || {};
+        const exists = Object.values(currentGroups).some(g => g.name.toLowerCase() === groupName.toLowerCase());
+        if (!exists) {
+          const spawnRes = spawnTacticalGroup({
+            combatState: updatedCombatState,
+            groupName,
+            count,
+            formation: form,
+            direction: 'south',
+            spawnSource: source,
+            unitDisplayName: groupName.replace(/\s*\d+x?$/, '').trim(),
+            baseHp: 30
+          });
+          updatedCombatState = spawnRes.updatedCombatState;
+        }
+      }
+
+      // 2. Parse & Execute Tactical Movement Commands from narrative or status tags
+      const tacticalCommands = parseTacticalCommandsFromText(text, updatedCombatState);
+      if (tacticalCommands.length > 0) {
+        for (const cmd of tacticalCommands) {
+          const res = executeTacticalCommand(updatedCombatState, cmd);
+          if (res.success) {
+            updatedCombatState = res.updatedCombatState;
+          }
+        }
+      }
+    }
+
     return { cleanedText: cleanedText.trim(), updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld };
   };
 
@@ -4089,26 +4133,8 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
           } else if (getCustomResourceNames()[0]?.toLowerCase() === lowerKey) {
             const val = parseInt(value);
             if (!isNaN(val)) setPlayerMp(Math.max(0, val));
-          } else if (lowerKey.startsWith('position_')) {
-            const charName = key.substring(9).replace(/_/g, ' ').trim();
-            const parts = value.split(/[,\s]+/).map(Number);
-            if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-              setTimeout(() => {
-                const currentAdv = adventureRef.current || adventure;
-                if (currentAdv.combatState) {
-                  onUpdateAdventure({
-                    ...currentAdv,
-                    combatState: {
-                      ...currentAdv.combatState,
-                      positions: {
-                        ...(currentAdv.combatState.positions || {}),
-                        [charName]: { x: parts[0], y: parts[1] }
-                      }
-                    }
-                  });
-                }
-              }, 0);
-            }
+          } else if (lowerKey.startsWith('position_') || lowerKey.startsWith('move_') || lowerKey.startsWith('movegroup_') || lowerKey.startsWith('moveentity_')) {
+            // Tactical movement is authoritatively calculated and executed by the Tactical Movement Engine in parseLoreAndCharUpdates.
           } else if (lowerKey.startsWith('terrain_')) {
             const coordStr = key.substring(8).replace(/_/g, ',');
             setTimeout(() => {

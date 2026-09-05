@@ -20,13 +20,17 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
   showNobleChildrenButton = true
 }) => {
   const safeValue = value || "";
+  const allNobleTitles = NOBLE_CHILDREN_GROUPS.flatMap(g => g.titles);
   const isValueInPresets = ALL_PRESET_JOBS.includes(safeValue);
-  const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && safeValue.trim().length > 0);
+  const isValueInNoble = allNobleTitles.includes(safeValue);
+  const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && !isValueInNoble && safeValue.trim().length > 0);
   const [showNobleChildrenSubmenu, setShowNobleChildrenSubmenu] = useState<boolean>(false);
 
   useEffect(() => {
     const sVal = value || "";
-    if (!ALL_PRESET_JOBS.includes(sVal) && sVal.trim().length > 0) {
+    if (ALL_PRESET_JOBS.includes(sVal) || sVal.trim().length === 0 || allNobleTitles.includes(sVal)) {
+      setIsCustomMode(false);
+    } else {
       setIsCustomMode(true);
     }
   }, [value]);
@@ -71,7 +75,7 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
           type="text"
           value={safeValue}
           onChange={e => onChange(e.target.value)}
-          placeholder="Bezeichnung oder Titel eintragen..."
+          placeholder="Eigene Rolle oder Beruf eintragen..."
           className={inputClassName}
         />
       )}

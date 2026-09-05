@@ -615,7 +615,7 @@ export function moveTacticalGroup(params: MoveGroupParams): MoveGroupResult {
   const blockedForGroupLeader = new Set<string>([...blocked, ...occupied]);
 
   // 3. Compute main group path from currentCenter to targetPosition
-  const mainPathResult = findPath({
+  let mainPathResult = findPath({
     start: currentCenter,
     target: targetPosition,
     grid,
@@ -623,6 +623,45 @@ export function moveTacticalGroup(params: MoveGroupParams): MoveGroupResult {
     combatState,
     allowDiagonal
   });
+
+  // If target itself is blocked (e.g. village building, wall, or enemy at target coordinates),
+  // find the closest free/walkable approach cell to targetPosition so the group can march there!
+  if (!mainPathResult.success && mainPathResult.reason === 'TARGET_BLOCKED') {
+    const candidates: Array<{ x: number; y: number; dist: number }> = [];
+    for (let r = 1; r <= 3; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dy = -r; dy <= r; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) === r) {
+            const nx = targetPosition.x + dx;
+            const ny = targetPosition.y + dy;
+            if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
+              if (!blockedForGroupLeader.has(`${nx},${ny}`)) {
+                const dist = Math.hypot(nx - currentCenter.x, ny - currentCenter.y);
+                candidates.push({ x: nx, y: ny, dist });
+              }
+            }
+          }
+        }
+      }
+      if (candidates.length > 0) break;
+    }
+
+    candidates.sort((a, b) => a.dist - b.dist);
+    for (const cand of candidates) {
+      const altPath = findPath({
+        start: currentCenter,
+        target: { x: cand.x, y: cand.y },
+        grid,
+        blockedCells: blockedForGroupLeader,
+        combatState,
+        allowDiagonal
+      });
+      if (altPath.success) {
+        mainPathResult = altPath;
+        break;
+      }
+    }
+  }
 
   // If no path at all to target, check if target itself was blocked or if there is no route
   if (!mainPathResult.success) {
@@ -632,7 +671,7 @@ export function moveTacticalGroup(params: MoveGroupParams): MoveGroupResult {
       movedCount: 0,
       blockedCount: groupEntities.length,
       totalUnits: groupEntities.length,
-      reason: 'NO_PATH',
+      reason: mainPathResult.reason || 'NO_PATH',
       updatedCombatState: combatState
     };
   }
@@ -667,8 +706,11 @@ export function moveTacticalGroup(params: MoveGroupParams): MoveGroupResult {
 
   // Spiral search for finding nearest free cell if ideal formation cell is blocked (Degradation)
   const findNearestFreeCell = (desiredX: number, desiredY: number): FormationPosition | null => {
-    if (isCellAvailableForUnit(desiredX, desiredY)) {
-      return { x: desiredX, y: desiredY };
+    const clampedX = Math.min(gridWidth - 1, Math.max(0, desiredX));
+    const clampedY = Math.min(gridHeight - 1, Math.max(0, desiredY));
+
+    if (isCellAvailableForUnit(clampedX, clampedY)) {
+      return { x: clampedX, y: clampedY };
     }
 
     const maxRadius = Math.max(gridWidth, gridHeight);
@@ -676,8 +718,8 @@ export function moveTacticalGroup(params: MoveGroupParams): MoveGroupResult {
       for (let dx = -r; dx <= r; dx++) {
         for (let dy = -r; dy <= r; dy++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) === r) {
-            const cx = desiredX + dx;
-            const cy = desiredY + dy;
+            const cx = clampedX + dx;
+            const cy = clampedY + dy;
             if (isCellAvailableForUnit(cx, cy)) {
               return { x: cx, y: cy };
             }
@@ -724,7 +766,9 @@ export function moveTacticalGroup(params: MoveGroupParams): MoveGroupResult {
     ...group,
     formation: finalFormation,
     direction: finalDirection,
+    facingDirection: finalDirection,
     center: targetPosition,
+    anchorPosition: targetPosition,
     targetPosition
   };
 
@@ -1158,15 +1202,84 @@ export function parseTacticalCommandsFromText(
     }
   }
 
-  // B) Shorthand status tags:
-  // [[STATUS: MoveGroup_goblin_attack_group_01=15,12]] or [[STATUS: MoveGroup_Goblins=15,12]]
-  const groupMatches = text.matchAll(/\[\[STATUS:\s*MoveGroup_([^\s=]+)\s*=\s*(\d+)\s*,\s*(\d+)\s*\]\]/gi);
+  // B) Flexible Shorthand status tags:
+  // [[STATUS: MoveGroup_Goblins=15,12]] or [[STATUS: MoveGroup_Goblins=15,12, Formation=wedge]]
+  // Handles tags inside single or multi-attribute STATUS blocks as well as standalone
+  const groupMatches = text.matchAll(/(?:MoveGroup|GroupMove)_([^\s=,]+)\s*=\s*(\d+)\s*,\s*(\d+)(?:[,\s]+(?:formation|form)=([a-zA-Z_]+))?/gi);
   for (const match of groupMatches) {
     const rawTarget = match[1].replace(/_/g, ' ').trim().toLowerCase();
     const tx = parseInt(match[2]);
     const ty = parseInt(match[3]);
+    const optFormation = (match[4] || '').toLowerCase() as TacticalFormation;
 
     // Find group by id or name
+    let matchedGroup = Object.values(groups).find(g => 
+      g.id.toLowerCase() === rawTarget || 
+      g.name.toLowerCase().includes(rawTarget) ||
+      rawTarget.includes(g.name.toLowerCase())
+    );
+
+    // If group does not exist yet, check if there is a matching opponent in combatState.opponents
+    if (!matchedGroup && combatState.opponents && combatState.opponents.length > 0) {
+      const matchedOpp = combatState.opponents.find(o => 
+        o.name.toLowerCase().includes(rawTarget) || 
+        rawTarget.includes(o.name.toLowerCase())
+      );
+      if (matchedOpp) {
+        const count = matchedOpp.count && matchedOpp.count > 1 ? matchedOpp.count : 50;
+        const spawnRes = spawnTacticalGroup({
+          combatState,
+          groupName: matchedOpp.name,
+          count,
+          formation: optFormation || (matchedOpp.formation as TacticalFormation) || 'wedge',
+          direction: 'south',
+          spawnSource: matchedOpp.spawnSource || 'Wald',
+          unitDisplayName: matchedOpp.name.replace(/\s*\d+x?$/, '').trim(),
+          baseHp: matchedOpp.hp ? Math.max(10, Math.round(matchedOpp.hp / count)) : 30
+        });
+        matchedGroup = spawnRes.group;
+        Object.assign(groups, spawnRes.updatedCombatState.tacticalGroups);
+        Object.assign(entities, spawnRes.updatedCombatState.tacticalEntities);
+      }
+    }
+
+    // Fallback: If text specifically says "Goblins" or rawTarget is "goblins" and no group exists yet,
+    // auto-spawn 50 Goblins in wedge from Wald
+    if (!matchedGroup && (rawTarget.includes('goblin') || rawTarget === 'goblins')) {
+      const spawnRes = spawnTacticalGroup({
+        combatState,
+        groupName: 'Goblins',
+        count: 50,
+        formation: optFormation || 'wedge',
+        direction: 'south',
+        spawnSource: 'Wald',
+        unitDisplayName: 'Goblin',
+        baseHp: 30
+      });
+      matchedGroup = spawnRes.group;
+      Object.assign(groups, spawnRes.updatedCombatState.tacticalGroups);
+      Object.assign(entities, spawnRes.updatedCombatState.tacticalEntities);
+    }
+
+    if (matchedGroup) {
+      commands.push({
+        id: `cmd_grp_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 4)}`,
+        type: 'move_group',
+        groupId: matchedGroup.id,
+        targetPosition: { x: tx, y: ty },
+        formation: optFormation || matchedGroup.formation || 'wedge',
+        source: 'ai',
+        status: 'pending'
+      });
+    }
+  }
+
+  // [[STATUS: Formation_Goblins=wedge]] or Formation_Goblins=wedge
+  const formationMatches = text.matchAll(/(?:Formation|Form)_([^\s=,]+)\s*=\s*([a-zA-Z_]+)/gi);
+  for (const match of formationMatches) {
+    const rawTarget = match[1].replace(/_/g, ' ').trim().toLowerCase();
+    const newForm = match[2].trim().toLowerCase() as TacticalFormation;
+
     const matchedGroup = Object.values(groups).find(g => 
       g.id.toLowerCase() === rawTarget || 
       g.name.toLowerCase().includes(rawTarget) ||
@@ -1175,18 +1288,18 @@ export function parseTacticalCommandsFromText(
 
     if (matchedGroup) {
       commands.push({
-        id: `cmd_grp_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 4)}`,
-        type: 'move_group',
+        id: `cmd_form_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 4)}`,
+        type: 'formation',
         groupId: matchedGroup.id,
-        targetPosition: { x: tx, y: ty },
+        formation: newForm,
         source: 'ai',
         status: 'pending'
       });
     }
   }
 
-  // [[STATUS: MoveEntity_EntityId=15,12]]
-  const entityMatches = text.matchAll(/\[\[STATUS:\s*MoveEntity_([^\s=]+)\s*=\s*(\d+)\s*,\s*(\d+)\s*\]\]/gi);
+  // [[STATUS: MoveEntity_EntityId=15,12]] or MoveEntity_...
+  const entityMatches = text.matchAll(/(?:MoveEntity|EntityMove)_([^\s=,]+)\s*=\s*(\d+)\s*,\s*(\d+)/gi);
   for (const match of entityMatches) {
     const rawId = match[1].trim();
     const tx = parseInt(match[2]);
