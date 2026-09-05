@@ -4049,7 +4049,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
         const form = (spawnMatch[4] || 'wedge') as any;
 
         const currentGroups = updatedCombatState.tacticalGroups || {};
-        const exists = Object.values(currentGroups).some(g => g.name.toLowerCase() === groupName.toLowerCase());
+        const exists = Object.values(currentGroups).some((g: any) => g?.name?.toLowerCase() === groupName.toLowerCase());
         if (!exists) {
           const spawnRes = spawnTacticalGroup({
             combatState: updatedCombatState,

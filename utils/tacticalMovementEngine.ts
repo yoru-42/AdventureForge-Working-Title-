@@ -13,7 +13,8 @@ import {
   generateLocalFormationOffsets,
   collectOccupiedAndBlockedCells,
   changeTacticalGroupFormation,
-  splitTacticalGroup
+  splitTacticalGroup,
+  spawnTacticalGroup
 } from './tacticalEngine';
 
 // =============================================================
@@ -1231,7 +1232,7 @@ export function parseTacticalCommandsFromText(
           combatState,
           groupName: matchedOpp.name,
           count,
-          formation: optFormation || (matchedOpp.formation as TacticalFormation) || 'wedge',
+          formation: optFormation || ((matchedOpp as any).formation as TacticalFormation) || 'wedge',
           direction: 'south',
           spawnSource: matchedOpp.spawnSource || 'Wald',
           unitDisplayName: matchedOpp.name.replace(/\s*\d+x?$/, '').trim(),

@@ -4789,6 +4789,82 @@ Beantworte für die Fraktion zwingend und ausführlich auf Deutsch die folgenden
    - 'resourceTrade': Handelsnetzwerk (Karawanen, Überseerouten, Monopole)
 - 'philosophy': Leitmotiv oder Grundphilosophie
 - 'maxMembers': Geschätzte maximale Mitgliederzahl / Gruppengröße`;
+      } else if (category === 'Rassen') {
+        contextPrompt += `
+Für Rassen / Völker (STRENGSTE DIRECTIVE & KERNBEREICHE):
+Erstelle ein vollständiges Profil für dieses Volk mit allen relevanten Aspekten auf Deutsch:
+1. Grunddaten & Lebensraum:
+   - 'subraces': Alternative Bezeichnungen, Unterarten, Sippen oder Stämme
+   - 'originHabitat': Ursprünglicher Lebensraum, Kontinente, bevorzugte Biome
+   - 'rarity': Verbreitung (z.B. 'Häufig (Weit verbreitet)', 'Regional verbreitet', 'Selten', 'Sehr selten', 'Legendär / Mythisch')
+   - 'lifespan': Durchschnittliche Lebenserwartung & Reifealter (z.B. '120 Jahre, erwachsen mit 18 Jahren')
+   - 'languages': Sprache, Dialekte und Schriftsystem
+2. Physische & Anatomische Merkmale:
+   - 'averageHeight': Durchschnittsgröße (z.B. '1,75 m bis 2,05 m')
+   - 'averageWeight': Körperbau und typisches Gewicht (z.B. '70 - 110 kg, kräftig und sehnig')
+   - 'skinAndHair': Typische Haut-, Fell- oder Schuppentöne sowie Haarfarben
+   - 'eyeFeatures': Augenmerkmale, Nachtsicht oder Sinnesorgane
+   - 'distinctiveFeatures': Besondere physische Merkmale (Hörner, Schweif, Schuppen, Kiemen, Flügel etc.)
+   - 'biologyAndDiet': Biologische Besonderheiten, Stoffwechsel, Ernährung und Schlafbedarf
+3. Kultur, Glaube & Gesellschaft:
+   - 'socialStructure': Gesellschaftsordnung, Sippenstruktur und Herrschaftssystem
+   - 'valuesAndPhilosophy': Kulturelle Grundwerte, Ehrenkodex und Philosophie
+   - 'religionsAndGods': Religiöser Glaube, Ahnenkult und Gottheiten
+   - 'traditionsAndRituals': Bräuche, Riten, Feste und Zeremonien
+   - 'typicalProfessions': Typische Berufsfelder, Handwerkskunst und Rollen
+4. Fähigkeiten, Magie & Resistenzen:
+   - 'naturalTraits': Angeborene Begabungen und körperliche Talente
+   - 'magicalAffinities': Magische Begabung, Elementaraffinitäten oder Energienutzung
+   - 'resistances': Resistenzen und Immunitäten (z.B. Hitze, Kälte, Gift)
+   - 'weaknesses': Schwächen und Verwundbarkeiten
+5. Diplomatie & Beziehungen:
+   - 'relationsAllies': Befreundete oder verbündete Völker
+   - 'relationsRivals': Angespannte Verhältnisse und Rivalitäten
+   - 'relationsEnemies': Feindseligkeiten oder historische Erbfeinde
+   - 'attitudeTowardsOutsiders': Haltung gegenüber Fremden
+   - 'reputation': Weltweiter Ruf und Stereotypen
+6. Namenskonventionen & Bekannte Vertreter:
+   - 'namingMale': Männliche Beispielnamen
+   - 'namingFemale': Weibliche Beispielnamen
+   - 'namingSurnames': Sippennamen, Clan-Bezeichnungen oder Titel
+   - 'prominentFigures': Bedeutende historische Persönlichkeiten oder Anführer`;
+      } else if (category === 'Gegner') {
+        contextPrompt += `
+Für Gegner / Monster / Schergen / Bosse (STRENGSTE DIRECTIVE & BESTIARIUM):
+Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mit allen relevanten Aspekten auf Deutsch:
+1. Klassifizierung & Lebensraum:
+   - 'enemyType': Eines aus: 'Scherge / Fußsoldat (Minion)', 'Regulärer Gegner (Standard)', 'Elite / Champion', 'Miniboss', 'Dungeonboss / Gebietsboss', 'Weltboss / Epischer Boss', 'Schwarm / Rudel (Swarm)'
+   - 'species': Spezies/Familie (z.B. Humanoid, Untoter, Bestie / Tier, Dämon / Unhold, Konstrukt / Automat, Elementar, Monstrum, Drache / Drachenblut, Pflanze / Pilz, Geist / Phantom, Aberration / Kosmisch, Sonstige Kreatur)
+   - 'threatLevel': Gefahrenstufe (z.B. 'Harmlos (Stufe 1)', 'Niedrig (Stufe 2 - 3)', 'Mittel (Stufe 4 - 5)', 'Gefährlich (Stufe 6 - 7)', 'Tödlich (Stufe 8 - 9)', 'Kataklysmisch (Stufe 10+)')
+   - 'habitat': Bevorzugter Lebensraum, Spawn-Gebiete, Dungeons, Zonen
+   - 'typicalGroupSize': Typische Rudelgröße (z.B. 'Einzelgänger (1)', 'Kleines Rudel (2 - 4)', 'Kampftrupp / Patrouille (4 - 8)', 'Große Horde (10 - 25)', 'Massenhafter Schwarm (30+)')
+   - 'tacticalFormation': Typische Kampfformation (z.B. 'Keilformation (Wedge / Sturmangriff)', 'Schlachtlinie (Line / Schildfront)', 'Umzingelung (Surround / Einkreisung)', 'Zangenangriff (Flank / Flankieren)', 'Verstreut / Plänkler (Skirmish / Hit-and-Run)')
+   - 'faction': Zugehörige Fraktion oder Organisation
+   - 'alignment': Gesinnung/Natur (z.B. Aggressiv-Raubtierhaft, Fanatisch-Böse, Territorial-Neutral, Kontrolliert/Konstrukt)
+2. Erscheinung & Physis:
+   - 'appearance': Physische Gestalt, Panzerung, Klauen, Schuppen, Zähne, Aura, visuelle Erkennungsmerkmale
+   - 'sizeCategory': Größenkategorie ('Winzig', 'Klein', 'Mittel (Menschengroß)', 'Groß (2 - 4 Meter)', 'Riesig (5 - 10 Meter)', 'Kolossal (Über 10 Meter)')
+   - 'sensoryPerception': Sinne & Wahrnehmung (z.B. Dunkelsicht, Wärmesinn, Erschütterungssinn, Geruchssinn, Magiesinn)
+3. Basis-Kampfwerte & KI-Taktik:
+   - 'baseHp': Basis-Lebenspunkte (z.B. '120')
+   - 'baseMp': Basis-Energie/Mana (z.B. '50')
+   - 'armor': Rüstungswert / Physische Abwehr (z.B. '15')
+   - 'magicResistance': Magiewiderstand (z.B. '10%')
+   - 'movementSpeed': Bewegungsreichweite / Tempo / Mobilität (z.B. 'Sehr schnell (Sprint/Flug)' oder 'Normal')
+   - 'combatBehavior': Taktisches Verhalten im Gefecht (z.B. 'Aggressiver Sturmangriff (Frontal)', 'Hinterhalt aus dem Schatten (Tarnung & Überfall)', 'Distanzkampf & Kiting (Rückzug bei Annäherung)', 'Defensiver Schildwall & Konter', 'Rudel-Koordination & Flankieren')
+   - 'targetPriority': Zielpriorität (z.B. 'Magier und Heiler fokussieren', 'Schwächstes / verletztes Ziel angreifen', 'Nächstes Ziel / Nahkämpfer', 'Ziel mit höchster Bedrohung (Aggro/Frontkämpfer)')
+   - 'moraleBehavior': Moral- und Fluchtverhalten (z.B. 'Kämpft bedingungslos bis zum Tod', 'Flieht bei schweren Verletzungen (<20% LP)', 'Gerät in Berserker-Raserei bei niedrigen LP', 'Ruft Verstärkung oder schlägt Alarm')
+4. Resistenzen & Schwachstellen:
+   - 'vulnerabilities': Physische oder elementare Schwachstellen (z.B. Anfällig für Feuerschaden (+100%), Schwachstelle am ungeschützten Nacken)
+   - 'damageResistances': Schadensresistenzen (z.B. 50% Resistenz gegen Schnitt- und Stichwaffen, Hohe Frost-Resistenz)
+   - 'statusImmunities': Immunitäten gegen Statuseffekte (z.B. Immun gegen Blutung, Gift, Betäubung, Furcht)
+5. Beute & Rohstoffe (Loot):
+   - 'guaranteedDrops': Garantierte Drops (100%)
+   - 'rareDrops': Seltene Schätze & Drops mit %-Chance
+   - 'harvestableParts': Verwertbare Handwerksmaterialien & Alchemiezutaten
+   - 'goldDrop': Typische Währungsausbeute
+6. Fähigkeiten & Macht:
+   - 'abilities': Liste von 2-4 spezifischen Fähigkeiten mit Name, category ('Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Talente'), cost, description und activationCondition.`;
       }
 
       contextPrompt += `\n\nText: "${text}"\n`;
@@ -4960,6 +5036,39 @@ Beantworte für die Fraktion zwingend und ausführlich auf Deutsch die folgenden
           }
         });
         requiredFields.push("foundingReason", "currentGoal", "leader");
+      } else if (category === 'Rassen') {
+        Object.assign(detailsProperties, {
+          subraces: { type: Type.STRING, description: "Alternative Bezeichnungen, Unterarten, Stämme oder Sippen." },
+          originHabitat: { type: Type.STRING, description: "Ursprünglicher Lebensraum, Kontinente, Biome." },
+          rarity: { type: Type.STRING, description: "Verbreitung / Häufigkeit (z.B. Häufig, Regional, Selten, Legendär)." },
+          lifespan: { type: Type.STRING, description: "Durchschnittliche Lebenserwartung & Reifealter." },
+          languages: { type: Type.STRING, description: "Sprache, Dialekte und Schriftsystem." },
+          averageHeight: { type: Type.STRING, description: "Durchschnittsgröße." },
+          averageWeight: { type: Type.STRING, description: "Durchschnittliches Gewicht und Körperbau." },
+          skinAndHair: { type: Type.STRING, description: "Typische Haut-, Fell- oder Schuppentöne sowie Haarfarben." },
+          eyeFeatures: { type: Type.STRING, description: "Augenmerkmale, Nachtsicht oder Sinnesorgane." },
+          distinctiveFeatures: { type: Type.STRING, description: "Besondere physische Merkmale (Hörner, Kiemen, Flügel etc.)." },
+          biologyAndDiet: { type: Type.STRING, description: "Biologische Besonderheiten, Stoffwechsel, Ernährung und Schlaf." },
+          socialStructure: { type: Type.STRING, description: "Gesellschaftsordnung und Herrschaftssystem." },
+          valuesAndPhilosophy: { type: Type.STRING, description: "Kulturelle Grundwerte, Ehrenkodex und Philosophie." },
+          religionsAndGods: { type: Type.STRING, description: "Religiöser Glaube, Gottheiten und Ahnenkult." },
+          traditionsAndRituals: { type: Type.STRING, description: "Bräuche, Riten und Feste." },
+          typicalProfessions: { type: Type.STRING, description: "Typische Tätigkeitsfelder und Handwerkskunst." },
+          naturalTraits: { type: Type.STRING, description: "Angeborene Begabungen und körperliche Talente." },
+          magicalAffinities: { type: Type.STRING, description: "Magische Begabung und Elementaraffinitäten." },
+          resistances: { type: Type.STRING, description: "Resistenzen und Immunitäten." },
+          weaknesses: { type: Type.STRING, description: "Schwächen und Verwundbarkeiten." },
+          relationsAllies: { type: Type.STRING, description: "Befreundete oder verbündete Völker." },
+          relationsRivals: { type: Type.STRING, description: "Angespannte Verhältnisse und Rivalitäten." },
+          relationsEnemies: { type: Type.STRING, description: "Feindseligkeiten oder historische Feinde." },
+          attitudeTowardsOutsiders: { type: Type.STRING, description: "Haltung gegenüber Fremden und Außenstehenden." },
+          reputation: { type: Type.STRING, description: "Weltweiter Ruf und Stereotypen." },
+          namingMale: { type: Type.STRING, description: "Männliche Beispielnamen." },
+          namingFemale: { type: Type.STRING, description: "Weibliche Beispielnamen." },
+          namingSurnames: { type: Type.STRING, description: "Sippennamen, Clan-Bezeichnungen oder Titel." },
+          prominentFigures: { type: Type.STRING, description: "Bedeutende historische Persönlichkeiten oder Anführer." }
+        });
+        requiredFields.push("originHabitat", "distinctiveFeatures", "socialStructure");
       } else if (category === 'Gegenstände') {
         Object.assign(detailsProperties, {
           itemType: { type: Type.STRING, description: "Gegenstandsklasse (z. B. 'Waffen', 'Schiff / Fahrzeug / Transportmittel', 'Gebäude / Festung / Bauwerk', 'Belagerungsgerät / Geschütz', 'Artefakte / Zubehör', 'Verbrauchsgüter')." },
@@ -4993,25 +5102,52 @@ Beantworte für die Fraktion zwingend und ausführlich auf Deutsch die folgenden
         requiredFields.push("timeOfEvent", "location", "involvedCharacters");
       } else if (category === 'Gegner') {
         Object.assign(detailsProperties, {
-          role: { type: Type.STRING, description: "Die Kampfrolle oder Klassifizierung (z.B. 'Schwerer Gardist', 'Schatten-Ninja')" },
-          skills: { type: Type.STRING, description: "Kurze Kräftebeschreibung (z.B. 'Schattenmagie und Giftmischerei')" },
-          powerSource: { type: Type.STRING, description: "Die Quelle der Macht (z.B. 'Physische Kraft', 'Mondlicht-Mana')" },
-          powerCost: { type: Type.STRING, description: "Energiekosten oder Einschränkungen (z.B. 'Ausdauer-Abzug')" },
-          techniques: { type: Type.STRING, description: "Liste der Techniken als kommagetrennte Namen-Liste." },
-          techniqueList: {
+          enemyType: { type: Type.STRING, description: "Gegnertyp (z.B. 'Scherge / Fußsoldat (Minion)', 'Regulärer Gegner (Standard)', 'Elite / Champion', 'Miniboss', 'Dungeonboss / Gebietsboss', 'Weltboss / Epischer Boss', 'Schwarm / Rudel (Swarm)')." },
+          species: { type: Type.STRING, description: "Spezies oder Kreaturenfamilie (z.B. Humanoid, Untoter, Bestie / Tier, Dämon / Unhold, Konstrukt, Elementar, Monstrum, Drache, Pflanze, Geist, Aberration)." },
+          threatLevel: { type: Type.STRING, description: "Gefahrenstufe (z.B. 'Harmlos (Stufe 1)', 'Niedrig (Stufe 2 - 3)', 'Mittel (Stufe 4 - 5)', 'Gefährlich (Stufe 6 - 7)', 'Tödlich (Stufe 8 - 9)', 'Kataklysmisch (Stufe 10+)')." },
+          habitat: { type: Type.STRING, description: "Bevorzugter Lebensraum, Spawn-Zonen und Dungeons." },
+          typicalGroupSize: { type: Type.STRING, description: "Typische Gruppengröße (z.B. 'Einzelgänger (1)', 'Kleines Rudel (2 - 4)', 'Kampftrupp / Patrouille (4 - 8)', 'Große Horde (10 - 25)', 'Massenhafter Schwarm (30+)')." },
+          tacticalFormation: { type: Type.STRING, description: "Taktische Standardformation (z.B. Keilformation, Schlachtlinie, Umzingelung, Zangenangriff, Plänkler)." },
+          faction: { type: Type.STRING, description: "Zugehörige Fraktion oder Organisation." },
+          alignment: { type: Type.STRING, description: "Gesinnung und Wesensart (z.B. Aggressiv-Raubtierhaft, Fanatisch-Böse, Territorial-Neutral)." },
+          appearance: { type: Type.STRING, description: "Physische Gestalt, Anatomie, Panzerung, Klauen, Schuppen und optische Merkmale." },
+          sizeCategory: { type: Type.STRING, description: "Größenkategorie (z.B. 'Mittel (Menschengroß)', 'Groß (2 - 4 Meter)', 'Riesig (5 - 10 Meter)', 'Kolossal (Über 10 Meter)')." },
+          sensoryPerception: { type: Type.STRING, description: "Sinne und Wahrnehmung (z.B. Dunkelsicht, Erschütterungssinn, Geruchssinn für Blut)." },
+          baseHp: { type: Type.STRING, description: "Basis-Lebenspunkte (z.B. '120' oder '650')." },
+          baseMp: { type: Type.STRING, description: "Basis-Mana/Energie (z.B. '50' oder '200')." },
+          armor: { type: Type.STRING, description: "Rüstungswert / Physische Abwehr (z.B. '15')." },
+          magicResistance: { type: Type.STRING, description: "Magiewiderstand (z.B. '10%')." },
+          movementSpeed: { type: Type.STRING, description: "Tempo und Mobilität (z.B. 'Schnell (Flug/Sprint)' oder 'Träge aber zäh')." },
+          combatBehavior: { type: Type.STRING, description: "Kampfverhalten und KI-Taktik (z.B. 'Aggressiver Sturmangriff (Frontal)', 'Hinterhalt aus dem Schatten (Tarnung & Überfall)', 'Distanzkampf & Kiting (Rückzug bei Annäherung)', 'Defensiver Schildwall & Konter', 'Rudel-Koordination & Flankieren')." },
+          combatBehaviorCustom: { type: Type.STRING, description: "Spezifische taktische Anweisungen für die KI." },
+          targetPriority: { type: Type.STRING, description: "Zielpriorität (z.B. 'Magier und Heiler fokussieren', 'Schwächstes / verletztes Ziel angreifen', 'Nächstes Ziel / Nahkämpfer', 'Ziel mit höchster Bedrohung (Aggro/Frontkämpfer)')." },
+          moraleBehavior: { type: Type.STRING, description: "Moral- und Fluchtverhalten (z.B. 'Kämpft bedingungslos bis zum Tod', 'Flieht bei schweren Verletzungen (<20% LP)', 'Gerät in Berserker-Raserei bei niedrigen LP')." },
+          vulnerabilities: { type: Type.STRING, description: "Schwachstellen und Verwundbarkeiten (z.B. Feuerschaden, offener Rücken)." },
+          damageResistances: { type: Type.STRING, description: "Schadensresistenzen (z.B. Stichschaden-Resistenz, Frost-Resistenz)." },
+          statusImmunities: { type: Type.STRING, description: "Statuseffekt-Immunitäten (z.B. Immun gegen Blutung, Gift, Betäubung)." },
+          guaranteedDrops: { type: Type.STRING, description: "Garantierte Beute (Drop 100%)." },
+          rareDrops: { type: Type.STRING, description: "Seltene Drops mit Prozentangabe." },
+          harvestableParts: { type: Type.STRING, description: "Verwertbare Materialien und Handwerksrohstoffe." },
+          goldDrop: { type: Type.STRING, description: "Typische Währungsausbeute (z.B. 5 - 15 Silbermünzen)." },
+          abilities: {
             type: Type.ARRAY,
             items: {
               type: Type.OBJECT,
               properties: {
-                name: { type: Type.STRING, description: "Name der Technik." },
-                description: { type: Type.STRING, description: "Effekt und Ablauf dieser Kampf- oder Magie-Technik." }
+                name: { type: Type.STRING, description: "Name der Fähigkeit." },
+                category: { type: Type.STRING, description: "Eines aus: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Talente'." },
+                cost: { type: Type.STRING, description: "Kosten oder Abklingzeit (z.B. '20 MP', 'Alle 3 Runden')." },
+                description: { type: Type.STRING, description: "Wirkung und Ablauf der Fertigkeit." },
+                activationCondition: { type: Type.STRING, description: "Auslöserbedingung (z.B. 'Bei <30% HP')." },
+                transformName: { type: Type.STRING, description: "Name der Verwandlungsgestalt (falls Transformation)." },
+                transformBuffs: { type: Type.STRING, description: "Attribut-Boni (falls Transformation)." }
               },
-              required: ["name", "description"]
+              required: ["name", "category", "description"]
             },
-            description: "Liste von konkreten Spezialtechniken."
+            description: "Liste von 2-4 spezifischen Fähigkeiten, Techniken oder Transformationen."
           }
         });
-        requiredFields.push("role", "skills", "powerSource", "powerCost", "techniques", "techniqueList");
+        requiredFields.push("enemyType", "species", "threatLevel", "habitat", "appearance", "combatBehavior", "vulnerabilities", "abilities");
 
         if (powerSettings && Object.keys(powerSettings).length > 0) {
           const powerProps: any = {};
@@ -5028,12 +5164,17 @@ Beantworte für die Fraktion zwingend und ausführlich auf Deutsch die folgenden
               required: ["value", "potentialMax"]
             };
           });
+          detailsProperties.campaignPowerData = {
+            type: Type.OBJECT,
+            properties: powerProps,
+            required: Object.keys(powerSettings)
+          };
           detailsProperties.campaignPowerLevels = {
             type: Type.OBJECT,
             properties: powerProps,
             required: Object.keys(powerSettings)
           };
-          requiredFields.push("campaignPowerLevels");
+          requiredFields.push("campaignPowerData");
         }
       } else if (category === 'Events' || category === 'Story & Quests') {
         Object.assign(detailsProperties, {
@@ -5228,7 +5369,12 @@ ${existingTitles || '(Keine bisherigen Einträge vorhanden)'}
     - "envNeighbours": Unmittelbare Umgebung (z.B. "Eingebettet zwischen schroffen Basaltklippen und blauem Ozean")
     - "distancesToNeighbours": Reisedistanzen (z.B. "1 Tagesreise zur Nachbarinsel")
 
-#### 3. Kategorie "Fraktionen"
+#### 3. Kategorie "Rassen"
+- title: Name des Volkes oder der Rasse (z.B. "Lunarier", "Hochelfen", "Mondschatten-Katzenvolk")
+- description: Kultureller Hintergrund, Erscheinungsbild und Lebensweise (Deutsch, detailreich)
+- details-Objekt mit Völker-Attributen: "subraces", "originHabitat", "rarity", "lifespan", "languages", "averageHeight", "averageWeight", "distinctiveFeatures", "skinAndHair", "eyeFeatures", "biologyAndDiet", "socialStructure", "valuesAndPhilosophy", "religionsAndGods", "traditionsAndRituals", "typicalProfessions", "naturalTraits", "magicalAffinities", "resistances", "weaknesses", "relationsAllies", "relationsRivals", "relationsEnemies", "attitudeTowardsOutsiders", "reputation", "namingMale", "namingFemale", "namingSurnames", "prominentFigures"
+
+#### 4. Kategorie "Fraktionen"
 - title: Name der Fraktion (z.B. "Klingen der Nacht")
 - description: Hintergrundgeschichte, Entstehung und Machtbereich (Deutsch, detailreich)
 - details-Objekt mit den 10 Kernfeldern:
@@ -5276,7 +5422,7 @@ Du MUSST ein valides JSON-Objekt zurückgeben mit genau einem Feld "entries", we
 {
   "entries": [
     {
-      "category": "Charaktere" | "Orte" | "Fraktionen" | "Gegenstände" | "Verbotenes Wissen" | "Weltregeln" | "Gegner" | "Zeitlinie",
+      "category": "Charaktere" | "Rassen" | "Orte" | "Fraktionen" | "Gegenstände" | "Verbotenes Wissen" | "Weltregeln" | "Gegner" | "Zeitlinie",
       "title": "Titel des Eintrags",
       "description": "Atmosphärische und detailreiche Beschreibung auf Deutsch",
       "isUnlocked": true,

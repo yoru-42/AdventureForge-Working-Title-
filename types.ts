@@ -1382,7 +1382,97 @@ export interface WorldSetting {
   }[];
 }
 
-export type LoreCategory = 'Charaktere' | 'Orte' | 'Fraktionen' | 'Gegenstände' | 'Verbotenes Wissen' | 'Story & Quests' | 'Weltregeln' | 'Gegner' | 'Zeitlinie';
+export type LoreCategory = 'Charaktere' | 'Rassen' | 'Orte' | 'Fraktionen' | 'Gegenstände' | 'Verbotenes Wissen' | 'Story & Quests' | 'Weltregeln' | 'Gegner' | 'Zeitlinie';
+
+export interface RaceDetails {
+  // Grunddaten & Einordnung
+  subraces?: string; // Alternative Bezeichnungen, Unterarten oder Stämme
+  lifespan?: string; // Durchschnittliche Lebenserwartung & Reifealter
+  originHabitat?: string; // Heimatgebiet, Kontinent oder bevorzugter Lebensraum
+  rarity?: string; // Verbreitung / Häufigkeit (Häufig, Regional, Selten, Fast ausgestorben, Legendär)
+  languages?: string; // Sprache, Dialekte und Schriftsystem
+
+  // Physische & Anatomische Merkmale
+  averageHeight?: string; // Durchschnittsgröße
+  averageWeight?: string; // Durchschnittliches Gewicht / Statur
+  distinctiveFeatures?: string; // Besondere Merkmale (Hörner, Schweif, Schuppen, Ohren, Flügel etc.)
+  skinAndHair?: string; // Typische Haut-, Fell- oder Schuppentöne sowie Haarfarben
+  eyeFeatures?: string; // Augenmerkmale, Nachtsicht oder Sinnesorgane
+  biologyAndDiet?: string; // Biologische Besonderheiten, Stoffwechsel, Ernährung und Schlafbedarf
+
+  // Kultur, Glauben & Gesellschaft
+  socialStructure?: string; // Gesellschaftsordnung, Sippenstruktur und Herrschaftssystem
+  valuesAndPhilosophy?: string; // Kulturelle Grundwerte, Ehrenkodex und Philosophie
+  religionsAndGods?: string; // Religiöser Glaube, Ahnenkult und Gottheiten
+  traditionsAndRituals?: string; // Bräuche, Riten, Feste und Zeremonien
+  typicalProfessions?: string; // Typische Tätigkeitsfelder, Handwerkskunst und Rollen
+
+  // Fähigkeiten, Magie & Resistenzen
+  naturalTraits?: string; // Angeborene Begabungen und körperliche Talente
+  magicalAffinities?: string; // Magische Begabung, Elementaraffinitäten oder Energienutzung
+  resistances?: string; // Resistenzen und Immunitäten (z.B. Hitze, Kälte, Gift)
+  weaknesses?: string; // Schwächen und Verwundbarkeiten
+
+  // Diplomatie & Beziehungen
+  relationsAllies?: string; // Befreundete oder verbündete Völker
+  relationsRivals?: string; // Angespannte Verhältnisse und Rivalitäten
+  relationsEnemies?: string; // Feindseligkeiten oder historische Erbfeinde
+  attitudeTowardsOutsiders?: string; // Haltung gegenüber Fremden (Gastfreundlich, Misstrauisch, Isoliert etc.)
+  reputation?: string; // Weltweiter Ruf und Stereotypen
+
+  // Namenskonventionen & Bekannte Vertreter
+  namingMale?: string; // Männliche Beispielnamen und Konventionen
+  namingFemale?: string; // Weibliche Beispielnamen und Konventionen
+  namingSurnames?: string; // Sippennamen, Clan-Bezeichnungen oder Titel
+  prominentFigures?: string; // Bedeutende historische Persönlichkeiten oder Anführer
+}
+
+export interface EnemyDetails {
+  // Klassifizierung & Typ
+  enemyType?: string; // Scherge / Fußsoldat, Regulärer Gegner, Elite / Champion, Miniboss, Dungeonboss / Gebietsboss, Weltboss / Epischer Boss, Schwarm / Rudel
+  species?: string; // Humanoid, Untoter, Bestie / Tier, Dämon / Unhold, Konstrukt / Golem, Elementar, Monstrum, Drache / Drachenblut, Pflanze / Pilz, Geist / Phantom, Aberration / Kosmisch
+  threatLevel?: string; // Harmlos (Stufe 1), Niedrig (Stufe 2-3), Mittel (Stufe 4-5), Gefährlich (Stufe 6-7), Tödlich / Heroisch (Stufe 8-9), Kataklysmisch (Stufe 10+)
+  habitat?: string; // Bevorzugter Lebensraum, Spawn-Gebiete, Dungeons, Zonen
+  typicalGroupSize?: string; // Einzelgänger, Kleines Rudel (2-4), Kampftrupp (4-8), Große Horde (10-25), Massenhafter Schwarm (30+)
+  tacticalFormation?: string; // Keilformation (Wedge), Schlachtlinie (Line), Umzingelung (Surround), Zangenangriff (Flank), Verstreut / Plänkler (Skirmish)
+  faction?: string; // Zugehörige Fraktion oder Organisation
+  alignment?: string; // Gesinnung / Wesen (Aggressiv-Raubtierhaft, Fanatisch-Böse, Territorial-Neutral, Kontrolliert/Konstrukt)
+
+  // Physische & Sensorische Merkmale
+  appearance?: string; // Physische Erscheinung, Panzerung, Klauen, Schuppen, Aura
+  sensoryPerception?: string; // Sinne & Wahrnehmung (Dunkelsicht, Wärmesinn, Erschütterungssinn, Geruchssinn, Magiesinn)
+  sizeCategory?: string; // Winzig, Klein, Mittel, Groß, Riesig, Kolossal
+
+  // Kampfattribute & Basiseinstufung
+  baseHp?: number | string; // Basis-Lebenspunkte
+  baseMp?: number | string; // Basis-Mana / Energie / Ausdauer
+  armor?: number | string; // Rüstung / Schadensreduktion
+  magicResistance?: number | string; // Magieresistenz
+  movementSpeed?: string; // Bewegungsreichweite / Tempo / Mobilität
+
+  // Kampftaktik, KI-Verhalten & Moral
+  combatBehavior?: string; // Taktisches Verhalten im Gefecht (Aggressiv, Hinterhalt, Kiting/Distanz, Schildwall, Fokusfeuer, Unterstützung)
+  combatBehaviorCustom?: string; // Zusätzliche benutzerdefinierte KI-Anweisungen
+  targetPriority?: string; // Zielpriorität (Magier & Heiler zuerst, Schwächster Nahkämpfer, Nächstes Ziel, Höchste Aggro/Bedrohung)
+  moraleBehavior?: string; // Moral & Fluchtverhalten (Kämpft bis zum Tod, Flucht bei <20% LP, Verzweiflungs-Berserker, Ruft Verstärkung)
+
+  // Schwächen, Resistenzen & Immunitäten
+  vulnerabilities?: string; // Elementare & physische Schwachstellen
+  damageResistances?: string; // Schadensresistenzen
+  statusImmunities?: string; // Statuseffekt-Immunitäten
+
+  // Macht- & Kampfeinstufung (Power-Level)
+  campaignPowerData?: Record<string, { value: number; potentialMax: number }>;
+  campaignPowerLevels?: Record<string, { value: number; potentialMax: number }>;
+  abilities?: any[]; // Passive Fähigkeiten, Techniken, Ultimative Techniken, Transformationen, Talente
+  powerSources?: any[];
+
+  // Beute & Rohstoffe (Loot-Tabelle)
+  guaranteedDrops?: string; // Garantierte Beute
+  rareDrops?: string; // Seltene Drops & Schätze
+  harvestableParts?: string; // Verwertbare Handwerksmaterialien
+  goldDrop?: string; // Währungsausbeute
+}
 
 export interface EventStep {
   id: string;

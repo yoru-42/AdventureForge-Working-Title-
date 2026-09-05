@@ -8,6 +8,8 @@ import { CampaignPowerParameter } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { NauticalMapBackground } from './NauticalMapBackground';
 import { CharacterLoreForm } from './CharacterLoreForm';
+import { EnemyLoreForm } from './EnemyLoreForm';
+import { RaceLoreForm } from './RaceLoreForm';
 import TerritorySpecificFields from './TerritorySpecificFields';
 import WorldKnowledgeManager from './WorldKnowledgeManager';
 import { syncEconomyWithWorld } from '../lib/economySync';
@@ -30,7 +32,7 @@ interface Props {
   playerAttributes?: any[];
 }
 
-const CATEGORIES: (LoreCategory | 'Verhüllung')[] = ['Charaktere', 'Verhüllung', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Story & Quests', 'Weltregeln', 'Gegner', 'Zeitlinie'];
+const CATEGORIES: (LoreCategory | 'Verhüllung')[] = ['Charaktere', 'Rassen', 'Verhüllung', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Story & Quests', 'Weltregeln', 'Gegner', 'Zeitlinie'];
 
 const GENDER_OPTIONS = ["Männlich", "Weiblich", "Divers", "Nicht-Binär", "Androgyn", "Unbekannt"];
 const BUILD_OPTIONS = ["Schlank", "Sportlich", "Muskulös", "Kräftig", "Zierlich", "Drahtig", "Kurvig", "Stämmig", "Hager", "Unbekannt"];
@@ -2585,7 +2587,7 @@ const LoreDatabaseView: React.FC<Props> = ({
     try {
       let prompt = `Erstelle ein cineastisches Bild für den Codexeintrag "${editForm.title}" in der Welt "${worldTitle}".\n\n`;
       
-      if (currentCategory === 'Charaktere' || currentCategory === 'Gegner') {
+      if (currentCategory === 'Charaktere') {
         prompt += `Es handelt sich um einen Charakter. Das Bild ist ein Portrait.
         - Geschlecht: ${editForm.details?.gender || 'Unbekannt'}
         - Rasse: ${editForm.details?.race || 'Unbekannt'}
@@ -2597,6 +2599,15 @@ const LoreDatabaseView: React.FC<Props> = ({
         - Kleidung/Rolle: ${editForm.details?.outfit || editForm.details?.role || 'Unbekannt'}
         - Gesinnung/Ziel: ${editForm.details?.goal || 'Neutral'}
         Realistischer, detaillierter Fantasy- oder Sci-Fi-Stil, je nach Welt. Fokus auf das Gesicht. Keine Schrift.`;
+      } else if (currentCategory === 'Gegner') {
+        prompt += `Es handelt sich um einen Gegner / ein Monster / eine Kreatur: "${editForm.title || 'Gegner'}".
+        - Gegnertyp: ${editForm.details?.enemyType || 'Monster'}
+        - Spezies: ${editForm.details?.species || 'Kreatur'}
+        - Bedrohungsgrad: ${editForm.details?.threatLevel || 'Gefährlich'}
+        - Physische Erscheinung: ${editForm.details?.appearance || ''}
+        - Lebensraum / Umgebung: ${editForm.details?.habitat || ''}
+        - Beschreibung: ${editForm.description || ''}
+        Stil: Hochwertige Bestiarium-Konzeptkunst, atmosphärische Beleuchtung, keine Schrift.`;
       } else if (currentCategory === 'Gegenstände') {
         prompt += `Es handelt sich um einen Gegenstand: ${editForm.details?.itemType || 'Unbekannt'}. Seltenheit: ${editForm.details?.rarity || 'Unbekannt'}.
         Beschreibung: ${editForm.description}.
@@ -2604,6 +2615,12 @@ const LoreDatabaseView: React.FC<Props> = ({
       } else if (currentCategory === 'Orte') {
         prompt += `Es handelt sich um einen Ort: ${editForm.details?.type || ''}. Klima: ${editForm.details?.climate || ''}.
         Beschreibung: ${editForm.description}. Landschaftsbild. Keine Schrift.`;
+      } else if (currentCategory === 'Rassen') {
+        prompt += `Es handelt sich um ein ganzes Volk oder eine Rasse: "${editForm.title || 'Unbenannt'}".
+        Merkmale: ${editForm.details?.distinctiveFeatures || ''}.
+        Lebensraum: ${editForm.details?.originHabitat || ''}.
+        Beschreibung: ${editForm.description || ''}.
+        Konzeptkunst, detaillierte Völkerdarstellung, neutraler Hintergrund, keine Schrift.`;
       } else {
         prompt += `Beschreibung: ${editForm.description}. Keine Schrift.`;
       }
@@ -2755,8 +2772,13 @@ const LoreDatabaseView: React.FC<Props> = ({
   const groupedLore = useMemo(() => {
     const groups: { [faction: string]: LoreEntry[] } = {};
     filteredLore.forEach(item => {
-      const rawFaction = getItemFaction(item);
-      const f = rawFaction ? rawFaction : 'Ohne Fraktion';
+      let rawFaction = getItemFaction(item);
+      if (activeCategory === 'Rassen') {
+        rawFaction = item.details?.originHabitat || item.details?.rarity || 'Völker & Rassen';
+      } else if (activeCategory === 'Gegner') {
+        rawFaction = item.details?.enemyType || item.details?.species || item.details?.faction || 'Gegner & Monster';
+      }
+      const f = rawFaction ? rawFaction : (activeCategory === 'Rassen' ? 'Völker & Rassen' : activeCategory === 'Gegner' ? 'Gegner & Monster' : 'Ohne Fraktion');
       if (!groups[f]) groups[f] = [];
       groups[f].push(item);
     });
@@ -3440,6 +3462,7 @@ const LoreDatabaseView: React.FC<Props> = ({
           >
             {c === 'Omni-Smart-Fill' && <i className="fa-solid fa-wand-magic-sparkles mr-2 opacity-70 text-amber-400"></i>}
             {c === 'Charaktere' && <i className="fa-solid fa-users mr-2 opacity-70"></i>}
+            {c === 'Rassen' && <i className="fa-solid fa-dna mr-2 opacity-70 text-emerald-400"></i>}
             {c === 'Verhüllung' && <i className="fa-solid fa-mask mr-2 opacity-70 text-sky-400"></i>}
             {c === 'Gegner' && <i className="fa-solid fa-skull mr-2 opacity-70"></i>}
             {c === 'Orte' && <i className="fa-solid fa-map mr-2 opacity-70"></i>}
@@ -4790,7 +4813,7 @@ const LoreDatabaseView: React.FC<Props> = ({
             </div>
           </div>
 
-        ) : (currentCategory === 'Charaktere' || currentCategory === 'Gegner') ? (
+        ) : currentCategory === 'Charaktere' ? (
           <div className="flex flex-col gap-6">
             <CharacterLoreForm
               editForm={editForm}
@@ -4801,7 +4824,7 @@ const LoreDatabaseView: React.FC<Props> = ({
               onDelete={handleDelete}
               onCancel={() => {
                 setIsEditing(null);
-                setEditForm({ category: currentCategory });
+                setEditForm({ category: 'Charaktere' });
               }}
               lore={lore}
               onUpdateLore={onUpdateLore}
@@ -4816,21 +4839,21 @@ const LoreDatabaseView: React.FC<Props> = ({
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Gespeicherte Einträge ({filteredLore.length})
+                  Gespeicherte Charaktere ({filteredLore.length})
                 </span>
 
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Einträge filtern..."
+                  placeholder="Charaktere filtern..."
                   className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 w-36 sm:w-48"
                 />
               </div>
 
               {filteredLore.length === 0 ? (
                 <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
-                  Keine Einträge vorhanden.
+                  Keine Charaktere vorhanden.
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
@@ -4863,6 +4886,200 @@ const LoreDatabaseView: React.FC<Props> = ({
                                 }}
                                 className="text-slate-500 hover:text-rose-400 text-xs p-1 transition-colors"
                                 title="Eintrag löschen"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : currentCategory === 'Gegner' ? (
+          <div className="flex flex-col gap-6">
+            <EnemyLoreForm
+              editForm={editForm}
+              setEditForm={setEditForm}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+              onSave={handleSave}
+              onDelete={handleDelete}
+              onCancel={() => {
+                setIsEditing(null);
+                setEditForm({ category: 'Gegner' });
+              }}
+              lore={lore}
+              onUpdateLore={onUpdateLore}
+              worldTitle={worldTitle}
+              isNsfw={isNsfw}
+              worldPowerSettings={worldPowerSettings}
+              world={world}
+            />
+
+            {/* List of Existing Lore Entries for this category */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Gespeicherte Gegnertypen &amp; Monster ({filteredLore.length})
+                </span>
+
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Gegner filtern..."
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 w-36 sm:w-48"
+                />
+              </div>
+
+              {filteredLore.length === 0 ? (
+                <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
+                  Keine Gegner im Bestiarium angelegt.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {groupedLore.map(([groupName, items]) => (
+                    <div key={groupName} className="flex flex-col gap-2">
+                      <div className="text-[11px] font-bold text-rose-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
+                        <span>{groupName}</span>
+                        <span className="text-slate-500 text-[10px]">({items.length})</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {items.map(item => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleEdit(item)}
+                            className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                              isEditing === item.id 
+                                ? 'border-amber-500 bg-amber-950/30 text-amber-300 font-bold shadow-md' 
+                                : 'border-slate-800 hover:border-slate-700 hover:bg-slate-850 text-slate-200'
+                            }`}
+                          >
+                            <span className="text-xs font-semibold truncate flex-1">
+                              {item.title || 'Unbenannter Gegner'}
+                            </span>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(item.id);
+                                }}
+                                className="text-slate-500 hover:text-rose-400 text-xs p-1 transition-colors"
+                                title="Gegner löschen"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : currentCategory === 'Rassen' ? (
+          <div className="flex flex-col gap-6">
+            <RaceLoreForm
+              editForm={editForm}
+              setEditForm={setEditForm}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+              onSave={handleSave}
+              onDelete={handleDelete}
+              onCancel={() => {
+                setIsEditing(null);
+                setEditForm({ category: 'Rassen' });
+              }}
+              lore={lore}
+              onUpdateLore={onUpdateLore}
+              worldTitle={worldTitle}
+              isNsfw={isNsfw}
+              world={world}
+            />
+
+            {/* List of Existing Lore Entries for this category */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Gespeicherte Völker &amp; Rassen ({filteredLore.length})
+                </span>
+
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Völker filtern..."
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 w-36 sm:w-48"
+                />
+              </div>
+
+              {filteredLore.length === 0 ? (
+                <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
+                  Keine Rassen im Codex angelegt.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {groupedLore.map(([groupName, items]) => (
+                    <div key={groupName} className="flex flex-col gap-2">
+                      <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
+                        <span>{groupName}</span>
+                        <span className="text-slate-500 text-[10px]">({items.length})</span>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {items.map(item => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleEdit(item)}
+                            className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
+                              isEditing === item.id 
+                                ? 'border-amber-500 bg-amber-950/30 text-amber-300 font-bold shadow-md' 
+                                : 'border-slate-800 hover:border-slate-700 hover:bg-slate-850 text-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              {item.image ? (
+                                <img
+                                  src={item.image}
+                                  alt={item.title}
+                                  className="w-8 h-8 rounded-lg object-cover border border-slate-700 shrink-0"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center shrink-0 text-emerald-400">
+                                  <i className="fa-solid fa-dna text-xs"></i>
+                                </div>
+                              )}
+                              <div className="flex flex-col min-w-0">
+                                <span className="text-xs font-semibold truncate text-slate-200">
+                                  {item.title || 'Unbenannte Rasse'}
+                                </span>
+                                {item.details?.originHabitat && (
+                                  <span className="text-[10px] text-slate-400 truncate">
+                                    {item.details.originHabitat}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {item.details?.rarity && (
+                                <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 hidden sm:inline-block">
+                                  {item.details.rarity}
+                                </span>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(item.id);
+                                }}
+                                className="text-slate-500 hover:text-rose-400 text-xs p-1 transition-colors cursor-pointer"
+                                title="Rasse löschen"
                               >
                                 <i className="fa-solid fa-trash"></i>
                               </button>
