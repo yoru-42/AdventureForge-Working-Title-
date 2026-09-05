@@ -1051,6 +1051,100 @@ export interface RelevantWorldContextParams {
   factionIds?: string[];
 }
 
+export type WorldEntityType =
+  | 'race'
+  | 'enemy'
+  | 'faction'
+  | 'character'
+  | 'npc'
+  | 'territory'
+  | 'place'
+  | 'holding'
+  | 'event'
+  | 'lore';
+
+export interface WorldEntityReference {
+  entityId: string;
+  entityType: WorldEntityType;
+  displayName?: string;
+  category?: string;
+  sourceType?: FactSourceType;
+  metadata?: Record<string, any>;
+}
+
+export interface EncounterForce {
+  id: string;
+  name: string;
+  factionId?: string;
+  factionName?: string;
+  raceId?: string;
+  raceName?: string;
+  enemyTypeId?: string;
+  enemyTypeName?: string;
+  leaderCharacterId?: string;
+  leaderCharacterName?: string;
+  originId?: string;
+  originName?: string;
+  targetId?: string;
+  targetName?: string;
+  count: number;
+  objective?: string; // 'raid' | 'patrol' | 'defense' | 'scout' | 'assault' | 'siege' | 'travel' | 'camp' | 'unknown' | string
+  context?: string;
+  hostility?: 'neutral' | 'suspicious' | 'hostile';
+  escalation?: 'local' | 'regional' | 'major' | 'unknown';
+  status?: 'detected' | 'mobilized' | 'engaged' | 'defeated' | 'retreated' | 'dispersed';
+  tacticalGroupId?: string;
+  isTacticalSpawned?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface FactionWorldState {
+  factionId: string;
+  factionName?: string;
+  currentTerritoryId?: string;
+  currentTerritoryName?: string;
+  currentLeaderId?: string;
+  currentLeaderName?: string;
+  availableForce?: number;
+  mobilizedForce?: number;
+  casualtyCount?: number;
+  morale?: number; // 0 to 100
+  resources?: Record<string, any>;
+  currentGoal?: string;
+  activeEvents?: string[];
+  activeThreats?: string[];
+  relationships?: Record<string, string>; // targetId -> 'allied' | 'hostile' | 'neutral' | 'tensed' | string
+  isWeakened?: boolean;
+  lastUpdated?: number;
+}
+
+export interface CombatResultFeedback {
+  forceId?: string;
+  factionId?: string;
+  enemyTypeId?: string;
+  initialCount?: number;
+  casualties?: number;
+  survivors?: number;
+  targetId?: string;
+  outcome?: 'victory' | 'defeat' | 'retreat' | 'stalemate';
+  leaderStatus?: 'unharmed' | 'injured' | 'captured' | 'fallen' | 'retreated' | string;
+  damageToTargetLocation?: string;
+  relationshipImpact?: string;
+  timestamp?: number;
+  details?: string;
+}
+
+export interface DynamicWorldState {
+  factions?: Record<string, FactionWorldState>;
+  encounterForces?: Record<string, EncounterForce>;
+  activeThreats?: string[];
+  activeEvents?: string[];
+  recentCombatOutcomes?: CombatResultFeedback[];
+  lastUpdated?: number;
+}
+
 export interface RelevantWorldContextResult {
   currentLocation?: Territory | null;
   nearbyTerritories: Territory[];
@@ -1090,6 +1184,8 @@ export interface WorldSetting {
   facts?: WorldFact[];
   conflicts?: WorldFactConflict[];
   changeLog?: WorldFactChangeLogEntry[];
+  encounterForces?: EncounterForce[];
+  dynamicWorldState?: DynamicWorldState;
   connections?: { id?: string; fromId?: string; toId?: string; fromPlace?: string; toPlace?: string; label?: string; travelTime?: string; distance?: string; duration?: string; type?: 'land' | 'sea' | 'air' | string; isUnlocked?: boolean }[];
   startLocationId?: string;
   startLocationName?: string;
@@ -1657,6 +1753,9 @@ export interface TacticalEntity {
   displayName: string;
   factionId?: string;
   groupId?: string;
+  encounterForceId?: string;
+  enemyTypeId?: string;
+  raceId?: string;
   unitType?: string;
   position: {
     x: number;
@@ -1680,6 +1779,9 @@ export interface TacticalGroup {
   id: string;
   name: string;
   factionId?: string;
+  encounterForceId?: string;
+  enemyTypeId?: string;
+  raceId?: string;
   unitIds: string[];
   formation?: TacticalFormation;
   direction?: TacticalDirection;
@@ -1808,6 +1910,8 @@ export interface Adventure {
   statusElements: StatusElement[];
   summaryLog?: string;
   combatState?: CombatState;
+  encounterForces?: EncounterForce[];
+  dynamicWorldState?: DynamicWorldState;
   emotionState?: UserEmotionState;
   physicalChangeHistory?: PhysicalChangeHistoryEntry[];
   npcAppearanceMemory?: Record<string, NPCAppearanceObservation>;

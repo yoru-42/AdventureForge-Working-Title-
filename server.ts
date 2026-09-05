@@ -77,19 +77,19 @@ function sanitizeContents(contents: any): any {
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
     'gemini-flash-latest'
   ];
   
-  // Clean invalid/experimental model requests that cause rate-limit or invalid model errors
-  const isValidModel = requestedModel && 
-                       !requestedModel.includes('3.8') && 
-                       !requestedModel.includes('3.1') && 
-                       !requestedModel.includes('3.0') &&
-                       defaultModels.includes(requestedModel);
+  // Clean invalid/deprecated model requests that cause rate-limit or invalid model errors
+  const isDeprecated = requestedModel && (
+    requestedModel.includes('2.0') || 
+    requestedModel.includes('1.5') || 
+    requestedModel.includes('2.5') ||
+    requestedModel === 'gemini-pro'
+  );
 
-  const modelsToTry = isValidModel ? [requestedModel, ...defaultModels.filter(m => m !== requestedModel)] : defaultModels;
+  const targetModel = (!requestedModel || isDeprecated) ? 'gemini-flash-latest' : requestedModel;
+  const modelsToTry = [targetModel, ...defaultModels.filter(m => m !== targetModel)];
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -359,7 +359,8 @@ async function startServer() {
       let lastError: any = null;
 
       const imageModelsToTry = [
-        'gemini-2.5-flash-image',
+        'gemini-3.1-flash-lite-image',
+        'gemini-3.1-flash-image',
         'imagen-3.0-generate-002'
       ];
 

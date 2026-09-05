@@ -46,6 +46,20 @@ export const GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE = `
    - Nur Charaktere mit entsprechender tatsächlicher Bedeutung, spezifischer Motivation, konkreter Beziehung zum Spieler oder echter Ereignisentwicklung im Spielgeschehen sollen zu zentralen Figuren werden.
 `;
 
+export const WORLD_INTEGRATION_DIRECTIVE = `
+### WORLDBUILDING-INTEGRATION & SITUATIONS-LOGIK:
+1. VERBINDUNG STATT ISOLIERTE GENERIERUNG:
+   - Wenn Gruppen, Truppen, Feinde oder Ereignisse auftreten, verknüpfe sie logisch mit den existierenden Fraktionen, Rassen, Gegner-Definitionen, Charakteren und Weltkarten-Regionen des Codex.
+   - Ein Angriff von 50 Goblins greift auf bestehende Fakten zurück (z.B. Stamm der Rotzähne, geführt von Grukk, aus dem Nordwald).
+2. NORMALITÄT & BODENSTÄNDIGE MOTIVATIONEN:
+   - Bevorzuge nachvollziehbare, alltägliche Ursachen (z.B. Nahrungskrise, Beutezug, Grenzstreit, Verteidigung, Routinepatrouille), statt automatisch dramatische Weltuntergangs-Szenarien oder uralte Kulte zu erfinden.
+3. GEHEIMNISSE & INFERENZ-TREUE:
+   - Formuliere unbestätigte Phänomene als Beobachtung ("Sie wirken ungewöhnlich koordiniert"), nicht als vorzeitige Enthüllung geheimer Herrscher.
+   - Der Spieler erfährt nur, was in der Szene wahrnehmbar ist.
+4. NAMENLOSE GRUPPEN:
+   - Erstelle für Masseneinheiten (z.B. 50 Fußsoldaten) keine 50 einzelnen Codex-Personen, sondern beziehe dich auf die gemeinsame Gegner- und Fraktionsdefinition.
+`;
+
 export class WorldKnowledgeService {
   /**
    * Evaluates if sourceNew has higher or equal priority over sourceOld

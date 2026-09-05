@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { jsonrepair } from "jsonrepair";
 import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
-import { CANON_PROTECTION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
+import { CANON_PROTECTION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
 import {
   executeDrawingPlan,
   validateDrawingPlanAndGeometries,
@@ -100,7 +100,7 @@ export class GeminiService {
     return {
       models: {
         generateContent: async (reqArgs: any) => {
-          if (reqArgs.model === 'gemini-2.5-flash-image' || (typeof reqArgs.model === 'string' && reqArgs.model.includes('image'))) {
+          if (reqArgs.model === 'gemini-3.1-flash-lite-image' || reqArgs.model === 'gemini-3.1-flash-image' || (typeof reqArgs.model === 'string' && reqArgs.model.includes('image'))) {
             const isNsfw = !!reqArgs.config?.safetySettings;
             const prompt = Array.isArray(reqArgs.contents?.parts) 
                 ? reqArgs.contents.parts[0]?.text 
@@ -297,11 +297,11 @@ export class GeminiService {
       // The systemInstruction already contains all world, player and NPC profile info.
       const maxHistoryCount = 12;
       let historyToPass = history;
-      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}`;
+      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}`;
 
       if (history.length > maxHistoryCount) {
         if (history[0] && history[0].text) {
-          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
+          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
         }
         historyToPass = history.slice(-maxHistoryCount);
       }
@@ -325,7 +325,7 @@ export class GeminiService {
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-flash-latest',
         contents: contents,
         config: {
           systemInstruction: finalSystemInstruction,
@@ -388,7 +388,7 @@ export class GeminiService {
     try {
       const ai = this.getAI();
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+        model: 'gemini-3.1-flash-lite-image',
         contents: {
           parts: [{ text: prompt }]
         },
@@ -647,7 +647,7 @@ ANWEISUNGEN:
       Stil: Realistisch, detailliert, Fokus auf Gesicht und Oberkörper. Keine Schrift.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
+        model: 'gemini-3.1-flash-lite-image',
         contents: {
           parts: [{ text: prompt }]
         },
@@ -6036,7 +6036,7 @@ ${recentMessages.map(m => `${m.role === 'user' ? 'Spieler' : 'DM'}: ${m.text}`).
 Schreibe die aktualisierte Chronik als zusammenhängenden, packenden Text auf Deutsch. Halte sie kurz (maximal 150-200 Wörter). Konzentriere dich nur auf wichtige Enthüllungen, getroffene Entscheidungen, bereiste Orte oder dramatische Wendungen. Nenne niemals geheime Rollen oder Tarnungen, bevor sie nicht im Text absolut zweifelsfigurlich und zweifelsfrei enthüllt wurden! Antworte NUR mit dem reinen Text der Chronik (kein Intro, kein Outro, keine Einleitung wie "Hier ist die Chronik...").`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-flash-latest',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             safetySettings: isNsfw ? this.getSafetySettings() : undefined
@@ -6134,7 +6134,7 @@ Gib das Ergebnis als ein valides JSON-Array von Objekten aus. Jedes Objekt muss 
 WICHTIG: Antworte AUSSCHLIESSLICH mit dem validen JSON-Array. Keine Einleitung, kein Outro, kein Markdown wie \`\`\`json oder \`\`\`. Wenn keine neuen Elemente gefunden werden, antworte mit einem leeren Array: []`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-flash-latest',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             responseMimeType: "application/json",

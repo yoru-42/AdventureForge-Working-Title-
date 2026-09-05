@@ -19,6 +19,7 @@ import { WorkManagementModal } from './WorkManagementModal';
 import { isClothingPlaceholder, isClothingItemTitle } from '../App';
 import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
+import { WorldIntegrationService } from '../services/worldIntegrationService';
 
 
 const baseEmotions = [
@@ -4051,17 +4052,46 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
         const currentGroups = updatedCombatState.tacticalGroups || {};
         const exists = Object.values(currentGroups).some((g: any) => g?.name?.toLowerCase() === groupName.toLowerCase());
         if (!exists) {
-          const spawnRes = spawnTacticalGroup({
-            combatState: updatedCombatState,
-            groupName,
+          // Resolve connected world entities & create EncounterForce
+          const unitDisplayName = groupName.replace(/\s*\d+x?$/, '').trim();
+          const encounter = WorldIntegrationService.createEncounterForce({
+            name: `${count}x ${unitDisplayName}`,
+            enemyTypeIdOrName: unitDisplayName,
+            factionIdOrName: unitDisplayName,
+            originIdOrName: source,
             count,
+            objective: 'raid',
+            world: updatedWorld,
+            loreDatabase: updatedLore,
+            characters: updatedPlayer ? [updatedPlayer] : [],
+            npcs: updatedNpcs
+          });
+
+          const spawnRes = WorldIntegrationService.spawnEncounterForceToTactical({
+            encounterForce: encounter.encounterForce,
+            combatState: updatedCombatState,
             formation: form,
             direction: 'south',
             spawnSource: source,
-            unitDisplayName: groupName.replace(/\s*\d+x?$/, '').trim(),
             baseHp: 30
           });
           updatedCombatState = spawnRes.updatedCombatState;
+
+          // Track encounter force in world setting
+          const nextForces = [...(updatedWorld.encounterForces || []), spawnRes.updatedEncounterForce];
+          const nextDynamicState = {
+            ...(updatedWorld.dynamicWorldState || {}),
+            encounterForces: {
+              ...(updatedWorld.dynamicWorldState?.encounterForces || {}),
+              [spawnRes.updatedEncounterForce.id]: spawnRes.updatedEncounterForce
+            }
+          };
+          updatedWorld = {
+            ...updatedWorld,
+            encounterForces: nextForces,
+            dynamicWorldState: nextDynamicState,
+            facts: [...(updatedWorld.facts || []), ...encounter.worldFacts]
+          };
         }
       }
 
