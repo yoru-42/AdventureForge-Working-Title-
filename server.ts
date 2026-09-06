@@ -77,7 +77,10 @@ function sanitizeContents(contents: any): any {
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
-    'gemini-flash-latest'
+    'gemini-flash-latest',
+    'gemini-3.8-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-3.1-pro-preview'
   ];
   
   // Clean invalid/deprecated model requests that cause rate-limit or invalid model errors
@@ -89,7 +92,9 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   );
 
   const targetModel = (!requestedModel || isDeprecated) ? 'gemini-flash-latest' : requestedModel;
-  const modelsToTry = [targetModel, ...defaultModels.filter(m => m !== targetModel)];
+  
+  // Build deduplicated ordered candidate models list
+  const modelsToTry = Array.from(new Set([targetModel, ...defaultModels]));
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -118,11 +123,11 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
                                 rawMsg.includes('RESOURCE_EXHAUSTED');
 
       if (isQuotaOrRateLimit) {
-        console.log(`[Gemini Server] Note: ${currentModel} reached rate threshold. Checking next model.`);
-        await delay(250);
+        console.log(`[Gemini Server] Note: ${currentModel} reached rate/quota threshold. Trying next fallback model...`);
+        await delay(200);
       } else {
-        console.log(`[Gemini Server] Note: ${currentModel} temporarily unavailable. Checking next model.`);
-        await delay(400);
+        console.log(`[Gemini Server] Note: ${currentModel} temporarily unavailable (${rawMsg.slice(0, 100)}). Checking next model.`);
+        await delay(350);
       }
     }
   }
@@ -132,11 +137,11 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
     const errStr = lastError?.message || String(lastError || '');
     if (errStr.includes('429') || errStr.toLowerCase().includes('quota') || errStr.toLowerCase().includes('rate limit') || errStr.includes('RESOURCE_EXHAUSTED')) {
       const retryMatch = errStr.match(/retry in ([\d\.]+)s/i);
-      const waitSeconds = retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 10) : (cooldownAttempt * 3 + 1);
-      console.log(`[Gemini Server] Rate limit window active. Cooldown waiting ${waitSeconds}s (Attempt ${cooldownAttempt}/2)...`);
+      const waitSeconds = retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 8) : (cooldownAttempt * 2 + 1);
+      console.log(`[Gemini Server] Rate limit window active across models. Cooldown waiting ${waitSeconds}s (Attempt ${cooldownAttempt}/2)...`);
       await delay(waitSeconds * 1000);
       
-      for (const retryModel of defaultModels) {
+      for (const retryModel of modelsToTry) {
         try {
           const recoveryResponse = await ai.models.generateContent({
             model: retryModel,
@@ -173,15 +178,28 @@ async function startServer() {
       res.json({ text: response.text, grounding: response.candidates?.[0]?.groundingMetadata?.groundingChunks || [] });
     } catch (e: any) {
       console.log("[Gemini Server] Warning - content generation ended:", (e?.message || String(e)).replace(/error/gi, "issue"));
-      let errorResponse = e.message || String(e);
-      // Try to extract a clean message if it's wrapped in JSON
+      let errorMsg = e?.message || String(e || '');
       try {
-        const parsed = JSON.parse(errorResponse);
+        const parsed = JSON.parse(errorMsg);
         if (parsed.error?.message) {
-          errorResponse = parsed.error.message;
+          errorMsg = parsed.error.message;
         }
       } catch (_) {}
-      res.status(500).json({ error: errorResponse });
+
+      let userFriendlyError = errorMsg;
+      if (
+        errorMsg.includes('429') ||
+        errorMsg.toLowerCase().includes('quota') ||
+        errorMsg.toLowerCase().includes('rate limit') ||
+        errorMsg.includes('RESOURCE_EXHAUSTED')
+      ) {
+        const retryMatch = errorMsg.match(/retry in ([\d\.]+)s/i);
+        const waitSec = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) : 20;
+        userFriendlyError = `Das Anfragen-Limit der KI (Quota/Rate-Limit) wurde erreicht. Bitte warte ca. ${waitSec} Sekunden und versuche es erneut.`;
+        return res.status(429).json({ error: userFriendlyError });
+      }
+
+      res.status(500).json({ error: userFriendlyError });
     }
   });
 

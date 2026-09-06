@@ -2610,9 +2610,36 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
             )}
           </div>
         ) : (
-          <div className="text-[9.5px] text-emerald-400/90 bg-emerald-950/30 border border-emerald-500/20 p-2 rounded-lg flex items-center gap-1.5 font-medium">
-            <i className="fa-solid fa-circle-check"></i>
-            <span>Vollständig gesund & unverletzt</span>
+          <div className={`text-[9.5px] p-2 rounded-lg flex items-center gap-1.5 font-medium border ${
+            activeConditionsList.some(c => c.type === 'curse')
+              ? 'text-red-400 bg-red-950/30 border-red-500/20'
+              : activeConditionsList.some(c => c.name.toLowerCase().includes('mental') || c.name.toLowerCase().includes('geist') || c.description.toLowerCase().includes('mental') || c.description.toLowerCase().includes('geist') || c.description.toLowerCase().includes('gedanken') || c.name.toLowerCase().includes('kontrolle'))
+              ? 'text-fuchsia-400 bg-fuchsia-950/30 border-fuchsia-500/20'
+              : activeConditionsList.some(c => c.name.toLowerCase().includes('hormon') || c.description.toLowerCase().includes('hormon') || c.name.toLowerCase().includes('fruchtbar') || c.description.toLowerCase().includes('fruchtbar') || c.name.toLowerCase().includes('lust') || c.description.toLowerCase().includes('lust'))
+              ? 'text-pink-400 bg-pink-950/30 border-pink-500/20'
+              : state.isPregnant
+              ? 'text-pink-400 bg-pink-950/30 border-pink-500/20'
+              : activeConditionsList.length > 0
+              ? 'text-amber-400 bg-amber-950/30 border-amber-500/20'
+              : state.isVampire
+              ? 'text-red-500 bg-red-950/30 border-red-500/20'
+              : 'text-emerald-400/90 bg-emerald-950/30 border-emerald-500/20'
+          }`}>
+            {activeConditionsList.some(c => c.type === 'curse') ? (
+              <><i className="fa-solid fa-skull-crossbones"></i><span>Körperlich verflucht & beeinträchtigt</span></>
+            ) : activeConditionsList.some(c => c.name.toLowerCase().includes('mental') || c.name.toLowerCase().includes('geist') || c.description.toLowerCase().includes('mental') || c.description.toLowerCase().includes('geist') || c.description.toLowerCase().includes('gedanken') || c.name.toLowerCase().includes('kontrolle')) ? (
+              <><i className="fa-solid fa-brain"></i><span>Mentale Stabilität & Kontrolle manipuliert</span></>
+            ) : activeConditionsList.some(c => c.name.toLowerCase().includes('hormon') || c.description.toLowerCase().includes('hormon') || c.name.toLowerCase().includes('fruchtbar') || c.description.toLowerCase().includes('fruchtbar') || c.name.toLowerCase().includes('lust') || c.description.toLowerCase().includes('lust')) ? (
+              <><i className="fa-solid fa-flask"></i><span>Hormoneller & physiologischer Zustand manipuliert</span></>
+            ) : state.isPregnant ? (
+              <><i className="fa-solid fa-person-pregnant"></i><span>Körper im fortgeschrittenen Schwangerschaftszustand</span></>
+            ) : activeConditionsList.length > 0 ? (
+              <><i className="fa-solid fa-vial-virus"></i><span>Physisch unverletzt, aber anomal beeinflusst</span></>
+            ) : state.isVampire ? (
+              <><i className="fa-solid fa-droplet"></i><span>Untoter, vampirischer Zustand</span></>
+            ) : (
+              <><i className="fa-solid fa-circle-check"></i><span>Vollständig gesund & unverletzt</span></>
+            )}
           </div>
         )}
 

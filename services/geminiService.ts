@@ -68,17 +68,17 @@ STRENGSTE REGELN FÜR DIE BIOGRAFIE:
 export const CHARACTER_BIO_7_QUESTIONS_PROMPT = CHARACTER_BIO_8_QUESTIONS_PROMPT;
 
 export class GeminiService {
-  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 1, initialDelay = 1500): Promise<Response> {
+  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 2, initialDelay = 1500): Promise<Response> {
     let attempt = 0;
     let delay = initialDelay;
     while (true) {
       try {
         attempt++;
         const res = await fetch(url, options);
-        if (!res.ok && (res.status === 502 || res.status === 503 || res.status === 504) && attempt <= maxRetries) {
+        if (!res.ok && (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) && attempt <= maxRetries) {
           console.warn(`[Gemini Client Fetch] HTTP ${res.status}, retrying attempt ${attempt}/${maxRetries} in ${delay}ms...`);
           await new Promise(r => setTimeout(r, delay));
-          delay *= 1.5;
+          delay *= 2;
           continue;
         }
         return res;

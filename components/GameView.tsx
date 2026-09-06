@@ -71,10 +71,23 @@ const isSimilarLoreTitle = (titleA: string | undefined, titleB: string | undefin
   if (!titleA || !titleB) return false;
   const normalize = (t: string) => {
     let s = t.toLowerCase().trim();
-    s = s.replace(/^(die|der|das|ein|eine|einen|einem|eines|einer|the|a|an)\s+/, '');
+    s = s.replace(/^(die|der|das|ein|eine|einen|einem|eines|einer|the|a|an)\s+/gi, '');
+    s = s.replace(/[-\s_]/g, '');
     return s.trim();
   };
-  return normalize(titleA) === normalize(titleB);
+  const normA = normalize(titleA);
+  const normB = normalize(titleB);
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+
+  if (normA.length > 3 && normB.length > 3) {
+    if (normA.endsWith('n') && normA.slice(0, -1) === normB) return true;
+    if (normB.endsWith('n') && normB.slice(0, -1) === normA) return true;
+    if (normA.endsWith('en') && normA.slice(0, -2) === normB) return true;
+    if (normB.endsWith('en') && normB.slice(0, -2) === normA) return true;
+    if (normA.includes(normB) || normB.includes(normA)) return true;
+  }
+  return false;
 };
 
 
@@ -1688,8 +1701,12 @@ Text:
 
       const exists = currentLore.some(e =>
         (e.category === 'Gegner' || e.category === 'Charaktere') &&
-        (e.title.trim().toLowerCase() === cleanName.toLowerCase() ||
-         e.title.toLowerCase().replace(/[-\s_]/g, '') === cleanName.toLowerCase().replace(/[-\s_]/g, ''))
+        (
+          e.title.trim().toLowerCase() === cleanName.toLowerCase() ||
+          e.title.toLowerCase().replace(/[-\s_]/g, '') === cleanName.toLowerCase().replace(/[-\s_]/g, '') ||
+          isSimilarLoreTitle(e.title, cleanName) ||
+          isNameMatch(e.title, e.details?.nickname, cleanName)
+        )
       );
 
       if (!exists) {
@@ -3345,7 +3362,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
 
       let existsIdx = -1;
       if (category === 'Charaktere' || category === 'Gegner') {
-        existsIdx = updatedLore.findIndex(e => (e.category === 'Charaktere' || e.category === 'Gegner') && isNameMatch(e.title, e.details?.nickname, title));
+        existsIdx = updatedLore.findIndex(e => (e.category === 'Charaktere' || e.category === 'Gegner') && (isNameMatch(e.title, e.details?.nickname, title) || isSimilarLoreTitle(e.title, title)));
       } else {
         existsIdx = updatedLore.findIndex(e => e.category === category && isSimilarLoreTitle(e.title, title));
       }
@@ -3460,18 +3477,26 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
           }
         }
 
+        const newDescTrimmed = description?.trim() || '';
+        const oldDescTrimmed = existingEntry.description?.trim() || '';
+        const descChanged = newDescTrimmed && newDescTrimmed !== oldDescTrimmed;
+
         updatedLore[existsIdx] = {
           ...existingEntry,
-          description: description,
+          description: descChanged ? description : existingEntry.description,
           details: mergedDetails,
           isUnlocked: true
         };
-        notifications.push({
-          id: Math.random().toString(),
-          type: 'add',
-          title: `${title} (Aktualisiert)`,
-          category
-        });
+
+        // Only add a notification if the entry was locked previously or newly unlocked
+        if (!existingEntry.isUnlocked) {
+          notifications.push({
+            id: Math.random().toString(),
+            type: 'add',
+            title: `${title} (Freigeschaltet)`,
+            category
+          });
+        }
       }
     }
 
@@ -3524,6 +3549,58 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
           });
         }
       }
+    }
+
+    // Helper to update event step status in loreDatabase
+    const updateEventStepStatusInLore = (stepIdent: string, rawStatus: string) => {
+      const targetStatus = (rawStatus.includes('happen') || rawStatus.includes('eingetreten') || rawStatus.includes('erfüllt') || rawStatus.includes('abgeschlossen') || rawStatus.includes('done') || rawStatus.includes('complete') || rawStatus === 'true' || rawStatus === '1') ? 'happened' : 'pending';
+
+      updatedLore.forEach((entry, eIdx) => {
+        if ((entry.category === 'Story & Quests' || entry.category === 'Events') && entry.details?.eventSteps) {
+          const steps = [...entry.details.eventSteps];
+          let updated = false;
+
+          steps.forEach((s: any, sIdx: number) => {
+            const stepNumStr = (sIdx + 1).toString();
+            const cleanIdent = stepIdent.trim().toLowerCase().replace(/^(station_|eventstep_|queststep_|station\s*#?)/i, '');
+            const isMatch = cleanIdent === stepNumStr || 
+                            isSimilarLoreTitle(s.title, stepIdent) ||
+                            (s.title && isSimilarLoreTitle(s.title, cleanIdent)) ||
+                            (s.title && s.title.toLowerCase().includes(cleanIdent));
+            
+            if (isMatch) {
+              steps[sIdx] = { ...s, status: targetStatus };
+              updated = true;
+              if (targetStatus === 'happened') {
+                notifications.push({
+                  id: Math.random().toString(),
+                  type: 'add',
+                  title: `Story-Station eingetreten: ${s.title || `Station #${sIdx + 1}`}`,
+                  category: 'Story & Quests'
+                });
+              }
+            }
+          });
+
+          if (updated) {
+            updatedLore[eIdx] = {
+              ...entry,
+              details: {
+                ...entry.details,
+                eventSteps: steps
+              }
+            };
+          }
+        }
+      });
+    };
+
+    // Parse EVENT_STEP_SET: [[EVENT_STEP_SET: StationIdent = status]]
+    const eventStepRegex = /\[\[EVENT_STEP_SET:\s*([^=\|]+)(?:=|\s*\|\s*)([^\]]+)\]\]/g;
+    let eventStepMatch;
+    while ((eventStepMatch = eventStepRegex.exec(text)) !== null) {
+      cleanedText = cleanedText.replace(eventStepMatch[0], '');
+      updateEventStepStatusInLore(eventStepMatch[1].trim(), eventStepMatch[2].trim());
     }
 
     // Parse RELATIONSHIP: [[RELATIONSHIP: NameA | NameB | Typ | Verhalten]]
@@ -3977,7 +4054,10 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
         const lower = trimmed.toLowerCase();
         if (!trimmed || lower === 'keine' || lower === 'keines' || lower === 'kein' || lower === 'empty') return;
 
-        const existsIdx = updatedLore.findIndex(e => e.category === 'Gegenstände' && e.title.trim().toLowerCase() === lower);
+        const existsIdx = updatedLore.findIndex(e =>
+          e.category === 'Gegenstände' &&
+          (e.title.trim().toLowerCase() === lower || isSimilarLoreTitle(e.title, trimmed))
+        );
         if (existsIdx > -1) {
           const existing = updatedLore[existsIdx];
           const currentDetails = existing.details || {};
@@ -4163,6 +4243,9 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
           } else if (getCustomResourceNames()[0]?.toLowerCase() === lowerKey) {
             const val = parseInt(value);
             if (!isNaN(val)) setPlayerMp(Math.max(0, val));
+          } else if (lowerKey.startsWith('eventstep_') || lowerKey.startsWith('station_') || lowerKey.startsWith('queststep_')) {
+            const stepIdent = key.replace(/^(eventstep_|station_|queststep_)/i, '').replace(/_/g, ' ').trim();
+            updateEventStepStatusInLore(stepIdent, value.trim());
           } else if (lowerKey.startsWith('position_') || lowerKey.startsWith('move_') || lowerKey.startsWith('movegroup_') || lowerKey.startsWith('moveentity_')) {
             // Tactical movement is authoritatively calculated and executed by the Tactical Movement Engine in parseLoreAndCharUpdates.
           } else if (lowerKey.startsWith('terrain_')) {
@@ -4746,8 +4829,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       13. HANDLUNGEN MARKIEREN: Wenn du Handlungen, Bewegungen oder den Gesichtsausdruck beschreibst, umschließe diese bitte mit Sternchen, wie z.B. *Er zieht sein Schwert* oder *schaut böse*. Gesprochener Text bleibt ohne Sterne.
       14. DYNAMISCHES CODEX / LORE UPDATE & GEGNER-CODEX (STRENG EINZUHALTEN):
           Erweitere die Lore-Datenbank (Codex) eigenständig bei wichtigen Ereignissen oder sobald neue Gegner eingeführt werden!
-          - DUPLIKATE STRENGSTENS VERMEIDEN: Achte penibel darauf, keine Einträge doppelt zu erstellen. Wenn ein Eintrag (ein Charakter, Gegner, Ort, Gegenstand etc.) bereits in der Lore-Datenbank existiert (oder ein sehr ähnlicher Name vorliegt), erstelle KEINEN neuen Eintrag. Du kannst und sollst das [[LORE_ADD: ...]] Format mit demselben Namen verwenden, um die Beschreibung eines bereits existierenden Eintrags zu bearbeiten/aktualisieren, aber erstelle ihn niemals neu als Duplikat!
-          - GEGNER & HOSTILE GRUPPEN (MANDATORY): Sobald du im Storyverlauf (beim Spielstart, in der ersten Szene oder neuen Begegnungen) physisch anwesende "No-Name" Gegner, Einzelgegner oder feindselige Gruppen (wie Banditen, wilde Rudel, Wachen, feindliche Soldaten) einiffs, MUSST du zwingend sofort einen detaillierten Codex-Eintrag unter der Kategorie 'Gegner' erstellen! Verwende dazu das Format: [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]]. Dadurch werden diese Gegner strukturiert im Codex erfasst und für das Kampfvorbereitungs-Menü freigeschaltet.
+          - DUPLIKATE STRENGSTENS VERMEIDEN (KEINE ERNEUTE AUSGABE EXISTIERENDER EINTRÄGE): Prüfe vor jeder Antwort zwingend die oben aufgeführte 'LORE DATENBANK'! Wenn ein Eintrag (ein Charakter, Gegner, Ort, Gegenstand etc.) BEREITS in der Lore-Datenbank existiert (oder ein sehr ähnlicher Name wie 'Wachen', 'Marine-Soldaten' etc. bereits vorhanden ist), gib UNTER KEINEN UMSTÄNDEN erneut einen [[LORE_ADD: ...]] Tag für diesen Eintrag aus! Gib [[LORE_ADD: ...]] AUSSCHLIESSLICH DANN AUS, wenn eine VÖLLIG NEUE Entität zum ersten Mal in der Geschichte auftaucht.
+          - GEGNER & HOSTILE GRUPPEN: Sobald du im Storyverlauf eine VÖLLIG NEUE feindselige Gruppe oder einen neuen Gegner einführst, der NOCH NICHT in der 'LORE DATENBANK' aufgelistet ist, erstelle EINMALIG einen Codex-Eintrag per [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]]. Falls der Gegner/die Gruppe jedoch BEREITS in der Lore-Datenbank steht, gib den Tag NICHT erneut aus!
           - GEGNER-FILTERUNG: Führe nur Gegner ein, die sich auch tatsächlich physisch in unmittelbarer Nähe des Spielers befinden. Verbündete (Gefährten, Freunde, Lehrer) oder politische Fraktionen sind KEINE Gegner und dürfen niemals als Kampfgegner gelistet werden.
           - GEGENSTÄNDE, KLEIDUNG & OUTFITS (STRENGES MANDAT):
             1. Erstelle NIEMALS, absolut NIEMALS Einträge für gewöhnliche, alltägliche Gegenstände (wie Tisch, Lampe, Stift, Papier) oder einzelne Kleidungsstücke (wie "Kochhemd", "Schürze", "Stiefel", "Nachthemd", "Hose") oder Platzhalter-Zustände (wie "barfuß", "keine Kopfbedeckung").
@@ -4794,7 +4877,12 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           - Spieler zieht sich um & erhält Waffe: [[INVENTORY_SET: armor.chest=Schwarzer Ledermantel | armor.legs=Dunkle Stoffhose | weapons+=Silberner Dolch]]
           - Spieler kauft Heiltrank für 20 Berry: [[INVENTORY_SET: generalItems+=Heiltrank | money=80]]
           - Spieler legt Rüstung ab: [[INVENTORY_SET: armor.chest=none | armor.head=none]]
-      25. ENTHÜLLTES / VERBORGENES WISSEN BEACHTEN: Achte penibel auf das "Enthülltes/Verborgenes Wissen" in den Event-Stationen. Wenn ein Story-Schritt/eine Station noch als "Ausstehend/Geplant" markiert ist, darfst du dieses Wissen auf KEINEN FALL vorzeitig im Chat verraten, andeuten, erwähnen oder enthüllen! Erst wenn die Hauptstory/Nebenquests diesen Schritt erreicht haben (Station ist als "Eingetreten" markiert), ist das Wissen aktiv und darf im Chat thematisiert oder offenbart werden.
+      25. PROAKTIVES KAMPAGNEN- & STORY-STATIONEN MANAGEMENT (MANDATORISCH):
+          - DU BIST ALS AI-DUNGEON-MASTER DAFÜR VERANTWORTLICH, DIE KAMPAGNE DYNAMISCH VORANZUTREIBEN!
+          - Prüfe vor jeder Antwort die in der 'LORE DATENBANK' unter 'STORY & QUESTS' gelisteten Ereignisse / Kampagnen-Stationen (z. B. Station #1: Überwachung in Distrikt 9).
+          - PROAKTIVES AUSLÖSEN: Sobald der Spieler sich am passenden Ort befindet oder eine dazu passende Situation eintritt, MUSST du die nächste ausstehende Kampagnen-Station direkt in der Narration auslösen, die beteiligten NPCs (wie Aizawa, Midnight etc.) auftreten lassen und das Ereignis aktiv ins Spielgeschehen einbauen!
+          - AUTOMATISCHER STATUS-TAG: Sobald eine Kampagnen-Station im Text eingetreten ist oder vollzogen wurde, MUSST du dies zwingend per Tag im Status-Block signalisieren: z. B. [[STATUS: Station_1=happened]] oder [[STATUS: Station_Überwachung in Distrikt 9=happened]] oder [[EVENT_STEP_SET: Station_1=happened]]. Dadurch setzt das System den Haken in der Story-Übersicht automatisch auf "Eingetreten".
+          - Schiebe anstehende Haupt- und Nebenstory-Stationen niemals unbegründet auf, sondern führe die Spielfigur aktiv durch den roten Faden der Geschichte!
       26. STRENGE ZEITLICHE KONSISTENZ & TEMPORALE LOGIK: Analysiere genau den zeitlichen Ablauf seit dem zentralen Katalysator-Ereignis (z.B. Unfall, Verwandlung, Erhalt von Kräften, Amnesie des Spielers). Wenn dieses Ereignis erst gestern, heute oder vor extrem kurzer Zeit stattfand, dürfen NPCs NIEMALS unlogische Dinge sagen wie 'Du hast dich in letzter Zeit verändert' (als wäre es ein wochenlanger Prozess gewesen). NPCs dürfen sich nicht so verhalten, als hätten sie die Veränderung bereits über einen langen Zeitraum beobachtet. Achte penibel darauf, dass NPCs nur das wissen und ansprechen können, was in der kurzen verstrichenen Zeitspanne logischerweise beobachtbar war! Sorge für 100% lückenlose zeitliche Logik!
       27. ABSOLUTES VERBOT DES AUSGEBENS VON KAMPAGNEN-WERTEN ODER STATS: Gib NIEMALS, unter keinen Umständen, Kampagnen-Werte, Attribute, Statuslisten, Progress-Bars, Werteveränderungen oder Status-Meldungen (wie "**KAMPAGNEN-WERTE**", "Haki: 0/5000" etc.) im ausgegebenen Text aus! Diese Werte werden rein im Hintergrund für dich übermittelt. Dein Text darf ausschließlich die cineastische Erzählung, Dialoge und atmosphärische Beschreibungen enthalten - komplett frei von technischen Wertelisten.
       28. SCHWANGERSCHAFT, EMPFÄNGNIS & ZYKLUS-REGELN:
@@ -4812,7 +4900,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       30. BODENSTÄNDIGE CHARAKTERE & WELTENTWICKLUNG (GLAUBWÜRDIGE HINTERGRÜNDE):
           - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
           - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
-          - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
+          - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meiste Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
       
       const response = await GeminiService.chat(updatedMessages, systemInstruction, world.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
@@ -6486,8 +6574,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       13. HANDLUNGEN MARKIEREN: Wenn du Handlungen, Bewegungen oder den Gesichtsausdruck beschreibst, umschließe diese bitte mit Sternchen, wie z.B. *Er zieht sein Schwert* oder *schaut böse*. Gesprochener Text bleibt ohne Sterne.
       14. DYNAMISCHES CODEX / LORE UPDATE & GEGNER-CODEX (STRENG EINZUHALTEN):
           Erweitere die Lore-Datenbank (Codex) eigenständig bei wichtigen Ereignissen oder sobald neue Gegner eingeführt werden!
-          - DUPLIKATE STRENGSTENS VERMEIDEN: Achte penibel darauf, keine Einträge doppelt zu erstellen. Wenn ein Eintrag (ein Charakter, Gegner, Ort, Gegenstand etc.) bereits in der Lore-Datenbank existiert (oder ein sehr ähnlicher Name vorliegt), erstelle KEINEN neuen Eintrag. Du kannst und sollst das [[LORE_ADD: ...]] Format mit demselben Namen verwenden, um die Beschreibung eines bereits existierenden Eintrags zu bearbeiten/aktualisieren, aber erstelle ihn niemals neu als Duplikat!
-          - GEGNER & HOSTILE GRUPPEN (MANDATORY): Sobald du im Storyverlauf (beim Spielstart, in der ersten Szene oder neuen Begegnungen) physisch anwesende "No-Name" Gegner, Einzelgegner oder feindselige Gruppen (wie Banditen, wilde Rudel, Wachen, feindliche Soldaten) einführst, MUSST du zwingend sofort einen detaillierten Codex-Eintrag unter der Kategorie 'Gegner' erstellen! Verwende dazu das Format: [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]]. Dadurch werden diese Gegner strukturiert im Codex erfasst und für das Kampfvorbereitungs-Menü freigeschaltet.
+          - DUPLIKATE STRENGSTENS VERMEIDEN (KEINE ERNEUTE AUSGABE EXISTIERENDER EINTRÄGE): Prüfe vor jeder Antwort zwingend die oben aufgeführte 'LORE DATENBANK'! Wenn ein Eintrag (ein Charakter, Gegner, Ort, Gegenstand etc.) BEREITS in der Lore-Datenbank existiert (oder ein sehr ähnlicher Name wie 'Wachen', 'Marine-Soldaten' etc. bereits vorhanden ist), gib UNTER KEINEN UMSTÄNDEN erneut einen [[LORE_ADD: ...]] Tag für diesen Eintrag aus! Gib [[LORE_ADD: ...]] AUSSCHLIESSLICH DANN AUS, wenn eine VÖLLIG NEUE Entität zum ersten Mal in der Geschichte auftaucht.
+          - GEGNER & HOSTILE GRUPPEN: Sobald du im Storyverlauf eine VÖLLIG NEUE feindselige Gruppe oder einen neuen Gegner einführst, der NOCH NICHT in der 'LORE DATENBANK' aufgelistet ist, erstelle EINMALIG einen Codex-Eintrag per [[LORE_ADD: Gegner | Name | Beschreibung auf Deutsch]]. Falls der Gegner/die Gruppe jedoch BEREITS in der Lore-Datenbank steht, gib den Tag NICHT erneut aus!
           - GEGNER-FILTERUNG: Führe nur Gegner ein, die sich auch tatsächlich physisch in unmittelbarer Nähe des Spielers befinden. Verbündete (Gefährten, Freunde, Lehrer) oder politische Fraktionen sind KEINE Gegner und dürfen niemals als Kampfgegner gelistet werden.
           - GEGENSTÄNDE, KLEIDUNG & OUTFITS (STRENGES MANDAT):
             1. Erstelle NIEMALS, absolut NIEMALS Einträge für gewöhnliche, alltägliche Gegenstände (wie Tisch, Lampe, Stift, Papier) oder einzelne Kleidungsstücke (wie "Kochhemd", "Schürze", "Stiefel", "Nachthemd", "Hose") oder Platzhalter-Zustände (wie "barfuß", "keine Kopfbedeckung").
@@ -6534,7 +6622,12 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           - Spieler zieht sich um & erhält Waffe: [[INVENTORY_SET: armor.chest=Schwarzer Ledermantel | armor.legs=Dunkle Stoffhose | weapons+=Silberner Dolch]]
           - Spieler kauft Heiltrank für 20 Berry: [[INVENTORY_SET: generalItems+=Heiltrank | money=80]]
           - Spieler legt Rüstung ab: [[INVENTORY_SET: armor.chest=none | armor.head=none]]
-      25. ENTHÜLLTES / VERBORGENES WISSEN BEACHTEN: Achte penibel auf das "Enthülltes/Verborgenes Wissen" in den Event-Stationen. Wenn ein Story-Schritt/eine Station noch als "Ausstehend/Geplant" markiert ist, darfst du dieses Wissen auf KEINEN FALL vorzeitig im Chat verraten, andeuten, erwähnen oder enthüllen! Erst wenn die Hauptstory/Nebenquests diesen Schritt erreicht haben (Station ist als "Eingetreten" markiert), ist das Wissen aktiv und darf im Chat thematisiert oder offenbart werden.
+      25. PROAKTIVES KAMPAGNEN- & STORY-STATIONEN MANAGEMENT (MANDATORISCH):
+          - DU BIST ALS AI-DUNGEON-MASTER DAFÜR VERANTWORTLICH, DIE KAMPAGNE DYNAMISCH VORANZUTREIBEN!
+          - Prüfe vor jeder Antwort die in der 'LORE DATENBANK' unter 'STORY & QUESTS' gelisteten Ereignisse / Kampagnen-Stationen (z. B. Station #1: Überwachung in Distrikt 9).
+          - PROAKTIVES AUSLÖSEN: Sobald der Spieler sich am passenden Ort befindet oder eine dazu passende Situation eintritt, MUSST du die nächste ausstehende Kampagnen-Station direkt in der Narration auslösen, die beteiligten NPCs (wie Aizawa, Midnight etc.) auftreten lassen und das Ereignis aktiv ins Spielgeschehen einbauen!
+          - AUTOMATISCHER STATUS-TAG: Sobald eine Kampagnen-Station im Text eingetreten ist oder vollzogen wurde, MUSST du dies zwingend per Tag im Status-Block signalisieren: z. B. [[STATUS: Station_1=happened]] oder [[STATUS: Station_Überwachung in Distrikt 9=happened]] oder [[EVENT_STEP_SET: Station_1=happened]]. Dadurch setzt das System den Haken in der Story-Übersicht automatisch auf "Eingetreten".
+          - Schiebe anstehende Haupt- und Nebenstory-Stationen niemals unbegründet auf, sondern führe die Spielfigur aktiv durch den roten Faden der Geschichte!
       26. STRENGE ZEITLICHE KONSISTENZ & TEMPORALE LOGIK: Analysiere genau den zeitlichen Ablauf seit dem zentralen Katalysator-Ereignis (z.B. Unfall, Verwandlung, Erhalt von Kräften, Amnesie des Spielers). Wenn dieses Ereignis erst gestern, heute oder vor extrem kurzer Zeit stattfand, dürfen NPCs NIEMALS unlogische Dinge sagen wie 'Du hast dich in letzter Zeit verändert' (als wäre es ein wochenlanger Prozess gewesen). NPCs dürfen sich nicht so verhalten, als hätten sie die Veränderung bereits über einen langen Zeitraum beobachtet. Achte penibel darauf, dass NPCs nur das wissen und ansprechen können, was in der kurzen verstrichenen Zeitspanne logischerweise beobachtbar war! Sorge für 100% lückenlose zeitliche Logik!
       27. ABSOLUTES VERBOT DES AUSGEBENS VON KAMPAGNEN-WERTEN ODER STATS: Gib NIEMALS, unter keinen Umständen, Kampagnen-Werte, Attribute, Statuslisten, Progress-Bars, Werteveränderungen oder Status-Meldungen (wie "**KAMPAGNEN-WERTE**", "Haki: 0/5000" etc.) im ausgegebenen Text aus! Diese Werte werden rein im Hintergrund für dich übermittelt. Dein Text darf ausschließlich die cineastische Erzählung, Dialoge und atmosphärische Beschreibungen enthalten - komplett frei von technischen Wertelisten.
       28. SCHWANGERSCHAFT, EMPFÄNGNIS & ZYKLUS-REGELN:
