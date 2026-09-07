@@ -1806,14 +1806,24 @@ export class WorldIntegrationService {
   } {
     const { battleInstanceId, combatResult, world } = params;
 
+    const bId = battleInstanceId || combatResult.battleInstanceId;
+    const battleInstancesMap = { ...(world.dynamicWorldState?.battleInstances || {}) };
+    const targetBattle = bId ? battleInstancesMap[bId] : null;
+
+    // Idempotency check: if battle is already completed/retreated/aborted, return world without reapplying side effects
+    if (targetBattle && targetBattle.status !== 'active' && targetBattle.status !== undefined) {
+      return {
+        updatedWorld: world,
+        updatedBattleInstance: targetBattle,
+        changeLogs: [],
+        newFacts: []
+      };
+    }
+
     const baseResult = this.applyCombatResultToWorldState({ feedback: combatResult, world });
     let currentWorld = baseResult.updatedWorld;
     const changeLogs = [...baseResult.changeLogs];
     const newFacts = [...baseResult.newFacts];
-
-    const bId = battleInstanceId || combatResult.battleInstanceId;
-    const battleInstancesMap = { ...(currentWorld.dynamicWorldState?.battleInstances || {}) };
-    const targetBattle = bId ? battleInstancesMap[bId] : null;
 
     let updatedBattleInstance: BattleInstance | null = null;
 
