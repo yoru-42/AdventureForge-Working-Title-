@@ -73,13 +73,14 @@ Feedback, ideas, and contributions are always welcome.
 
 View your app in AI Studio: https://ai.studio/apps/9751ace7-c725-4cb4-9a2b-550876b20f0a
 
-<img width="666" height="1037" alt="Screenshot 2026-07-05 203514" src="https://github.com/user-attachments/assets/7bc44d48-16e8-4d92-8d42-ea3714f6bd54" />
-<img width="682" height="1049" alt="Screenshot 2026-07-05 203457" src="https://github.com/user-attachments/assets/16028f6e-acb7-40ce-844d-6c10bebc07c3" />
-<img width="687" height="1117" alt="Screenshot 2026-07-05 203437" src="https://github.com/user-attachments/assets/df0cd8a0-a67f-45e3-b5c8-7764a6cf4363" />
-<img width="616" height="1112" alt="Screenshot 2026-07-05 203401" src="https://github.com/user-attachments/assets/e8f4fa5a-eb82-4adf-aeb5-707b56210305" />
-<img width="723" height="1135" alt="Screenshot 2026-07-05 203335" src="https://github.com/user-attachments/assets/80c8d8db-c81c-4130-86ea-559903b5242c" />
-<img width="676" height="1123" alt="Screenshot 2026-07-05 203301" src="https://github.com/user-attachments/assets/3a662f52-b4ff-419d-96be-fa24e9cfa9f6" />
-<img width="721" height="1100" alt="Screenshot 2026-07-05 203241" src="https://github.com/user-attachments/assets/58519d7c-d39b-41e3-8d71-37fcd3e330da" />
-<img width="713" height="1108" alt="Screenshot 2026-07-05 203205" src="https://github.com/user-attachments/assets/a38f968a-e397-4c96-8a44-4cf65e341d51" />
-<img width="731" height="1060" alt="Screenshot 2026-07-05 203134" src="https://github.com/user-attachments/assets/5256f6c7-9b6c-4b48-92d0-ab29b55caad2" />
-<img width="1996" height="1045" alt="Screenshot 2026-07-05 203838" src="https://github.com/user-attachments/assets/ce83c08b-3d3e-4c64-8b17-fe0a9437bf76" />
+<img width="673" height="1038" alt="grafik" src="https://github.com/user-attachments/assets/a4e25531-6558-4724-9875-ef4883ad3579" />
+<img width="678" height="1103" alt="grafik" src="https://github.com/user-attachments/assets/916653a9-74a3-4f39-bd90-493d5a01806b" />
+<img width="687" height="1108" alt="grafik" src="https://github.com/user-attachments/assets/f0e43674-dd33-4d89-a093-941eebf2885c" />
+<img width="689" height="1115" alt="grafik" src="https://github.com/user-attachments/assets/d05c2a52-1600-4fb6-ad01-d5a385aeec41" />
+<img width="679" height="1112" alt="grafik" src="https://github.com/user-attachments/assets/19a1d244-a489-4687-ab10-3b992ea68bfd" />
+<img width="723" height="1119" alt="grafik" src="https://github.com/user-attachments/assets/c8dc8497-8886-4e3e-832a-c7a7e4932718" />
+<img width="678" height="1086" alt="grafik" src="https://github.com/user-attachments/assets/44dcbcd1-f518-40cb-aec3-c96b4934546a" />
+<img width="705" height="1071" alt="grafik" src="https://github.com/user-attachments/assets/73a0bfe7-bd6a-4ca3-a452-ce340c454d90" />
+<img width="691" height="1059" alt="grafik" src="https://github.com/user-attachments/assets/2920b015-5880-49b1-99ab-9bcfa1bd2c0f" />
+<img width="2017" height="1102" alt="grafik" src="https://github.com/user-attachments/assets/3b4253ea-91af-4bf5-8d88-b049c9620d68" />
+<img width="2002" height="1042" alt="grafik" src="https://github.com/user-attachments/assets/65744918-2fbc-46bb-b105-db6c7e655fec" />
