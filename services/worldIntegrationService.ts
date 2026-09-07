@@ -1,6 +1,10 @@
 import {
   WorldSetting,
   Territory,
+  WorldLocationReference,
+  BattleInstance,
+  PlacedCombatObject,
+  WorldTime,
   LoreEntry,
   Character,
   NPC,
@@ -1228,12 +1232,15 @@ export class WorldIntegrationService {
       behavior
     });
 
-    // Tag the TacticalGroup and Entities with EncounterForce references
+    // Tag the TacticalGroup and Entities with EncounterForce references and World Source Tracking
     const updatedGroup: TacticalGroup = {
       ...spawnResult.group,
       encounterForceId: encounterForce.id,
       enemyTypeId: encounterForce.enemyTypeId,
-      raceId: encounterForce.raceId
+      raceId: encounterForce.raceId,
+      factionId: encounterForce.factionId,
+      sourceType: 'encounter_force',
+      sourceId: encounterForce.id
     };
 
     const updatedEntities = spawnResult.entities.map((e, idx) => {
@@ -1243,6 +1250,9 @@ export class WorldIntegrationService {
         encounterForceId: encounterForce.id,
         enemyTypeId: encounterForce.enemyTypeId,
         raceId: encounterForce.raceId,
+        factionId: encounterForce.factionId,
+        sourceType: 'encounter_force',
+        sourceId: encounterForce.id,
         isLeader,
         displayName: isLeader && encounterForce.leaderCharacterName
           ? encounterForce.leaderCharacterName
@@ -1463,6 +1473,470 @@ export class WorldIntegrationService {
       isCurrent: true,
       note: note || 'Beobachtung oder Verdacht (kein unumstößlicher Kanon)',
       createdAt: Date.now()
+    };
+  }
+
+  // -------------------------------------------------------------
+  // 10. World State & Map Architecture Methods
+  // -------------------------------------------------------------
+
+  /**
+   * Resolves a location / POI reference inside a given Territory or WorldSetting.
+   * Maintains stable ID references (Location ID != name).
+   */
+  static resolveLocationReference(params: {
+    idOrName?: string;
+    territoryId?: string;
+    world: WorldSetting;
+    loreDatabase?: LoreEntry[];
+  }): ResolutionResult<WorldLocationReference> {
+    const { idOrName, territoryId, world, loreDatabase = world.loreDatabase || [] } = params;
+    if (!idOrName) {
+      return { value: null, status: 'unresolved', confidence: 0, reason: 'Keine Ortsbezeichnung angegeben' };
+    }
+
+    const trimmed = idOrName.trim();
+    if (!trimmed) {
+      return { value: null, status: 'unresolved', confidence: 0, reason: 'Leere Ortsbezeichnung' };
+    }
+
+    const normalized = this.normalizeStr(trimmed);
+
+    // 1. Look in world.locations / dynamicWorldState.locations
+    const existingLocs: WorldLocationReference[] = [
+      ...(world.locations || []),
+      ...Object.values(world.dynamicWorldState?.locations || {})
+    ];
+
+    // Exact ID match
+    const idMatch = existingLocs.find(l => l.id === trimmed);
+    if (idMatch) return { value: idMatch, status: 'resolved', confidence: 100, source: 'id' };
+
+    // Exact Name match
+    const nameMatch = existingLocs.find(l => l.name.toLowerCase() === trimmed.toLowerCase() && (!territoryId || l.territoryId === territoryId));
+    if (nameMatch) return { value: nameMatch, status: 'resolved', confidence: 95, source: 'exact_name' };
+
+    // Normalized Match
+    const normMatch = existingLocs.find(l => this.normalizeStr(l.name) === normalized && (!territoryId || l.territoryId === territoryId));
+    if (normMatch) return { value: normMatch, status: 'resolved', confidence: 90, source: 'normalized' };
+
+    // 2. Search inside Territory markers, places, and POIs
+    if (territoryId || world.territories) {
+      const territoriesToSearch = territoryId ? world.territories?.filter(t => t.id === territoryId) : world.territories;
+      if (territoriesToSearch && territoriesToSearch.length > 0) {
+        for (const terr of territoriesToSearch) {
+          // Search placeMarkers
+          if (terr.placeMarkers) {
+            const pm = terr.placeMarkers.find(m => m.id === trimmed || m.name.toLowerCase() === trimmed.toLowerCase() || this.normalizeStr(m.name) === normalized);
+            if (pm) {
+              const locRef: WorldLocationReference = {
+                id: pm.id || `loc_${terr.id}_${this.normalizeStr(pm.name)}`,
+                territoryId: terr.id,
+                name: pm.name,
+                type: pm.type || 'ort',
+                x: pm.x,
+                y: pm.y,
+                description: pm.description,
+                controlledByFactionId: terr.controlledByFactionId,
+                ownerFactionId: terr.ownerFactionId
+              };
+              return { value: locRef, status: 'resolved', confidence: 85, source: 'fact' };
+            }
+          }
+          // Search regionMarkers
+          if (terr.regionMarkers) {
+            const rm = terr.regionMarkers.find(m => m.id === trimmed || m.name.toLowerCase() === trimmed.toLowerCase() || this.normalizeStr(m.name) === normalized);
+            if (rm) {
+              const locRef: WorldLocationReference = {
+                id: rm.id || `loc_${terr.id}_${this.normalizeStr(rm.name)}`,
+                territoryId: terr.id,
+                name: rm.name,
+                type: rm.type || 'region',
+                x: rm.x,
+                y: rm.y,
+                description: rm.description,
+                controlledByFactionId: terr.controlledByFactionId
+              };
+              return { value: locRef, status: 'resolved', confidence: 85, source: 'fact' };
+            }
+          }
+          // Match territory itself if requested
+          if (terr.id === trimmed || terr.name.toLowerCase() === trimmed.toLowerCase() || this.normalizeStr(terr.name) === normalized) {
+            const locRef: WorldLocationReference = {
+              id: `loc_${terr.id}`,
+              territoryId: terr.id,
+              name: terr.name,
+              type: terr.type || 'gebiet',
+              x: terr.x,
+              y: terr.y,
+              description: terr.description,
+              controlledByFactionId: terr.controlledByFactionId,
+              ownerFactionId: terr.ownerFactionId,
+              tileData: terr.tileData
+            };
+            return { value: locRef, status: 'resolved', confidence: 80, source: 'normalized' };
+          }
+        }
+      }
+    }
+
+    // 3. Search LoreDatabase category 'Orte'
+    const loreLoc = this.resolveLoreEntryDetailed(loreDatabase, trimmed, 'Orte');
+    if (loreLoc.status === 'resolved' && loreLoc.value) {
+      const terrId = territoryId || world.territories?.[0]?.id || 'territory_default';
+      const locRef: WorldLocationReference = {
+        id: `loc_${loreLoc.value.id}`,
+        territoryId: terrId,
+        name: loreLoc.value.title,
+        type: 'ort',
+        description: loreLoc.value.description,
+        loreEntryId: loreLoc.value.id
+      };
+      return { value: locRef, status: 'resolved', confidence: loreLoc.confidence, source: loreLoc.source };
+    }
+
+    // Fallback: construct lightweight WorldLocationReference with stable ID
+    const defaultTerrId = territoryId || world.territories?.[0]?.id || 'territory_default';
+    const fallbackLoc: WorldLocationReference = {
+      id: `loc_${defaultTerrId}_${normalized}`,
+      territoryId: defaultTerrId,
+      name: trimmed,
+      type: 'ort',
+      description: `Ort ${trimmed}`
+    };
+
+    return { value: fallbackLoc, status: 'resolved', confidence: 50, reason: 'Ort neu abgeleitet', source: 'fuzzy' };
+  }
+
+  /**
+   * Derives tactical battle map parameters directly from location & territory data.
+   * Priority: Location terrain/type -> Territory biome/terrain -> defaults.
+   */
+  static deriveBattleMapFromLocation(params: {
+    territory?: Territory | null;
+    location?: WorldLocationReference | null;
+    gridWidth?: number;
+    gridHeight?: number;
+  }): {
+    terrainType: string;
+    biome: string;
+    gridWidth: number;
+    gridHeight: number;
+    blockedCells: Record<string, boolean>;
+    terrainCells: Record<string, string>;
+    placedObjects: PlacedCombatObject[];
+  } {
+    const { territory, location, gridWidth = 30, gridHeight = 20 } = params;
+
+    const terrainType = location?.terrainType || location?.type || territory?.terrain || territory?.biome || 'gras';
+    const biome = territory?.biome || territory?.type || 'grasland';
+    const placedObjects: PlacedCombatObject[] = [...(location?.placedObjects || [])];
+
+    const blockedCells: Record<string, boolean> = {};
+    const terrainCells: Record<string, string> = {};
+
+    const tileData = location?.tileData || territory?.tileData;
+    if (tileData && tileData.tiles) {
+      Object.entries(tileData.tiles).forEach(([k, v]) => {
+        terrainCells[k] = String(v);
+        if (
+          String(v).includes('water') ||
+          String(v).includes('wall') ||
+          String(v).includes('mountain') ||
+          String(v).includes('blocked')
+        ) {
+          blockedCells[k] = true;
+        }
+      });
+    }
+
+    if (tileData && Array.isArray(tileData.placedObjects)) {
+      tileData.placedObjects.forEach((obj: any, idx: number) => {
+        if (obj && !placedObjects.some(p => p.id === obj.id)) {
+          placedObjects.push({
+            id: obj.id || `placed_obj_${idx}`,
+            name: obj.name || 'Gebäude/Objekt',
+            icon: obj.icon || 'building',
+            x: obj.x || 0,
+            y: obj.y || 0,
+            category: obj.category || 'gebaeude',
+            description: obj.description || 'Struktur vor Ort',
+            condition: obj.condition || 'intact'
+          });
+        }
+      });
+    }
+
+    return {
+      terrainType,
+      biome,
+      gridWidth,
+      gridHeight,
+      blockedCells,
+      terrainCells,
+      placedObjects
+    };
+  }
+
+  /**
+   * Creates a BattleInstance anchoring a tactical battle to a specific Territory and Location.
+   * Captures a terrain & object snapshot at battle start.
+   */
+  static createBattleInstance(params: {
+    territoryId: string;
+    locationIdOrName?: string;
+    world: WorldSetting;
+    loreDatabase?: LoreEntry[];
+    participatingFactionIds?: string[];
+    participatingCharacterIds?: string[];
+    participatingEncounterForceIds?: string[];
+    startedAtWorldTime?: WorldTime;
+    gridWidth?: number;
+    gridHeight?: number;
+  }): {
+    battleInstance: BattleInstance;
+    location: WorldLocationReference | null;
+    updatedWorld: WorldSetting;
+    updatedCombatState: Partial<CombatState>;
+  } {
+    const {
+      territoryId,
+      locationIdOrName,
+      world,
+      loreDatabase = world.loreDatabase || [],
+      participatingFactionIds = [],
+      participatingCharacterIds = [],
+      participatingEncounterForceIds = [],
+      startedAtWorldTime = world.worldTime,
+      gridWidth = 30,
+      gridHeight = 20
+    } = params;
+
+    const terr = world.territories?.find(t => t.id === territoryId) || null;
+    const locRes = locationIdOrName
+      ? this.resolveLocationReference({ idOrName: locationIdOrName, territoryId, world, loreDatabase })
+      : { value: null, status: 'unresolved' as const, confidence: 0 };
+
+    const location = locRes.value;
+    const derivedMap = this.deriveBattleMapFromLocation({ territory: terr, location, gridWidth, gridHeight });
+
+    const battleId = `battle_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+    const battleInstance: BattleInstance = {
+      id: battleId,
+      territoryId,
+      locationId: location?.id,
+      locationName: location?.name || (terr ? terr.name : 'Unbekannter Schauplatz'),
+      startedAtWorldTime,
+      status: 'active',
+      participatingFactionIds,
+      participatingCharacterIds,
+      participatingEncounterForceIds,
+      tacticalGroupIds: [],
+      terrainSnapshot: {
+        terrainType: derivedMap.terrainType,
+        biome: derivedMap.biome,
+        gridWidth: derivedMap.gridWidth,
+        gridHeight: derivedMap.gridHeight,
+        blockedCells: derivedMap.blockedCells,
+        terrainCells: derivedMap.terrainCells
+      },
+      objectSnapshot: {
+        placedObjects: derivedMap.placedObjects
+      },
+      createdAt: Date.now()
+    };
+
+    const existingBattleInstances = { ...(world.dynamicWorldState?.battleInstances || {}) };
+    existingBattleInstances[battleId] = battleInstance;
+
+    const existingLocations = { ...(world.dynamicWorldState?.locations || {}) };
+    if (location) {
+      existingLocations[location.id] = location;
+    }
+
+    const updatedWorldState: DynamicWorldState = {
+      ...(world.dynamicWorldState || {}),
+      battleInstances: existingBattleInstances,
+      locations: existingLocations,
+      lastUpdated: Date.now()
+    };
+
+    const updatedWorldLocations = [...(world.locations || [])];
+    if (location && !updatedWorldLocations.some(l => l.id === location.id)) {
+      updatedWorldLocations.push(location);
+    }
+
+    const updatedWorld: WorldSetting = {
+      ...world,
+      dynamicWorldState: updatedWorldState,
+      locations: updatedWorldLocations,
+      battleInstances: [...(world.battleInstances || []), battleInstance]
+    };
+
+    const updatedCombatState: Partial<CombatState> = {
+      battleInstanceId: battleId,
+      territoryId,
+      locationId: location?.id,
+      locationName: battleInstance.locationName,
+      gridWidth: derivedMap.gridWidth,
+      gridHeight: derivedMap.gridHeight,
+      placedObjects: derivedMap.placedObjects
+    };
+
+    return {
+      battleInstance,
+      location,
+      updatedWorld,
+      updatedCombatState
+    };
+  }
+
+  /**
+   * Concludes a BattleInstance and writes back changes to Territory control, Location damages, and EconomyHoldings.
+   */
+  static completeBattleInstance(params: {
+    battleInstanceId?: string;
+    combatResult: CombatResultFeedback;
+    world: WorldSetting;
+  }): {
+    updatedWorld: WorldSetting;
+    updatedBattleInstance: BattleInstance | null;
+    changeLogs: WorldFactChangeLogEntry[];
+    newFacts: WorldFact[];
+  } {
+    const { battleInstanceId, combatResult, world } = params;
+
+    const baseResult = this.applyCombatResultToWorldState({ feedback: combatResult, world });
+    let currentWorld = baseResult.updatedWorld;
+    const changeLogs = [...baseResult.changeLogs];
+    const newFacts = [...baseResult.newFacts];
+
+    const bId = battleInstanceId || combatResult.battleInstanceId;
+    const battleInstancesMap = { ...(currentWorld.dynamicWorldState?.battleInstances || {}) };
+    const targetBattle = bId ? battleInstancesMap[bId] : null;
+
+    let updatedBattleInstance: BattleInstance | null = null;
+
+    if (targetBattle) {
+      const isCompleted = combatResult.outcome === 'victory' || combatResult.outcome === 'defeat';
+      const status: BattleInstance['status'] = isCompleted
+        ? 'completed'
+        : combatResult.outcome === 'retreat'
+        ? 'retreated'
+        : 'aborted';
+
+      updatedBattleInstance = {
+        ...targetBattle,
+        status,
+        completedAt: Date.now(),
+        result: {
+          winnerFactionId: combatResult.outcome === 'victory' ? combatResult.factionId : undefined,
+          casualties: { [combatResult.factionId || 'opponents']: combatResult.casualties || 0 },
+          destroyedObjects: combatResult.destroyedObjectIds || [],
+          damagedObjects: combatResult.damagedObjectIds || [],
+          territoryChanges:
+            combatResult.conqueredTerritoryId && combatResult.newControllingFactionId
+              ? {
+                  territoryId: combatResult.conqueredTerritoryId,
+                  newFactionId: combatResult.newControllingFactionId
+                }
+              : undefined,
+          locationChanges: combatResult.damageToTargetLocation
+            ? {
+                locationId: targetBattle.locationId,
+                damageDescription: combatResult.damageToTargetLocation
+              }
+            : undefined,
+          details: combatResult.details
+        }
+      };
+
+      battleInstancesMap[targetBattle.id] = updatedBattleInstance;
+
+      // 1. If territory conquered, update Territory.controlledByFactionId
+      if (combatResult.conqueredTerritoryId && combatResult.newControllingFactionId && currentWorld.territories) {
+        const updatedTerritories = currentWorld.territories.map(t => {
+          if (t.id === combatResult.conqueredTerritoryId) {
+            return { ...t, controlledByFactionId: combatResult.newControllingFactionId };
+          }
+          return t;
+        });
+        currentWorld = { ...currentWorld, territories: updatedTerritories };
+      }
+
+      // 2. Propagate economic impacts to EconomyHoldings
+      const targetHoldingTerritoryId = targetBattle.territoryId;
+      const configToUse = currentWorld.economyConfig || currentWorld.economy;
+
+      if (configToUse && configToUse.holdings) {
+        const updatedHoldings = configToUse.holdings.map(h => {
+          const matchesTerritory = h.territoryId === targetHoldingTerritoryId;
+          const matchesLocation =
+            h.locationName &&
+            targetBattle.locationName &&
+            h.locationName.toLowerCase().includes(targetBattle.locationName.toLowerCase());
+
+          if (matchesTerritory || matchesLocation) {
+            const newStatus: typeof h.status = combatResult.conqueredTerritoryId
+              ? 'under_siege'
+              : combatResult.damagedObjectIds?.length || combatResult.damageToTargetLocation
+              ? 'damaged'
+              : h.status;
+
+            const logEntry = {
+              id: `econ_log_combat_${Date.now().toString(36)}`,
+              timestamp: new Date().toISOString(),
+              type: 'incident' as const,
+              message: `Gefechtsfolgen an Standort: ${
+                combatResult.damageToTargetLocation || 'Schäden oder Kontrollwechsel verzeichnet.'
+              }`,
+              severity: 'urgent' as const
+            };
+
+            return {
+              ...h,
+              status: newStatus,
+              controlledByFactionId: combatResult.newControllingFactionId || h.controlledByFactionId,
+              controlledByFactionName: combatResult.newControllingFactionId || h.controlledByFactionName,
+              activityLogs: [logEntry, ...(h.activityLogs || [])]
+            };
+          }
+          return h;
+        });
+
+        if (currentWorld.economyConfig) {
+          currentWorld = {
+            ...currentWorld,
+            economyConfig: { ...currentWorld.economyConfig, holdings: updatedHoldings }
+          };
+        }
+        if (currentWorld.economy) {
+          currentWorld = {
+            ...currentWorld,
+            economy: { ...currentWorld.economy, holdings: updatedHoldings }
+          };
+        }
+      }
+    }
+
+    const updatedWorldState: DynamicWorldState = {
+      ...(currentWorld.dynamicWorldState || {}),
+      battleInstances: battleInstancesMap,
+      lastUpdated: Date.now()
+    };
+
+    const updatedWorld: WorldSetting = {
+      ...currentWorld,
+      dynamicWorldState: updatedWorldState,
+      battleInstances:
+        currentWorld.battleInstances?.map(b => (b.id === updatedBattleInstance?.id ? updatedBattleInstance : b)) || []
+    };
+
+    return {
+      updatedWorld,
+      updatedBattleInstance,
+      changeLogs,
+      newFacts
     };
   }
 }

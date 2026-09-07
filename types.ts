@@ -858,6 +858,10 @@ export interface Territory {
   direction?: string;
   routeFrom?: string;
 
+  // Ort-/Region-Marker
+  placeMarkers?: any[];
+  regionMarkers?: any[];
+
   // Quest 4: Fakten-Herkunft & Kanon-Schutz
   sourceType?: FactSourceType;
   factStatus?: FactStatus;
@@ -1276,6 +1280,72 @@ export interface FactionWorldState {
   lastUpdated?: number;
 }
 
+export interface WorldLocationReference {
+  id: string;
+  territoryId: string;
+  name: string;
+  type: string; // 'stadt' | 'dorf' | 'gebaeude' | 'strasse' | 'hafen' | 'festung' | 'poi' | string
+  x?: number;
+  y?: number;
+  description?: string;
+  terrainType?: string;
+  parentLocationId?: string;
+  loreEntryId?: string;
+  controlledByFactionId?: string;
+  ownerFactionId?: string;
+  ownerCharacterId?: string;
+  placedObjects?: PlacedCombatObject[];
+  tileData?: any;
+  metadata?: Record<string, any>;
+}
+
+export interface BattleInstance {
+  id: string;
+  worldStateId?: string;
+  territoryId: string;
+  locationId?: string;
+  locationName?: string;
+  battleMapId?: string;
+  startedAtWorldTime?: WorldTime;
+  status: 'active' | 'completed' | 'retreated' | 'aborted';
+
+  participatingFactionIds: string[];
+  participatingCharacterIds: string[];
+  participatingEncounterForceIds?: string[];
+  tacticalGroupIds: string[];
+
+  terrainSnapshot?: {
+    terrainType?: string;
+    biome?: string;
+    gridWidth: number;
+    gridHeight: number;
+    blockedCells?: Record<string, boolean>;
+    terrainCells?: Record<string, string>;
+  };
+  objectSnapshot?: {
+    placedObjects?: PlacedCombatObject[];
+  };
+
+  result?: {
+    winnerFactionId?: string;
+    casualties?: Record<string, number>;
+    destroyedObjects?: string[];
+    damagedObjects?: string[];
+    territoryChanges?: {
+      territoryId: string;
+      previousFactionId?: string;
+      newFactionId?: string;
+    };
+    locationChanges?: {
+      locationId?: string;
+      damageDescription?: string;
+    };
+    details?: string;
+  };
+  createdAt?: number;
+  completedAt?: number;
+}
+
 export interface CombatResultFeedback {
   forceId?: string;
   factionId?: string;
@@ -1290,11 +1360,18 @@ export interface CombatResultFeedback {
   relationshipImpact?: string;
   timestamp?: number;
   details?: string;
+  battleInstanceId?: string;
+  destroyedObjectIds?: string[];
+  damagedObjectIds?: string[];
+  conqueredTerritoryId?: string;
+  newControllingFactionId?: string;
 }
 
 export interface DynamicWorldState {
   factions?: Record<string, FactionWorldState>;
   encounterForces?: Record<string, EncounterForce>;
+  battleInstances?: Record<string, BattleInstance>;
+  locations?: Record<string, WorldLocationReference>;
   activeThreats?: string[];
   activeEvents?: string[];
   recentCombatOutcomes?: CombatResultFeedback[];
@@ -1336,6 +1413,8 @@ export interface WorldSetting {
   economyConfig?: EconomyConfig;
   economy?: EconomyConfig;
   territories?: Territory[];
+  locations?: WorldLocationReference[];
+  battleInstances?: BattleInstance[];
   loreDatabase?: LoreEntry[];
   facts?: WorldFact[];
   conflicts?: WorldFactConflict[];
@@ -1860,6 +1939,10 @@ export interface CombatState {
   timeOfDay?: 'morning' | 'day' | 'evening' | 'night';
   gridWidth?: number;
   gridHeight?: number;
+  battleInstanceId?: string;
+  territoryId?: string;
+  locationId?: string;
+  locationName?: string;
   tacticalEntities?: Record<string, TacticalEntity>;
   tacticalGroups?: Record<string, TacticalGroup>;
   tacticalCommands?: TacticalCommand[];
@@ -1913,6 +1996,8 @@ export interface TacticalEntity {
   enemyTypeId?: string;
   raceId?: string;
   unitType?: string;
+  sourceType?: 'character' | 'faction' | 'territory' | 'encounter_force' | 'npc' | 'location' | string;
+  sourceId?: string;
   position: {
     x: number;
     y: number;
@@ -1938,6 +2023,8 @@ export interface TacticalGroup {
   encounterForceId?: string;
   enemyTypeId?: string;
   raceId?: string;
+  sourceType?: 'character' | 'faction' | 'territory' | 'encounter_force' | 'npc' | 'location' | string;
+  sourceId?: string;
   unitIds: string[];
   formation?: TacticalFormation;
   direction?: TacticalDirection;

@@ -487,6 +487,124 @@ export function runWorldIntegrationTests() {
 
   assert(dupRes.encounterForce.id === t1Res.encounterForce.id, 'Duplicate creation returned existing force ID');
 
+  // -------------------------------------------------------------
+  // Test 13: World Location Resolution & Hierarchy
+  // Erwartung: Stabile ID-Auflösung für Orte im Territory
+  // -------------------------------------------------------------
+  console.log('\n--- Test 13: World Location Resolution & Hierarchy ---');
+  const locRes = WorldIntegrationService.resolveLocationReference({
+    idOrName: 'Dorf Eichenhain',
+    territoryId: 'territory_nordwald_01',
+    world: sampleWorld,
+    loreDatabase: sampleLore
+  });
+
+  assert(locRes.status === 'resolved', 'Location resolved successfully');
+  assert(Boolean(locRes.value?.id), 'Resolved location has a stable ID');
+  assert(locRes.value?.territoryId === 'territory_nordwald_01', 'Location hierarchy correctly linked to Territory');
+
+  // -------------------------------------------------------------
+  // Test 14: Battle Instance Creation & Snapshot
+  // Erwartung: BattleInstance mit Terrain-/Objekt-Snapshot
+  // -------------------------------------------------------------
+  console.log('\n--- Test 14: Battle Instance Creation & Snapshot ---');
+  const battleInstanceRes = WorldIntegrationService.createBattleInstance({
+    territoryId: 'territory_nordwald_01',
+    locationIdOrName: 'Dorf Eichenhain',
+    world: sampleWorld,
+    loreDatabase: sampleLore,
+    participatingFactionIds: ['faction_rotzaehne_01']
+  });
+
+  assert(Boolean(battleInstanceRes.battleInstance.id), 'BattleInstance created with unique ID');
+  assert(battleInstanceRes.battleInstance.status === 'active', 'BattleInstance is active');
+  assert(battleInstanceRes.battleInstance.territoryId === 'territory_nordwald_01', 'BattleInstance tied to Territory');
+  assert(Boolean(battleInstanceRes.battleInstance.terrainSnapshot), 'Terrain snapshot captured');
+  assert(battleInstanceRes.updatedCombatState.battleInstanceId === battleInstanceRes.battleInstance.id, 'CombatState linked to BattleInstance');
+
+  // -------------------------------------------------------------
+  // Test 15: Battle Completion & Economy Update Propagation
+  // Erwartung: Gefechtsende aktualisiert Territory-Kontrolle und EconomyHolding
+  // -------------------------------------------------------------
+  console.log('\n--- Test 15: Battle Completion & Economy Update Propagation ---');
+  const worldWithEconomy: WorldSetting = {
+    ...battleInstanceRes.updatedWorld,
+    economyConfig: {
+      currencyName: 'Gold',
+      currencyIcon: 'coin',
+      payoutInterval: 'daily',
+      allowPassiveIncome: true,
+      enableRandomEvents: true,
+      holdings: [
+        {
+          id: 'holding_taverne_01',
+          name: 'Taverne Zum Grünen Wald',
+          type: 'taverne',
+          level: 1,
+          ownerType: 'user',
+          incomePerInterval: 50,
+          upkeepPerInterval: 10,
+          staffCount: 3,
+          status: 'active',
+          territoryId: 'territory_nordwald_01',
+          locationName: 'Dorf Eichenhain'
+        }
+      ]
+    }
+  };
+
+  const combatCompletionRes = WorldIntegrationService.completeBattleInstance({
+    battleInstanceId: battleInstanceRes.battleInstance.id,
+    combatResult: {
+      outcome: 'victory',
+      factionId: 'faction_rotzaehne_01',
+      casualties: 5,
+      conqueredTerritoryId: 'territory_nordwald_01',
+      newControllingFactionId: 'faction_rotzaehne_01',
+      damageToTargetLocation: 'Gebäude beschädigt',
+      damagedObjectIds: ['building_01']
+    },
+    world: worldWithEconomy
+  });
+
+  assert(combatCompletionRes.updatedBattleInstance?.status === 'completed', 'BattleInstance status set to completed');
+  assert(
+    combatCompletionRes.updatedWorld.territories?.find(t => t.id === 'territory_nordwald_01')?.controlledByFactionId === 'faction_rotzaehne_01',
+    'Territory political control updated in WorldState'
+  );
+  const updatedHolding = combatCompletionRes.updatedWorld.economyConfig?.holdings[0];
+  assert(updatedHolding?.status === 'under_siege', 'EconomyHolding status updated due to conquest');
+  assert(updatedHolding?.activityLogs && updatedHolding.activityLogs.length > 0, 'Economic activity log recorded combat impact');
+
+  // -------------------------------------------------------------
+  // Test 16: Tactical Spawn Source Tracking
+  // Erwartung: TacticalGroup und TacticalEntity besitzen sourceType und sourceId
+  // -------------------------------------------------------------
+  console.log('\n--- Test 16: Tactical Spawn Source Tracking ---');
+  const dummyCombatState: CombatState = {
+    isCombatActive: true,
+    selectedEnemyId: '',
+    customEnemyName: 'Goblins',
+    opponents: [],
+    playerHp: 100,
+    playerMaxHp: 100,
+    playerMp: 50,
+    playerMaxMp: 50,
+    enemyHp: 100,
+    enemyMaxHp: 100,
+    combatSubMenu: 'main'
+  };
+
+  const spawnWithSource = WorldIntegrationService.spawnEncounterForceToTactical({
+    encounterForce: t1Res.encounterForce,
+    combatState: dummyCombatState
+  });
+
+  assert(spawnWithSource.group.sourceType === 'encounter_force', 'TacticalGroup has sourceType = encounter_force');
+  assert(spawnWithSource.group.sourceId === t1Res.encounterForce.id, 'TacticalGroup has sourceId matching EncounterForce');
+  assert(spawnWithSource.entities[0].sourceType === 'encounter_force', 'TacticalEntity has sourceType = encounter_force');
+  assert(spawnWithSource.entities[0].sourceId === t1Res.encounterForce.id, 'TacticalEntity has sourceId matching EncounterForce');
+
   // Summary
   console.log(`\n=== TEST RESULTS: ${passed} / ${total} PASSED ===`);
   if (passed === total) {
