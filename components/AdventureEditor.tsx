@@ -1994,28 +1994,36 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
   const getPlayerName = () => {
     if (activeTransformation) {
-      return activeTransformation.transformName || player.name || '';
+      return activeTransformation.transformName !== undefined
+        ? activeTransformation.transformName
+        : '';
     }
     return player.name || '';
   };
 
   const getPlayerRufName = () => {
     if (activeTransformation) {
-      return activeTransformation.transformRufName || player.rufName || '';
+      return activeTransformation.transformRufName !== undefined
+        ? activeTransformation.transformRufName
+        : '';
     }
     return player.rufName || '';
   };
 
   const getPlayerNickname = () => {
     if (activeTransformation) {
-      return activeTransformation.transformNickname || player.nickname || '';
+      return activeTransformation.transformNickname !== undefined
+        ? activeTransformation.transformNickname
+        : '';
     }
     return player.nickname || '';
   };
 
   const getPlayerRole = () => {
     if (activeTransformation) {
-      return activeTransformation.transformRole || player.role || player.profession || '';
+      return activeTransformation.transformRole !== undefined
+        ? activeTransformation.transformRole
+        : (player.role || player.profession || '');
     }
     return player.role || player.profession || '';
   };
@@ -4101,7 +4109,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </label>
                     <AutoExpandingTextarea 
                       className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all font-semibold"
-                      placeholder={activeTransformation ? `Name der Transformation (${activeTransformation.name})` : "z.B. Son Goku, Monkey D. Ruffy..."} 
+                      placeholder={activeTransformation ? `z.B. Name im transformierten Zustand (leer = unbenannte Form)` : "z.B. Son Goku, Monkey D. Ruffy..."} 
                       value={getPlayerName()} 
                       onChange={e => updatePlayerName(e.target.value)} 
                     />
@@ -4112,7 +4120,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </label>
                     <AutoExpandingTextarea 
                       className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all font-semibold"
-                      placeholder="z.B. Goku, Ruffy (Standard: Name)" 
+                      placeholder={activeTransformation ? "z.B. Rufname im Kampf (optional, leer = unbenannt)" : "z.B. Goku, Ruffy (Standard: Name)"} 
                       value={getPlayerRufName()} 
                       onChange={e => updatePlayerRufName(e.target.value)} 
                     />
@@ -4524,6 +4532,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                   player={player} 
                   loreDatabase={loreDatabase}
                   npcs={npcs}
+                  costResources={world?.costResources}
+                  world={world}
                   onUpdateLore={setLoreDatabase}
                   onUpdateNpcs={setNpcs}
                   onUpdatePlayer={setPlayer} 
@@ -5503,7 +5513,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                                           const val = e.target.value;
                                           setPlayer({
                                             ...player,
-                                            abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, name: val, transformName: activeAbilityTab === 'Transformationen' ? (a.transformName || val) : a.transformName } : a)
+                                            abilities: currentAbilities.map(a => a.id === ability.id ? { ...a, name: val, transformName: activeAbilityTab === 'Transformationen' ? (a.transformName !== undefined ? a.transformName : val) : a.transformName } : a)
                                           });
                                         }}
                                       />

@@ -2005,34 +2005,65 @@ const LoreDatabaseView: React.FC<Props> = ({
         mergedRelationships = currentRels;
       }
 
-      let finalTitle = data.title || (keepExistingLoreDetails ? prev.title : loreSmartFill);
+      let finalTitle = (keepExistingLoreDetails && prev.title && prev.title.trim())
+        ? prev.title
+        : (data.title || (keepExistingLoreDetails ? prev.title : loreSmartFill));
       let finalDescription = data.description || (keepExistingLoreDetails ? prev.description : '');
       
       if (cat === 'Story & Quests' || (cat as string) === 'Events') {
-        if (processedDetails.eventSteps) {
-          processedDetails.eventSteps = processedDetails.eventSteps.map((step: any, idx: number) => ({
-            ...step,
-            id: step.id || `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
-            title: step.title || `Station #${idx + 1}`,
-            status: step.status || 'planned',
-            branch: step.branch || 'main',
-            unlockConditions: step.unlockConditions || 'Keine',
-            chatInstruction: step.chatInstruction || '',
-            travelPath: step.travelPath || '',
-            travelDurationDays: step.travelDurationDays !== undefined ? Number(step.travelDurationDays) : undefined,
-            timeOfDay: step.timeOfDay || '',
-            trigger: step.trigger || '',
-            cast: step.cast || '',
-            setting: step.setting || '',
-            conflict: step.conflict || '',
-            revealedKnowledge: step.revealedKnowledge || ''
-          }));
-          finalDescription = processedDetails.eventSteps.map((s: any, idx: number) => `${idx + 1}. [${s.title}] ${s.description || ''}`).join('\n');
-          if (!finalTitle || finalTitle === 'Events' || finalTitle === 'Event' || finalTitle === 'Story & Quests') {
-            finalTitle = processedDetails.eventSteps[0]?.title || 'Ereignis-Timeline';
-          }
+        let incomingSteps = processedDetails.eventSteps || [];
+        if (!Array.isArray(incomingSteps)) incomingSteps = [];
+
+        const formattedIncomingSteps = incomingSteps.map((step: any, idx: number) => ({
+          ...step,
+          id: step.id || `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+          title: step.title || `Station #${idx + 1}`,
+          status: step.status || 'planned',
+          branch: step.branch || 'main',
+          unlockConditions: step.unlockConditions || 'Keine',
+          chatInstruction: step.chatInstruction || '',
+          travelPath: step.travelPath || '',
+          travelDurationDays: step.travelDurationDays !== undefined ? Number(step.travelDurationDays) : undefined,
+          timeOfDay: step.timeOfDay || '',
+          trigger: step.trigger || '',
+          cast: step.cast || '',
+          setting: step.setting || '',
+          conflict: step.conflict || '',
+          revealedKnowledge: step.revealedKnowledge || ''
+        }));
+
+        if (keepExistingLoreDetails && prev.details?.eventSteps && Array.isArray(prev.details.eventSteps) && prev.details.eventSteps.length > 0) {
+          const existingSteps = [...prev.details.eventSteps];
+          const mergedSteps = [...existingSteps];
+
+          const normalizeTitle = (t: string) => (t || '').replace(/^(\d+[\.\)]|\Station\s*#?\d+:?|\[.*?\])\s*/i, '').trim().toLowerCase();
+
+          formattedIncomingSteps.forEach((nStep: any) => {
+            const normNewTitle = normalizeTitle(nStep.title);
+            const matchIdx = mergedSteps.findIndex((eStep: any) => {
+              if (eStep.id && eStep.id === nStep.id) return true;
+              const normExistTitle = normalizeTitle(eStep.title);
+              return normExistTitle.length > 0 && normNewTitle.length > 0 && normExistTitle === normNewTitle;
+            });
+
+            if (matchIdx >= 0) {
+              mergedSteps[matchIdx] = { ...mergedSteps[matchIdx], ...nStep, id: mergedSteps[matchIdx].id };
+            } else {
+              mergedSteps.push(nStep);
+            }
+          });
+
+          processedDetails.eventSteps = mergedSteps;
         } else {
-          processedDetails.eventSteps = [];
+          processedDetails.eventSteps = formattedIncomingSteps;
+        }
+
+        finalDescription = processedDetails.eventSteps
+          .map((s: any, idx: number) => `${idx + 1}. [${s.title}] ${s.description || ''}`)
+          .join('\n');
+
+        if (!finalTitle || finalTitle === 'Events' || finalTitle === 'Event' || finalTitle === 'Story & Quests') {
+          finalTitle = processedDetails.eventSteps[0]?.title || prev.title || 'Ereignis-Timeline';
         }
       }
 

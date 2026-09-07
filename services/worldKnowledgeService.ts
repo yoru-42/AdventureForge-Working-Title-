@@ -36,28 +36,88 @@ export const CANON_PROTECTION_DIRECTIVE = `
 
 export const GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE = `
 ### KI-REGEL: GLAUBWÜRDIGKEIT, ALLTÄGLICHKEIT & BODENSTÄNDIGKEIT:
-1. INTERESSANT BEDEUTET NICHT AUTOMATISCH AUSSERGEWÖHNLICH:
-   - Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe für Charaktere, NPCs, Orte und Ereignisse.
-   - Erzeuge KEINE geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch explizite Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diese Figur vorgesehen sind.
-2. GEWÖHNLICHES LEBEN ALS NORMALITÄT:
-   - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist.
-   - Die allermeisten Bewohner dürfen und sollen ein gewöhnliches Leben mit alltäglichen Beschäftigungen und Sorgen führen.
-3. ORGANISCHE BEDEUTUNG & ENTWICKLUNG:
-   - Nur Charaktere mit entsprechender tatsächlicher Bedeutung, spezifischer Motivation, konkreter Beziehung zum Spieler oder echter Ereignisentwicklung im Spielgeschehen sollen zu zentralen Figuren werden.
+
+1. HARTER GRUNDSATZ FÜR DYNAMISCHE WELTEN:
+   AdventureForge soll keine Welt voller Hauptcharaktere erzeugen. Die meisten Bewohner dürfen vollkommen gewöhnliche Menschen mit gewöhnlichen Problemen, Berufen, Beziehungen und Lebensgeschichten sein. Außergewöhnlichkeit muss begründet sein. Sie darf nicht als Standard verwendet werden, um einen Charakter interessanter wirken zu lassen.
+
+2. PRIORITÄTSKETTE ("GEWÖHNLICH VOR AUSSERGEWÖHNLICH"):
+   Bei der Beschreibung, Erstellung und Führung von Charakteren gilt folgende strikte Rangfolge:
+   Bestehender Kontext
+          ↓
+   Welt / Ort / Beruf / Rolle
+          ↓
+   Beziehungen
+          ↓
+   Motivation
+          ↓
+   bisherige Ereignisse
+          ↓
+   Bedeutung des Charakters
+          ↓
+   erst danach außergewöhnliche Elemente
+
+3. OPTIONALE GEHEIMNISSE:
+   Ein Geheimnis ist vollkommen OPTIONAL. Wenn aus Welt, Charakter, Beziehungen, Fraktion oder bisherigen Ereignissen kein sinnvolles Geheimnis hervorgeht, darf keines erzeugt oder erfunden werden. Stufen-Geheimnisse bleiben erhalten, werden aber nur genutzt, wenn tatsächlich ein begründetes Geheimnis existiert.
+
+4. HINTERGRUND-NPCS & SCHRITTWEISE VERTIEFUNG:
+   Nicht jeder NPC muss sofort vollständig mit tiefer Geschichte generiert werden. Eine einfache, bodenständige Beschreibung (z. B. "Ein älterer Mann sitzt am Ecktisch und trinkt Bier") genügt vollkommen, solange die Figur im Hintergrund bleibt. Erst wenn der Spieler interagiert, der NPC storyrelevant wird oder ein Ereignis auslöst, entfaltet sich die Figur weiter.
+
+5. PRÜFUNG DER CHARAKTER-BEDEUTUNG:
+   Bevor einem NPC außergewöhnliche Eigenschaften, geheimnisvolle Mächte oder dramatische Geheimnisse gegeben werden, muss geprüft werden, ob der Charakter eine der folgenden Rollen einnimmt:
+   - zentrale Storyfigur
+   - wichtige Fraktionsfigur / Anführer / Herrscher
+   - bedeutender Gegner oder Schlüssel-Questgeber
+   - starke Verbindung zu einem aktiven Weltkonflikt
+   - explizite Vorgabe des Nutzers
+   Trifft keines dieser Kriterien zu, ist zwingend ein gewöhnlicher, glaubwürdiger Charakter zu wählen.
+
+6. GESCHICHTEN ENTSTEHEN AUS EREIGNISSEN:
+   Echte Geschichten entwickeln sich aus der Welt und aktuellen Ereignissen (z. B. Engpässe, Handelskrisen, Routineaufgaben), nicht aus gekünstelten, melodramatischen Vorgeschichten.
 `;
 
 export const WORLD_INTEGRATION_DIRECTIVE = `
 ### WORLDBUILDING-INTEGRATION & SITUATIONS-LOGIK:
-1. VERBINDUNG STATT ISOLIERTE GENERIERUNG:
-   - Wenn Gruppen, Truppen, Feinde oder Ereignisse auftreten, verknüpfe sie logisch mit den existierenden Fraktionen, Rassen, Gegner-Definitionen, Charakteren und Weltkarten-Regionen des Codex.
-   - Ein Angriff von 50 Goblins greift auf bestehende Fakten zurück (z.B. Stamm der Rotzähne, geführt von Grukk, aus dem Nordwald).
-2. NORMALITÄT & BODENSTÄNDIGE MOTIVATIONEN:
-   - Bevorzuge nachvollziehbare, alltägliche Ursachen (z.B. Nahrungskrise, Beutezug, Grenzstreit, Verteidigung, Routinepatrouille), statt automatisch dramatische Weltuntergangs-Szenarien oder uralte Kulte zu erfinden.
-3. GEHEIMNISSE & INFERENZ-TREUE:
-   - Formuliere unbestätigte Phänomene als Beobachtung ("Sie wirken ungewöhnlich koordiniert"), nicht als vorzeitige Enthüllung geheimer Herrscher.
-   - Der Spieler erfährt nur, was in der Szene wahrnehmbar ist.
-4. NAMENLOSE GRUPPEN:
-   - Erstelle für Masseneinheiten (z.B. 50 Fußsoldaten) keine 50 einzelnen Codex-Personen, sondern beziehe dich auf die gemeinsame Gegner- und Fraktionsdefinition.
+1. WORLDBUILDING ALS EIGENER KONTEXT (HIERARCHISCHE EINBETTUNG):
+   Charaktere existieren innerhalb einer Welt, nicht innerhalb einer isolierten Questliste. Berücksichtige die Hierarchie:
+   Welt ➔ Region ➔ Stadt ➔ Bezirk ➔ Gebäude ➔ Beruf ➔ soziale Stellung ➔ Familie ➔ Beziehungen ➔ Wirtschaft ➔ Fraktionen ➔ lokale Ereignisse ➔ Gerüchte.
+   Eine Tavernenbesitzerin interagiert mit Lieferanten, Gästen, Nachbarn, Wachen und Familie – ohne dass jeder von ihnen eine Quest hat.
+
+2. VERBINDUNG STATT ISOLIERTE GENERIERUNG:
+   Wenn Gruppen, Truppen, Feinde oder Ereignisse auftreten, verknüpfe sie logisch mit den existierenden Fraktionen, Rassen, Gegner-Definitionen, Charakteren und Weltkarten-Regionen des Codex.
+   Ein Angriff von Fußsoldaten greift auf bestehende Fakten der Welt zurück.
+
+3. NORMALITÄT & BODENSTÄNDIGE MOTIVATIONEN:
+   Bevorzuge nachvollziehbare, alltägliche Ursachen (z.B. Nahrungskrise, Beutezug, Grenzstreit, Verteidigung, Routinepatrouille), statt automatisch dramatische Weltuntergangs-Szenarien oder uralte Kulte zu erfinden.
+
+4. GEHEIMNISSE & INFERENZ-TREUE:
+   Formuliere unbestätigte Phänomene als Beobachtung ("Sie wirken ungewöhnlich koordiniert"), nicht als vorzeitige Enthüllung geheimer Herrscher.
+   Der Spieler erfährt nur, was in der Szene wahrnehmbar ist.
+
+5. NAMENLOSE GRUPPEN:
+   Erstelle für Masseneinheiten keine Dutzenden von Einzel-Charakteren, sondern beziehe dich auf die gemeinsame Gegner- und Fraktionsdefinition.
+`;
+
+export const ACTION_AND_TIMESKIP_DIRECTIVE = `
+### VORRANG VON HANDLUNG VOR UMGEBUNGSBESCHREIBUNGEN & ZEITSPRÜNGE BEI RUHE/OHNMACHT:
+1. MEHR HANDLUNG, WENIGER REINE UMGEBUNGSBESCHREIBUNG:
+   - Der absolute Schwerpunkt deiner Erzählung MUSS auf aktiven Ereignissen, Handlungen, Entscheidungen, Reaktionen von NPCs und spürbarem Plot-Fortschritt liegen.
+   - Vermeide ausschweifende, passive oder statische Beschreibungen von Räumen, Wänden, Böden, Möbeln, Lichtstimmungen oder Stille.
+   - Maximal 1-2 kurze, wirkungsvolle Sätze zur Szenerie genügen völlig. Der gesamte Rest deiner Antwort muss aus lebendiger Handlung, Interaktion und Vorfällen bestehen!
+
+2. SCHLAFEN, RASTEN, OHNMACHT & BEWUSSTLOSIGKEIT (AUTOMATISCHER ZEITSPRUNG & DIREKTE HANDLUNGSVORBEREITUNG):
+   - Wenn der Spieler sich schlafen legt, schlafen geht, zur Ruhe begibt, rastet oder ohnmächtig/bewusstlos wird (z. B. "*legt sich schlafen*", "*schläft ein*", "*wird ohnmächtig*", "*bricht zusammen*"):
+     * Bleibe NIEMALS in der Ruheszene stehen und verfalle nicht in Schilderungen von Stille, Dämmerlicht oder ruhigem Atmen.
+     * Schildere das Einschlafen oder das Schwinden der Sinne in maximal 1-2 knappen Sätzen.
+     * Mache ZWINGEND sofort einen automatischen ZEITSPRUNG bis zu dem Moment, an dem der Charakter wieder aufwacht (z. B. am nächsten Morgen oder nach einigen Stunden)!
+     * Aktualisiere die Uhrzeit im [[STATUS: Zeit=HH:MM]] entsprechend weit nach vorne (+6 bis +8 Stunden für Nachtruhe, z. B. auf 07:00 Uhr am Morgen, bzw. +1 bis +3 Stunden bei Ohnmacht) und regeneriere HP/MP/Ausdauer.
+     * BEREITE BEIM ERWACHEN SOFORT DIE NÄCHSTE HANDLUNG VOR (AKTIVER SZENENAUFHÄNGER):
+       Der Spieler muss beim Aufwachen unmittelbar mit einem neuen Ereignis, einer Aktion oder einer Situation konfrontiert werden, worauf er in seiner nächsten Nachricht sofort reagieren und handeln kann!
+       Beispiele: Ein lautes Pochen an der Zimmertür; eilige Schritte oder Stimmen im Flur; ein NPC betritt den Raum mit einer dringenden Botschaft oder einem Befehl; Sonnenlicht fällt durch die Fenster und draußen ertönt Lärm/Alarm; ein neuer Tag bricht an mit einer konkreten Dringlichkeit oder Aufgabe.
+       Der Charakter darf nach dem Erwachen nicht im Stillstand verharren, sondern die nächste Handlung beginnt sofort!
+
+3. AKTIVER SZENENAUFHÄNGER AM ANTWORT-ENDE (HANDLUNGSANGEBOT STATT PASSIVEM AUSKLINGEN):
+   - Beende deine Antworten NIEMALS mit passivem Ausklingen in Leere, Stille oder Ticken einer Wanduhr.
+   - Jede Antwort soll in einem aktiven Handlungsmoment gipfeln (eine Aktion eines NPCs, ein unerwartetes Geräusch, ein Eintreffen oder eine veränderte Lage), worauf der Spieler direkt mit seiner nächsten Nachricht reagieren kann (ohne billige Floskel-Fragen wie "Was tust du?").
 `;
 
 export class WorldKnowledgeService {

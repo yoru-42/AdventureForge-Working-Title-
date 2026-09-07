@@ -447,6 +447,9 @@ export const BodyConditionsManager: React.FC<BodyConditionsManagerProps> = ({
         stageName={resolved.transformationStageName}
         onUpdateIntensity={handleSetIntensity}
         readOnly={readOnly}
+        player={player}
+        resolvedBody={resolved}
+        powerSource={player.powerSource || resolved.powerSource}
       />
 
       {/* CATEGORY TABS & SEARCH */}

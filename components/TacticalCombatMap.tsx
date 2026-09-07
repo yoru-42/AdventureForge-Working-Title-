@@ -1805,10 +1805,10 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
     });
 
     if (hasChanges && onUpdateAdventure) {
-      onUpdateAdventure((prev: any) => ({
-        ...prev,
+      onUpdateAdventure({
+        ...adventure,
         combatState: currentState
-      }));
+      });
     }
   }, [opponents, isCombatActive]);
 
@@ -1821,10 +1821,10 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
         newFormation,
         newDirection: activeTacticalGroup.direction || 'south'
       });
-      onUpdateAdventure((prev: any) => ({
-        ...prev,
+      onUpdateAdventure({
+        ...adventure,
         combatState: res.updatedCombatState
-      }));
+      });
     } catch (err) {
       console.error('Fehler beim Formations-Wechsel:', err);
     }
@@ -1839,10 +1839,10 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
         newFormation: activeTacticalGroup.formation || 'loose',
         newDirection
       });
-      onUpdateAdventure((prev: any) => ({
-        ...prev,
+      onUpdateAdventure({
+        ...adventure,
         combatState: res.updatedCombatState
-      }));
+      });
     } catch (err) {
       console.error('Fehler beim Richtungs-Wechsel:', err);
     }
@@ -1862,10 +1862,10 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
           y: activeTacticalGroup.center?.y || 10
         }
       });
-      onUpdateAdventure((prev: any) => ({
-        ...prev,
+      onUpdateAdventure({
+        ...adventure,
         combatState: res.updatedCombatState
-      }));
+      });
       setSelectedGroupId(res.newGroup.id);
     } catch (err) {
       console.error('Fehler beim Aufteilen des Verbands:', err);
@@ -1882,10 +1882,10 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
         direction: 'south',
         unitDisplayName: 'Goblin'
       });
-      onUpdateAdventure((prev: any) => ({
-        ...prev,
+      onUpdateAdventure({
+        ...adventure,
         combatState: res.updatedCombatState
-      }));
+      });
       setSelectedGroupId(res.group.id);
     } catch (err) {
       console.error('Fehler beim Aufstellen der Test-Horde:', err);
@@ -2877,7 +2877,7 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
       // Legacy character auto-movement toward opponents has been disabled to prevent conflicting state updates.
 
       // Save updated positions and placed objects back to adventure state
-      if (hasGridChanges || needsPosUpdate) {
+      if (hasGridChanges) {
         const nextPlayerPos = updatedPositions[playerName] || { x: 10, y: 15 };
         const prevPlayerPos = initializedPositions[playerName] || { x: 10, y: 15 };
         const playerMoved = nextPlayerPos.x !== prevPlayerPos.x || nextPlayerPos.y !== prevPlayerPos.y;
@@ -2903,7 +2903,7 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
 
       prevMsgCountRef.current = messages.length;
     }
-  }, [messages, tiles, initializedPositions, fireTurnCount, opponents, playerName, companions, adventure, combatState, onUpdateAdventure, needsPosUpdate]);
+  }, [messages.length]);
 
   // Handle immediate coordinates changes on first load if default setup occurred
   useEffect(() => {

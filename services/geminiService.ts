@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { jsonrepair } from "jsonrepair";
 import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
-import { CANON_PROTECTION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
+import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
 import {
   executeDrawingPlan,
   validateDrawingPlanAndGeometries,
@@ -48,22 +48,23 @@ export const audioUtils = {
 };
 
 export const CHARACTER_BIO_8_QUESTIONS_PROMPT = `
-### ZWINGENDE STRUKTUR DER VERGANGENHEIT / BIOGRAFIE ('bio' bzw. 'description' bei Charakteren):
-Die Biografie des Charakters MUSS zwingend und ausführlich die folgenden 8 Kernfragen in fließender, atmosphärischer und zusammenhängender Form (auf Deutsch) beantworten.
-Jede der 8 Fragen MUSS mit jeweils EXAKT 2 BIS 3 SÄTZEN beantwortet werden (insgesamt 16 bis 24 Sätze Fließtext):
-1. Wo und in welchen Verhältnissen bist du aufgewachsen? (Herkunft, Familie, soziale Verhältnisse -> Beantworte mit 2-3 Sätzen)
-2. Wie würdest du deine Kindheit beschreiben? (glücklich, schwierig, behütet, einsam, geprägt durch Krieg usw. -> Beantworte mit 2-3 Sätzen)
-3. Welche Menschen waren in deiner Kindheit und Jugend besonders wichtig für dich? (Eltern, Geschwister, Freunde, Mentoren etc. -> Beantworte mit 2-3 Sätzen)
-4. Was war ein wichtiges Ereignis, das dein Leben verändert hat? (ein einzelnes prägendes Ereignis reicht -> Beantworte mit 2-3 Sätzen)
-5. Wie bist du zu deinem heutigen Leben / Beruf / deiner Rolle gekommen? (erklärt den Übergang von Vergangenheit zu Gegenwart -> Beantworte mit 2-3 Sätzen)
-6. Welche Erlebnisse oder Erfahrungen haben dich besonders geprägt? (hier 1–3 relevante prägende Punkte auswählen -> Beantworte mit 2-3 Sätzen)
-7. Gibt es etwas aus deiner Vergangenheit, das du bereust, verloren hast oder gerne ändern würdest? (gibt der Figur emotionale Tiefe -> Beantworte mit 2-3 Sätzen)
-8. Gibt es etwas aus deiner Vergangenheit, das du anderen verschweigst? (optionales Geheimnis -> Beantworte mit 2-3 Sätzen)
+### STRUKTUR DER VERGANGENHEIT / BIOGRAFIE ('bio' bzw. 'description' bei Charakteren):
+Die Biografie des Charakters beantwortet fließend, atmosphärisch und zusammenhängend auf Deutsch die folgenden Fragen (jeweils ca. 2 bis 3 Sätze pro Punkt):
+1. Wo und in welchen Verhältnissen bist du aufgewachsen? (Herkunft, Familie, soziale Verhältnisse)
+2. Wie würdest du deine Kindheit beschreiben? (glücklich, schwierig, behütet, gewöhnlich etc.)
+3. Welche Menschen waren in deiner Kindheit und Jugend besonders wichtig für dich? (Eltern, Geschwister, Freunde, Meister etc.)
+4. Was war ein wichtiges Ereignis, das dein Leben beeinflusst hat? (ein normales oder prägendes Ereignis)
+5. Wie bist du zu deinem heutigen Leben / Beruf / deiner Rolle gekommen? (Übergang von Vergangenheit zu Gegenwart)
+6. Welche Erlebnisse oder Erfahrungen haben dich besonders geprägt? (relevante prägende Punkte)
+7. Gibt es etwas aus deiner Vergangenheit, das du bereust, verloren hast oder gerne ändern würdest? (emotionale Tiefe)
+8. Gibt es etwas aus deiner Vergangenheit, das du anderen verschweigst? (EIN GEHEIMNIS IST VOLLKOMMEN OPTIONAL: Wenn aus Rolle, Beruf, Welt oder Beziehungen kein natürliches Geheimnis hervorgeht, wird KEINES erzeugt. Beschreibe stattdessen einen bodenständigen Aspekt des bisherigen Lebens).
 
-STRENGSTE REGELN FÜR DIE BIOGRAFIE:
+STRENGSTE REGELN FÜR DIE BIOGRAFIE & CHARAKTERERSTELLUNG:
+- GEWÖHNLICH VOR AUSSERGEWÖHNLICH: Bevorzuge stets bodenständige, alltägliche Hintergründe. Außergewöhnliche Merkmale oder Geheimnisse sind NUR erlaubt, wenn der Charakter eine explizite Schlüsselrolle (Anführer, Hauptgegner, zentraler Questgeber) hat oder der Nutzer es vorgegeben hat.
+- PRIORITÄTSKETTE: Kontext → Welt/Ort/Beruf/Rolle → Beziehungen → Motivation → bisherige Ereignisse → Bedeutung des Charakters → erst danach außergewöhnliche Elemente.
+- HARTER GRUNDSATZ: AdventureForge soll keine Welt voller Hauptcharaktere erzeugen. Die meisten Bewohner sind gewöhnliche Menschen mit alltäglichen Problemen und Berufen.
 - Alles in der Biografie repräsentiert ausschließlich die HISTORISCHE VERGANGENHEIT (Vorgeschichte vor Beginn des aktuellen Spiels).
-- Der Charakter darf KEINERLEI Wissen über das aktuelle Geschehen der Story oder die gegenwärtige Situation des Spielers besitzen.
-- Halte die Balance von jeweils genau 2 bis 3 Sätzen pro Frage strikt ein!`;
+- Der Charakter darf KEINERLEI Wissen über das aktuelle Geschehen der Story oder die gegenwärtige Situation des Spielers besitzen.`;
 
 export const CHARACTER_BIO_7_QUESTIONS_PROMPT = CHARACTER_BIO_8_QUESTIONS_PROMPT;
 
@@ -297,11 +298,11 @@ export class GeminiService {
       // The systemInstruction already contains all world, player and NPC profile info.
       const maxHistoryCount = 12;
       let historyToPass = history;
-      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}`;
+      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}`;
 
       if (history.length > maxHistoryCount) {
         if (history[0] && history[0].text) {
-          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
+          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
         }
         historyToPass = history.slice(-maxHistoryCount);
       }
@@ -325,7 +326,7 @@ export class GeminiService {
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contents,
         config: {
           systemInstruction: finalSystemInstruction,
@@ -501,7 +502,7 @@ WICHTIG (SPIELER-AUTONOMIE & KRAFTAUSBRUCHS-VERBOT):
 WICHTIG: Antworte NUR mit dem generierten Prologtext. Keinen JSON-Wrapper, kein "Hier ist dein Prolog", kein Markdown außer normalem Text mit Absätzen.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
       });
 
@@ -617,7 +618,7 @@ ANWEISUNGEN:
   Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: "Startszene generieren",
         config: {
           systemInstruction,
@@ -1248,7 +1249,7 @@ ANWEISUNGEN:
          - Beschreibe in 'currentSituation', wie der Charakter heute mit dieser Verwandlung lebt und wie sie sein aktuelles Leben bestimmt.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1341,7 +1342,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema(world.campaignPowerSettings);
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1414,7 +1415,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema(world.campaignPowerSettings);
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1539,7 +1540,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema();
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -1740,7 +1741,7 @@ ANWEISUNGEN:
       Die Generierung muss inhaltlich hochqualitativ, spielmechanisch schlüssig und perfekt auf das Genre (Fantasy, Sci-Fi, Cyberpunk, Slice of Life, etc.) abgestimmt sein!`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -1911,7 +1912,7 @@ Generiere basierend darauf ein detailliertes Geografie- und Weltschöpfungs-Mode
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -2551,7 +2552,7 @@ ${customInstruction ? `--- ZUSÄTZLICHE NUTZERANWEISUNG ---\n${customInstruction
 Gib deine Antwort als Valides JSON zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -3270,7 +3271,7 @@ Jedes Terrain-Objekt in der Liste MUSS folgenden Aufbau haben:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3407,7 +3408,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3536,7 +3537,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3632,7 +3633,7 @@ Gib eine JSON-Struktur zurück mit einer Liste von Unterregionen, jede mit:
 Erstelle für jedes dieser 3-4 Unterregionen spannenden Content, der perfekt zur Lore passt und die Welt tiefgründiger macht.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3750,7 +3751,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3863,7 +3864,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3969,7 +3970,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -4195,7 +4196,7 @@ ${existingCodexCharacters.map(c => `- Name: "${c.name}"
       contextPrompt += `\n\nText: "${text}"\n`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4513,7 +4514,7 @@ ${JSON.stringify(cleanedExisting, null, 2)}`;
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4580,7 +4581,7 @@ ${JSON.stringify(existingCore, null, 2)}\n`;
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4750,7 +4751,21 @@ Für Story & Quests / Roter Faden / Kapitel der Kampagne:
   * "cast": Die Besetzung (Wer taucht auf? z.B. "Der gierige Kobold-Kaufmann und zwei bewaffnete Wachen").
   * "setting": Die Kulisse (Wo findet die Handlung statt? z.B. "Eine feuchte, von spärlich glimmenden Pilzen erleuchtete Felshöhle").
   * "conflict": Der Konflikt (Was passiert und welcher Widerstand existiert? z.B. "Die Kobolde fordern eine horrende Maut und blockieren den einzigen Ausgang").
+`;
 
+        if (existingEntry && existingEntry.details?.eventSteps && Array.isArray(existingEntry.details.eventSteps) && existingEntry.details.eventSteps.length > 0) {
+          contextPrompt += `
+- STRENGE ANWEISUNG FÜR ERGÄNZUNGS-MODUS BEI STORY & QUESTS:
+  * Es existieren bereits ${existingEntry.details.eventSteps.length} Station(en) in dieser Kampagne/Story:
+${existingEntry.details.eventSteps.map((s: any, idx: number) => `    ${idx + 1}. [${s.title}] ${s.description || ''}`).join('\n')}
+  * ABSOLUTES LÖSCH- & ÜBERSCHREIB-VERBOT: Überschreibe, lösche, kürze oder übertreibe die bestehenden Stationen NICHT!
+  * Führe den Ablauf fort, indem du das neu beschriebene Ereignis als NÄCHSTE STATION (Station #${existingEntry.details.eventSteps.length + 1}) am Ende im Array 'eventSteps' erzeugst.
+  * Falls du die bestehenden Stationen im Array 'eventSteps' mitlieferst, füge sie unverändert an den ersten Stellen ein und hänge die neue Station dahinter an.
+  * Behalte den bisherigen Gesamttitel "${existingEntry.title || ''}" im Feld 'title' unverändert bei.
+`;
+        }
+
+        contextPrompt += `
 - STRENGE REVISION & EINBEZIEHUNG BESTEHENDER CODEX-EINTRÄGE (Charaktere, Orte, Fraktionen, etc.):
   * Analysiere alle bereits in der Welt existierenden Codex-Einträge (siehe die oben gelistete Tabelle existierender Einträge)!
   * Sorge für maximale narrative Konsistenz: Wenn im Story-Ablauf bestimmte Orte besucht oder Charaktere/Fraktionen aktiv werden, verwende bevorzugt und konsequent die bereits im Codex existierenden Namen und Gegebenheiten!
@@ -5265,7 +5280,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5460,7 +5475,7 @@ Du MUSST ein valides JSON-Objekt zurückgeben mit genau einem Feld "entries", we
 Antworte AUSSCHLIESSLICH mit diesem validen JSON-Objekt. Keine Einleitung, kein Outro, kein Markdown wie \`\`\`json.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5640,7 +5655,7 @@ ${entriesToUse.slice(0, 35).map((l: any) => `- [${l.category || 'Codex'}] ${l.ti
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5728,7 +5743,7 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -5810,7 +5825,7 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
       });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -5996,7 +6011,7 @@ Gib das Ergebnis streng im geforderten JSON-Format zurück, bestehend aus einer 
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -6036,7 +6051,7 @@ ${recentMessages.map(m => `${m.role === 'user' ? 'Spieler' : 'DM'}: ${m.text}`).
 Schreibe die aktualisierte Chronik als zusammenhängenden, packenden Text auf Deutsch. Halte sie kurz (maximal 150-200 Wörter). Konzentriere dich nur auf wichtige Enthüllungen, getroffene Entscheidungen, bereiste Orte oder dramatische Wendungen. Nenne niemals geheime Rollen oder Tarnungen, bevor sie nicht im Text absolut zweifelsfigurlich und zweifelsfrei enthüllt wurden! Antworte NUR mit dem reinen Text der Chronik (kein Intro, kein Outro, keine Einleitung wie "Hier ist die Chronik...").`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.8-flash',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             safetySettings: isNsfw ? this.getSafetySettings() : undefined
@@ -6134,7 +6149,7 @@ Gib das Ergebnis als ein valides JSON-Array von Objekten aus. Jedes Objekt muss 
 WICHTIG: Antworte AUSSCHLIESSLICH mit dem validen JSON-Array. Keine Einleitung, kein Outro, kein Markdown wie \`\`\`json oder \`\`\`. Wenn keine neuen Elemente gefunden werden, antworte mit einem leeren Array: []`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-flash-latest',
+          model: 'gemini-3.8-flash',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             responseMimeType: "application/json",
@@ -6244,7 +6259,7 @@ Gib das Ergebnis als valides JSON-Objekt zurück mit genau dieser Struktur:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -6467,7 +6482,7 @@ Gib ausschließlich valides JSON mit folgenden vier Listen zurück:
 GIB NUR DAS REINE JSON-OBJEKT ZURÜCK, KEINE TEXTERKLÄRUNGEN DRUMHERUM!`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -6742,7 +6757,7 @@ Generiere ein detailliertes JSON Array von Objekten mit folgenden Feldern:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6928,7 +6943,7 @@ WICHTIG:
 - Gib ein valides JSON-Objekt zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -6980,7 +6995,7 @@ Gib ein JSON-Objekt mit folgenden Feldern zurück:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7020,7 +7035,7 @@ Gib ein JSON Array mit Objekten zurück:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7086,7 +7101,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7149,7 +7164,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7207,7 +7222,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7277,7 +7292,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7321,7 +7336,7 @@ Anweisung: ${instruction}
 Gib ein JSON-Objekt mit passenden Namenslisten für verschiedene Elementtypen zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -7589,7 +7604,7 @@ NUTZER-AUFTRAG:
 
       // 1. Initial Plan Generation
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: `${systemPrompt}\n\n${promptContext}`,
         config: {
           responseMimeType: 'application/json',
@@ -7645,7 +7660,7 @@ NUTZER-AUFTRAG:
 
         try {
           const correctionResponse = await ai.models.generateContent({
-            model: 'gemini-flash-latest',
+            model: 'gemini-3.8-flash',
             contents: `${systemPrompt}\n\n${promptContext}\n\n${correctionPrompt}`,
             config: {
               responseMimeType: 'application/json',
@@ -7729,7 +7744,7 @@ REGELN FÜR DIE TEILZONEN:
 5. Beschreibe prägnant Gefahrenstufe, Besonderheiten (Strömungen, Seemonster, Windstille) und Atmosphäre.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -7897,7 +7912,7 @@ ${keepExistingDetails && Object.keys(existingDetails).length > 0 ? `### BESTEHEN
    - Verwende neutrale, präzise und stimmungsvolle Beschreibungen. Keine Platzhalter. Keine Emojis in den Inhalten.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",

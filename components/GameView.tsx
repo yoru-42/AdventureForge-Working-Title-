@@ -8,15 +8,15 @@ import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI, Modality } from '@google/genai';
 import { TacticalCombatMap } from './TacticalCombatMap';
 import { BodySilhouette } from './BodySilhouette';
-import { resolveBodyAppearance } from './bodyConditionResolver';
+import { resolveBodyAppearance, migrateFremdeinflussConditions } from './bodyConditionResolver';
 import { buildPhysicalStatusAndPerceptionPrompt, calculatePhysicalChanges } from '../utils/changeTracker';
-import { getTransformationCardSettings, formatDuration, formatNum } from './TransformationIntensityCard';
-import { formatRelationshipForAI } from '../lib/relationshipHelper';
+import { getTransformationCardSettings, getFormSideEffects, formatDuration, formatNum } from './TransformationIntensityCard';
+import { formatRelationshipForAI, formatMotivationCoreForAI, formatNPCForAIPrompt, formatPlayerForAIPrompt } from '../lib/relationshipHelper';
 import { formatDisplayLocationName } from '../utils/mapUtils';
 import { createOrganicIslandPoints } from './worldmap/worldMapData';
 import { formatPersonalityTraitsAsPrompt } from './PersonalityTraitsEditor';
 import { WorkManagementModal } from './WorkManagementModal';
-import { isClothingPlaceholder, isClothingItemTitle } from '../App';
+import { isClothingPlaceholder, isClothingItemTitle, consolidateLoreOutfits } from '../App';
 import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
 import { WorldIntegrationService } from '../services/worldIntegrationService';
@@ -225,10 +225,21 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       const needsInitialNpcs = !adventure.initialNpcs;
       const needsInitialInventory = !adventure.initialInventory;
 
-      if (needsInitialPlayer || needsInitialStatusElements || needsInitialStructuredInventory || needsInitialLoreDatabase || needsInitialNpcs || needsInitialInventory) {
+      let playerToUse = adventure.player;
+      let playerMigrated = false;
+      if (adventure.player) {
+        const mig = migrateFremdeinflussConditions(adventure.player);
+        if (mig.updated) {
+          playerToUse = mig.player;
+          playerMigrated = true;
+        }
+      }
+
+      if (needsInitialPlayer || needsInitialStatusElements || needsInitialStructuredInventory || needsInitialLoreDatabase || needsInitialNpcs || needsInitialInventory || playerMigrated) {
         onUpdateAdventureRef.current({
           ...adventure,
-          initialPlayer: adventure.initialPlayer || JSON.parse(JSON.stringify(adventure.player)),
+          player: playerToUse,
+          initialPlayer: adventure.initialPlayer || JSON.parse(JSON.stringify(playerToUse)),
           initialStatusElements: adventure.initialStatusElements || JSON.parse(JSON.stringify(adventure.statusElements || [])),
           initialStructuredInventory: adventure.initialStructuredInventory || (adventure.structuredInventory ? JSON.parse(JSON.stringify(adventure.structuredInventory)) : undefined),
           initialLoreDatabase: adventure.initialLoreDatabase || JSON.parse(JSON.stringify(adventure.loreDatabase || [])),
@@ -237,7 +248,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         });
       }
     }
-  }, [adventure]);
+  }, [adventure.id]);
 
   const getPowerLevel = (name?: string) => {
     if (!name) return null;
@@ -338,19 +349,57 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
   const getFavoriteTechniques = () => {
     const list: any[] = [];
-    adventure?.player?.abilities?.forEach((ability: any) => {
-      if (ability.techniqueList) {
-        ability.techniqueList.forEach((tech: any) => {
-          if (tech.isFavorite || tech.favorite) {
-            list.push({
-              ...tech,
-              abilityId: ability.id,
-              abilitySource: ability.source,
-            });
-          }
+    const seenNames = new Set<string>();
+
+    const checkAndPush = (item: any, fallbackCategory: string, isTrans = false, isUlt = false) => {
+      if (!item || !item.name || !item.name.trim()) return;
+      const cleanName = item.name.trim();
+      const lower = cleanName.toLowerCase();
+      if (seenNames.has(lower)) return;
+      if (item.isFavorite || item.favorite) {
+        seenNames.add(lower);
+        list.push({
+          ...item,
+          name: cleanName,
+          category: item.category || fallbackCategory,
+          isTransformation: isTrans || (item.category || '').toLowerCase().includes('transform'),
+          isUltimate: isUlt || (item.category || '').toLowerCase().includes('ultimat'),
         });
       }
+    };
+
+    adventure?.player?.abilities?.forEach((ability: any) => {
+      const abCat = ability.category || 'Techniken';
+      const isTrans = abCat === 'Transformationen' || !!ability.transformName || (ability.type || '').toLowerCase().includes('transform');
+      const isUlt = abCat === 'Ultimative Techniken' || (ability.type || '').toLowerCase().includes('ultimat');
+
+      if (Array.isArray(ability.techniqueList)) {
+        ability.techniqueList.forEach((tech: any) => {
+          checkAndPush({
+            ...tech,
+            abilityId: ability.id,
+            abilitySource: ability.source,
+          }, abCat, isTrans, isUlt);
+        });
+      }
+
+      // Check ability itself (Transformationen like "Reine Esper Hoshiko", Ultimative Techniken, or standalone abilities)
+      const mainName = isTrans ? (ability.transformName || ability.name) : ability.name;
+      if (mainName) {
+        checkAndPush({
+          id: ability.id,
+          name: mainName,
+          description: ability.description || (isTrans ? 'Verwandlungsform mit modifizierten Attributen und Kräften.' : 'Fähigkeit des Charakters.'),
+          category: abCat,
+          level: ability.level || 1,
+          cost: ability.cost || '',
+          abilityId: ability.id,
+          abilitySource: ability.source,
+          isFavorite: !!ability.isFavorite || !!ability.favorite,
+        }, abCat, isTrans, isUlt);
+      }
     });
+
     return list;
   };
 
@@ -639,6 +688,23 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
   const [error, setError] = useState<string | null>(null);
   const [loreNotifications, setLoreNotifications] = useState<{ id: string; type: 'add' | 'unlock'; title: string; category: string }[]>([]);
+
+  const addLoreNotifications = (newItems: { id: string; type: 'add' | 'unlock'; title: string; category: string }[]) => {
+    if (!newItems || newItems.length === 0) return;
+    setLoreNotifications(prev => {
+      const existingKeys = new Set(prev.map(p => `${p.category}:${p.title.trim().toLowerCase()}`));
+      const filtered = newItems.filter(item => {
+        if (item.category === 'Gegenstände' && (isClothingPlaceholder(item.title) || isClothingItemTitle(item.title))) {
+          return false;
+        }
+        const key = `${item.category}:${item.title.trim().toLowerCase()}`;
+        if (existingKeys.has(key)) return false;
+        existingKeys.add(key);
+        return true;
+      });
+      return [...prev, ...filtered].slice(-5);
+    });
+  };
 
   // --- JRPG KAMPFSYSTEM STATES ---
   const [isCombatActive, setIsCombatActive] = useState(() => adventure.combatState?.isCombatActive ?? false);
@@ -1193,7 +1259,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     if (hasUnsplitGroup) {
       setOpponents(prev => autoSplitOpponents(prev, messages));
     }
-  }, [messages, isCombatActive, opponents]);
+  }, [messages, isCombatActive]);
 
   // Persistent combat state synchronization
   useEffect(() => {
@@ -1219,7 +1285,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
     if (!isCombatActive) {
       // Wenn der Kampf nicht aktiv ist, müssen wir nur synchronisieren, wenn der gespeicherte Zustand den Kampf noch als aktiv markiert hat
-      hasChanged = !stored || stored.isCombatActive !== false;
+      hasChanged = Boolean(stored?.isCombatActive);
     } else {
       // Wenn der Kampf aktiv ist, synchronisieren wir alle relevanten Kampfeigenschaften
       hasChanged = !stored ||
@@ -1754,7 +1820,7 @@ Text:
         loreDatabase: [...currentLore, ...newGegnerEntries]
       });
       if (newNotifications.length > 0) {
-        setLoreNotifications(prev => [...prev, ...newNotifications]);
+        addLoreNotifications(newNotifications);
       }
     }
   }, [detectedEnemies]);
@@ -2582,7 +2648,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
     if (loreNotifications.length > 0) {
       const timer = setTimeout(() => {
         setLoreNotifications(prev => prev.slice(1));
-      }, 5000);
+      }, 3500);
       return () => clearTimeout(timer);
     }
   }, [loreNotifications]);
@@ -3114,7 +3180,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
 
     if (hasChanges) {
       if (notifications.length > 0) {
-        setLoreNotifications(prev => [...prev, ...notifications]);
+        addLoreNotifications(notifications);
       }
       onUpdateAdventure({
         ...adventure,
@@ -3345,7 +3411,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       else if (catLower.includes('event') || catLower.includes('ereignis') || catLower.includes('quest') || catLower.includes('story')) category = 'Story & Quests';
       else if (catLower.includes('regel') || catLower.includes('gesetz')) category = 'Weltregeln';
 
-      if (category === 'Gegenstände' && isClothingPlaceholder(title)) {
+      if (category === 'Gegenstände' && (isClothingPlaceholder(title) || isClothingItemTitle(title, description))) {
         continue;
       }
 
@@ -3524,6 +3590,69 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       });
     }
 
+    // Parse CONDITION_ADD: [[CONDITION_ADD: Name | Typ | Beschreibung | Quelle]]
+    const condAddRegex = /\[\[CONDITION_ADD:\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)(?:\s*\|\s*([^\]]+))?\]\]/g;
+    let condAddMatch;
+    while ((condAddMatch = condAddRegex.exec(text)) !== null) {
+      cleanedText = cleanedText.replace(condAddMatch[0], '');
+      const condName = condAddMatch[1].trim();
+      const condType = (condAddMatch[2].trim().toLowerCase() as any) || 'curse';
+      const condDesc = condAddMatch[3].trim();
+      const condSource = (condAddMatch[4] || 'Fremdeinfluss').trim();
+
+      const currentConditions = [...(updatedPlayer.appearance?.activeConditions || [])];
+      const existingIdx = currentConditions.findIndex(c => c.name.toLowerCase() === condName.toLowerCase());
+      const newCondition = {
+        id: existingIdx >= 0 ? currentConditions[existingIdx].id : `cond-chat-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        name: condName,
+        type: (condType === 'blessing' ? 'blessing' : condType === 'mutation' ? 'magical_mutation' : 'curse') as any,
+        category: 'Körperlicher Zustand / Statuseffekt',
+        isActive: true,
+        severity: 'leicht' as const,
+        source: condSource,
+        duration: 'Temporär (Aktiv)',
+        description: condDesc
+      };
+
+      if (existingIdx >= 0) {
+        currentConditions[existingIdx] = { ...currentConditions[existingIdx], ...newCondition, isActive: true };
+      } else {
+        currentConditions.push(newCondition);
+      }
+
+      updatedPlayer = {
+        ...updatedPlayer,
+        appearance: {
+          ...(updatedPlayer.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' }),
+          activeConditions: currentConditions
+        }
+      };
+
+      notifications.push({
+        id: Math.random().toString(),
+        type: 'add',
+        title: `${condName} (Körperlicher Zustand)`,
+        category: 'Zustand'
+      });
+    }
+
+    // Parse CONDITION_REMOVE: [[CONDITION_REMOVE: Name]]
+    const condRemRegex = /\[\[CONDITION_REMOVE:\s*([^\]]+)\]\]/g;
+    let condRemMatch;
+    while ((condRemMatch = condRemRegex.exec(text)) !== null) {
+      cleanedText = cleanedText.replace(condRemMatch[0], '');
+      const condName = condRemMatch[1].trim().toLowerCase();
+      const currentConditions = (updatedPlayer.appearance?.activeConditions || []).filter(c => c.name.toLowerCase() !== condName);
+
+      updatedPlayer = {
+        ...updatedPlayer,
+        appearance: {
+          ...(updatedPlayer.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' }),
+          activeConditions: currentConditions
+        }
+      };
+    }
+
     // Parse LORE_UNLOCK: [[LORE_UNLOCK: Titel]]
     const unlockRegex = /\[\[LORE_UNLOCK:\s*([^\]]+)\]\]/g;
     let unlockMatch;
@@ -3556,7 +3685,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       const targetStatus = (rawStatus.includes('happen') || rawStatus.includes('eingetreten') || rawStatus.includes('erfüllt') || rawStatus.includes('abgeschlossen') || rawStatus.includes('done') || rawStatus.includes('complete') || rawStatus === 'true' || rawStatus === '1') ? 'happened' : 'pending';
 
       updatedLore.forEach((entry, eIdx) => {
-        if ((entry.category === 'Story & Quests' || entry.category === 'Events') && entry.details?.eventSteps) {
+        if (entry.category === 'Story & Quests' && entry.details?.eventSteps) {
           const steps = [...entry.details.eventSteps];
           let updated = false;
 
@@ -3601,6 +3730,13 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
     while ((eventStepMatch = eventStepRegex.exec(text)) !== null) {
       cleanedText = cleanedText.replace(eventStepMatch[0], '');
       updateEventStepStatusInLore(eventStepMatch[1].trim(), eventStepMatch[2].trim());
+    }
+
+    // Parse STATUS station tags: [[STATUS: Station_1=happened]]
+    const statusStationRegex = /\[\[STATUS:\s*(?:station_|eventstep_|queststep_)([^=\|\]]+)=(.*?)\]\]/gi;
+    let statusStationMatch;
+    while ((statusStationMatch = statusStationRegex.exec(text)) !== null) {
+      updateEventStepStatusInLore(statusStationMatch[1].trim(), statusStationMatch[2].trim());
     }
 
     // Parse RELATIONSHIP: [[RELATIONSHIP: NameA | NameB | Typ | Verhalten]]
@@ -4053,6 +4189,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
         const trimmed = name.trim();
         const lower = trimmed.toLowerCase();
         if (!trimmed || lower === 'keine' || lower === 'keines' || lower === 'kein' || lower === 'empty') return;
+        if (isClothingPlaceholder(trimmed) || isClothingItemTitle(trimmed)) return;
 
         const existsIdx = updatedLore.findIndex(e =>
           e.category === 'Gegenstände' &&
@@ -4072,8 +4209,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
             };
           }
         } else {
-          let itemType = isWpn ? 'Wachten' : 'Werkzeuge & Alltags-Gegenstände';
-          if (isWpn) itemType = 'Waffen';
+          let itemType = isWpn ? 'Waffen' : 'Werkzeuge & Alltags-Gegenstände';
           const newEntry = {
             id: 'dyn-itm-' + Math.random().toString(36).substr(2, 9),
             category: 'Gegenstände',
@@ -4089,12 +4225,6 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
             }
           };
           updatedLore.push(newEntry as any);
-          notifications.push({
-            id: Math.random().toString(),
-            type: 'add',
-            title: trimmed,
-            category: 'Gegenstände'
-          });
         }
       };
 
@@ -4103,16 +4233,6 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       }
       if (Array.isArray(updatedStructuredInventory.generalItems)) {
         updatedStructuredInventory.generalItems.forEach((itm: string) => ensureItemInCodex(itm, false));
-      }
-      if (updatedStructuredInventory.armor) {
-        Object.values(updatedStructuredInventory.armor).forEach((itm: any) => {
-          if (typeof itm === 'string') ensureItemInCodex(itm, false);
-        });
-      }
-      if (updatedStructuredInventory.accessories) {
-        Object.values(updatedStructuredInventory.accessories).forEach((itm: any) => {
-          if (typeof itm === 'string') ensureItemInCodex(itm, false);
-        });
       }
     }
 
@@ -4187,6 +4307,17 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       }
     }
 
+    // Consolidate outfits and purge any stray clothing entries from updatedLore
+    const pNameForLore = updatedPlayer.name || currentAdventure.player?.name || 'Spieler';
+    const { cleanedLore } = consolidateLoreOutfits(updatedLore, pNameForLore);
+    updatedLore = cleanedLore;
+
+    // Ensure any stray conditions in abilities are migrated to activeConditions
+    const condMig = migrateFremdeinflussConditions(updatedPlayer);
+    if (condMig.updated) {
+      updatedPlayer = { ...updatedPlayer, ...condMig.player };
+    }
+
     return { cleanedText: cleanedText.trim(), updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld };
   };
 
@@ -4244,8 +4375,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
             const val = parseInt(value);
             if (!isNaN(val)) setPlayerMp(Math.max(0, val));
           } else if (lowerKey.startsWith('eventstep_') || lowerKey.startsWith('station_') || lowerKey.startsWith('queststep_')) {
-            const stepIdent = key.replace(/^(eventstep_|station_|queststep_)/i, '').replace(/_/g, ' ').trim();
-            updateEventStepStatusInLore(stepIdent, value.trim());
+            // Station status updates are processed in parseLoreAndCharUpdates
           } else if (lowerKey.startsWith('position_') || lowerKey.startsWith('move_') || lowerKey.startsWith('movegroup_') || lowerKey.startsWith('moveentity_')) {
             // Tactical movement is authoritatively calculated and executed by the Tactical Movement Engine in parseLoreAndCharUpdates.
           } else if (lowerKey.startsWith('terrain_')) {
@@ -4387,12 +4517,64 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
             const kLabel = key.toLowerCase();
             if (sLabel === kLabel) return true;
             if ((sLabel === 'zeit' || sLabel === 'uhrzeit') && (kLabel === 'zeit' || kLabel === 'uhrzeit')) return true;
+            if ((sLabel.includes('körper') && sLabel.includes('zustand')) && (kLabel.includes('körper') && kLabel.includes('zustand'))) return true;
             return false;
           });
           if (index !== -1) {
             const isLoc = newStatus[index].label.toLowerCase().includes('ort') || newStatus[index].label.toLowerCase().includes('standort');
             const valToStore = isLoc ? formatDisplayLocationName(value) : value;
             newStatus[index] = { ...newStatus[index], value: valToStore };
+
+            // If this is "Körperlicher Zustand", dynamically reflect in activeConditions
+            const isBodyStatus = newStatus[index].label.toLowerCase().includes('körper') && newStatus[index].label.toLowerCase().includes('zustand');
+            if (isBodyStatus) {
+              const valLower = value.toLowerCase();
+              setTimeout(() => {
+                const currentAdv = adventureRef.current || adventure;
+                if (currentAdv?.player) {
+                  const currentApp = currentAdv.player.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' };
+                  const conds = [...(currentApp.activeConditions || [])];
+                  let changed = false;
+
+                  if (valLower.includes('hormon') || valLower.includes('instabil')) {
+                    if (!conds.some(c => c.name.toLowerCase().includes('hormon'))) {
+                      conds.push({
+                        id: `cond-hormon-${Date.now()}`,
+                        name: 'Hormonelle Instabilität',
+                        type: 'curse',
+                        category: 'Körperlicher Zustand / Statuseffekt',
+                        isActive: true,
+                        severity: 'leicht',
+                        source: 'Fremdeinfluss',
+                        duration: 'Temporär (Aktiv)',
+                        description: 'Hormonelle Schwankungen und Instabilität beeinflussen den physischen und mentalen Zustand.'
+                      });
+                      changed = true;
+                    }
+                  } else if (valLower.includes('gesund') || valLower.includes('unverletzt') || valLower.includes('normal')) {
+                    const filtered = conds.filter(c => !c.name.toLowerCase().includes('hormon'));
+                    if (filtered.length !== conds.length) {
+                      conds.length = 0;
+                      conds.push(...filtered);
+                      changed = true;
+                    }
+                  }
+
+                  if (changed) {
+                    onUpdateAdventureRef.current({
+                      ...currentAdv,
+                      player: {
+                        ...currentAdv.player,
+                        appearance: {
+                          ...currentApp,
+                          activeConditions: conds
+                        }
+                      }
+                    });
+                  }
+                }
+              }, 0);
+            }
           }
           // Do not automatically add new fields that do not exist in the configured HUD elements!
           // This keeps the HUD and Interface strictly clean and prevents ad-hoc field pollution.
@@ -4437,21 +4619,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       // Advance stats locally first
       const statusWithTime = advanceGameTime(adventure.statusElements || []);
       
-      const npcDocs = npcs.map(n => `
-      NPC: ${n.name} (${n.role})
-      - Portrait: ${n.image ? 'Vorhanden' : 'Keins'}
-      - Aussehen: ${n.appearance.gender}, ${n.appearance.age}J, ${n.appearance.build}, Haare: ${n.appearance.hairColor}, Kleidung: ${n.appearance.outfit || 'Standard'}${n.appearance.gender === 'Weiblich' && n.appearance.cupSize && n.appearance.cupSize !== '-' ? `, Körbchen: ${n.appearance.cupSize}` : ''}${n.appearance.currentLocation ? `, Aktueller Standort: ${n.appearance.currentLocation}` : ''}
-      - Vergangenheit: ${n.bio}
-      - Aktuelle Situation: ${n.currentSituation || 'Wartet auf Interaktion'}
-      - Ziel: ${n.goal || 'Unbekannt'}
-      - Fähigkeiten/Jutsus: ${n.skills || 'Unbekannt'}
-      - Gesinnung: ${n.isHostile ? 'Feindselig' : 'Freundlich'}
-      - Geheimnisse & Verborgenes Wissen (3-Stufen-Logik):
-        * Stufe 1 (Öffentlich): ${n.secretsStage1 || 'Keine'}
-        * Stufe 2 (Indizien & Verdacht): ${n.secretsStage2 || 'Keine'}
-        * Stufe 3 (Absolutes Geheimnis - Blackbox): ${n.secretsStage3 || 'Keine'}
-        * Verhüllung & Geteiltes Wissen (Wer weiß was?): ${n.knowledge || 'Keine Angabe (NPCs wissen standardmäßig nur das, was sie im Laufe der Geschichte direkt miterlebt oder erzählt bekommen haben)'}
-      `).join('\n');
+      const npcDocs = npcs.map(n => formatNPCForAIPrompt(n)).join('\n');
 
       const currentStatsStr = statusWithTime.map(s => `${s.label}: ${s.value}`).join(', ');
 
@@ -4546,7 +4714,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       }).join('\n      ');
       techniqueRulesInstruction += `\nAKTIVE BALANCING-TABELLE AUS DEM DATENBLATT:\n      ${rulesDetails}\n`;
 
-      let loreInstruction = ''; // prompt_build_first_lore
+      let loreInstruction = ''; // prompt_build_first_lore_loc1
       if (lore.length > 0) {
         const grouped = lore.reduce((acc, curr) => {
           acc[curr.category] = acc[curr.category] || [];
@@ -4554,7 +4722,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           return acc;
         }, {} as Record<string, typeof lore>);
 
-        loreInstruction = '\nLORE DATENBANK (Wichtige Fakten, Regeln, Geheimnisse & Historie der Welt):\n';
+        loreInstruction = '\nLORE DATENBANK (Wichtige Fakten, Regeln, Geheimnisse & Historie der Welt) [LOC1]:\n';
         Object.entries(grouped).forEach(([cat, entries]) => {
           loreInstruction += `[${cat.toUpperCase()}]\n`;
           const sorted = (cat === 'Events' || cat === 'Story & Quests') 
@@ -4579,6 +4747,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
               if (d.role) traits.push(`Rolle: ${d.role}`);
               if (d.gender || d.age) traits.push(`Aussehen: ${d.gender || ''} ${d.age ? d.age + 'J' : ''}`.trim());
               if (d.goal) traits.push(`Ziel: ${d.goal}`);
+              if (d.motivationCore) {
+                const motivationStr = formatMotivationCoreForAI(d.motivationCore);
+                if (motivationStr) traits.push(motivationStr);
+              }
               
               // Location check
               const activeLocation = lore.find(l => l.category === 'Orte' && l.details?.isActiveTarget);
@@ -4598,8 +4770,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
               }
 
               if (d.relationships && d.relationships.length > 0) {
-                const relsStr = d.relationships.map((r: any) => `${r.type} zu ${r.targetCharacter}${r.behavior ? ` (Verhalten: ${r.behavior})` : ''}`).join(', ');
-                traits.push(`Beziehungen: ${relsStr}`);
+                const relsStr = d.relationships.map((r: any) => formatRelationshipForAI(r, e.title)).join(' | ');
+                traits.push(`Detaillierte Beziehungen: ${relsStr}`);
               } else if (d.relationship) {
                 traits.push(`Beziehung: ${d.relationship}`);
               }
@@ -4644,10 +4816,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
                 const settingText = s.setting ? ` | Kulisse (Wo): ${s.setting}` : '';
                 const conflictText = s.conflict ? ` | Konflikt (Was): ${s.conflict}` : '';
                 
-                return `[Station #${sIdx + 1}: ${s.title || 'Unbenannt'} (${s.status === 'happened' ? 'Eingetreten' : 'Ausstehend/Geplant'})${s.description ? ` - ${s.description}` : ''}${triggerText}${castText}${settingText}${conflictText}${knowledgeText}]`;
+                return `[Station #${sIdx + 1}: ${s.title || 'Unbenannt'} (${s.status === 'happened' ? 'Eingetreten' : 'Ausstehend/Geplant'})${s.description ? ` - HANDLUNGS-, DIALOG- & TAKTIKVORGABE FÜR NPCS: ${s.description}` : ''}${triggerText}${castText}${settingText}${conflictText}${knowledgeText}]`;
               });
               if (steps.length > 0) {
-                extraDetails = ` | Roter Faden / Geplante Story-Schritte: ${steps.join(' -> ')}`;
+                extraDetails = ` | Roter Faden / Geplante Story-Schritte (MANDATORISCH ZU BEACHTEN): ${steps.join(' -> ')}`;
               }
             }
 
@@ -4767,8 +4939,20 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       3. Beziehe delegierte oder aktive Aufgaben bei passenden Gelegenheiten mit ein.
       ` : '';
 
+      const isSleep = /(?:schlaf|schläft|schlafe|zubett|zu\s*bett|ruhe\s*legen|hinlegen\s*zum|zur\s*ruhe|rasten|nachtruhe|einschlaf|augen\s*zu.*schlaf)/i.test(textToSend);
+      const isUnconscious = /(?:ohnm[aä]cht|bewusstlos|kollabier|bewusstsein\s*verlier)/i.test(textToSend);
+      const isSleepOrRestOrUnconscious = isSleep || isUnconscious;
+      const situationalActionDirective = isSleepOrRestOrUnconscious ? `
+      ACHTUNG - PRIORITÄRE SPIELLEITER-ANWEISUNG FÜR DIESEN ZUG (SCHLAF / OHNMACHT / ZEITSPRUNG & HANDLUNGSVORBEREITUNG):
+      Der Spieler legt sich schlafen, rastet oder wird ohnmächtig/bewusstlos ("${textToSend}").
+      1. BESCHREIBE NICHT ENDLOS DAS ZIMMER ODER DIE STILLE! Schildere das Hinlegen / die schwindenden Sinne in maximal 1-2 kurzen Sätzen.
+      2. FÜHRE ZWINGEND SOFORT EINEN AUTOMATISCHEN ZEITSPRUNG BIS ZUM ERWACHEN DURCH (z. B. bis zum nächsten Morgen oder nach mehreren Stunden Ruhe/Ohnmacht)!
+      3. AKTUALISIERE DIE UHRZEIT IM STATUS-TAG entsprechend weit nach vorne (+6 bis +8 Stunden für Nachtruhe, z. B. [[STATUS: Zeit=07:00, Ausdauer=100%]] oder +2 Stunden bei Ohnmacht) und regeneriere Werte.
+      4. BEREITE BEIM ERWACHEN SOFORT DIE NÄCHSTE HANDLUNG VOR: Der Spieler erwacht und sieht sich SOFORT mit einem neuen Vorfall, einer Aktion oder Situation konfrontiert, auf die er in seiner nächsten Nachricht reagieren kann (z. B. lautes Klopfen an der Tür, ein NPC tritt ein, Aufruhr oder Schritte im Haus)!
+      ` : '';
+
       const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${world.title}".
-      
+      ${situationalActionDirective}
       WELT: ${world.description} (Ton: ${world.tone})
       ${campaignPowerInstruction}
       ${techniqueRulesInstruction}
@@ -4782,20 +4966,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
 
       ${profileInfo}
 
-      SPIELER-CHARAKTER:
-      ${player.name} (${player.role}). 
-      - Aussehen & Physischer Status: ${getPlayerPhysicalStatusSummary()}
-      - Bio: ${player.bio}
-      - Aktuelle Lage: ${player.currentSituation}
-      - Ziel: ${player.goal}
-      - Kräfte & Fähigkeiten: ${getPlayerAbilitiesFormat()}${playerPowerInstruction}
-      - Aktuelle Ausrüstung & Inventar:
-        - ${getInventoryAndEquipmentSummary()}
-      - Geheimnisse & Verborgenes Wissen (3-Stufen-Logik):
-        * Stufe 1 (Öffentlich): ${player.secretsStage1 || 'Keine'}
-        * Stufe 2 (Indizien & Verdacht): ${player.secretsStage2 || 'Keine'}
-        * Stufe 3 (Absolutes Geheimnis - Blackbox): ${player.secretsStage3 || 'Keine'}
-        * Verhüllung & Geteiltes Wissen (Wer weiß was?): ${player.knowledge || 'Keine Angabe (andere Charaktere wissen standardmäßig nur das, was sie im Laufe der Geschichte direkt miterlebt oder erzählt bekommen haben)'}
+      ${formatPlayerForAIPrompt(player, getPlayerPhysicalStatusSummary(), getPlayerAbilitiesFormat(), playerPowerInstruction, getInventoryAndEquipmentSummary())}
 
       AKTUELLE WERTE: ${currentStatsStr}
 
@@ -4806,12 +4977,28 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       ${combatInstruction}
 
       ANWEISUNGEN FÜR DEINE ANTWORTEN (STRENG EINZUHALTEN):
-      1. Beschreibe Szenen FILMREIF. Wenn ein Charakter (Spieler oder NPC) erscheint oder handelt, beschreibe detailliert seine FRISUR, seine KLEIDUNG und seine KÖRPERSPRACHE basierend auf den obigen Infos.
+      1. MEHR HANDLUNG & DYNAMIK, WENIGER REINE UMGEBUNGSBESCHREIBUNG:
+         - Der absolute Schwerpunkt deiner Nachricht MUSS auf aktiven Ereignissen, Handlungen, Entscheidungen, dynamischen Interaktionen und spürbarem Plot-Fortschritt liegen!
+         - Vermeide lange, statische oder passive Beschreibungen von Räumen, Wänden, Böden, Möbeln, Lichtstimmungen oder Stille. Maximal 1-2 kurze, wirkungsvolle Sätze zur Szenerie genügen völlig.
+         - Der gesamte Rest deiner Antwort muss aus lebendiger Handlung, Reaktionen von Charakteren und neuen Vorfällen bestehen. Beschreibe Kleidung und Körpersprache dynamisch im Fluss der Aktion, niemals als statischen Stillstand.
       2. Beziehe die VERGANGENHEIT der Figuren mit ein (Andeutungen oder direkte Referenzen).
       3. Lass die NPCs ihre ZIELE verfolgen. Sie sollten nicht nur passiv sein, sondern eigene Agenden haben.
       4. Nutze das HUD für Änderungen der AKTUELLEN WERTE: [[STATUS: Feld1=Wert1, Feld2=Wert2]]. Trenne mehrere Änderungen zwingend mit einem Komma! Du KANNST und SOLLST Werte anpassen, wenn die Handlung es erfordert. WICHTIG: Nutze AUSSCHLIESSLICH die exakten Feldnamen, die dir unter \"AKTUELLE WERTE\" übergeben wurden! Erfinde NIEMALS neue HUD-Felder, die nicht in den aktuellen Werten stehen.
       5. ANTWORTE IMMER AUF DEUTSCH. Gib KEINE Antwortmöglichkeiten (A, B, C) vor. Der Spieler schreibt seine Aktionen frei.
-      6. KEINE STANDARD-FRAGEN AM ENDE: Beende deine Nachrichten NIEMALS mit stereotypischen Fragen wie "Was wirst du tun?", "Was tust du?", "Wie reagierst du?", "Wie wirst du reagieren?" oder ähnlichen Fragen. Lass das Ende deiner Antwort atmosphärisch ausklingen, ganz ohne eine abschließende Frage.
+      6. KEINE STANDARD-FRAGEN AM ENDE, ABER IMMER EIN AKTIVER SZENENAUFHÄNGER:
+         - Beende deine Nachrichten NIEMALS mit stereotypischen Fragen wie "Was wirst du tun?", "Was tust du?", "Wie reagierst du?", "Wie wirst du reagieren?" oder ähnlichen Floskeln.
+         - Lass die Szene aber NICHT in passiver Leere, Stille oder Ticken der Wanduhr versanden!
+         - Schließe deine Antwort IMMER mit einer aktiven Situation, einem neuen Vorfall, einer Aktion eines NPCs, einem unerwarteten Geräusch oder einem Wendepunkt ab, worauf der Spieler mit seiner nächsten Nachricht sofort gezielt und spannend reagieren und handeln kann!
+      6b. SCHLAFEN, RASTEN & OHNMACHT / BEWUSSTLOSIGKEIT (AUTOMATISCHER ZEITSPRUNG & DIREKTE HANDLUNGSVORBEREITUNG):
+         - Wenn der Spieler sich schlafen legt, schlafen geht, zur Ruhe begibt, rastet oder ohnmächtig/bewusstlos wird (z. B. "*hoshiko legt sich in ihr zimmer schlafen*", "*schläft ein*", "*wird bewusstlos*"):
+           * BLEIBE UNTER KEINEN UMSTÄNDEN IN DER RUHESZENE STEHEN! Beschreibe nicht endlos das Zimmer, das Bett, das ruhige Atmen oder die Stille der Nacht.
+           * Fasse das Einschlafen oder das Schwinden der Sinne in maximal 1-2 kurzen Sätzen zusammen.
+           * Führe ZWINGEND sofort einen automatischen ZEITSPRUNG bis zu dem Moment durch, an dem der Charakter wieder aufwacht (z. B. am nächsten Morgen oder nach mehreren Stunden Erholung/Ohnmacht)!
+           * Aktualisiere die Uhrzeit im [[STATUS: Zeit=HH:MM]] (z. B. auf 07:00 am nächsten Morgen oder +7 bis +8 Stunden für Nachtruhe, bzw. +1 bis +3 Stunden bei Ohnmacht) und regeneriere HP/MP/Ausdauer (z. B. [[STATUS: Zeit=07:00, Ausdauer=100%]]).
+           * BEREITE BEIM ERWACHEN SOFORT DIE NÄCHSTE HANDLUNG VOR (AKTIVER SZENENAUFHÄNGER):
+             Unmittelbar beim Aufwachen tritt sofort die nächste Handlung, ein neues Ereignis oder ein Vorfall ein, worauf der Spieler mit seiner nächsten Nachricht reagieren kann!
+             (Beispiele: Jemand klopft energisch an die Zimmertür; eilige Schritte oder Stimmen hallen durch den Flur; ein NPC betritt den Raum mit einer wichtigen Botschaft oder einem Befehl; draußen ertönt Lärm, Aufruhr oder Alarm; ein neuer Tag bricht an mit einer konkreten Dringlichkeit oder Aufgabe).
+             Der Charakter darf nach dem Erwachen nicht im Stillstand verharren, sondern die nächste Handlung beginnt sofort!
       7. KEIN DIKTIEREN DER WAHRNEHMUNG, REAKTION, GEFÜHLE, UNWILLKÜRLICHEN KÖRPERREAKTIONEN ODER DIALOGE DES SPIELERS (ABSOLUTES SPRECH- UND HANDLUNGSVERBOT FÜR DEN NUTZER): Schreibe niemals vor, was der Spieler aktiv tut, denkt, fühlt, bemerkt, empfindet oder wie sein Körper unwillkürlich reagiert. Diktierte Aktionen, Gefühle oder Sätze wie "Du bemerkst, dass dich jemand beobachtet", "Du spürst Angst aufsteigen", "Du blickst dich um", "lässt dein Herz einen Schlag aussetzen", "Deine Hände umklammern fester", "Du spürst eine eisige Kälte in deiner Brust" oder "Du musst jetzt reagieren" sind STRENGSTENS VERBOTEN. Zudem darfst du NIEMALS wörtliche Rede, Dialoge, Gedanken oder aktive Handlungen im Namen des Spielers/seines Charakters formulieren, erfinden oder diktieren (z.B. darfst du ihm niemals Sätze in den Mund legen wie: "Das war's, du hättest mich nie finden dürfen!", rufst du). Der Spieler spricht, fühlt und handelt einzig und allein selbst durch seine Eingaben! Beschreibe stattdessen nur die objektive Umwelt und das Verhalten von NPCs (z.B. "Draußen zieht ein frischer Wind auf und die Blätter rascheln an den Fenstern" anstatt "Du spürst eine Kälte in deiner Brust"). Der Spieler entscheidet ganz allein über seine Wahrnehmung, Gedanken, unwillkürlichen Körperreaktionen, Gefühle, Dialoge und Reaktionen.
       7b. ABSOLUTES ZITIERVERBOT DES NUTZERS: Du als Erzähler darfst NIEMALS die Eingaben, Worte oder Aussagen des Spielers/Nutzers wörtlich in deiner Narration oder Beschreibung wiederholen, zitieren oder zusammenfassend nachplappern. Wenn der Spieler spricht, ist es bereits gesagt worden. NPCs und andere Charaktere in der Welt dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich auf seine Worte beziehen.
       8. ABSOLUTES VERBOT DES SELBSTSTÄNDIGEN / PASSIVEN LOSGEHENS VON FÄHIGKEITEN & KRÄFTEN DES SPIELERS (SPIELER-KRAFTKONTROLLE & AKTIVIERUNGSMONOPOL):
@@ -4853,9 +5040,12 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           - Gründliches Durchsuchen eines großen Raums / Spaziergang / Besorgungen: +10 bis +15 Minuten.
           - Kampf / Auseinandersetzung: Dauert in der Regel 1 bis 3 Minuten (Schlagabtäusche laufen in Sekunden ab). Nur ausgedehnte Großschlachten dauern 15 bis 30 Minuten.
           - Längere Reise / Fußmarsch zwischen weit entfernten Orten: Entsprechend der tatsächlichen Reisedauer (z.B. +1 bis +3 Stunden).
-          - Rast / Schlaf / bewusste Zeitsprünge: Entsprechend der Schlafdauer (z.B. +1 Stunde Pause, +8 Stunden Nachtruhe).
+          - Rast / Schlaf / Ohnmacht / bewusste Zeitsprünge: Entsprechend der Dauer (z.B. +1 Stunde Pause, +7 bis +8 Stunden Nachtruhe z. B. bis 07:00 Uhr morgens, bzw. +1 bis +3 Stunden bei Ohnmacht). Der Charakter erwacht noch in derselben Antwort und die nächste Handlung beginnt sofort!
           Berechne die neue Uhrzeit immer exakt ausgehend von der bisherigen Uhrzeit im Status (z.B. von 12:00 nach einer kurzen Frage auf 12:00 oder 12:01, nach einem kurzen Kampf auf 12:03) und gib sie im [[STATUS]] Block an.
-      21. GEHEIMNISSE & VERBORGENES WISSEN (3-STUFEN-LOGIK - ABSOLUTES SPOILER- UND ENTHÜLLUNGSVERBOT): Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 ist eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden. Erst wenn der Spieler das Geheimnis im Chat gesteht, oder wenn NPCs durch gesammelte Indizien im Chat eine unumstößliche, logische Schlussfolgerung im Hier und Jetzt ziehen, darf dieses Wissen enthüllt werden. Jedes Meta-Wissen-Bleeding ist strengstens verboten!
+      21. GEHEIMNISSE, VERBORGENES WISSEN & ABSICHTENISOLATION (3-STUFEN-LOGIK & KEINE HELLSEHEREI): // rule21_loc1
+          // loc1_marker
+          Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 ist eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden.
+          ABSICHTENISOLATION ZWISCHEN CHARAKTEREN: NPCs besitzen KEINERLEI Wissen über die geheimen Absichten, Pläne, Hintergedanken oder ungesagten Gefühle anderer Charaktere (sei es anderer NPCs oder des Spielers), solange diese nicht vor ihren Augen/Ohren im Chat explizit geäußert, gestanden oder durch offensichtliche Taten offenbart wurden. Erst wenn der Spieler das Geheimnis im Chat gesteht, oder wenn NPCs durch gesammelte Indizien im Chat eine unumstößliche, logische Schlussfolgerung im Hier und Jetzt ziehen, darf dieses Wissen enthüllt werden. Jedes Meta-Wissen-Bleeding ist strengstens verboten!
       22. ABSOLUTES VERBOT DES VORZEITIGEN LORE-ENTHÜLLENS: Wenn ein Lore-Eintrag oder Fakt in der Lore-Datenbank mit '[STRENG GEHEIM:...]' markiert ist, darfst du diesen Fakt, Text oder Inhalt NIEMALS von dir aus im Chat erwähnen, andeuten, spoilern oder referenzieren! Er ist für die Spielfiguren und den Erzähler eine absolute Blackbox, bis der Spieler ihn selbst lüftet oder du ihn per [[LORE_UNLOCK: Name]] im Spielverlauf offiziell freischaltest. Halte dich penibel an dieses Verbot, um dem Spieler nicht die Spannung zu nehmen!
       23. ABSOLUTE UNANTASTBARKEIT BESTEHENDER BEZIEHUNGEN & VERHALTEN: Verändere oder überschreibe niemals Beziehungen ('relationships') oder das festgelegte Verhalten ('conduct', 'behavior') von bestehenden Charakteren. Alle vorgegebenen Beziehungs- und Verhaltensstrukturen sind fix und unveränderlich.
       24. INVENTAR- & AUSRÜSTUNGSUPDATES (SYNCHRONISATION ZUM CHAT - MANDATORY):
@@ -4900,7 +5090,27 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       30. BODENSTÄNDIGE CHARAKTERE & WELTENTWICKLUNG (GLAUBWÜRDIGE HINTERGRÜNDE):
           - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
           - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
-          - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meiste Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
+          - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meiste Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
+      31. PERSPEKTIVISCHE WISSENSISOLATION BEI PROLOG, ERSTER SZENE & WELTBESCHREIBUNG (ÜBERRASCHUNGS- & REAKTIONS-PFLICHT):
+          - PROLOG & ERSTE SZENE ISOLATION FÜR NICHT-ANWESENDE CHARAKTERE: Charaktere/NPCs besitzen KEINERLEI Wissen über Geschehnisse, Vorfälle oder Verwandlungen aus der Weltenbeschreibung, dem Prolog oder der ersten Szene (Spielstart), bei denen sie selbst PHYSISCH NICHT ANWESEND waren!
+          - ÜBERRASCHUNG BEI NEU DAZU STOSSENDEN CHARAKTEREN: Wenn ein Charakter das erste Mal eine Szene/einen Raum betritt oder dem Spieler begegnet und der Spieler durch den Prolog, die erste Szene oder jüngste Vorfälle eine dauerhafte Verwandlung erfahren hat, ein verändertes Aussehen hat, verletzt ist, neue Gestalt besitzt oder ungewöhnliche Merkmale trägt, darf dieser dazustoßende Charakter KEINESFALLS so tun, als kenne er diesen Zustand bereits oder als sei er unbeeindruckt.
+          - MANDATORISCHE REAKTION: Der dazustoßende Charakter MUSS glaubwürdig, überrascht, schockiert, erschrocken, verwirrt oder neugierig auf den vorgefundenen Zustand des Spielers reagieren (z. B. entgeistertes Anstarren, "Was ist mit dir geschehen?!", "Wer oder was bist du?!", Fragen nach der Ursache), anstatt die Veränderung stillschweigend hinzunehmen.
+          - NPCs erfahren von den Geschehnissen des Prologs oder der Verwandlung ERST DANN, wenn ihnen der Spieler oder ein Augenzeuge im Chat davon berichtet oder sie im Spielverlauf Beweise dafür finden.
+      32. ABSOLUTE NAMENS-PRIORITÄT & STRIKTES VERBOT ABWEICHENDER ODER ALTER NAMEN (VERBOT VON FANTASIENAMEN ODER VERALTETEN RESTE-NAMEN WIE 'YARA'):
+          - Für die Anrede, Nennung und Referenzierung des Spielers sowie aller Charaktere/NPCs in Erzählungen, Dialogen, Gedanken und Systemanzeigen gelten AUSSCHLIESSLICH die im jeweiligen Charakterbogen definierten Felder:
+            1) "Name des Charakters" (Echter bürgerlicher Name)
+            2) "Rufname (Kampfanzeige)"
+            3) "Spitzname / Titel / Alias"
+            4) "Name der Transformation" (bei aktiver Transformation)
+          - Diese vier Felder haben ABSOLUTE UND UNANFECHTBARE PRIORITÄT!
+          - Es ist der KI, dem Erzähler und allen NPCs STRENGSTENS VERBOTEN, den Spieler oder andere Figuren mit abweichenden, frei erfundenen oder aus alten Versionen/Prompts stammenden Namen (wie z. B. 'Yara' oder unbelegten Wörtern) anzusprechen, zu nennen oder zu beschreiben.
+          - Sollte in Alt-Texten, Weltbeschreibungen, Prolog-Überresten oder Lore-Einträgen ein abweichender Name auftauchen, der nicht mit den oben genannten vier Feldern übereinstimmt, MUSS die KI diesen sofort ignorieren und strikt durch den im Charakterbogen hinterlegten Namen/Rufnamen/Alias/Transformationsnamen ersetzen, um vollkommene Einheitlichkeit zu garantieren!
+          - DYNAMISCHE NAMENSGEBUNG BEI LEEREN TRANSFORMATIONSNAMEN: Sollten bei einer aktiven Verwandlungsform "Name der Transformation" oder "Rufname (Kampfanzeige)" LEER sein, gilt diese Form als UNBENANNT. In diesem Fall können der Spieler oder Charaktere/NPCs dieser Transformation im Laufe der Geschichte/Dialoge einen eigenen Namen geben!
+      33. LOGIK FÜR INHALTE VON KLEIDERSCHRÄNKEN & TRUHEN IN PRIVATEN RÄUMEN (KONTEXT- & GESCHLECHTSLOGIK DER GARDEROBE):
+          - LOGIK UND HISTORIE DES RAUMBESITZERS: In privaten Räumen, Schlafzimmern, Truhen, Schränken oder Ankleiden (wie z. B. im eigenen Zimmer des Spielers oder eines NPCs) muss der vorgefundene Inhalt von Kleiderschränken und Truhen strikt der Identität, der Historie und dem ursprünglichen biologischen Geschlecht/Stand des jeweiligen Eigentümers entsprechen!
+          - VERBOT UNBEGRÜNDETER KONTRAST-KLEIDUNG: War die Spielfigur oder der Raumbesitzer ein Mann (oder befindet man sich im Zimmer/Quartier eines Mannes), befinden sich in dessen Schrank oder Truhe NIEMALS unbegründet Frauenkleider, Mädchenkleider, Röcke, BHs oder Damenunterwäsche.
+          - WEITERBESTAND BEI METAMORPHOSEN & VERWANDLUNGEN: Hat der Spieler z. B. vor Kurzem eine Verwandlung erfahren (z. B. Geschlechtsumwandlung, Verjüngung, Fluch oder Gestaltwechsel), verwandeln sich dadurch NICHT automatisch die Kleidungsstücke in Schränken oder Truhen! Im Schrank eines vormals männlichen Charakters liegen weiterhin ausschließlich Männerkleider der bisherigen Passform, sofern nicht explizit in der Handlung neue Kleidung gekauft, geschenkt oder von jemandem im Raum deponiert wurde.
+          - PLAUSIBILITÄT BEI UNPASSENDER KLEIDUNG: Muss sich der verwandelt/verändert vorgefundene Charakter umziehen, muss die vorgefundene Kleidung in eigenen Schränken realistisch unpassend sein (z. B. viel zu große Herrenhemden/Hosen für einen verjüngten oder weiblich gewordenen Körper) oder es muss aktiv passende Kleidung besorgt werden. Es dürfen nicht wie durch Zauberei passende Mädchenkleider oder Damenkleider in der Truhe eines Mannes auftauchen!`;
       
       const response = await GeminiService.chat(updatedMessages, systemInstruction, world.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
@@ -4909,7 +5119,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, forceNextHp, forceNextMp);
 
       if (notifications.length > 0) {
-        setLoreNotifications(prev => [...prev, ...notifications]);
+        addLoreNotifications(notifications);
       }
 
       const newModelMsg: ChatMessage = { id: `model-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'model', text: finalCleanedText };
@@ -4917,6 +5127,38 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       const nextChatHistory: ChatMessage[] = [...updatedMessages, newModelMsg];
       
       let syncedStatus = [...newStatus];
+
+      // Automatic robust time advance and recovery for sleep/rest/unconscious if model didn't update Zeit
+      if (isSleepOrRestOrUnconscious) {
+        const timeIdx = syncedStatus.findIndex(el => {
+          const l = (el.label || '').toLowerCase();
+          return l === 'zeit' || l === 'uhrzeit' || l.includes('zeit');
+        });
+        const hadModelTimeUpdate = rawText.includes('STATUS:') && /zeit\s*=/i.test(rawText);
+        if (timeIdx > -1 && !hadModelTimeUpdate) {
+          const currentVal = syncedStatus[timeIdx].value || '22:00';
+          const timeParts = currentVal.split(':');
+          if (timeParts.length === 2) {
+            const hoursToAdd = isSleep ? 8 : 2;
+            const nextHour = (parseInt(timeParts[0], 10) + hoursToAdd) % 24;
+            syncedStatus[timeIdx] = {
+              ...syncedStatus[timeIdx],
+              value: `${String(nextHour).padStart(2, '0')}:${timeParts[1]}`
+            };
+          }
+        }
+        if (isSleep) {
+          const ausdauerIdx = syncedStatus.findIndex(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('ausdauer') || l.includes('stamina');
+          });
+          if (ausdauerIdx > -1) {
+            syncedStatus[ausdauerIdx] = { ...syncedStatus[ausdauerIdx], value: '100%' };
+          }
+          setPlayerHp(playerMaxHp);
+          setPlayerMp(playerMaxMp);
+        }
+      }
       let syncedInv = updatedStructuredInventory ? { ...updatedStructuredInventory } : { money: 100, currencyLabel: 'Goldstücke' };
       const moneyStatusIdx = syncedStatus.findIndex(el => {
         const l = (el.label || '').toLowerCase();
@@ -5688,6 +5930,35 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
     }
   };
 
+  const handleCancelCombat = () => {
+    setIsCombatActive(false);
+    setIsCombatMenuExpanded(false);
+    setCombatSubMenu('main');
+    clearCombatActionQueue();
+    setSelectedEnemyId('');
+    setSelectedEnemyIds([]);
+    onUpdateAdventure({
+      ...adventure,
+      combatState: {
+        selectedEnemyId: '',
+        selectedEnemyIds: [],
+        customEnemyName: '',
+        opponents: [],
+        playerHp: playerHp || 100,
+        playerMaxHp: playerMaxHp || 100,
+        playerMp: playerMp || 100,
+        playerMaxMp: playerMaxMp || 100,
+        enemyHp: 100,
+        enemyMaxHp: 100,
+        combatSubMenu: 'main',
+        placedObjects: adventure.combatState?.placedObjects || [],
+        tiles: adventure.combatState?.tiles || {},
+        ...(adventure.combatState || {}),
+        isCombatActive: false
+      }
+    });
+  };
+
   const selectOpponentAsTarget = (oppId: string) => {
     setSelectedEnemyIds(prev => {
       const isAlreadySelected = prev.includes(oppId);
@@ -6196,21 +6467,7 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       const { player, npcs, world } = adventure;
       const statusWithTime = advanceGameTime(adventure.statusElements || []);
 
-      const npcDocs = npcs.map(n => `
-      NPC: ${n.name} (${n.role})
-      - Portrait: ${n.image ? 'Vorhanden' : 'Keins'}
-      - Aussehen: ${n.appearance.gender}, ${n.appearance.age}J, ${n.appearance.build}, Haare: ${n.appearance.hairColor}, Kleidung: ${n.appearance.outfit || 'Standard'}${n.appearance.gender === 'Weiblich' && n.appearance.cupSize && n.appearance.cupSize !== '-' ? `, Körbchen: ${n.appearance.cupSize}` : ''}${n.appearance.currentLocation ? `, Aktueller Standort: ${n.appearance.currentLocation}` : ''}
-      - Vergangenheit: ${n.bio}
-      - Aktuelle Situation: ${n.currentSituation || 'Wartet auf Interaktion'}
-      - Ziel: ${n.goal || 'Unbekannt'}
-      - Fähigkeiten/Jutsus: ${n.skills || 'Unbekannt'}
-      - Gesinnung: ${n.isHostile ? 'Feindselig' : 'Freundlich'}
-      - Geheimnisse & Verborgenes Wissen (3-Stufen-Logik):
-        * Stufe 1 (Öffentlich): ${n.secretsStage1 || 'Keine'}
-        * Stufe 2 (Indizien & Verdacht): ${n.secretsStage2 || 'Keine'}
-        * Stufe 3 (Absolutes Geheimnis - Blackbox): ${n.secretsStage3 || 'Keine'}
-        * Verhüllung & Geteiltes Wissen (Wer weiß was?): ${n.knowledge || 'Keine Angabe (NPCs wissen standardmäßig nur das, was sie im Laufe der Geschichte direkt miterlebt oder erzählt bekommen haben)'}
-      `).join('\n');
+      const npcDocs = npcs.map(n => formatNPCForAIPrompt(n)).join('\n');
 
       const currentStatsStr = statusWithTime.map(s => `${s.label}: ${s.value}`).join(', ');
 
@@ -6315,7 +6572,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       }).join('\n      ');
       techniqueRulesInstruction += `\nAKTIVE BALANCING-TABELLE AUS DEM DATENBLATT:\n      ${rulesDetails}\n`;
 
-      let loreInstruction = ''; // prompt_build_second_lore
+      let loreInstruction = ''; // prompt_build_second_lore_loc2
       if (lore.length > 0) {
         const grouped = lore.reduce((acc, curr) => {
           acc[curr.category] = acc[curr.category] || [];
@@ -6323,7 +6580,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           return acc;
         }, {} as Record<string, typeof lore>);
 
-        loreInstruction = '\nLORE DATENBANK (Wichtige Fakten, Regeln, Geheimnisse & Historie der Welt):\n';
+        loreInstruction = '\nLORE DATENBANK (Wichtige Fakten, Regeln, Geheimnisse & Historie der Welt) [LOC2]:\n';
         Object.entries(grouped).forEach(([cat, entries]) => {
           loreInstruction += `[${cat.toUpperCase()}]\n`;
           const sorted = (cat === 'Events' || cat === 'Story & Quests') 
@@ -6348,6 +6605,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               if (d.role) traits.push(`Rolle: ${d.role}`);
               if (d.gender || d.age) traits.push(`Aussehen: ${d.gender || ''} ${d.age ? d.age + 'J' : ''}`.trim());
               if (d.goal) traits.push(`Ziel: ${d.goal}`);
+              if (d.motivationCore) {
+                const motivationStr = formatMotivationCoreForAI(d.motivationCore);
+                if (motivationStr) traits.push(motivationStr);
+              }
               
               // Location check
               const activeLocation = lore.find(l => l.category === 'Orte' && l.details?.isActiveTarget);
@@ -6367,8 +6628,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               }
 
               if (d.relationships && d.relationships.length > 0) {
-                const relsStr = d.relationships.map((r: any) => `${r.type} zu ${r.targetCharacter}${r.behavior ? ` (Verhalten: ${r.behavior})` : ''}`).join(', ');
-                traits.push(`Beziehungen: ${relsStr}`);
+                const relsStr = d.relationships.map((r: any) => formatRelationshipForAI(r, e.title)).join(' | ');
+                traits.push(`Detaillierte Beziehungen: ${relsStr}`);
               } else if (d.relationship) {
                 traits.push(`Beziehung: ${d.relationship}`);
               }
@@ -6413,10 +6674,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 const settingText = s.setting ? ` | Kulisse (Wo): ${s.setting}` : '';
                 const conflictText = s.conflict ? ` | Konflikt (Was): ${s.conflict}` : '';
                 
-                return `[Station #${sIdx + 1}: ${s.title || 'Unbenannt'} (${s.status === 'happened' ? 'Eingetreten' : 'Ausstehend/Geplant'})${s.description ? ` - ${s.description}` : ''}${triggerText}${castText}${settingText}${conflictText}${knowledgeText}]`;
+                return `[Station #${sIdx + 1}: ${s.title || 'Unbenannt'} (${s.status === 'happened' ? 'Eingetreten' : 'Ausstehend/Geplant'})${s.description ? ` - HANDLUNGS-, DIALOG- & TAKTIKVORGABE FÜR NPCS: ${s.description}` : ''}${triggerText}${castText}${settingText}${conflictText}${knowledgeText}]`;
               });
               if (steps.length > 0) {
-                extraDetails = ` | Roter Faden / Geplante Story-Schritte: ${steps.join(' -> ')}`;
+                extraDetails = ` | Roter Faden / Geplante Story-Schritte (MANDATORISCH ZU BEACHTEN): ${steps.join(' -> ')}`;
               }
             }
 
@@ -6529,20 +6790,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
       ${profileInfo}
 
-      SPIELER-CHARAKTER:
-      ${player.name} (${player.role}). 
-      - Aussehen & Physischer Status: ${getPlayerPhysicalStatusSummary()}
-      - Bio: ${player.bio}
-      - Aktuelle Lage: ${player.currentSituation}
-      - Ziel: ${player.goal}
-      - Kräfte & Fähigkeiten: ${getPlayerAbilitiesFormat()}${playerPowerInstruction}
-      - Aktuelle Ausrüstung & Inventar:
-        - ${getInventoryAndEquipmentSummary()}
-      - Geheimnisse & Verborgenes Wissen (3-Stufen-Logik):
-        * Stufe 1 (Öffentlich): ${player.secretsStage1 || 'Keine'}
-        * Stufe 2 (Indizien & Verdacht): ${player.secretsStage2 || 'Keine'}
-        * Stufe 3 (Absolutes Geheimnis - Blackbox): ${player.secretsStage3 || 'Keine'}
-        * Verhüllung & Geteiltes Wissen (Wer weiß was?): ${player.knowledge || 'Keine Angabe (andere Charaktere wissen standardmäßig nur das, was sie im Laufe der Geschichte direkt miterlebt oder erzählt bekommen haben)'}
+      ${formatPlayerForAIPrompt(player, getPlayerPhysicalStatusSummary(), getPlayerAbilitiesFormat(), playerPowerInstruction, getInventoryAndEquipmentSummary())}
 
       AKTUELLE WERTE: ${currentStatsStr}
 
@@ -6553,12 +6801,28 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       ${combatInstruction}
 
       ANWEISUNGEN FÜR DEINE ANTWORTEN (STRENG EINZUHALTEN):
-      1. Beschreibe Szenen FILMREIF. Wenn ein Charakter (Spieler oder NPC) erscheint oder handelt, beschreibe detailliert seine FRISUR, seine KLEIDUNG und seine KÖRPERSPRACHE basierend auf den obigen Infos.
+      1. MEHR HANDLUNG & DYNAMIK, WENIGER REINE UMGEBUNGSBESCHREIBUNG:
+         - Der absolute Schwerpunkt deiner Nachricht MUSS auf aktiven Ereignissen, Handlungen, Entscheidungen, dynamischen Interaktionen und spürbarem Plot-Fortschritt liegen!
+         - Vermeide lange, statische oder passive Beschreibungen von Räumen, Wänden, Böden, Möbeln, Lichtstimmungen oder Stille. Maximal 1-2 kurze, wirkungsvolle Sätze zur Szenerie genügen völlig.
+         - Der gesamte Rest deiner Antwort muss aus lebendiger Handlung, Reaktionen von Charakteren und neuen Vorfällen bestehen. Beschreibe Kleidung und Körpersprache dynamisch im Fluss der Aktion, niemals als statischen Stillstand.
       2. Beziehe die VERGANGENHEIT der Figuren mit ein (Andeutungen oder direkte Referenzen).
       3. Lass die NPCs ihre ZIELE verfolgen. Sie sollten nicht nur passiv sein, sondern eigene Agenden haben.
       4. Nutze das HUD für Änderungen der AKTUELLEN WERTE: [[STATUS: Feld1=Wert1, Feld2=Wert2]]. Trenne mehrere Änderungen zwingend mit einem Komma! Du KANNST und SOLLST Werte anpassen, wenn die Handlung es erfordert. WICHTIG: Nutze AUSSCHLIESSLICH die exakten Feldnamen, die dir unter \"AKTUELLE WERTE\" übergeben wurden! Erfinde NIEMALS neue HUD-Felder, die nicht in den aktuellen Werten stehen.
       5. ANTWORTE IMMER AUF DEUTSCH. Gib KEINE Antwortmöglichkeiten (A, B, C) vor. Der Spieler schreibt seine Aktionen frei.
-      6. KEINE STANDARD-FRAGEN AM ENDE: Beende deine Nachrichten NIEMALS mit stereotypischen Fragen wie "Was wirst du tun?", "Was tust du?", "Wie reagierst du?", "Wie wirst du reagieren?" oder ähnlichen Fragen. Lass das Ende deiner Antwort atmosphärisch ausklingen, ganz ohne eine abschließende Frage.
+      6. KEINE STANDARD-FRAGEN AM ENDE, ABER IMMER EIN AKTIVER SZENENAUFHÄNGER:
+         - Beende deine Nachrichten NIEMALS mit stereotypischen Fragen wie "Was wirst du tun?", "Was tust du?", "Wie reagierst du?", "Wie wirst du reagieren?" oder ähnlichen Floskeln.
+         - Lass die Szene aber NICHT in passiver Leere, Stille oder Ticken der Wanduhr versanden!
+         - Schließe deine Antwort IMMER mit einer aktiven Situation, einem neuen Vorfall, einer Aktion eines NPCs, einem unerwarteten Geräusch oder einem Wendepunkt ab, worauf der Spieler mit seiner nächsten Nachricht sofort gezielt und spannend reagieren und handeln kann!
+      6b. SCHLAFEN, RASTEN & OHNMACHT / BEWUSSTLOSIGKEIT (AUTOMATISCHER ZEITSPRUNG & DIREKTE HANDLUNGSVORBEREITUNG):
+         - Wenn der Spieler sich schlafen legt, schlafen geht, zur Ruhe begibt, rastet oder ohnmächtig/bewusstlos wird:
+           * BLEIBE UNTER KEINEN UMSTÄNDEN IN DER RUHESZENE STEHEN! Beschreibe nicht endlos das Zimmer, das Bett, das ruhige Atmen oder die Stille der Nacht.
+           * Fasse das Einschlafen oder das Schwinden der Sinne in maximal 1-2 kurzen Sätzen zusammen.
+           * Führe ZWINGEND sofort einen automatischen ZEITSPRUNG bis zu dem Moment durch, an dem der Charakter wieder aufwacht (z. B. am nächsten Morgen oder nach mehreren Stunden Erholung/Ohnmacht)!
+           * Aktualisiere die Uhrzeit im [[STATUS: Zeit=HH:MM]] (z. B. auf 07:00 am nächsten Morgen oder +7 bis +8 Stunden für Nachtruhe, bzw. +1 bis +3 Stunden bei Ohnmacht) und regeneriere HP/MP/Ausdauer (z. B. [[STATUS: Zeit=07:00, Ausdauer=100%]]).
+           * BEREITE BEIM ERWACHEN SOFORT DIE NÄCHSTE HANDLUNG VOR (AKTIVER SZENENAUFHÄNGER):
+             Unmittelbar beim Aufwachen tritt sofort die nächste Handlung, ein neues Ereignis oder ein Vorfall ein, worauf der Spieler mit seiner nächsten Nachricht reagieren kann!
+             (Beispiele: Jemand klopft energisch an die Zimmertür; eilige Schritte oder Stimmen hallen durch den Flur; ein NPC betritt den Raum mit einer wichtigen Botschaft oder einem Befehl; draußen ertönt Lärm, Aufruhr oder Alarm; ein neuer Tag bricht an mit einer konkreten Dringlichkeit oder Aufgabe).
+             Der Charakter darf nach dem Erwachen nicht im Stillstand verharren, sondern die nächste Handlung beginnt sofort!
       7. KEIN DIKTIEREN DER WAHRNEHMUNG, REAKTION, GEFÜHLE, UNWILLKÜRLICHEN KÖRPERREAKTIONEN ODER DIALOGE DES SPIELERS (ABSOLUTES SPRECH- UND HANDLUNGSVERBOT FÜR DEN NUTZER): Schreibe niemals vor, was der Spieler aktiv tut, denkt, fühlt, bemerkt, empfindet oder wie sein Körper unwillkürlich reagiert. Diktierte Aktionen, Gefühle oder Sätze wie "Du bemerkst, dass dich jemand beobachtet", "Du spürst Angst aufsteigen", "Du blickst dich um", "lässt dein Herz einen Schlag aussetzen", "Deine Hände umklammern fester", "Du spürst eine eisige Kälte in deiner Brust" oder "Du musst jetzt reagieren" sind STRENGSTENS VERBOTEN. Zudem darfst du NIEMALS wörtliche Rede, Dialoge, Gedanken oder aktive Handlungen im Namen des Spielers/seines Charakters formulieren, erfinden oder diktieren (z.B. darfst du ihm niemals Sätze in den Mund legen wie: "Das war's, du hättest mich nie finden dürfen!", rufst du). Der Spieler spricht, fühlt und handelt einzig und allein selbst durch seine Eingaben! Beschreibe stattdessen nur die objektive Umwelt und das Verhalten von NPCs (z.B. "Draußen zieht ein frischer Wind auf und die Blätter rascheln an den Fenstern" anstatt "Du spürst eine Kälte in deiner Brust"). Der Spieler entscheidet ganz allein über seine Wahrnehmung, Gedanken, unwillkürlichen Körperreaktionen, Gefühle, Dialoge und Reaktionen.
       7b. ABSOLUTES ZITIERVERBOT DES NUTZERS: Du als Erzähler darfst NIEMALS die Eingaben, Worte oder Aussagen des Spielers/Nutzers wörtlich in deiner Narration oder Beschreibung wiederholen, zitieren oder zusammenfassend nachplappern. Wenn der Spieler spricht, ist es bereits gesagt worden. NPCs und andere Charaktere in der Welt dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich auf seine Worte beziehen.
       8. ABSOLUTES VERBOT DES SELBSTSTÄNDIGEN / PASSIVEN LOSGEHENS VON FÄHIGKEITEN & KRÄFTEN DES SPIELERS (SPIELER-KRAFTKONTROLLE & AKTIVIERUNGSMONOPOL):
@@ -6600,7 +6864,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           - Längere Reise / Fußmarsch zwischen weit entfernten Orten: Entsprechend der tatsächlichen Reisedauer (z.B. +1 bis +3 Stunden).
           - Rast / Schlaf / bewusste Zeitsprünge: Entsprechend der Schlafdauer (z.B. +1 Stunde Pause, +8 Stunden Nachtruhe).
           Berechne die neue Uhrzeit immer exakt ausgehend von der bisherigen Uhrzeit im Status (z.B. von 12:00 nach einer kurzen Frage auf 12:00 oder 12:01, nach einem kurzen Kampf auf 12:03) und gib sie im [[STATUS]] Block an.
-      21. GEHEIMNISSE & VERBORGENES WISSEN (3-STUFEN-LOGIK - ABSOLUTES SPOILER- UND ENTHÜLLUNGSVERBOT): Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 is eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden. Erst wenn der Spieler das Geheimnis im Chat gesteht, oder wenn NPCs durch gesammelte Indizien im Chat eine unumstößliche, logische Schlussfolgerung im Hier und Jetzt ziehen, darf dieses Wissen enthüllt werden. Jedes Meta-Wissen-Bleeding is strengstens verboten!
+      21. GEHEIMNISSE, VERBORGENES WISSEN & ABSICHTENISOLATION (3-STUFEN-LOGIK & KEINE HELLSEHEREI):
+          // loc2_marker
+          Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 is eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden.
+          ABSICHTENISOLATION ZWISCHEN CHARAKTEREN: NPCs besitzen KEINERLEI Wissen über die geheimen Absichten, Pläne, Hintergedanken oder ungesagten Gefühle anderer Charaktere (sei es anderer NPCs oder des Spielers), solange diese nicht vor ihren Augen/Ohren im Chat explizit geäußert, gestanden oder durch offensichtliche Taten offenbart wurden. Erst wenn der Spieler das Geheimnis im Chat gesteht, oder wenn NPCs durch gesammelte Indizien im Chat eine unumstößliche, logische Schlussfolgerung im Hier und Jetzt ziehen, darf dieses Wissen enthüllt werden. Jedes Meta-Wissen-Bleeding is strengstens verboten!
       22. ABSOLUTES VERBOT DES VORZEITIGEN LORE-ENTHÜLLENS: Wenn ein Lore-Eintrag oder Fakt in der Lore-Datenbank mit '[STRENG GEHEIM:...]' markiert ist, darfst du diesen Fakt, Text oder Inhalt NIEMALS von dir aus im Chat erwähnen, andeuten, spoilern oder referenzieren! Er ist für die Spielfiguren und den Erzähler eine absolute Blackbox, bis der Spieler ihn selbst lüftet oder du ihn per [[LORE_UNLOCK: Name]] im Spielverlauf offiziell freischaltest. Halte dich penibel an dieses Verbot, um dem Spieler nicht die Spannung zu nehmen!
       23. ABSOLUTE UNANTASTBARKEIT BESTEHENDER BEZIEHUNGEN & VERHALTEN: Verändere oder überschreibe niemals Beziehungen ('relationships') oder das festgelegte Verhalten ('conduct', 'behavior') von bestehenden Charakteren. Alle vorgegebenen Beziehungs- und Verhaltensstrukturen sind fix und unveränderlich.
       24. INVENTAR- & AUSRÜSTUNGSUPDATES (SYNCHRONISATION ZUM CHAT - MANDATORY):
@@ -6645,7 +6912,27 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       30. BODENSTÄNDIGE CHARAKTERE & WELTENTWICKLUNG (GLAUBWÜRDIGE HINTERGRÜNDE):
           - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
           - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
-          - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
+          - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
+      31. PERSPEKTIVISCHE WISSENSISOLATION BEI PROLOG, ERSTER SZENE & WELTBESCHREIBUNG (ÜBERRASCHUNGS- & REAKTIONS-PFLICHT):
+          - PROLOG & ERSTE SZENE ISOLATION FÜR NICHT-ANWESENDE CHARAKTERE: Charaktere/NPCs besitzen KEINERLEI Wissen über Geschehnisse, Vorfälle oder Verwandlungen aus der Weltenbeschreibung, dem Prolog oder der ersten Szene (Spielstart), bei denen sie selbst PHYSISCH NICHT ANWESEND waren!
+          - ÜBERRASCHUNG BEI NEU DAZU STOSSENDEN CHARAKTEREN: Wenn ein Charakter das erste Mal eine Szene/einen Raum betritt oder dem Spieler begegnet und der Spieler durch den Prolog, die erste Szene oder jüngste Vorfälle eine dauerhafte Verwandlung erfahren hat, ein verändertes Aussehen hat, verletzt ist, neue Gestalt besitzt oder ungewöhnliche Merkmale trägt, darf dieser dazustoßende Charakter KEINESFALLS so tun, als kenne er diesen Zustand bereits oder als sei er unbeeindruckt.
+          - MANDATORISCHE REAKTION: Der dazustoßende Charakter MUSS glaubwürdig, überrascht, schockiert, erschrocken, verwirrt oder neugierig auf den vorgefundenen Zustand des Spielers reagieren (z. B. entgeistertes Anstarren, "Was ist mit dir geschehen?!", "Wer oder was bist du?!", Fragen nach der Ursache), anstatt die Veränderung stillschweigend hinzunehmen.
+          - NPCs erfahren von den Geschehnissen des Prologs oder der Verwandlung ERST DANN, wenn ihnen der Spieler oder ein Augenzeuge im Chat davon berichtet oder sie im Spielverlauf Beweise dafür finden.
+      32. ABSOLUTE NAMENS-PRIORITÄT & STRIKTES VERBOT ABWEICHENDER ODER ALTER NAMEN (VERBOT VON FANTASIENAMEN ODER VERALTETEN RESTE-NAMEN WIE 'YARA'):
+          - Für die Anrede, Nennung und Referenzierung des Spielers sowie aller Charaktere/NPCs in Erzählungen, Dialogen, Gedanken und Systemanzeigen gelten AUSSCHLIESSLICH die im jeweiligen Charakterbogen definierten Felder:
+            1) "Name des Charakters" (Echter bürgerlicher Name)
+            2) "Rufname (Kampfanzeige)"
+            3) "Spitzname / Titel / Alias"
+            4) "Name der Transformation" (bei aktiver Transformation)
+          - Diese vier Felder haben ABSOLUTE UND UNANFECHTBARE PRIORITÄT!
+          - Es ist der KI, dem Erzähler und allen NPCs STRENGSTENS VERBOTEN, den Spieler oder andere Figuren mit abweichenden, frei erfundenen oder aus alten Versionen/Prompts stammenden Namen (wie z. B. 'Yara' oder unbelegten Wörtern) anzusprechen, zu nennen oder zu beschreiben.
+          - Sollte in Alt-Texten, Weltbeschreibungen, Prolog-Überresten oder Lore-Einträgen ein abweichender Name auftauchen, der nicht mit den oben genannten vier Feldern übereinstimmt, MUSS die KI diesen sofort ignorieren und strikt durch den im Charakterbogen hinterlegten Namen/Rufnamen/Alias/Transformationsnamen ersetzen, um vollkommene Einheitlichkeit zu garantieren!
+          - DYNAMISCHE NAMENSGEBUNG BEI LEEREN TRANSFORMATIONSNAMEN: Sollten bei einer aktiven Verwandlungsform "Name der Transformation" oder "Rufname (Kampfanzeige)" LEER sein, gilt diese Form als UNBENANNT. In diesem Fall können der Spieler oder Charaktere/NPCs dieser Transformation im Laufe der Geschichte/Dialoge einen eigenen Namen geben!
+      33. LOGIK FÜR INHALTE VON KLEIDERSCHRÄNKEN & TRUHEN IN PRIVATEN RÄUMEN (KONTEXT- & GESCHLECHTSLOGIK DER GARDEROBE):
+          - LOGIK UND HISTORIE DES RAUMBESITZERS: In privaten Räumen, Schlafzimmern, Truhen, Schränken oder Ankleiden (wie z. B. im eigenen Zimmer des Spielers oder eines NPCs) muss der vorgefundene Inhalt von Kleiderschränken und Truhen strikt der Identität, der Historie und dem ursprünglichen biologischen Geschlecht/Stand des jeweiligen Eigentümers entsprechen!
+          - VERBOT UNBEGRÜNDETER KONTRAST-KLEIDUNG: War die Spielfigur oder der Raumbesitzer ein Mann (oder befindet man sich im Zimmer/Quartier eines Mannes), befinden sich in dessen Schrank oder Truhe NIEMALS unbegründet Frauenkleider, Mädchenkleider, Röcke, BHs oder Damenunterwäsche.
+          - WEITERBESTAND BEI METAMORPHOSEN & VERWANDLUNGEN: Hat der Spieler z. B. vor Kurzem eine Verwandlung erfahren (z. B. Geschlechtsumwandlung, Verjüngung, Fluch oder Gestaltwechsel), verwandeln sich dadurch NICHT automatisch die Kleidungsstücke in Schränken oder Truhen! Im Schrank eines vormals männlichen Charakters liegen weiterhin ausschließlich Männerkleider der bisherigen Passform, sofern nicht explizit in der Handlung neue Kleidung gekauft, geschenkt oder von jemandem im Raum deponiert wurde.
+          - PLAUSIBILITÄT BEI UNPASSENDER KLEIDUNG: Muss sich der verwandelt/verändert vorgefundene Charakter umziehen, muss die vorgefundene Kleidung in eigenen Schränken realistisch unpassend sein (z. B. viel zu große Herrenhemden/Hosen für einen verjüngten oder weiblich gewordenen Körper) oder es muss aktiv passende Kleidung besorgt werden. Es dürfen nicht wie durch Zauberei passende Mädchenkleider oder Damenkleider in der Truhe eines Mannes auftauchen!`;
 
       setMessages(historyToUse);
 
@@ -6656,7 +6943,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure);
 
       if (notifications.length > 0) {
-        setLoreNotifications(prev => [...prev, ...notifications]);
+        addLoreNotifications(notifications);
       }
 
       const newModelMsg: ChatMessage = { id: `regen-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`, role: 'model', text: finalCleanedText };
@@ -6840,17 +7127,17 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       {/* Floating Lore-Updates Notifications */}
       {loreNotifications.length > 0 && (
         <div className="absolute top-[88px] right-4 z-50 flex flex-col gap-2 max-w-xs pointer-events-none">
-          {loreNotifications.map((notif, notifIdx) => (
+          {loreNotifications.slice(0, 3).map((notif, notifIdx) => (
             <div 
               key={notif.id ? `notif-${notif.id}-${notifIdx}` : `notif-${notifIdx}`} 
-              className="bg-amber-950/90 border border-amber-500/30 text-amber-100 px-3.5 py-2.5 rounded-xl text-xs shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-right duration-300 pointer-events-auto backdrop-blur-md"
+              className="bg-slate-900/95 border border-amber-500/30 text-amber-100 px-3.5 py-2.5 rounded-xl text-xs shadow-2xl flex items-center gap-2.5 animate-in slide-in-from-right duration-300 pointer-events-auto backdrop-blur-md"
             >
-              <span className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg">
+              <span className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg shrink-0">
                 <i className="fa-solid fa-book-open text-xs"></i>
               </span>
               <div className="flex-1 min-w-0">
                 <div className="font-extrabold text-[9px] uppercase tracking-wider text-amber-500">
-                  {notif.type === 'add' ? 'Neuer Codex-Eintrag!' : 'Codex freigeschaltet!'}
+                  {notif.type === 'add' ? 'Neuer Codex-Eintrag' : 'Codex freigeschaltet'}
                 </div>
                 <div className="truncate text-[11px] font-semibold text-slate-200">
                   [{notif.category}] {notif.title}
@@ -6861,9 +7148,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   e.stopPropagation();
                   setLoreNotifications(prev => prev.filter(n => n.id !== notif.id));
                 }}
-                className="text-slate-500 hover:text-slate-300 font-bold px-1 py-0.5 ml-1.5 text-xs"
+                className="text-slate-400 hover:text-slate-200 font-bold px-1.5 py-0.5 ml-1 text-xs rounded hover:bg-slate-800"
+                title="Schließen"
               >
-                
+                ✕
               </button>
             </div>
           ))}
@@ -7088,6 +7376,35 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             return l.includes('körperliche veränderung') || l.includes('körperliche veränderungen') || (l.includes('veränderungen') && !l.includes('klima'));
           }).forEach((el, idx) => {
             const summaryText = resolvedApp.compactChangesSummary || el.value || 'Keine';
+
+            const activeTransId = adventure.player.appearance?.activeTransformationId || 'standard';
+            const activeTransformation = (adventure.player.abilities || []).find(
+              a => a.id === activeTransId || a.name === activeTransId
+            );
+            const isTransActive = Boolean(
+              (activeTransformation && activeTransId !== 'standard') ||
+              (resolvedApp.transformationIntensityVal > 0)
+            );
+
+            const sideEffectsList = getFormSideEffects(activeTransformation, transSettings.pnrThreshold);
+            const duringEffects = sideEffectsList.filter(s => s.phase === 'während');
+            const afterEffects = sideEffectsList.filter(s => s.phase === 'nachwirkung');
+            const pnrEffects = sideEffectsList.filter(s => s.phase === 'risiko_pnr');
+
+            const currentRes = transSettings.resourcePoolCurrent !== undefined ? transSettings.resourcePoolCurrent : 100;
+            const maxRes = transSettings.resourcePoolMax !== undefined ? transSettings.resourcePoolMax : 100;
+            const upkeep = transSettings.resourceUpkeepRate !== undefined ? transSettings.resourceUpkeepRate : 5;
+            const timeUnit = transSettings.timeUnit || 'Min.';
+            const resName = transSettings.resourceName || 'MP';
+            const powerSourceName = transSettings.powerSourceName || adventure.player.powerSource || resolvedApp.powerSource || 'Kraftquelle';
+
+            const remainingDurationVal = upkeep > 0 ? currentRes / upkeep : Infinity;
+            const remainingDurationFormatted = formatDuration(remainingDurationVal, timeUnit);
+            const maxDurationVal = upkeep > 0 ? maxRes / upkeep : Infinity;
+            const maxDurationFormatted = formatDuration(maxDurationVal, timeUnit);
+
+            const transName = activeTransformation?.transformName || activeTransformation?.name || resolvedApp.transformationStageName || 'Aktive Verwandlung';
+
             hudItems.push(
               <button
                 key={`hud-physchange-${el.id || idx}`}
@@ -7100,8 +7417,19 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     value: summaryText,
                     icon: 'fa-dna',
                     colorClass: 'text-teal-400',
-                    details: [
+                    details: isTransActive ? [
                       { label: 'Kategorie', value: 'Charakter & Transformation' },
+                      { label: 'Aktive Form', value: `${transName} (${formatNum(resolvedApp.transformationIntensityVal)}%)` },
+                      { label: 'Verbleibende Dauer', value: `${remainingDurationFormatted} (${formatNum(currentRes)} / ${formatNum(maxRes)} ${resName})` },
+                      { label: 'Max. Gesamtdauer', value: `${maxDurationFormatted} (bei 100% Vorrat)` },
+                      { label: 'Kraftquelle & Erhaltung', value: `${powerSourceName} (-${formatNum(upkeep)} ${resName}/${timeUnit})` },
+                      { label: 'Mögliche Nebenwirkungen (Aktiv)', value: duringEffects.length > 0 ? duringEffects.map(s => `${s.name}: ${s.effect}`).join(' • ') : 'Keine akuten Nebenwirkungen' },
+                      { label: 'Nachwirkungen nach Form', value: afterEffects.length > 0 ? afterEffects.map(s => `${s.name} (${s.duration || 'Temporär'}): ${s.effect}`).join(' • ') : 'Keine' },
+                      { label: 'Point of No Return & Risiken', value: pnrEffects.length > 0 ? pnrEffects.map(s => `${s.name}: ${s.effect}`).join(' • ') : `Point of No Return ab ${formatNum(transSettings.pnrThreshold)}%` },
+                      { label: 'Körperliche Veränderungen', value: summaryText },
+                      { label: 'Originalprofil', value: 'Unverändert geschützt' }
+                    ] : [
+                      { label: 'Kategorie', value: 'Charakter & Anatomie' },
                       { label: 'Aktuelle Veränderungen', value: summaryText },
                       { label: 'Originalprofil', value: 'Unverändert geschützt' },
                       { label: 'Änderungshistorie', value: 'Logbuch-Aktiv' }
@@ -7114,9 +7442,23 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <span className="font-semibold text-slate-300">
                   Körperliche Veränderungen
                 </span>
-                <span className="font-bold text-teal-400">
-                  {summaryText}
-                </span>
+                {isTransActive ? (
+                  <span className="font-bold text-teal-400 flex items-center gap-1.5 flex-wrap">
+                    <span>{summaryText}</span>
+                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Dauer: {remainingDurationFormatted}
+                    </span>
+                    {duringEffects.length > 0 && (
+                      <span className="text-[10px] font-mono font-medium text-rose-300/90" title={duringEffects.map(s => `${s.name}: ${s.effect}`).join('\n')}>
+                        ({duringEffects.length} Nebenwirkung{duringEffects.length > 1 ? 'en' : ''})
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="font-bold text-teal-400">
+                    {summaryText}
+                  </span>
+                )}
               </button>
             );
           });
@@ -8011,14 +8353,14 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 {showFavoritesMenu && (
                   <div className="absolute bottom-full left-0 mb-2 w-72 bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
                     <div className="p-2.5 px-3 text-[10px] uppercase font-extrabold text-amber-500 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5"><i className="fa-solid fa-star text-amber-400"></i> Favoriten-Techniken</span>
+                      <span className="flex items-center gap-1.5"><i className="fa-solid fa-star text-amber-400"></i> Favoriten</span>
                       <button onClick={() => setShowFavoritesMenu(false)} className="text-slate-500 hover:text-slate-300 text-xs"></button>
                     </div>
                     <div className="max-h-64 overflow-y-auto p-1.5 space-y-1 bg-slate-950/40">
                       {getFavoriteTechniques().length === 0 ? (
                         <div className="p-4 text-center text-xs text-slate-500 italic leading-relaxed">
                           Keine Favoriten markiert.<br />
-                          Markiere Techniken im <span className="text-amber-500/95 font-bold">Logbuch</span> (oben rechts) mit dem Stern-Symbol.
+                          Markiere Techniken, Ultimative Techniken oder Transformationen im <span className="text-amber-500/95 font-bold">Logbuch</span> mit dem Stern-Symbol.
                         </div>
                       ) : (
                         getFavoriteTechniques().map((tech, i) => (
@@ -8026,14 +8368,26 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                             key={tech.id || i}
                             type="button"
                             onClick={() => {
-                              insertFormatting(`*${tech.name}*`, '');
+                              const actionText = tech.category === 'Transformationen' || tech.isTransformation
+                                ? `*aktiviert ${tech.name}*`
+                                : `*setzt ${tech.name} ein*`;
+                              insertFormatting(actionText, '');
                               setShowFavoritesMenu(false);
                             }}
-                            className="w-full text-left p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-850/60 hover:border-amber-500/30 transition-all flex flex-col gap-0.5"
+                            className="w-full text-left p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-850/60 hover:border-amber-500/30 transition-all flex flex-col gap-1"
                           >
-                            <div className="flex justify-between items-center w-full">
-                              <span className="font-bold text-xs text-slate-200">{tech.name}</span>
-                              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 font-bold">Lv. {tech.level || 1}</span>
+                            <div className="flex justify-between items-center w-full gap-1.5">
+                              <span className="font-bold text-xs text-slate-200 truncate">{tech.name}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {tech.category === 'Transformationen' || tech.isTransformation ? (
+                                  <span className="text-[8px] px-1.5 py-0.2 rounded bg-purple-950/70 border border-purple-500/40 text-purple-300 font-extrabold uppercase">Form</span>
+                                ) : tech.category === 'Ultimative Techniken' || tech.isUltimate ? (
+                                  <span className="text-[8px] px-1.5 py-0.2 rounded bg-amber-950/70 border border-amber-500/40 text-amber-300 font-extrabold uppercase">Ultimativ</span>
+                                ) : (
+                                  <span className="text-[8px] px-1.5 py-0.2 rounded bg-indigo-950/70 border border-indigo-500/40 text-indigo-300 font-extrabold uppercase">Technik</span>
+                                )}
+                                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 font-bold">Lv. {tech.level || 1}</span>
+                              </div>
                             </div>
                             {tech.description && (
                               <p className="text-[10px] text-slate-400 leading-tight line-clamp-2 italic">{tech.description}</p>
@@ -8661,8 +9015,18 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
               {/* Left Column (42% on desktop): Narrativer Kampf-Verlauf */}
               <div className="flex-1 lg:w-[42%] xl:w-[40%] flex flex-col min-h-0 overflow-y-auto p-4 pr-2.5 space-y-4 border-b lg:border-b-0 lg:border-r border-slate-800">
-                <div className="text-center pb-2 border-b border-slate-850">
-                  <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase"> Narrativer Kampf-Verlauf </span>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-850">
+                  <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase"> Narrativer Kampf-Verlauf </span>
+                  <button
+                    type="button"
+                    onClick={handleCancelCombat}
+                    disabled={isLoading}
+                    className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 hover:border-red-600 text-red-300 hover:text-red-100 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+                    title="Kampf abbrechen und zum normalen Chat zurückkehren"
+                  >
+                    <i className="fa-solid fa-xmark text-xs"></i>
+                    <span>Kampf abbrechen</span>
+                  </button>
                 </div>
                 
                 {messages.slice(-12).map((msg, idx) => {
@@ -9014,13 +9378,25 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   {combatSubMenu === 'defend' && ' DEFENSIVE STELLUNGEN'}
                   {combatSubMenu === 'items' && ' INVENTAR & ITEMS'}
                 </span>
-                {combatSubMenu !== 'main' && (
-                  <button 
-                    onClick={() => setCombatSubMenu('main')}
-                    className="text-amber-500 hover:text-amber-400 font-bold flex items-center gap-1.5 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 active:scale-95 transition-all text-[9.5px]"
-                  ><i className="fa-solid fa-arrow-left mr-1"></i> HAUPTMENÜ
+                <div className="flex items-center gap-2">
+                  {combatSubMenu !== 'main' && (
+                    <button 
+                      onClick={() => setCombatSubMenu('main')}
+                      className="text-amber-500 hover:text-amber-400 font-bold flex items-center gap-1.5 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 active:scale-95 transition-all text-[9.5px]"
+                    ><i className="fa-solid fa-arrow-left mr-1"></i> HAUPTMENÜ
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCancelCombat}
+                    disabled={isLoading}
+                    className="px-2.5 py-1 bg-red-950/30 hover:bg-red-900/50 border border-red-800/40 hover:border-red-600 text-red-300 hover:text-red-100 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+                    title="Kampf abbrechen und zum normalen Chat zurückkehren"
+                  >
+                    <i className="fa-solid fa-xmark text-xs"></i>
+                    <span>Kampf abbrechen</span>
                   </button>
-                )}
+                </div>
               </div>
 
               {/* Action options contents */}
@@ -10221,6 +10597,16 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 />
                 <button
                   type="button"
+                  onClick={handleCancelCombat}
+                  disabled={isLoading}
+                  className="px-3 py-2.5 bg-slate-950 hover:bg-red-950/60 border border-slate-800 hover:border-red-800/60 text-slate-400 hover:text-red-200 font-bold rounded-lg text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow shrink-0 active:scale-95 disabled:opacity-50"
+                  title="Kampf abbrechen und zum normalen Chat zurückkehren"
+                >
+                  <i className="fa-solid fa-xmark text-red-400 text-xs"></i>
+                  <span>Kampf abbrechen</span>
+                </button>
+                <button
+                  type="button"
                   onClick={handleSend}
                   disabled={isLoading || (!inputText.trim() && queuedCombatActions.length === 0)}
                   className="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-slate-950 font-bold rounded-lg text-xs transition-all flex items-center gap-2 cursor-pointer shadow shrink-0"
@@ -10268,11 +10654,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <span className="text-[10px] text-slate-400 uppercase font-extrabold tracking-wider block">
                   Aktuelle Details
                 </span>
-                <div className="space-y-2 text-xs">
+                <div className="space-y-2 text-xs max-h-[60vh] overflow-y-auto custom-scrollbar pr-1">
                   {selectedHudDetailField.details.map((dt, dIdx) => (
-                    <div key={dIdx} className="flex justify-between items-center py-1 border-b border-slate-800/60 last:border-0">
-                      <span className="text-slate-400 font-medium">{dt.label}</span>
-                      <span className="text-slate-200 font-bold font-mono truncate max-w-[200px]">{dt.value}</span>
+                    <div key={dIdx} className="flex flex-col sm:flex-row sm:justify-between sm:items-start py-1.5 border-b border-slate-800/60 last:border-0 gap-1">
+                      <span className="text-slate-400 font-medium shrink-0 max-w-[150px]">{dt.label}</span>
+                      <span className="text-slate-200 font-bold font-mono text-left sm:text-right break-words">{dt.value}</span>
                     </div>
                   ))}
                 </div>
@@ -10463,6 +10849,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 player={adventure.player}
                 loreDatabase={adventure.loreDatabase}
                 npcs={adventure.npcs}
+                costResources={adventure.world?.costResources}
+                world={adventure.world}
                 onUpdateLore={updatedLore => onUpdateAdventure({ ...adventure, loreDatabase: updatedLore })}
                 onUpdateNpcs={updatedNpcs => onUpdateAdventure({ ...adventure, npcs: updatedNpcs })}
                 onUpdatePlayer={updatedPlayer => onUpdateAdventure({ ...adventure, player: updatedPlayer })}

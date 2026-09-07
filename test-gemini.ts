@@ -5,7 +5,7 @@ async function test() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'gemini-flash-latest',
+      model: 'gemini-3.8-flash',
       contents: "Hello World",
       config: {}
     })

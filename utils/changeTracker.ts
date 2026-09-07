@@ -377,12 +377,28 @@ export const getCompactBodyConditionSummary = (
 
   const hasInjuries = injuries.trim().length > 0;
   const hasCurses = activeConditions.some(c => c.type === 'curse');
-  const hasNegativeEffects = hasInjuries || hasCurses || painLevel === 'stark' || fatigueLevel === 'erschöpft' || fatigueLevel === 'kollaps';
+  const hormonalCond = activeConditions.find(c => 
+    c.name.toLowerCase().includes('hormon') || 
+    c.name.toLowerCase().includes('instabil') ||
+    (c.description && (c.description.toLowerCase().includes('hormon') || c.description.toLowerCase().includes('erregung')))
+  );
+  const mentalCond = activeConditions.find(c => 
+    c.name.toLowerCase().includes('mental') || 
+    c.name.toLowerCase().includes('geist') || 
+    (c.description && (c.description.toLowerCase().includes('mental') || c.description.toLowerCase().includes('kontrolle')))
+  );
+  const hasNegativeEffects = hasInjuries || hasCurses || Boolean(hormonalCond) || Boolean(mentalCond) || painLevel === 'stark' || fatigueLevel === 'erschöpft' || fatigueLevel === 'kollaps';
 
   const details: string[] = [];
   if (hasInjuries) {
     const firstInjury = injuries.split('|')[0]?.trim() || injuries;
     details.push(firstInjury);
+  }
+  if (hormonalCond) {
+    details.push(hormonalCond.description ? (hormonalCond.description.length > 50 ? hormonalCond.description.substring(0, 48) + '...' : hormonalCond.description) : 'Hormonelle Beeinflussung');
+  }
+  if (mentalCond && mentalCond.id !== hormonalCond?.id) {
+    details.push(mentalCond.name);
   }
   if (painLevel && painLevel !== 'keine') {
     details.push(`Schmerzen: ${painLevel}`);
@@ -390,7 +406,7 @@ export const getCompactBodyConditionSummary = (
   if (fatigueLevel && fatigueLevel !== 'normal') {
     details.push(`Erschöpfung: ${fatigueLevel}`);
   }
-  if (hasCurses) {
+  if (hasCurses && !hormonalCond && !mentalCond) {
     details.push('Fluch aktiv');
   }
   if (showPregnancyInHud) {
@@ -423,11 +439,20 @@ export const getCompactBodyConditionSummary = (
   if (fatigueLevel === 'kollaps' || painLevel === 'unerträglich' || injuries.toLowerCase().includes('schwer') || injuries.toLowerCase().includes('tödlich')) {
     statusText = 'Kritisch';
     severity = 'severe';
+  } else if (hormonalCond) {
+    statusText = hormonalCond.name;
+    severity = 'minor';
+  } else if (mentalCond) {
+    statusText = mentalCond.name;
+    severity = 'minor';
   } else if (hasInjuries && hasCurses) {
     statusText = 'Geschwächt';
     severity = 'moderate';
   } else if (hasInjuries || hasCurses) {
     statusText = 'Angeschlagen';
+    severity = 'minor';
+  } else if (activeConditions.length > 0) {
+    statusText = activeConditions[0].name;
     severity = 'minor';
   }
 

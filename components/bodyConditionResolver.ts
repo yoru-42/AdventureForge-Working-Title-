@@ -321,7 +321,30 @@ export const resolveBodyAppearance = (character: Character): ResolvedBodyAppeara
   );
 
   // 4. Active Conditions layer
-  const activeConditions: BodyCondition[] = (baseApp.activeConditions || []).filter(c => c.isActive);
+  const activeConditions: BodyCondition[] = [...(baseApp.activeConditions || []).filter(c => c.isActive)];
+
+  // Also seamlessly check if character.abilities contains any bodily condition mistakenly entered as a technique (e.g. source: Fremdeinfluss or Hormonelle Instabilität)
+  if (Array.isArray((character as any)?.abilities)) {
+    (character as any).abilities.forEach((a: any) => {
+      const sLower = (a.source || '').toLowerCase();
+      const nLower = (a.name || '').toLowerCase();
+      const isCondition = sLower === 'fremdeinfluss' || nLower.includes('hormonelle instabilität') || (nLower.includes('hormon') && (a.category || '').toLowerCase() !== 'transformationen');
+      if (isCondition && !activeConditions.some(c => c.name.toLowerCase() === (a.name || '').toLowerCase())) {
+        activeConditions.push({
+          id: a.id || 'cond-migrated-fremd',
+          name: a.name || 'Hormonelle Instabilität',
+          type: 'curse',
+          category: 'Zustand / Fremdeinfluss',
+          isActive: true,
+          severity: 'leicht',
+          source: 'Akira (Fremdeinfluss)',
+          duration: 'Temporär (Aktiv)',
+          description: a.description || 'Ein Zustand, der durch Akiras Einwirkung auf ihre Hormone verursacht wird und sie in eine leichte Erregung versetzt.'
+        });
+      }
+    });
+  }
+
   const specialFeatures: string[] = [];
   const hudTags: string[] = [];
 
@@ -895,6 +918,68 @@ export const removeConditionFromCharacter = (character: Character, conditionId: 
       ...currentApp,
       activeConditions: (currentApp.activeConditions || []).filter(c => c.id !== conditionId),
       customConditions: (currentApp.customConditions || []).filter(c => c.id !== conditionId)
+    }
+  };
+};
+
+/**
+ * Automatically cleans up any physical conditions (like "Hormonelle Instabilität" or items with source "Fremdeinfluss")
+ * that were mistakenly saved in player.abilities, moving them into player.appearance.activeConditions
+ * so they appear under Character-Silhouette Status-Zusammenfassung and HUD Körperlicher Zustand instead of Logbook Techniken.
+ */
+export const migrateFremdeinflussConditions = (player: Character): { updated: boolean; player: Character } => {
+  if (!player || !Array.isArray(player.abilities)) return { updated: false, player };
+
+  const currentApp = player.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' };
+  const currentActiveConditions = [...(currentApp.activeConditions || [])];
+  let hasChanges = false;
+
+  const cleanedAbilities = player.abilities.filter((a: any) => {
+    const sLower = (a.source || '').toLowerCase();
+    const nLower = (a.name || '').toLowerCase();
+    const dLower = (a.description || '').toLowerCase();
+
+    const isBodilyCondition = 
+      sLower === 'fremdeinfluss' || 
+      nLower.includes('hormonelle instabilität') || 
+      (nLower.includes('hormon') && (a.category || '').toLowerCase() !== 'transformationen') ||
+      (dLower.includes('akiras einwirkung') && nLower.includes('instabilität'));
+
+    if (isBodilyCondition) {
+      hasChanges = true;
+      const conditionName = a.name || 'Hormonelle Instabilität';
+      const exists = currentActiveConditions.some(c => c.name.toLowerCase() === conditionName.toLowerCase());
+      if (!exists) {
+        currentActiveConditions.push({
+          id: a.id || `cond-migrated-${Date.now()}`,
+          name: conditionName,
+          type: 'curse',
+          category: 'Zustand / Fremdeinfluss',
+          isActive: true,
+          severity: 'leicht',
+          source: 'Akira (Fremdeinfluss)',
+          duration: 'Temporär (Aktiv)',
+          description: a.description || 'Ein Zustand, der durch Akiras Einwirkung auf ihre Hormone verursacht wird und sie in eine leichte Erregung versetzt.'
+        });
+      }
+      return false; // remove from trainable abilities
+    }
+    return true; // keep genuine technique
+  });
+
+  if (!hasChanges) {
+    return { updated: false, player };
+  }
+
+  return {
+    updated: true,
+    player: {
+      ...player,
+      abilities: cleanedAbilities,
+      appearance: {
+        ...currentApp,
+        activeConditions: currentActiveConditions
+      }
     }
   };
 };

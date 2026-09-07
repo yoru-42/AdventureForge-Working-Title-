@@ -5,6 +5,7 @@ import AdventureEditor from './components/AdventureEditor';
 import GameView from './components/GameView';
 import UserProfileEditor from './components/UserProfileEditor';
 import { BodySilhouette } from './components/BodySilhouette';
+import { migrateFremdeinflussConditions } from './components/bodyConditionResolver';
 import { GeminiService } from './services/geminiService';
 import { StorageService } from './lib/storageService';
 import { syncCharacterAndHoldingRoles } from './lib/economySync';
@@ -48,7 +49,9 @@ export function isClothingItemTitle(title?: string, itemType?: string): boolean 
     'hemd', 'stiefel', 'schürze', 'schuerze', 'nachthemd', 'hose', 'mantel', 'robe', 'gewand',
     'kleid', 'schuhe', 'mütze', 'muetze', 'hut', 'oberteil', 'unterteil', 'kleidung', 'outfit',
     'sandalen', 'wams', 'tunik', 'tunika', 'rock', 'lederkluft', 'kochkluft', 'arbeitsbekleidung',
-    'rüstung', 'panzer', 'beinschienen'
+    'rüstung', 'panzer', 'beinschienen', 'stoffschuhe', 'lederschuhe', 'arbeitsschuhe', 'alltagshemd',
+    'alltagshose', 'arbeitskleidung', 'weste', 'jacke', 't-shirt', 'shirt', 'handschuhe', 'handschuh',
+    'socken', 'cape', 'umhang', 'schal', 'pantoffel', 'pantoffeln', 'stiefelchen'
   ];
   return clothingKeywords.some(kw => lowerTitle.includes(kw));
 }
@@ -180,6 +183,7 @@ const App: React.FC = () => {
   const [activeLogbookTab, setActiveLogbookTab] = useState<'character' | 'stats' | 'abilities' | 'inventory' | 'chronicle' | 'codex'>('character');
   const [statsSubTab, setStatsSubTab] = useState<'resources' | 'radar'>('resources');
   const [codexSubTab, setCodexSubTab] = useState<'rules' | 'timeline'>('rules');
+  const [abilitiesSubTab, setAbilitiesSubTab] = useState<'all' | 'favoriten' | 'techniken' | 'ultimative' | 'transformationen'>('all');
   const [newWeaponName, setNewWeaponName] = useState("");
   const [newItemName, setNewItemName] = useState("");
 
@@ -215,6 +219,16 @@ const App: React.FC = () => {
           };
           deduplicateIds(savedAdventures);
           // --- End Data Sanitization ---
+
+          // Migrate conditions mistakenly saved as abilities (e.g. Hormonelle Instabilität / Fremdeinfluss)
+          savedAdventures.forEach(adv => {
+            if (adv.player) {
+              const mig = migrateFremdeinflussConditions(adv.player);
+              if (mig.updated) {
+                adv.player = mig.player;
+              }
+            }
+          });
 
           setAdventures(savedAdventures);
 
@@ -609,7 +623,7 @@ const App: React.FC = () => {
         if (!name) return;
         const trimmed = name.trim();
         const lower = trimmed.toLowerCase();
-        if (!trimmed || isClothingPlaceholder(trimmed)) return;
+        if (!trimmed || isClothingPlaceholder(trimmed) || isClothingItemTitle(trimmed)) return;
 
         const existsIdx = updatedLore.findIndex(e => e.category === 'Gegenstände' && e.title.trim().toLowerCase() === lower);
         if (existsIdx > -1) {
@@ -652,11 +666,6 @@ const App: React.FC = () => {
       }
       if (Array.isArray(updatedAdv.structuredInventory.generalItems)) {
         updatedAdv.structuredInventory.generalItems.forEach((itm: string) => ensureItemInCodex(itm, false));
-      }
-      if (updatedAdv.structuredInventory.accessories) {
-        Object.values(updatedAdv.structuredInventory.accessories).forEach((itm: any) => {
-          if (typeof itm === 'string') ensureItemInCodex(itm, false);
-        });
       }
 
       // Consolidate lore outfits and remove placeholders
@@ -736,6 +745,14 @@ const App: React.FC = () => {
             } : undefined
           }
         };
+      }
+    }
+
+    // Automatically migrate conditions mistakenly saved in player.abilities (e.g. Hormonelle Instabilität / Fremdeinfluss)
+    if (finalAdv.player) {
+      const mig = migrateFremdeinflussConditions(finalAdv.player);
+      if (mig.updated) {
+        finalAdv = { ...finalAdv, player: mig.player };
       }
     }
 
@@ -1106,8 +1123,8 @@ const App: React.FC = () => {
                 {/* TRANSFORMATIONEN SECTION */}
                 {currentAdventure.player.abilities?.some(a => a.category === 'Transformationen') && (
                   <div className="space-y-3 pt-4 border-t border-slate-800/60">
-                    <span className="text-[10px] text-purple-400 font-bold uppercase tracking-widest block">
-                      🌀 Verfügbare Transformationen
+                    <span className="text-[10px] text-purple-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                      <i className="fa-solid fa-masks-theater text-purple-400"></i> Verfügbare Transformationen
                     </span>
                     <div className="grid grid-cols-1 gap-2">
                       {currentAdventure.player.abilities
@@ -1612,245 +1629,527 @@ const App: React.FC = () => {
 
             {activeLogbookTab === 'abilities' && (
               <div className="space-y-4 animate-in fade-in duration-200">
-                <span className="text-[10px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
-                  <i className="fa-solid fa-wand-magic-sparkles text-amber-500 animate-pulse"></i> Techniken & Fertigkeiten (Progression)
-                </span>
-                
-                <div className="space-y-3">
-                  {(() => {
-                    const abilities = currentAdventure.player.abilities || [];
-                    const techList: any[] = [];
-                    abilities.forEach(ability => {
-                      if (ability.techniqueList && ability.techniqueList.length > 0) {
-                        ability.techniqueList.forEach((t: any) => {
-                          techList.push({ ...t, abilityId: ability.id, abilitySource: ability.source });
-                        });
-                      }
-                    });
+                {(() => {
+                  const abilities = currentAdventure.player.abilities || [];
+                  const rawList: any[] = [];
+                  const seenKeys = new Set<string>();
 
-                    if (techList.length === 0) {
-                      return (
-                        <p className="text-xs text-slate-500 italic py-4 text-center">Noch keine strukturierten Techniken für diesen Charakter definiert.</p>
-                      );
+                  const determineCategory = (techObj: any, defaultCat: string): 'Techniken' | 'Ultimative Techniken' | 'Transformationen' => {
+                    const catLower = (techObj.abilityCategory || techObj.category || defaultCat || '').toLowerCase();
+                    const typeLower = (techObj.type || '').toLowerCase();
+                    const subLower = (techObj.subtype || '').toLowerCase();
+                    const nameLower = (techObj.name || '').toLowerCase();
+                    const tierLower = (techObj.tier || '').toLowerCase();
+
+                    if (
+                      catLower.includes('transform') ||
+                      catLower.includes('verwandlung') ||
+                      typeLower === 'transformation' ||
+                      subLower.includes('transform') ||
+                      subLower.includes('form') ||
+                      subLower.includes('gestalt') ||
+                      nameLower.includes('transformation') ||
+                      nameLower.includes('verwandlung') ||
+                      nameLower.endsWith('-form') ||
+                      nameLower.endsWith(' form')
+                    ) {
+                      return 'Transformationen';
                     }
 
-                    return techList.map((tech, idx) => {
-                      const level = tech.level || 1;
-                      const maxLevel = tech.maxLevel || 10;
-                      const logic = currentAdventure?.world?.techniqueProgressionLogic || tech.progressionLogic || 'ep';
+                    if (
+                      catLower.includes('ultimat') ||
+                      catLower.includes('finisher') ||
+                      tierLower.includes('4') ||
+                      tierLower.includes('ultimativ') ||
+                      typeLower === 'ultimativ' ||
+                      typeLower === 'ultimate' ||
+                      subLower.includes('ultimat') ||
+                      subLower.includes('finisher') ||
+                      nameLower.includes('ultimativ') ||
+                      nameLower.includes('finisher')
+                    ) {
+                      return 'Ultimative Techniken';
+                    }
+
+                    if (catLower.includes('ultimative')) return 'Ultimative Techniken';
+                    if (catLower.includes('transform')) return 'Transformationen';
+
+                    return 'Techniken';
+                  };
+
+                  abilities.forEach((ability: any, abIdx: number) => {
+                    const abCat = ability.category || 'Techniken';
+                    const hasTechList = Array.isArray(ability.techniqueList) && ability.techniqueList.length > 0;
+
+                    if (hasTechList) {
+                      ability.techniqueList.forEach((t: any, tIdx: number) => {
+                        if (!t || !t.name || !t.name.trim()) return;
+                        const nameClean = t.name.trim();
+                        const key = `${ability.id || abIdx}-${t.id || tIdx}-${nameClean.toLowerCase()}`;
+                        if (seenKeys.has(key)) return;
+                        seenKeys.add(key);
+
+                        const assignedCat = determineCategory(t, abCat);
+                        rawList.push({
+                          ...t,
+                          id: t.id || `tech-${ability.id || abIdx}-${tIdx}`,
+                          name: nameClean,
+                          abilityId: ability.id || `ab-${abIdx}`,
+                          abilitySource: ability.source || currentAdventure.player.powerSource || '',
+                          category: assignedCat,
+                          isFavorite: !!(t.isFavorite || t.favorite),
+                          isStandaloneAbility: false
+                        });
+                      });
+                    }
+
+                    const isTrans = abCat === 'Transformationen';
+                    const isUlti = abCat === 'Ultimative Techniken';
+                    const isTech = abCat === 'Techniken';
+
+                    const mainName = (isTrans ? (ability.transformName || ability.name) : ability.name || '').trim();
+                    if (mainName) {
+                      const alreadyHasTechniqueWithName = hasTechList && ability.techniqueList.some((t: any) => (t.name || '').trim().toLowerCase() === mainName.toLowerCase());
                       
-                      return (
-                        <div key={tech.id || idx} className="bg-slate-950/40 border border-slate-850 rounded-2xl p-4 space-y-3 hover:border-slate-800 transition-all">
-                          <div className="flex justify-between items-start gap-3">
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-bold text-white">{tech.name}</span>
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-mono font-bold">
-                                  Lv. {level} / {maxLevel}
-                                </span>
-                                <button
-                                  onClick={() => {
-                                    const updatedAbilities = currentAdventure.player.abilities?.map((a: any) => {
-                                      if (a.id === tech.abilityId) {
-                                        return {
-                                          ...a,
-                                          techniqueList: a.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, isFavorite: !t.isFavorite } : t)
-                                        };
-                                      }
-                                      return a;
-                                    });
-                                    updateAdventure({
-                                      ...currentAdventure,
-                                      player: { ...currentAdventure.player, abilities: updatedAbilities }
-                                    });
-                                  }}
-                                  className="p-1 text-slate-500 hover:text-amber-400 active:scale-95 transition-all text-xs flex items-center justify-center cursor-pointer"
-                                  title={tech.isFavorite ? "Aus Favoriten entfernen" : "Als Favorit markieren"}
-                                >
-                                  <i className={tech.isFavorite ? "fa-solid fa-star text-amber-400" : "fa-regular fa-star"}></i>
-                                </button>
-                              </div>
-                              <p className="text-[11px] text-slate-400 italic leading-relaxed">{tech.description || 'Keine nähere Beschreibung.'}</p>
-                              {tech.abilitySource && (
-                                <span className="inline-block text-[9px] text-amber-500/80 font-semibold uppercase tracking-wide">
-                                  Quelle: {tech.abilitySource}
-                                </span>
-                              )}
-                            </div>
-                            
-                              <span className="text-[9.5px] px-2 py-0.5 rounded-full font-extrabold uppercase border bg-slate-900 shrink-0 select-none border-slate-800 text-slate-400">
-                                {logic === 'ep' && 'EP'}
-                                {logic === 'training' && 'Training'}
-                                {logic === 'milestone' && 'Meilenstein'}
-                                {logic === 'static' && 'Statisch'}
-                              </span>
-                          </div>
+                      if (!hasTechList || (!alreadyHasTechniqueWithName && (isTrans || isUlti || isTech))) {
+                        const key = `${ability.id || abIdx}-main-${mainName.toLowerCase()}`;
+                        if (!seenKeys.has(key)) {
+                          seenKeys.add(key);
+                          const assignedCat = determineCategory({ name: mainName, category: abCat }, abCat);
+                          rawList.push({
+                            id: ability.id || `ab-${abIdx}`,
+                            name: mainName,
+                            description: ability.description || (isTrans ? 'Verwandlungsform mit modifizierten Attributen und Kräften.' : 'Fähigkeit des Charakters.'),
+                            abilityId: ability.id || `ab-${abIdx}`,
+                            abilitySource: ability.source || currentAdventure.player.powerSource || '',
+                            category: assignedCat,
+                            cost: ability.cost,
+                            level: ability.level || 1,
+                            maxLevel: ability.maxLevel || 10,
+                            xp: ability.xp || 0,
+                            xpNeeded: ability.xpNeeded || 100,
+                            xpGainPerUse: ability.xpGainPerUse || 25,
+                            trainingProgress: ability.trainingProgress || 0,
+                            trainingRequired: ability.trainingRequired || 3,
+                            milestoneRequirement: ability.milestoneRequirement,
+                            staticCost: ability.staticCost,
+                            progressionLogic: ability.progressionLogic,
+                            isFavorite: !!(ability.isFavorite || ability.favorite),
+                            isStandaloneAbility: true
+                          });
+                        }
+                      }
+                    }
+                  });
 
-                          {logic === 'ep' && (
-                            <div className="space-y-2 pt-1">
-                              <div className="flex justify-between text-[10px] text-slate-500 font-bold">
-                                <span>ERFAHRUNGSPUNKTE (XP)</span>
-                                <span className="font-mono text-indigo-400">{tech.xp || 0} / {tech.xpNeeded || 100} XP</span>
-                              </div>
-                              <div className="w-full bg-slate-900 rounded-full h-1.5 border border-slate-850 overflow-hidden">
-                                <div 
-                                  className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full rounded-full transition-all" 
-                                  style={{ width: `${Math.min(100, ((tech.xp || 0) / (tech.xpNeeded || 100)) * 100)}%` }}
-                                />
-                              </div>
-                              <div className="flex gap-2 pt-1">
-                                <button
-                                  disabled={level >= maxLevel}
-                                  onClick={() => {
-                                    const gain = tech.xpGainPerUse || 25;
-                                    let nextXp = (tech.xp || 0) + gain;
-                                    let nextLvl = level;
-                                    const needed = tech.xpNeeded || 100;
-                                    if (nextXp >= needed) {
-                                      nextXp = nextXp % needed;
-                                      nextLvl = Math.min(maxLevel, nextLvl + 1);
-                                    }
-                                    const updatedAbilities = currentAdventure.player.abilities?.map((a: any) => {
-                                      if (a.id === tech.abilityId) {
-                                        return {
-                                          ...a,
-                                          techniqueList: a.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, xp: nextXp, level: nextLvl } : t)
-                                        };
-                                      }
-                                      return a;
-                                    });
-                                    updateAdventure({
-                                      ...currentAdventure,
-                                      player: { ...currentAdventure.player, abilities: updatedAbilities }
-                                    });
-                                  }}
-                                  className="flex-1 py-1 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-indigo-400 hover:border-indigo-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                                >
-                                  <i className="fa-solid fa-bolt"></i> Anwenden & Üben (+{tech.xpGainPerUse || 25} XP)
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                  if (rawList.length === 0) {
+                    const legacySkills = currentAdventure.player.techniques || currentAdventure.player.skills || '';
+                    if (typeof legacySkills === 'string' && legacySkills.trim()) {
+                      legacySkills.split(/[,\n;]/).map(s => s.trim()).filter(Boolean).forEach((tName, idx) => {
+                        const key = `legacy-${tName.toLowerCase()}`;
+                        if (!seenKeys.has(key)) {
+                          seenKeys.add(key);
+                          rawList.push({
+                            id: `legacy-${idx}`,
+                            name: tName,
+                            description: 'Fertigkeit aus Charakterprofil.',
+                            abilityId: `legacy-${idx}`,
+                            abilitySource: currentAdventure.player.powerSource || '',
+                            category: 'Techniken',
+                            level: 1,
+                            maxLevel: 10,
+                            xp: 0,
+                            xpNeeded: 100,
+                            xpGainPerUse: 25,
+                            trainingProgress: 0,
+                            trainingRequired: 3,
+                            isFavorite: false,
+                            isStandaloneAbility: true
+                          });
+                        }
+                      });
+                    }
+                  }
 
-                          {logic === 'training' && (
-                            <div className="space-y-2 pt-1">
-                              <div className="flex justify-between text-[10px] text-slate-500 font-bold">
-                                <span>TRAININGS-EINHEITEN</span>
-                                <span className="font-mono text-cyan-400">{tech.trainingProgress || 0} / {tech.trainingRequired || 3} Übungen</span>
-                              </div>
-                              <div className="w-full bg-slate-900 rounded-full h-1.5 border border-slate-850 overflow-hidden">
-                                <div 
-                                  className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full rounded-full transition-all" 
-                                  style={{ width: `${Math.min(100, ((tech.trainingProgress || 0) / (tech.trainingRequired || 3)) * 100)}%` }}
-                                />
-                              </div>
-                              <div className="flex gap-2 pt-1">
-                                <button
-                                  disabled={level >= maxLevel}
-                                  onClick={() => {
-                                    let nextProg = (tech.trainingProgress || 0) + 1;
-                                    let nextLvl = level;
-                                    const req = tech.trainingRequired || 3;
-                                    if (nextProg >= req) {
-                                      nextProg = 0;
-                                      nextLvl = Math.min(maxLevel, nextLvl + 1);
-                                    }
-                                    const updatedAbilities = currentAdventure.player.abilities?.map((a: any) => {
-                                      if (a.id === tech.abilityId) {
-                                        return {
-                                          ...a,
-                                          techniqueList: a.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, trainingProgress: nextProg, level: nextLvl } : t)
-                                        };
-                                      }
-                                      return a;
-                                    });
-                                    updateAdventure({
-                                      ...currentAdventure,
-                                      player: { ...currentAdventure.player, abilities: updatedAbilities }
-                                    });
-                                  }}
-                                  className="flex-1 py-1 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-cyan-400 hover:border-cyan-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                                >
-                                  <i className="fa-solid fa-dumbbell"></i> Aktiv Trainieren (+1 Einheit)
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                  const allCount = rawList.length;
+                  const favoritenCount = rawList.filter(t => !!t.isFavorite).length;
+                  const technikenCount = rawList.filter(t => t.category === 'Techniken').length;
+                  const ultiCount = rawList.filter(t => t.category === 'Ultimative Techniken').length;
+                  const transCount = rawList.filter(t => t.category === 'Transformationen').length;
 
-                          {logic === 'milestone' && (
-                            <div className="space-y-2 pt-1">
-                              <div className="bg-slate-900/50 border border-slate-850 p-2.5 rounded-xl text-[10.5px] text-slate-300">
-                                <span className="font-extrabold text-amber-500 uppercase tracking-wide mr-1 inline-flex items-center gap-1 mb-0.5">
-                                  <i className="fa-solid fa-flag-checkered text-[10px]"></i> Nächste Bedingung:
-                                </span>
-                                <span className="italic">"{tech.milestoneRequirement || 'Erreiche den nächsten großen Meilenstein in der Story.'}"</span>
-                              </div>
-                              <div className="flex gap-2 pt-1">
-                                <button
-                                  disabled={level >= maxLevel}
-                                  onClick={() => {
-                                    const updatedAbilities = currentAdventure.player.abilities?.map((a: any) => {
-                                      if (a.id === tech.abilityId) {
-                                        return {
-                                          ...a,
-                                          techniqueList: a.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, level: Math.min(maxLevel, level + 1) } : t)
-                                        };
-                                      }
-                                      return a;
-                                    });
-                                    updateAdventure({
-                                      ...currentAdventure,
-                                      player: { ...currentAdventure.player, abilities: updatedAbilities }
-                                    });
-                                  }}
-                                  className="flex-1 py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-500 text-[10px] font-bold text-amber-500 transition-all flex items-center justify-center gap-1.5 shadow cursor-pointer"
-                                >
-                                  <i className="fa-solid fa-circle-check"></i> Meilenstein erreicht & Level aufsteigen
-                                </button>
-                              </div>
-                            </div>
-                          )}
+                  const filteredList = rawList.filter(t => {
+                    if (abilitiesSubTab === 'favoriten') return !!t.isFavorite;
+                    if (abilitiesSubTab === 'techniken') return t.category === 'Techniken';
+                    if (abilitiesSubTab === 'ultimative') return t.category === 'Ultimative Techniken';
+                    if (abilitiesSubTab === 'transformationen') return t.category === 'Transformationen';
+                    return true;
+                  });
 
-                          {logic === 'static' && (
-                            <div className="space-y-2 pt-1">
-                              {tech.staticCost && (
-                                <div className="bg-slate-900/50 border border-slate-850 p-2.5 rounded-xl text-[10.5px] text-slate-300">
-                                  <span className="font-extrabold text-indigo-400 uppercase tracking-wide mr-1 inline-flex items-center gap-1 mb-0.5">
-                                    <i className="fa-solid fa-lock text-[10px]"></i> Upgrade-Voraussetzung:
-                                  </span>
-                                  <span className="italic">"{tech.staticCost}"</span>
-                                </div>
-                              )}
-                              <div className="flex gap-2 pt-1">
-                                <button
-                                  disabled={level >= maxLevel}
-                                  onClick={() => {
-                                    const updatedAbilities = currentAdventure.player.abilities?.map((a: any) => {
-                                      if (a.id === tech.abilityId) {
-                                        return {
-                                          ...a,
-                                          techniqueList: a.techniqueList?.map((t: any) => t.id === tech.id ? { ...t, level: Math.min(maxLevel, level + 1) } : t)
-                                        };
-                                      }
-                                      return a;
-                                    });
-                                    updateAdventure({
-                                      ...currentAdventure,
-                                      player: { ...currentAdventure.player, abilities: updatedAbilities }
-                                    });
-                                  }}
-                                  className="flex-1 py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500 text-[10px] font-bold text-indigo-400 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                                >
-                                  <i className="fa-solid fa-unlock-keyhole"></i> Manuell freischalten / Level aufwerten
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
+                  const updateItemInAdventure = (item: any, updater: (target: any) => any) => {
+                    const updatedAbilities = (currentAdventure.player.abilities || []).map((a: any) => {
+                      if (a.id === item.abilityId) {
+                        if (item.isStandaloneAbility || !a.techniqueList || a.techniqueList.length === 0) {
+                          const updated = updater(a);
+                          return {
+                            ...a,
+                            ...updated,
+                            techniqueList: a.techniqueList?.map((t: any) => t.id === item.id ? updater(t) : t)
+                          };
+                        } else {
+                          return {
+                            ...a,
+                            techniqueList: a.techniqueList.map((t: any) => t.id === item.id ? updater(t) : t)
+                          };
+                        }
+                      }
+                      return a;
                     });
-                  })()}
-                </div>
+                    updateAdventure({
+                      ...currentAdventure,
+                      player: { ...currentAdventure.player, abilities: updatedAbilities }
+                    });
+                  };
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Header & Count */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                        <span className="text-[10px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                          <i className="fa-solid fa-wand-magic-sparkles text-amber-500"></i> Techniken, Ultimative Techniken & Transformationen
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {allCount} {allCount === 1 ? 'Eintrag' : 'Einträge'} gesamt
+                        </span>
+                      </div>
+
+                      {/* Category Filter Tabs */}
+                      <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setAbilitiesSubTab('all')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            abilitiesSubTab === 'all'
+                              ? 'bg-amber-500 text-slate-950 shadow-md font-extrabold'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
+                          }`}
+                        >
+                          <span>Alle</span>
+                          <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-mono font-bold ${
+                            abilitiesSubTab === 'all' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-500'
+                          }`}>
+                            {allCount}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setAbilitiesSubTab('favoriten')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            abilitiesSubTab === 'favoriten'
+                              ? 'bg-amber-400 text-slate-950 shadow-md font-extrabold'
+                              : 'text-slate-400 hover:text-amber-400 hover:bg-slate-900/50'
+                          }`}
+                        >
+                          <i className="fa-solid fa-star text-[10px] text-amber-500"></i>
+                          <span>Favoriten</span>
+                          <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-mono font-bold ${
+                            abilitiesSubTab === 'favoriten' ? 'bg-slate-950 text-amber-400' : 'bg-slate-900 text-slate-500'
+                          }`}>
+                            {favoritenCount}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setAbilitiesSubTab('techniken')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            abilitiesSubTab === 'techniken'
+                              ? 'bg-indigo-600 text-white shadow-md font-extrabold'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
+                          }`}
+                        >
+                          <i className="fa-solid fa-wand-magic-sparkles text-[10px]"></i>
+                          <span>Techniken</span>
+                          <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-mono font-bold ${
+                            abilitiesSubTab === 'techniken' ? 'bg-indigo-950 text-indigo-200' : 'bg-slate-900 text-slate-500'
+                          }`}>
+                            {technikenCount}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setAbilitiesSubTab('ultimative')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            abilitiesSubTab === 'ultimative'
+                              ? 'bg-amber-600 text-white shadow-md font-extrabold'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
+                          }`}
+                        >
+                          <i className="fa-solid fa-burst text-[10px]"></i>
+                          <span>Ultimative Techniken</span>
+                          <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-mono font-bold ${
+                            abilitiesSubTab === 'ultimative' ? 'bg-amber-950 text-amber-200' : 'bg-slate-900 text-slate-500'
+                          }`}>
+                            {ultiCount}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setAbilitiesSubTab('transformationen')}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            abilitiesSubTab === 'transformationen'
+                              ? 'bg-purple-600 text-white shadow-md font-extrabold'
+                              : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
+                          }`}
+                        >
+                          <i className="fa-solid fa-masks-theater text-[10px]"></i>
+                          <span>Transformationen</span>
+                          <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-mono font-bold ${
+                            abilitiesSubTab === 'transformationen' ? 'bg-purple-950 text-purple-200' : 'bg-slate-900 text-slate-500'
+                          }`}>
+                            {transCount}
+                          </span>
+                        </button>
+                      </div>
+
+                      {/* Entries List */}
+                      <div className="space-y-3">
+                        {filteredList.length === 0 ? (
+                          <div className="p-6 text-center bg-slate-950/30 rounded-2xl border border-slate-850">
+                            <p className="text-xs text-slate-500 italic">
+                              {abilitiesSubTab === 'all'
+                                ? 'Noch keine Techniken, Ultimative Techniken oder Transformationen für diesen Charakter definiert.'
+                                : abilitiesSubTab === 'favoriten'
+                                ? 'Noch keine Favoriten markiert. Klicke auf das Stern-Symbol einer Technik, Ultimativen Technik oder Transformation, um sie als Favorit zu markieren.'
+                                : abilitiesSubTab === 'techniken'
+                                ? 'Keine Standard-Techniken vorhanden.'
+                                : abilitiesSubTab === 'ultimative'
+                                ? 'Keine Ultimativen Techniken vorhanden.'
+                                : 'Keine Transformationen vorhanden.'}
+                            </p>
+                          </div>
+                        ) : (
+                          filteredList.map((tech, idx) => {
+                            const level = tech.level || 1;
+                            const maxLevel = tech.maxLevel || 10;
+                            const logic = currentAdventure?.world?.techniqueProgressionLogic || tech.progressionLogic || 'ep';
+                            const isTransformation = tech.category === 'Transformationen';
+                            const isUltimate = tech.category === 'Ultimative Techniken';
+                            const isTransActive = isTransformation && currentAdventure.player.appearance?.activeTransformationId === tech.abilityId;
+
+                            return (
+                              <div 
+                                key={tech.id || idx} 
+                                className={`bg-slate-950/40 border rounded-2xl p-4 space-y-3 transition-all ${
+                                  isTransActive
+                                    ? 'border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.15)] bg-purple-950/10'
+                                    : isUltimate
+                                    ? 'border-slate-850 hover:border-amber-500/40'
+                                    : isTransformation
+                                    ? 'border-slate-850 hover:border-purple-500/40'
+                                    : 'border-slate-850 hover:border-slate-800'
+                                }`}
+                              >
+                                <div className="flex justify-between items-start gap-3">
+                                  <div className="space-y-1.5 flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-sm font-bold text-white truncate">{tech.name}</span>
+                                      
+                                      {/* Category Badge */}
+                                      {isUltimate ? (
+                                        <span className="text-[9px] px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-extrabold uppercase tracking-wide">
+                                          Ultimativ
+                                        </span>
+                                      ) : isTransformation ? (
+                                        <span className="text-[9px] px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 font-extrabold uppercase tracking-wide">
+                                          Transformation
+                                        </span>
+                                      ) : (
+                                        <span className="text-[9px] px-2 py-0.5 rounded-md bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-extrabold uppercase tracking-wide">
+                                          Technik
+                                        </span>
+                                      )}
+
+                                      {/* Transformation Active Badge */}
+                                      {isTransActive && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/25 border border-purple-500/40 text-purple-200 font-bold animate-pulse">
+                                          AKTIV
+                                        </span>
+                                      )}
+
+                                      {/* Level Badge */}
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-mono font-bold">
+                                        Lv. {level} / {maxLevel}
+                                      </span>
+
+                                      {/* Favorite Toggle */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const nextFav = !tech.isFavorite;
+                                          updateItemInAdventure(tech, (t) => ({ ...t, isFavorite: nextFav, favorite: nextFav }));
+                                        }}
+                                        className="p-1 text-slate-500 hover:text-amber-400 active:scale-95 transition-all text-xs flex items-center justify-center cursor-pointer"
+                                        title={tech.isFavorite ? "Aus Favoriten entfernen" : "Als Favorit markieren"}
+                                      >
+                                        <i className={tech.isFavorite ? "fa-solid fa-star text-amber-400" : "fa-regular fa-star"}></i>
+                                      </button>
+                                    </div>
+
+                                    <p className="text-[11px] text-slate-400 italic leading-relaxed">
+                                      {tech.description || 'Keine nähere Beschreibung.'}
+                                    </p>
+
+                                    <div className="flex items-center gap-3 flex-wrap text-[9px]">
+                                      {tech.abilitySource && (
+                                        <span className="text-amber-500/80 font-semibold uppercase tracking-wide">
+                                          Quelle: {tech.abilitySource}
+                                        </span>
+                                      )}
+                                      {tech.cost && (
+                                        <span className="text-slate-500 font-mono">
+                                          Kosten: {tech.cost}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Progression Type Indicator */}
+                                  <span className="text-[9.5px] px-2 py-0.5 rounded-full font-extrabold uppercase border bg-slate-900 shrink-0 select-none border-slate-800 text-slate-400">
+                                    {logic === 'ep' && 'EP'}
+                                    {logic === 'training' && 'Training'}
+                                    {logic === 'milestone' && 'Meilenstein'}
+                                    {logic === 'static' && 'Statisch'}
+                                  </span>
+                                </div>
+
+                                {/* Progression Controls */}
+                                {logic === 'ep' && (
+                                  <div className="space-y-2 pt-1">
+                                    <div className="flex justify-between text-[10px] text-slate-500 font-bold">
+                                      <span>ERFAHRUNGSPUNKTE (XP)</span>
+                                      <span className="font-mono text-indigo-400">{tech.xp || 0} / {tech.xpNeeded || 100} XP</span>
+                                    </div>
+                                    <div className="w-full bg-slate-900 rounded-full h-1.5 border border-slate-850 overflow-hidden">
+                                      <div 
+                                        className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full rounded-full transition-all" 
+                                        style={{ width: `${Math.min(100, ((tech.xp || 0) / (tech.xpNeeded || 100)) * 100)}%` }}
+                                      />
+                                    </div>
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        type="button"
+                                        disabled={level >= maxLevel}
+                                        onClick={() => {
+                                          const gain = tech.xpGainPerUse || 25;
+                                          let nextXp = (tech.xp || 0) + gain;
+                                          let nextLvl = level;
+                                          const needed = tech.xpNeeded || 100;
+                                          if (nextXp >= needed) {
+                                            nextXp = nextXp % needed;
+                                            nextLvl = Math.min(maxLevel, nextLvl + 1);
+                                          }
+                                          updateItemInAdventure(tech, (t) => ({ ...t, xp: nextXp, level: nextLvl }));
+                                        }}
+                                        className="flex-1 py-1 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-indigo-400 hover:border-indigo-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <i className="fa-solid fa-bolt"></i> Anwenden & Üben (+{tech.xpGainPerUse || 25} XP)
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {logic === 'training' && (
+                                  <div className="space-y-2 pt-1">
+                                    <div className="flex justify-between text-[10px] text-slate-500 font-bold">
+                                      <span>TRAININGS-EINHEITEN</span>
+                                      <span className="font-mono text-cyan-400">{tech.trainingProgress || 0} / {tech.trainingRequired || 3} Übungen</span>
+                                    </div>
+                                    <div className="w-full bg-slate-900 rounded-full h-1.5 border border-slate-850 overflow-hidden">
+                                      <div 
+                                        className="bg-gradient-to-r from-cyan-500 to-blue-500 h-full rounded-full transition-all" 
+                                        style={{ width: `${Math.min(100, ((tech.trainingProgress || 0) / (tech.trainingRequired || 3)) * 100)}%` }}
+                                      />
+                                    </div>
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        type="button"
+                                        disabled={level >= maxLevel}
+                                        onClick={() => {
+                                          let nextProg = (tech.trainingProgress || 0) + 1;
+                                          let nextLvl = level;
+                                          const req = tech.trainingRequired || 3;
+                                          if (nextProg >= req) {
+                                            nextProg = 0;
+                                            nextLvl = Math.min(maxLevel, nextLvl + 1);
+                                          }
+                                          updateItemInAdventure(tech, (t) => ({ ...t, trainingProgress: nextProg, level: nextLvl }));
+                                        }}
+                                        className="flex-1 py-1 px-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold text-cyan-400 hover:border-cyan-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <i className="fa-solid fa-dumbbell"></i> Aktiv Trainieren (+1 Einheit)
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {logic === 'milestone' && (
+                                  <div className="space-y-2 pt-1">
+                                    <div className="bg-slate-900/50 border border-slate-850 p-2.5 rounded-xl text-[10.5px] text-slate-300">
+                                      <span className="font-extrabold text-amber-500 uppercase tracking-wide mr-1 inline-flex items-center gap-1 mb-0.5">
+                                        <i className="fa-solid fa-flag-checkered text-[10px]"></i> Nächste Bedingung:
+                                      </span>
+                                      <span className="italic">"{tech.milestoneRequirement || 'Erreiche den nächsten großen Meilenstein in der Story.'}"</span>
+                                    </div>
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        type="button"
+                                        disabled={level >= maxLevel}
+                                        onClick={() => {
+                                          updateItemInAdventure(tech, (t) => ({ ...t, level: Math.min(maxLevel, level + 1) }));
+                                        }}
+                                        className="flex-1 py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-500 text-[10px] font-bold text-amber-500 transition-all flex items-center justify-center gap-1.5 shadow cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <i className="fa-solid fa-circle-check"></i> Meilenstein erreicht & Level aufsteigen
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {logic === 'static' && (
+                                  <div className="space-y-2 pt-1">
+                                    {tech.staticCost && (
+                                      <div className="bg-slate-900/50 border border-slate-850 p-2.5 rounded-xl text-[10.5px] text-slate-300">
+                                        <span className="font-extrabold text-indigo-400 uppercase tracking-wide mr-1 inline-flex items-center gap-1 mb-0.5">
+                                          <i className="fa-solid fa-lock text-[10px]"></i> Upgrade-Voraussetzung:
+                                        </span>
+                                        <span className="italic">"{tech.staticCost}"</span>
+                                      </div>
+                                    )}
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        type="button"
+                                        disabled={level >= maxLevel}
+                                        onClick={() => {
+                                          updateItemInAdventure(tech, (t) => ({ ...t, level: Math.min(maxLevel, level + 1) }));
+                                        }}
+                                        className="flex-1 py-1.5 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500 text-[10px] font-bold text-indigo-400 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        <i className="fa-solid fa-unlock-keyhole"></i> Manuell freischalten / Level aufwerten
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

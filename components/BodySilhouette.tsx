@@ -20,6 +20,8 @@ interface BodySilhouetteProps {
   onUpdateLore?: (updatedLore: any[]) => void;
   npcs?: any[];
   onUpdateNpcs?: (updatedNpcs: any[]) => void;
+  costResources?: any[];
+  world?: any;
 }
 
 export interface SilhouetteState {
@@ -96,7 +98,9 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
   loreDatabase,
   onUpdateLore,
   npcs,
-  onUpdateNpcs
+  onUpdateNpcs,
+  costResources,
+  world,
 }) => {
   const playerName = player.name || '';
 
@@ -2611,12 +2615,12 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
           </div>
         ) : (
           <div className={`text-[9.5px] p-2 rounded-lg flex items-center gap-1.5 font-medium border ${
-            activeConditionsList.some(c => c.type === 'curse')
-              ? 'text-red-400 bg-red-950/30 border-red-500/20'
+            activeConditionsList.some(c => c.name.toLowerCase().includes('hormon') || c.description.toLowerCase().includes('hormon') || c.name.toLowerCase().includes('instabil') || c.name.toLowerCase().includes('fruchtbar') || c.description.toLowerCase().includes('fruchtbar') || c.name.toLowerCase().includes('lust') || c.description.toLowerCase().includes('lust'))
+              ? 'text-pink-300 bg-pink-950/40 border-pink-500/30 shadow-sm shadow-pink-950/20'
               : activeConditionsList.some(c => c.name.toLowerCase().includes('mental') || c.name.toLowerCase().includes('geist') || c.description.toLowerCase().includes('mental') || c.description.toLowerCase().includes('geist') || c.description.toLowerCase().includes('gedanken') || c.name.toLowerCase().includes('kontrolle'))
-              ? 'text-fuchsia-400 bg-fuchsia-950/30 border-fuchsia-500/20'
-              : activeConditionsList.some(c => c.name.toLowerCase().includes('hormon') || c.description.toLowerCase().includes('hormon') || c.name.toLowerCase().includes('fruchtbar') || c.description.toLowerCase().includes('fruchtbar') || c.name.toLowerCase().includes('lust') || c.description.toLowerCase().includes('lust'))
-              ? 'text-pink-400 bg-pink-950/30 border-pink-500/20'
+              ? 'text-fuchsia-300 bg-fuchsia-950/40 border-fuchsia-500/30'
+              : activeConditionsList.some(c => c.type === 'curse')
+              ? 'text-red-400 bg-red-950/30 border-red-500/20'
               : state.isPregnant
               ? 'text-pink-400 bg-pink-950/30 border-pink-500/20'
               : activeConditionsList.length > 0
@@ -2625,21 +2629,83 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
               ? 'text-red-500 bg-red-950/30 border-red-500/20'
               : 'text-emerald-400/90 bg-emerald-950/30 border-emerald-500/20'
           }`}>
-            {activeConditionsList.some(c => c.type === 'curse') ? (
-              <><i className="fa-solid fa-skull-crossbones"></i><span>Körperlich verflucht & beeinträchtigt</span></>
-            ) : activeConditionsList.some(c => c.name.toLowerCase().includes('mental') || c.name.toLowerCase().includes('geist') || c.description.toLowerCase().includes('mental') || c.description.toLowerCase().includes('geist') || c.description.toLowerCase().includes('gedanken') || c.name.toLowerCase().includes('kontrolle')) ? (
-              <><i className="fa-solid fa-brain"></i><span>Mentale Stabilität & Kontrolle manipuliert</span></>
-            ) : activeConditionsList.some(c => c.name.toLowerCase().includes('hormon') || c.description.toLowerCase().includes('hormon') || c.name.toLowerCase().includes('fruchtbar') || c.description.toLowerCase().includes('fruchtbar') || c.name.toLowerCase().includes('lust') || c.description.toLowerCase().includes('lust')) ? (
-              <><i className="fa-solid fa-flask"></i><span>Hormoneller & physiologischer Zustand manipuliert</span></>
-            ) : state.isPregnant ? (
-              <><i className="fa-solid fa-person-pregnant"></i><span>Körper im fortgeschrittenen Schwangerschaftszustand</span></>
-            ) : activeConditionsList.length > 0 ? (
-              <><i className="fa-solid fa-vial-virus"></i><span>Physisch unverletzt, aber anomal beeinflusst</span></>
-            ) : state.isVampire ? (
-              <><i className="fa-solid fa-droplet"></i><span>Untoter, vampirischer Zustand</span></>
-            ) : (
-              <><i className="fa-solid fa-circle-check"></i><span>Vollständig gesund & unverletzt</span></>
-            )}
+            {(() => {
+              const hormonalCond = activeConditionsList.find(c => 
+                c.name.toLowerCase().includes('hormon') || 
+                c.description.toLowerCase().includes('hormon') || 
+                c.name.toLowerCase().includes('instabil') ||
+                c.name.toLowerCase().includes('fruchtbar') || 
+                c.description.toLowerCase().includes('fruchtbar') || 
+                c.name.toLowerCase().includes('lust') || 
+                c.description.toLowerCase().includes('lust')
+              );
+              if (hormonalCond) {
+                return (
+                  <>
+                    <i className="fa-solid fa-flask text-pink-400 animate-pulse"></i>
+                    <span className="font-semibold text-pink-200">
+                      {hormonalCond.name}
+                      {hormonalCond.description ? `: ${hormonalCond.description.length > 65 ? hormonalCond.description.substring(0, 62) + '...' : hormonalCond.description}` : ' (Physiologischer Zustand manipuliert)'}
+                    </span>
+                  </>
+                );
+              }
+              const mentalCond = activeConditionsList.find(c => 
+                c.name.toLowerCase().includes('mental') || 
+                c.name.toLowerCase().includes('geist') || 
+                c.description.toLowerCase().includes('mental') || 
+                c.description.toLowerCase().includes('geist') || 
+                c.description.toLowerCase().includes('gedanken') || 
+                c.name.toLowerCase().includes('kontrolle')
+              );
+              if (mentalCond) {
+                return (
+                  <>
+                    <i className="fa-solid fa-brain text-fuchsia-400"></i>
+                    <span className="font-semibold text-fuchsia-200">{mentalCond.name}: Mentale Stabilität & Kontrolle manipuliert</span>
+                  </>
+                );
+              }
+              const curse = activeConditionsList.find(c => c.type === 'curse');
+              if (curse) {
+                return (
+                  <>
+                    <i className="fa-solid fa-skull-crossbones text-red-400"></i>
+                    <span className="font-semibold text-red-200">{curse.name} (Fluch aktiv)</span>
+                  </>
+                );
+              }
+              if (state.isPregnant) {
+                return (
+                  <>
+                    <i className="fa-solid fa-person-pregnant text-pink-400"></i>
+                    <span>Körper im fortgeschrittenen Schwangerschaftszustand</span>
+                  </>
+                );
+              }
+              if (activeConditionsList.length > 0) {
+                return (
+                  <>
+                    <i className="fa-solid fa-vial-virus text-amber-400"></i>
+                    <span className="font-semibold text-amber-200">{activeConditionsList[0].name} (Aktiv)</span>
+                  </>
+                );
+              }
+              if (state.isVampire) {
+                return (
+                  <>
+                    <i className="fa-solid fa-droplet text-red-500"></i>
+                    <span>Untoter, vampirischer Zustand</span>
+                  </>
+                );
+              }
+              return (
+                <>
+                  <i className="fa-solid fa-circle-check text-emerald-400"></i>
+                  <span>Vollständig gesund & unverletzt</span>
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -3077,6 +3143,12 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                       stageName={resolvedBody.transformationStageName}
                       onUpdateIntensity={handleSetTransformationIntensity}
                       readOnly={readOnly}
+                      activeTransformation={activeTransformation}
+                      player={player}
+                      resolvedBody={resolvedBody}
+                      powerSource={player?.powerSource || activeTransformation?.source || resolvedBody?.powerSource}
+                      powerCost={player?.powerCost || activeTransformation?.cost}
+                      costResources={costResources || (world as any)?.costResources}
                     />
                   </div>
                 </div>
