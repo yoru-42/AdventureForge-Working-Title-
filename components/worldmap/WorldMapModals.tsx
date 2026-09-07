@@ -61,7 +61,7 @@ export const ShiftModal: React.FC<ShiftModalProps> = ({
               type="text"
               value={shiftNewFaction}
               onChange={(e) => setShiftNewFaction(e.target.value)}
-              placeholder="z.B. Strohhut-Piraten, Marine, Kaiser-Allianz"
+              placeholder="Fraktionsname oder Herrschaftsbereich..."
               className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 font-bold focus:outline-none focus:border-amber-500"
             />
           </div>
@@ -239,7 +239,7 @@ export const AddTerritoryModal: React.FC<AddTerritoryModalProps> = ({
               type="text"
               value={form.faction}
               onChange={(e) => setForm(prev => ({ ...prev, faction: e.target.value }))}
-              placeholder="z.B. Weltregierung, Strohhut-Allianz, Neutral"
+              placeholder="Fraktion, Herrscher oder Bündnis..."
               className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 font-bold focus:outline-none focus:border-amber-500"
             />
           </div>

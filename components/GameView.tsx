@@ -20,6 +20,8 @@ import { isClothingPlaceholder, isClothingItemTitle, consolidateLoreOutfits } fr
 import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
 import { WorldIntegrationService } from '../services/worldIntegrationService';
+import { applyProfessionCompetencyActivity } from '../services/professionCompetencyService';
+import { ProfessionCompetencyActivity } from '../types';
 
 
 const baseEmotions = [
@@ -2214,7 +2216,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
 
             return (
               <div key={lIdx} className={`flex gap-3 items-start ${isPlayer ? 'flex-row-reverse' : 'flex-row'}`}>
-                {/* Character Portrait with Grandia hover badge */}
+                {/* Character Portrait with hover badge */}
                 {portraitUrl ? (
                   <div className="relative shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-2xl overflow-hidden border-2 border-slate-800 shadow bg-slate-900 group">
                     <img 
@@ -3767,6 +3769,54 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       }
     }
 
+    // Parse PROFESSION_ACTIVITY: [[PROFESSION_ACTIVITY: CharacterName | Profession | CompetencyName | difficulty | success | meaningful]]
+    const profActivityRegex = /\[\[PROFESSION_ACTIVITY:\s*([^|\]]+)\s*\|\s*([^|\]]+)\s*\|\s*([^|\]]+)(?:\s*\|\s*([^|\]]+))?(?:\s*\|\s*([^|\]]+))?(?:\s*\|\s*([^\]]+))?\]\]/gi;
+    let profActivityMatch;
+    while ((profActivityMatch = profActivityRegex.exec(text)) !== null) {
+      cleanedText = cleanedText.replace(profActivityMatch[0], '');
+      const charName = profActivityMatch[1].trim();
+      const professionName = profActivityMatch[2].trim();
+      const competencyName = profActivityMatch[3].trim();
+      const diffStr = (profActivityMatch[4] || 'moderate').trim().toLowerCase();
+      const succStr = (profActivityMatch[5] || 'true').trim().toLowerCase();
+      const meanStr = (profActivityMatch[6] || 'true').trim().toLowerCase();
+
+      const difficulty = (['trivial', 'easy', 'moderate', 'hard', 'master'].includes(diffStr)
+        ? diffStr
+        : 'moderate') as ProfessionCompetencyActivity['difficulty'];
+      const success = succStr !== 'false' && succStr !== '0';
+      const meaningfulContext = meanStr !== 'false' && meanStr !== '0';
+
+      const activity: ProfessionCompetencyActivity = {
+        professionName,
+        competencyName,
+        difficulty,
+        success,
+        meaningfulContext
+      };
+
+      if (isPlayerMatch(charName) || charName.toLowerCase() === 'spieler') {
+        const result = applyProfessionCompetencyActivity(updatedPlayer, activity);
+        updatedPlayer = { ...updatedPlayer, ...result.updatedCharacter };
+        const gainedXp = result.gainedXp || 0;
+        const gainedProficiency = result.gainedProficiency || 0;
+        if (gainedXp > 0 || gainedProficiency > 0) {
+          notifications.push({
+            id: Math.random().toString(),
+            type: 'add',
+            title: `Berufsübung (${competencyName}): +${gainedProficiency}% (${gainedXp} XP)`,
+            category: 'Beruf & Handwerk'
+          });
+        }
+      } else {
+        const npcIdx = updatedNpcs.findIndex(n => isNameMatch(n.name, n.nickname, charName));
+        if (npcIdx > -1) {
+          const result = applyProfessionCompetencyActivity(updatedNpcs[npcIdx], activity);
+          updatedNpcs[npcIdx] = { ...updatedNpcs[npcIdx], ...result.updatedCharacter };
+        }
+      }
+    }
+
     // Sync current combat HP/MP or forced HP/MP back to campaignPowerLevels of updatedPlayer
     const customResNames = getCustomResourceNames();
     const primaryRes = customResNames[0];
@@ -5110,7 +5160,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           - LOGIK UND HISTORIE DES RAUMBESITZERS: In privaten Räumen, Schlafzimmern, Truhen, Schränken oder Ankleiden (wie z. B. im eigenen Zimmer des Spielers oder eines NPCs) muss der vorgefundene Inhalt von Kleiderschränken und Truhen strikt der Identität, der Historie und dem ursprünglichen biologischen Geschlecht/Stand des jeweiligen Eigentümers entsprechen!
           - VERBOT UNBEGRÜNDETER KONTRAST-KLEIDUNG: War die Spielfigur oder der Raumbesitzer ein Mann (oder befindet man sich im Zimmer/Quartier eines Mannes), befinden sich in dessen Schrank oder Truhe NIEMALS unbegründet Frauenkleider, Mädchenkleider, Röcke, BHs oder Damenunterwäsche.
           - WEITERBESTAND BEI METAMORPHOSEN & VERWANDLUNGEN: Hat der Spieler z. B. vor Kurzem eine Verwandlung erfahren (z. B. Geschlechtsumwandlung, Verjüngung, Fluch oder Gestaltwechsel), verwandeln sich dadurch NICHT automatisch die Kleidungsstücke in Schränken oder Truhen! Im Schrank eines vormals männlichen Charakters liegen weiterhin ausschließlich Männerkleider der bisherigen Passform, sofern nicht explizit in der Handlung neue Kleidung gekauft, geschenkt oder von jemandem im Raum deponiert wurde.
-          - PLAUSIBILITÄT BEI UNPASSENDER KLEIDUNG: Muss sich der verwandelt/verändert vorgefundene Charakter umziehen, muss die vorgefundene Kleidung in eigenen Schränken realistisch unpassend sein (z. B. viel zu große Herrenhemden/Hosen für einen verjüngten oder weiblich gewordenen Körper) oder es muss aktiv passende Kleidung besorgt werden. Es dürfen nicht wie durch Zauberei passende Mädchenkleider oder Damenkleider in der Truhe eines Mannes auftauchen!`;
+          - PLAUSIBILITÄT BEI UNPASSENDER KLEIDUNG: Muss sich der verwandelt/verändert vorgefundene Charakter umziehen, muss die vorgefundene Kleidung in eigenen Schränken realistisch unpassend sein (z. B. viel zu große Herrenhemden/Hosen für einen verjüngten oder weiblich gewordenen Körper) oder es muss aktiv passende Kleidung besorgt werden. Es dürfen nicht wie durch Zauberei passende Mädchenkleider oder Damenkleider in der Truhe eines Mannes auftauchen!
+      34. BERUFSKOMPETENZEN, HANDWERK & BERUFSÜBUNGEN (DETERMINISTISCHES SYSTEM & REALISMUS):
+          - Charaktere und der Spieler verfügen über ein detailliertes Berufsprofil mit Kompetenzen (Kategorien: Grundlage, Fortgeschritten, Spezialisierung, Meisterschaft), Beherrschungsgrad (0-100%), XP und Talent (0-5).
+          - REALISTISCHE HANDWERKS- & BERUFSBESCHREIBUNGEN: Handwerkliche und berufliche Tätigkeiten (z.B. Schmieden, Schreinern, Kochen, Alchemie, Heilen, Jagen, Lederarbeiten) müssen materialgerecht, prozedural und glaubwürdig anhand der tatsächlichen Kompetenzen des Charakters beschrieben werden. Ein Lehrling oder jemand mit niedriger Beherrschung scheitert an Meisterstücken oder benötigt viel Mühe, während Meister Routine und höchste Präzision an den Tag legen.
+          - SIGNALISIERUNG VON BERUFLICHER ÜBUNG ODER HANDWERKS-AKTIONEN:
+            Wenn der Spieler oder ein NPC im Chat aktiv ein Handwerk ausübt, eine neue Technik übt oder eine berufliche Aufgabe durchführt, signalisiere dies am Ende deiner Antwort mit dem Tag:
+            [[PROFESSION_ACTIVITY: CharacterName | Profession | CompetencyName | difficulty | success | meaningful]]
+            * Parameter:
+              - CharacterName: Name des Charakters oder "Spieler"
+              - Profession: Name des Berufs (z.B. Schmied, Koch, Schreiner)
+              - CompetencyName: Die geübte Kompetenz (z.B. Schmiedefeuer entzünden, Fleisch schneiden)
+              - difficulty: trivial | easy | moderate | hard | master
+              - success: true | false
+              - meaningful: true | false (ob es eine echte Herausforderung / bewusste Übung war)
+            * Beispiel: [[PROFESSION_ACTIVITY: Spieler | Schmied | Schmiedefeuer entzünden | easy | true | true]]
+          - STRIKTES VERBOT WILLKÜRLICHER STAT-AUSGABEN: Gib niemals direkte Prozentwerte oder Erfahrungsstufen im Text oder als Tags wie [[PROFESSION: Schmieden=100%]] aus. Die Beherrschung und XP-Berechnung wird ausschließlich deterministisch und mathematisch vom Regelsystem auf Basis der Aktivität berechnet!`;
       
       const response = await GeminiService.chat(updatedMessages, systemInstruction, world.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';

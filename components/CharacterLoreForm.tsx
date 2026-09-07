@@ -20,6 +20,7 @@ import CompetenceProfileEditor from './CompetenceProfileEditor';
 import { GeminiService } from '../services/geminiService';
 import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArchetypesData';
 import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore } from '../lib/relationshipHelper';
+import { migrateLegacyProfessionData } from '../services/professionCompetencyService';
 
 export interface CharacterAbility {
   id: string;
@@ -121,6 +122,27 @@ export const CharacterLoreForm: React.FC<Props> = ({
   const [isFactionDropdownOpen, setIsFactionDropdownOpen] = useState<boolean>(false);
   const [customFactionInput, setCustomFactionInput] = useState<string>('');
   const [openApplicationsDropdown, setOpenApplicationsDropdown] = useState<string | null>(null);
+
+  // Automatic V2 Migration for legacy character data
+  useEffect(() => {
+    if (editForm.details) {
+      const details = editForm.details;
+      const needsMigration =
+        (details.profession || details.role || details.jobTitle) &&
+        (!details.positions || !details.professionField || !details.professionProgress);
+
+      if (needsMigration) {
+        const migrated = migrateLegacyProfessionData(details as any);
+        setEditForm(prev => ({
+          ...prev,
+          details: {
+            ...(prev.details || {}),
+            ...migrated
+          }
+        }));
+      }
+    }
+  }, [isEditing]);
 
   // Helper to get and update appearance/details
   const getDetail = <T = string,>(key: string, defaultVal: T = '' as any): T => {
@@ -716,7 +738,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
     if (!editForm.title) return;
     setIsGeneratingPortrait(true);
     try {
-      const prompt = `${editForm.title}, ${editForm.details?.gender || ''} ${editForm.details?.race || ''} ${editForm.details?.role || ''}, ${editForm.details?.looks || ''}, anime grandia style portrait, high quality, expressive`;
+      const prompt = `${editForm.title}, ${editForm.details?.gender || ''} ${editForm.details?.race || ''} ${editForm.details?.role || ''}, ${editForm.details?.looks || ''}, high quality fantasy character portrait, expressive`;
       const imgUrl = await GeminiService.generateImage(prompt);
       if (imgUrl) {
         setEditForm(prev => ({
@@ -748,7 +770,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
         surprised: 'surprised shocked wide-eyed expression',
         blushing: 'blushing embarrassed shy cute expression'
       };
-      const prompt = `${baseDesc}, ${exprPrompts[exprKey] || exprKey}, anime character portrait, grandia style, face closeup`;
+      const prompt = `${baseDesc}, ${exprPrompts[exprKey] || exprKey}, high quality fantasy character portrait, facial expression, face closeup`;
       const imgUrl = await GeminiService.generateImage(prompt);
       if (imgUrl) {
         setEditForm(prev => {
@@ -976,34 +998,33 @@ export const CharacterLoreForm: React.FC<Props> = ({
       {/* TAB 1: PROFIL & AUSSEHEN */}
       {charTab === 'profil' && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Grandia 1 style portraits */}
+          {/* Porträts (Gesichtsausdrücke) */}
           <div className="bg-slate-800/25 border border-slate-700/60 rounded-2xl p-4 md:p-5">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
               <div className="flex items-center gap-2">
-                <span className="text-xl">🎭</span>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-100">Grandia-Porträts (Gesichtsausdrücke)</h3>
-                  <p className="text-[11px] text-slate-400">Erstelle verschiedene Gesichtsausdrücke, die im Chat und Dialogen angezeigt werden</p>
+                  <h3 className="text-sm font-bold text-slate-100">Porträts & Gesichtsausdrücke</h3>
+                  <p className="text-[11px] text-slate-400">Erstelle verschiedene Gesichtsausdrücke, die im Chat und in Dialogen angezeigt werden</p>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               {[
-                { key: 'neutral', label: 'Standard (Neutral)', icon: '😐' },
-                { key: 'happy', label: 'Glücklich', icon: '😊' },
-                { key: 'sad', label: 'Traurig', icon: '😭' },
-                { key: 'angry', label: 'Wütend', icon: '😡' },
-                { key: 'surprised', label: 'Überrascht', icon: '😲' },
-                { key: 'blushing', label: 'Errötet', icon: '😳' }
+                { key: 'neutral', label: 'Standard (Neutral)' },
+                { key: 'happy', label: 'Glücklich' },
+                { key: 'sad', label: 'Traurig' },
+                { key: 'angry', label: 'Wütend' },
+                { key: 'surprised', label: 'Überrascht' },
+                { key: 'blushing', label: 'Errötet' }
               ].map((expr) => {
                 const currentImg = editForm.expressions?.[expr.key] || editForm.details?.expressions?.[expr.key] || (expr.key === 'neutral' ? editForm.image : undefined);
                 const isGeneratingThis = generatingExpression === expr.key;
 
                 return (
                   <div key={expr.key} className="bg-slate-900/60 border border-slate-800 rounded-xl p-2.5 flex flex-col items-center gap-2 text-center group/card">
-                    <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
-                      <span>{expr.icon}</span> {expr.label}
+                    <span className="text-[11px] font-semibold text-slate-300">
+                      {expr.label}
                     </span>
 
                     <div className="relative w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 flex items-center justify-center">
@@ -1090,7 +1111,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   type="text" 
                   value={editForm.title || ''} 
                   onChange={e => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="z.B. Luna Shadowend" 
+                  placeholder="Name des Charakters eingeben..." 
                   className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-semibold"
                 />
               </div>
@@ -1104,7 +1125,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   type="text" 
                   value={getDetail('callName', editForm.title || '')} 
                   onChange={e => updateDetail('callName', e.target.value)}
-                  placeholder={editForm.title ? editForm.title.split(' ')[0] : 'z.B. Luna'} 
+                  placeholder={editForm.title ? editForm.title.split(' ')[0] : 'Rufname oder Kurzform (Standard: Name)'} 
                   className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
                 />
               </div>
@@ -1117,7 +1138,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   type="text" 
                   value={getDetail('nickname', '')} 
                   onChange={e => updateDetail('nickname', e.target.value)}
-                  placeholder="z.B. Die Schattentänzerin" 
+                  placeholder="Spitzname, Alias oder Titel eingeben..." 
                   className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
                 />
               </div>
@@ -1128,9 +1149,12 @@ export const CharacterLoreForm: React.FC<Props> = ({
                 </label>
                 <ProfessionSelect
                   value={getDetail('role', '') || getDetail('profession', '')} 
-                  onChange={val => {
-                    updateDetail('role', val);
-                    updateDetail('profession', val);
+                  onChange={(val, detectedField) => {
+                    updateMultipleDetails({
+                      role: val,
+                      profession: val,
+                      ...(detectedField ? { professionField: detectedField } : {})
+                    });
                   }}
                   placeholder="Beruf wählen oder eintragen..." 
                 />
@@ -2768,12 +2792,26 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
             <CompetenceProfileEditor
               profession={getDetail('profession', getDetail('role', ''))}
-              onProfessionChange={val => {
-                updateDetail('profession', val);
-                updateDetail('role', val);
+              onProfessionChange={(val, detectedField) => {
+                updateMultipleDetails({
+                  profession: val,
+                  role: val,
+                  ...(detectedField ? { professionField: detectedField } : {})
+                });
               }}
               professionLevel={getDetail('professionLevel', '')}
               onProfessionLevelChange={val => updateDetail('professionLevel', val)}
+              professionField={getDetail('professionField', '')}
+              onProfessionFieldChange={val => updateDetail('professionField', val)}
+              professionSpecialization={getDetail('professionSpecialization', '')}
+              onProfessionSpecializationChange={val => updateDetail('professionSpecialization', val)}
+              professionRank={getDetail('professionRank', getDetail('professionLevel', ''))}
+              onProfessionRankChange={val => {
+                updateDetail('professionRank', val);
+                updateDetail('professionLevel', val);
+              }}
+              professionExperience={getDetail('professionExperience', undefined)}
+              onExperienceChange={val => updateDetail('professionExperience', val)}
               professionProficiencyScore={getDetail('professionProficiencyScore', 0)}
               onProfessionProficiencyScoreChange={val => updateDetail('professionProficiencyScore', val)}
               professionExperiencePoints={getDetail('professionExperiencePoints', 0)}
@@ -2782,6 +2820,16 @@ export const CharacterLoreForm: React.FC<Props> = ({
               onProfessionExperienceTextChange={val => updateDetail('professionExperienceText', val)}
               professionPromotionConditions={getDetail('professionPromotionConditions', '')}
               onProfessionPromotionConditionsChange={val => updateDetail('professionPromotionConditions', val)}
+              professionProgress={getDetail('professionProgress', undefined)}
+              onProfessionProgressChange={val => updateDetail('professionProgress', val)}
+              professionCompetencies={getDetail('professionCompetencies', [])}
+              onProfessionCompetenciesChange={val => updateDetail('professionCompetencies', val)}
+              socialTitles={getDetail<any[]>('socialTitles', [])}
+              onSocialTitlesChange={val => updateDetail('socialTitles', val)}
+              offices={getDetail<any[]>('offices', [])}
+              onOfficesChange={val => updateDetail('offices', val)}
+              positions={getDetail<any[]>('positions', [])}
+              onPositionsChange={val => updateDetail('positions', val)}
               craftingSkills={getDetail('craftingSkills', '')}
               onCraftingSkillsChange={val => updateDetail('craftingSkills', val)}
               jobTitle={getDetail('jobTitle', '')}

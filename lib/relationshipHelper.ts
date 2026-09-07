@@ -1,4 +1,5 @@
 import { Character, CharacterRelationship, LoreEntry, MotivationCore, NPC } from '../types';
+import { formatCharacterProfessionsForAI } from '../services/professionCompetencyService';
 
 /**
  * Formats a character's motivation core into a clean, structured string for the Story AI.
@@ -126,7 +127,9 @@ export function formatNPCForAIPrompt(n: NPC): string {
         * Stufe 1 (Öffentlich): ${n.secretsStage1 || 'Keine'}
         * Stufe 2 (Indizien & Verdacht): ${n.secretsStage2 || 'Keine'}
         * Stufe 3 (Absolutes Geheimnis - Blackbox): ${n.secretsStage3 || 'Keine'}
-        * Verhüllung & Geteiltes Wissen (Wer weiß was?): ${n.knowledge || 'Keine Angabe (NPCs wissen standardmäßig nur das, was sie im Laufe der Geschichte direkt miterlebt oder erzählt bekommen haben)'}`;
+        * Verhüllung & Geteiltes Wissen (Wer weiß was?): ${n.knowledge || 'Keine Angabe (NPCs wissen standardmäßig nur das, was sie im Laufe der Geschichte direkt miterlebt oder erzählt bekommen haben)'}
+      - Berufsprofil & Kompetenzen:
+        ${formatCharacterProfessionsForAI(n).split('\n').join('\n        ')}`;
 }
 
 /**
@@ -178,7 +181,9 @@ export function formatPlayerForAIPrompt(player: Character, physicalStatusSummary
         * Stufe 1 (Öffentlich): ${player.secretsStage1 || 'Keine'}
         * Stufe 2 (Indizien & Verdacht): ${player.secretsStage2 || 'Keine'}
         * Stufe 3 (Absolutes Geheimnis - Blackbox): ${player.secretsStage3 || 'Keine'}
-        * Verhüllung & Geteiltes Wissen (Wer weiß was?): ${player.knowledge || 'Keine Angabe (andere Charaktere wissen standardmäßig nur das, was sie im Laufe der Geschichte direkt miterlebt oder erzählt bekommen haben)'}`;
+        * Verhüllung & Geteiltes Wissen (Wer weiß was?): ${player.knowledge || 'Keine Angabe (andere Charaktere wissen standardmäßig nur das, was sie im Laufe der Geschichte direkt miterlebt oder erzählt bekommen haben)'}
+      - Berufsprofil & Kompetenzen:
+        ${formatCharacterProfessionsForAI(player).split('\n').join('\n        ')}`;
 }
 
 /**

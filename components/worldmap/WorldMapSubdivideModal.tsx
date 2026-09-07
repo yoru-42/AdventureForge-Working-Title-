@@ -61,8 +61,6 @@ export const WorldMapSubdivideModal: React.FC<WorldMapSubdivideModalProps> = ({
   onApplySubdivision,
   worldContext
 }) => {
-  if (!show || !targetTerritory) return null;
-
   // Selected partition mode
   const [mode, setMode] = useState<ZonePartitionMode>('one_piece_belts');
 
@@ -181,6 +179,8 @@ export const WorldMapSubdivideModal: React.FC<WorldMapSubdivideModalProps> = ({
     );
     onClose();
   };
+
+  if (!show || !targetTerritory) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 z-50 animate-in fade-in duration-200 select-none">

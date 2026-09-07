@@ -463,10 +463,125 @@ export interface CharacterConduct {
   behavior: string;
 }
 
+export interface ProfessionCompetency {
+  id: string;
+  name: string;
+  category: 'Grundlage' | 'Fortgeschritten' | 'Spezialisierung' | 'Meisterschaft';
+  proficiency: number; // 0–100
+  experiencePoints: number;
+  talent: number; // 0–5 (0=kein bes. Talent, 1=langsam, 2=eher langsam, 3=normal, 4=talentiert, 5=außergewöhnlich)
+  description?: string;
+  notes?: string;
+  practiceCount?: number;
+  lastPracticedAt?: string;
+  relatedCompetencyIds?: string[];
+  professionId?: string;
+}
+
+export interface ProfessionExperience {
+  years: number;
+  months?: number;
+  days?: number;
+}
+
+export interface ProfessionHistoryEntry {
+  professionId?: string;
+  professionName: string;
+  fieldId?: string;
+  specialization?: string;
+  rank?: string;
+  startedAt?: string;
+  endedAt?: string;
+  experienceYears?: number;
+  experienceMonths?: number;
+  reason?: string;
+}
+
+export interface SocialTitleState {
+  id: string;
+  title: string; // e.g. "Baron", "Graf", "Herzog", "Ritter"
+  titleType?: 'nobility' | 'honorary' | 'civic' | string;
+  grantedAt?: string;
+  grantedBy?: string;
+  inherited?: boolean;
+  reason?: string;
+}
+
+export interface OfficeState {
+  id: string;
+  name: string; // e.g. "Bürgermeister", "Mitglied des Stadtrates", "Richter", "Gildenmeister"
+  institution?: string; // e.g. "Stadtrat", "Handelsgilde"
+  appointedAt?: string;
+  appointedBy?: string;
+  term?: string;
+  description?: string;
+}
+
+export interface PositionState {
+  id: string;
+  title: string; // e.g. "Kapitän der 'Morgenstern'", "Hauptmann der Stadtwache"
+  holderCharacterId?: string;
+  acquiredAt?: string;
+  acquisitionMethod:
+    | 'formal_training'
+    | 'exam'
+    | 'experience'
+    | 'appointment'
+    | 'recommendation'
+    | 'election'
+    | 'emergency_succession'
+    | 'forced_assignment'
+    | 'request'
+    | 'inheritance'
+    | 'political_decision'
+    | 'religious_appointment'
+    | 'guild_recognition'
+    | 'military_command'
+    | string;
+  reason?: string;
+  appointedBy?: string[];
+  recognizedBy?: string[];
+  voluntary?: boolean; // true = freiwillig, false = widerwillig / Pflichtübernahme / Zwang
+}
+
+export interface ProfessionProgress {
+  professionId?: string;
+  professionName: string;
+  fieldId?: string;
+  specialization?: string;
+  level?: string;
+  rank?: string;
+  overallProficiency: number; // 0–100
+  experiencePoints: number;
+  experienceYears?: number;
+  experienceMonths?: number;
+  experienceDays?: number;
+  experienceText?: string;
+  promotionConditions?: string[];
+}
+
+export interface ProfessionCompetencyActivity {
+  characterId?: string;
+  characterName?: string;
+  professionId?: string;
+  professionName?: string;
+  competencyId?: string;
+  competencyName?: string;
+  action?: 'practice' | 'work' | 'study' | 'experiment' | 'masterpiece' | string;
+  difficulty?: 'trivial' | 'easy' | 'moderate' | 'medium' | 'hard' | 'extreme' | 'master' | string;
+  successful?: boolean;
+  success?: boolean;
+  meaningfulPractice?: boolean;
+  meaningfulContext?: boolean;
+  notes?: string;
+}
+
 export interface SecondaryProfession {
   id: string;
   profession: string;
   professionLevel?: string;
+  professionField?: string;
+  specialization?: string;
   jobTitle?: string;
   description?: string;
   proficiencyScore?: number;
@@ -474,6 +589,8 @@ export interface SecondaryProfession {
   experienceText?: string;
   promotionConditions?: string;
   authorities?: string[];
+  professionProgress?: ProfessionProgress;
+  professionCompetencies?: ProfessionCompetency[];
 }
 
 export interface Character {
@@ -495,6 +612,14 @@ export interface Character {
   expressions?: Record<string, string>;
   skills?: string;
   profession?: string;
+  professionField?: string;
+  professionSpecialization?: string;
+  professionRank?: string;
+  professionExperience?: ProfessionExperience;
+  professionHistory?: ProfessionHistoryEntry[];
+  socialTitles?: SocialTitleState[];
+  offices?: OfficeState[];
+  positions?: PositionState[];
   professionLevel?: string;
   secondaryProfessions?: SecondaryProfession[];
   jobTitle?: string;
@@ -504,6 +629,8 @@ export interface Character {
   professionExperiencePoints?: number;
   professionExperienceText?: string;
   professionPromotionConditions?: string;
+  professionProgress?: ProfessionProgress;
+  professionCompetencies?: ProfessionCompetency[];
   craftingSkills?: string;
   talents?: string;
   everydaySkills?: string;

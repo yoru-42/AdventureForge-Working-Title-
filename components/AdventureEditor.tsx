@@ -5,6 +5,7 @@ import { GeminiService } from '../services/geminiService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import ProfessionSelect from './ProfessionSelect';
 import CompetenceProfileEditor from './CompetenceProfileEditor';
+import { migrateLegacyProfessionData } from '../services/professionCompetencyService';
 import * as LucideIcons from 'lucide-react';
 import RelationshipDetailEditor from './RelationshipDetailEditor';
 import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore } from '../lib/relationshipHelper';
@@ -569,7 +570,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       }
     }
 
-    return p;
+    return migrateLegacyProfessionData(p);
   };
 
   const [player, setPlayer] = useState<Character>(getDefaultPlayerState());
@@ -1386,9 +1387,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     }
     setPlayerGeneratingExpression(exprKey);
     try {
-      const artStyle = selectedTags.includes("Anime") ? "Grandia JRPG Anime Stil, detailliertes Anime Porträt" :
-                       selectedTags.includes("JRPG") ? "Grandia JRPG Stil, klassische JRPG Charakter-Illustration" :
-                       "Grandia JRPG Stil, hochwertige digitale Fantasy Portrait-Konzeptkunst";
+      const artStyle = selectedTags.includes("Anime") ? "Anime Stil, detailliertes Anime Porträt" :
+                       selectedTags.includes("JRPG") ? "Klassische RPG Charakter-Illustration, detailliert" :
+                       "Hochwertige digitale Fantasy Portrait-Konzeptkunst";
       
       let emotionDesc = "neutraler Gesichtsausdruck";
       if (exprKey === 'happy') emotionDesc = "glücklich lächelnd, lachend, fröhlich";
@@ -1397,7 +1398,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       if (exprKey === 'surprised') emotionDesc = "überraschter Gesichtsausdruck, weit geöffnete Augen, erstaunt, schockiert";
       if (exprKey === 'blushing') emotionDesc = "errötetes Gesicht, schüchtern blickend, verlegen lächelnd, süß";
 
-      const prompt = `Grandia-Stil Porträt-Nahaufnahme von dem RPG-Charakter namens ${player.name} mit folgendem Ausdruck: ${emotionDesc}. Geschlecht: ${player.appearance?.gender || 'Unbekannt'}, Haare: ${player.appearance?.hairColor || 'Unbekannt'}, Augen: ${player.appearance?.eyeColor || 'Unbekannt'}, Statur: ${player.appearance?.build || 'Unbekannt'}, ${player.appearance?.outfit ? 'Outfit: ' + player.appearance.outfit : ''}. ${artStyle}. Zentrierte Kopf- und Schulteraufnahme (Avatar / Headshot Portrait), 1:1 Format. Fokus auf Gesicht und Mimik. Keine Schrift oder Text im Bild.`;
+      const prompt = `Porträt-Nahaufnahme von dem RPG-Charakter namens ${player.name} mit folgendem Ausdruck: ${emotionDesc}. Geschlecht: ${player.appearance?.gender || 'Unbekannt'}, Haare: ${player.appearance?.hairColor || 'Unbekannt'}, Augen: ${player.appearance?.eyeColor || 'Unbekannt'}, Statur: ${player.appearance?.build || 'Unbekannt'}, ${player.appearance?.outfit ? 'Outfit: ' + player.appearance.outfit : ''}. ${artStyle}. Zentrierte Kopf- und Schulteraufnahme (Avatar / Headshot Portrait), 1:1 Format. Fokus auf Gesicht und Mimik. Keine Schrift oder Text im Bild.`;
       
       const url = await GeminiService.generateImage(prompt, false, "1:1");
       if (url) {
@@ -4007,34 +4008,33 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
               {playerCharTab === 'profil' && (
                 <div className="space-y-6 animate-in fade-in duration-200">
 
-              {/* Grandia 1 style portraits */}
+              {/* Porträts & Gesichtsausdrücke */}
               <div className="bg-slate-800/25 border border-slate-700/60 rounded-2xl p-4 md:p-5">
                 <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-700/50">
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">🎭</span>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-100">Grandia-Porträts (Gesichtsausdrücke)</h3>
-                      <p className="text-[11px] text-slate-400">Erstelle verschiedene Gesichtsausdrücke, die im Chat angezeigt werden</p>
+                      <h3 className="text-sm font-bold text-slate-100">Porträts & Gesichtsausdrücke</h3>
+                      <p className="text-[11px] text-slate-400">Erstelle verschiedene Gesichtsausdrücke, die im Chat und in Dialogen angezeigt werden</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                   {[
-                    { key: 'neutral', label: 'Standard (Neutral)', icon: '😐' },
-                    { key: 'happy', label: 'Glücklich', icon: '😊' },
-                    { key: 'sad', label: 'Traurig', icon: '😭' },
-                    { key: 'angry', label: 'Wütend', icon: '😡' },
-                    { key: 'surprised', label: 'Überrascht', icon: '😲' },
-                    { key: 'blushing', label: 'Errötet', icon: '😳' }
+                    { key: 'neutral', label: 'Standard (Neutral)' },
+                    { key: 'happy', label: 'Glücklich' },
+                    { key: 'sad', label: 'Traurig' },
+                    { key: 'angry', label: 'Wütend' },
+                    { key: 'surprised', label: 'Überrascht' },
+                    { key: 'blushing', label: 'Errötet' }
                   ].map((expr) => {
                     const currentImg = player.expressions?.[expr.key] || (expr.key === 'neutral' ? player.image : undefined);
                     const isGeneratingThis = playerGeneratingExpression === expr.key;
 
                     return (
                       <div key={expr.key} className="bg-slate-900/60 border border-slate-800 rounded-xl p-2.5 flex flex-col items-center gap-2 text-center group/card">
-                        <span className="text-[11px] font-semibold text-slate-300 flex items-center gap-1">
-                          <span>{expr.icon}</span> {expr.label}
+                        <span className="text-[11px] font-semibold text-slate-300">
+                          {expr.label}
                         </span>
 
                         <div className="relative w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden border border-slate-700 bg-slate-950 flex items-center justify-center">
@@ -4109,7 +4109,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </label>
                     <AutoExpandingTextarea 
                       className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all font-semibold"
-                      placeholder={activeTransformation ? `z.B. Name im transformierten Zustand (leer = unbenannte Form)` : "z.B. Son Goku, Monkey D. Ruffy..."} 
+                      placeholder={activeTransformation ? `Name im transformierten Zustand (leer = unbenannte Form)` : "Name des Charakters eingeben..."} 
                       value={getPlayerName()} 
                       onChange={e => updatePlayerName(e.target.value)} 
                     />
@@ -4120,7 +4120,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </label>
                     <AutoExpandingTextarea 
                       className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all font-semibold"
-                      placeholder={activeTransformation ? "z.B. Rufname im Kampf (optional, leer = unbenannt)" : "z.B. Goku, Ruffy (Standard: Name)"} 
+                      placeholder={activeTransformation ? "Rufname im Kampf (optional)" : "Rufname oder Kurzform (Standard: Name)"} 
                       value={getPlayerRufName()} 
                       onChange={e => updatePlayerRufName(e.target.value)} 
                     />
@@ -4131,7 +4131,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </label>
                     <AutoExpandingTextarea 
                       className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-white focus:border-amber-500 outline-none w-full text-sm min-h-[46px] transition-all"
-                      placeholder="z.B. Akainu, Strohhut..." 
+                      placeholder="Spitzname, Alias oder Titel eingeben..." 
                       value={getPlayerNickname()} 
                       onChange={e => updatePlayerNickname(e.target.value)} 
                     />
@@ -6595,35 +6595,53 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                         }
                       }}
                       professionLevel={player.professionLevel || ''}
-                      onProfessionLevelChange={val => setPlayer({ ...player, professionLevel: val })}
+                      onProfessionLevelChange={val => setPlayer(prev => ({ ...prev, professionLevel: val }))}
+                      professionField={player.professionField || ''}
+                      onProfessionFieldChange={val => setPlayer(prev => ({ ...prev, professionField: val }))}
+                      professionSpecialization={player.professionSpecialization || ''}
+                      onProfessionSpecializationChange={val => setPlayer(prev => ({ ...prev, professionSpecialization: val }))}
+                      professionRank={player.professionRank || player.professionLevel || ''}
+                      onProfessionRankChange={val => setPlayer(prev => ({ ...prev, professionRank: val, professionLevel: val }))}
+                      professionExperience={player.professionExperience}
+                      onExperienceChange={val => setPlayer(prev => ({ ...prev, professionExperience: val }))}
                       professionProficiencyScore={player.professionProficiencyScore || 0}
-                      onProfessionProficiencyScoreChange={val => setPlayer({ ...player, professionProficiencyScore: val })}
+                      onProfessionProficiencyScoreChange={val => setPlayer(prev => ({ ...prev, professionProficiencyScore: val }))}
                       professionExperiencePoints={player.professionExperiencePoints || 0}
-                      onProfessionExperiencePointsChange={val => setPlayer({ ...player, professionExperiencePoints: val })}
+                      onProfessionExperiencePointsChange={val => setPlayer(prev => ({ ...prev, professionExperiencePoints: val }))}
                       professionExperienceText={player.professionExperienceText || ''}
-                      onProfessionExperienceTextChange={val => setPlayer({ ...player, professionExperienceText: val })}
+                      onProfessionExperienceTextChange={val => setPlayer(prev => ({ ...prev, professionExperienceText: val }))}
                       professionPromotionConditions={player.professionPromotionConditions || ''}
-                      onProfessionPromotionConditionsChange={val => setPlayer({ ...player, professionPromotionConditions: val })}
+                      onProfessionPromotionConditionsChange={val => setPlayer(prev => ({ ...prev, professionPromotionConditions: val }))}
+                      professionProgress={player.professionProgress}
+                      onProfessionProgressChange={val => setPlayer(prev => ({ ...prev, professionProgress: val }))}
+                      professionCompetencies={player.professionCompetencies || []}
+                      onProfessionCompetenciesChange={val => setPlayer(prev => ({ ...prev, professionCompetencies: val }))}
+                      socialTitles={player.socialTitles || []}
+                      onSocialTitlesChange={val => setPlayer(prev => ({ ...prev, socialTitles: val }))}
+                      offices={player.offices || []}
+                      onOfficesChange={val => setPlayer(prev => ({ ...prev, offices: val }))}
+                      positions={player.positions || []}
+                      onPositionsChange={val => setPlayer(prev => ({ ...prev, positions: val }))}
                       craftingSkills={player.craftingSkills || ''}
-                      onCraftingSkillsChange={val => setPlayer({ ...player, craftingSkills: val })}
+                      onCraftingSkillsChange={val => setPlayer(prev => ({ ...prev, craftingSkills: val }))}
                       jobTitle={player.jobTitle || ''}
-                      onJobTitleChange={val => setPlayer({ ...player, jobTitle: val })}
+                      onJobTitleChange={val => setPlayer(prev => ({ ...prev, jobTitle: val }))}
                       authorities={player.authorities || []}
-                      onAuthoritiesChange={val => setPlayer({ ...player, authorities: val })}
+                      onAuthoritiesChange={val => setPlayer(prev => ({ ...prev, authorities: val }))}
                       professionDescription={player.professionDescription || ''}
-                      onProfessionDescriptionChange={val => setPlayer({ ...player, professionDescription: val })}
+                      onProfessionDescriptionChange={val => setPlayer(prev => ({ ...prev, professionDescription: val }))}
                       secondaryProfessions={player.secondaryProfessions || []}
-                      onSecondaryProfessionsChange={val => setPlayer({ ...player, secondaryProfessions: val })}
+                      onSecondaryProfessionsChange={val => setPlayer(prev => ({ ...prev, secondaryProfessions: val }))}
                       talents={player.talents || ''}
-                      onTalentsChange={val => setPlayer({ ...player, talents: val })}
+                      onTalentsChange={val => setPlayer(prev => ({ ...prev, talents: val }))}
                       everydaySkills={player.everydaySkills || ''}
-                      onEverydaySkillsChange={val => setPlayer({ ...player, everydaySkills: val })}
+                      onEverydaySkillsChange={val => setPlayer(prev => ({ ...prev, everydaySkills: val }))}
                       everydaySkillsProficiencyScore={player.everydaySkillsProficiencyScore || 0}
-                      onEverydaySkillsProficiencyScoreChange={val => setPlayer({ ...player, everydaySkillsProficiencyScore: val })}
+                      onEverydaySkillsProficiencyScoreChange={val => setPlayer(prev => ({ ...prev, everydaySkillsProficiencyScore: val }))}
                       everydaySkillsExperienceText={player.everydaySkillsExperienceText || ''}
-                      onEverydaySkillsExperienceTextChange={val => setPlayer({ ...player, everydaySkillsExperienceText: val })}
+                      onEverydaySkillsExperienceTextChange={val => setPlayer(prev => ({ ...prev, everydaySkillsExperienceText: val }))}
                       toolsAndEquipment={player.toolsAndEquipment || ''}
-                      onToolsAndEquipmentChange={val => setPlayer({ ...player, toolsAndEquipment: val })}
+                      onToolsAndEquipmentChange={val => setPlayer(prev => ({ ...prev, toolsAndEquipment: val }))}
                     />
                   </div>
                 </div>

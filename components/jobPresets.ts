@@ -1,11 +1,13 @@
 export interface JobCategory {
+  fieldId: string;
   category: string;
   jobs: string[];
 }
 
 export const JOB_CATEGORIES: JobCategory[] = [
   {
-    category: "Handwerk & Produktion",
+    fieldId: "bau_handwerk",
+    category: "Bau & Handwerk",
     jobs: [
       "Schmied",
       "Schreiner / Tischler",
@@ -19,27 +21,88 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Weberei-Handwerker",
       "Steinmetz",
       "Zimmermann",
-      "Seiler"
+      "Seiler",
+      "Büchsenmacher",
+      "Feinmechaniker",
+      "Uhrmacher",
+      "Goldschmied",
+      "Juwelier",
+      "Instrumentenbauer",
+      "Optiker",
+      "Graveur",
+      "Siegelstecher"
     ]
   },
   {
-    category: "Landwirtschaft & Lebensmittel",
+    fieldId: "lebensmittel_ernaehrung",
+    category: "Lebensmittel & Ernährung",
     jobs: [
-      "Bauer / Landwirt",
-      "Viehzüchter",
       "Bäcker",
       "Metzger / Fleischer",
       "Brauer / Braumeister",
       "Winzer",
-      "Fischer",
-      "Imker",
       "Müller",
-      "Obstbauer",
-      "Hirte",
-      "Käser"
+      "Koch / Chefkoch",
+      "Käser",
+      "Obstbauer"
     ]
   },
   {
+    fieldId: "natur_landwirtschaft",
+    category: "Natur & Landwirtschaft",
+    jobs: [
+      "Bauer / Landwirt",
+      "Jäger",
+      "Förster",
+      "Waldläufer",
+      "Fischer",
+      "Kräutersammler",
+      "Holzfäller",
+      "Kundschafter",
+      "Trapper"
+    ]
+  },
+  {
+    fieldId: "tierhaltung",
+    category: "Tierhaltung",
+    jobs: [
+      "Hirte",
+      "Viehzüchter",
+      "Pferdezüchter",
+      "Hundezüchter",
+      "Falkner",
+      "Imker",
+      "Stallmeister"
+    ]
+  },
+  {
+    fieldId: "wissenschaft_forschung",
+    category: "Wissenschaft & Forschung",
+    jobs: [
+      "Gelehrter",
+      "Kartograf",
+      "Astronom",
+      "Historiker",
+      "Philosoph",
+      "Mathematiker"
+    ]
+  },
+  {
+    fieldId: "medizin_heilkunde",
+    category: "Medizin & Heilkunde",
+    jobs: [
+      "Arzt / Heiler",
+      "Feldscher",
+      "Wundarzt",
+      "Apotheker",
+      "Seuchenarzt",
+      "Pfleger",
+      "Hebamme",
+      "Quacksalber"
+    ]
+  },
+  {
+    fieldId: "handel_wirtschaft",
     category: "Handel & Wirtschaft",
     jobs: [
       "Händler",
@@ -55,79 +118,8 @@ export const JOB_CATEGORIES: JobCategory[] = [
     ]
   },
   {
-    category: "Transport & Logistik",
-    jobs: [
-      "Fuhrmann",
-      "Kutschfahrer / Kutscher",
-      "Schiffer / Kapitän",
-      "Hafenarbeiter",
-      "Bote / Eilbote",
-      "Belademeister / Logistiker",
-      "Fährmann",
-      "Karrenlenker",
-      "Matrose"
-    ]
-  },
-  {
-    category: "Medizin",
-    jobs: [
-      "Arzt / Heiler",
-      "Feldscher",
-      "Wundarzt",
-      "Apotheker",
-      "Seuchenarzt",
-      "Pfleger",
-      "Hebamme",
-      "Quacksalber"
-    ]
-  },
-  {
-    category: "Magische Berufe",
-    jobs: [
-      "Alchemist",
-      "Runenschmied",
-      "Magieforscher",
-      "Verzauberer",
-      "Elementarmagier",
-      "Beschwörer",
-      "Nekromant",
-      "Illusionist",
-      "Artefaktforscher",
-      "Ritualmagier"
-    ]
-  },
-  {
-    category: "Militär",
-    jobs: [
-      "Soldat",
-      "Reitersoldat / Kavallerist",
-      "Infanterist",
-      "Bogenschütze",
-      "Armbrustschütze",
-      "Offizier",
-      "Söldner",
-      "Strategieberater",
-      "Kommandant",
-      "Rekrut",
-      "Hauptmann"
-    ]
-  },
-  {
-    category: "Wachen & Sicherheit",
-    jobs: [
-      "Wache",
-      "Stadtwache",
-      "Türsteher",
-      "Leibwächter",
-      "Gefängniswärter",
-      "Patrouillenführer",
-      "Torkontrolleur",
-      "Nachtwächter",
-      "Turmwächter"
-    ]
-  },
-  {
-    category: "Verwaltung & Staat",
+    fieldId: "verwaltung_recht",
+    category: "Verwaltung & Recht",
     jobs: [
       "Schreiber",
       "Beamter",
@@ -138,57 +130,90 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Verwalter",
       "Kanzler",
       "Herold",
-      "Vogt"
-    ]
-  },
-  {
-    category: "Adel & Herrschaft (Regenten & Amtsträger)",
-    jobs: [
-      "Fürst / König",
-      "Königin",
-      "Herzog / Herzogin",
-      "Graf / Gräfin",
-      "Baron / Baronin",
-      "Freiherr / Freiin",
-      "Lord / Lady",
-      "Hofdame",
+      "Vogt",
       "Ratsherr / Berater",
       "Seneschall",
-      "Lehntherr",
-      "Kronprinz / Kronprinzessin"
+      "Lehntherr"
     ]
   },
   {
-    category: "Adel & Herrschaft (Kinder & Nachkommen)",
+    fieldId: "militaer_sicherheit",
+    category: "Militär & Sicherheit",
     jobs: [
-      "Herzogstochter",
-      "Herzogsohn",
-      "Grafentochter",
-      "Grafensohn",
-      "Baronstochter",
-      "Baronssohn",
-      "Fürstentochter",
-      "Fürstensohn",
-      "Königstochter",
-      "Königssohn",
-      "Prinzessin",
-      "Prinz",
-      "Erbprinzessin",
-      "Erbprinz",
-      "Erbtochter",
-      "Erbsohn",
-      "Edelfräulein",
-      "Junker",
-      "Komtesse",
-      "Freiin",
-      "Freiherr (Nachkomme)",
-      "Lordstochter",
-      "Lordsohn",
-      "Adelsnachkomme"
+      "Soldat",
+      "Kommandant",
+      "Offizier",
+      "Hauptmann",
+      "Rekrut",
+      "Söldner",
+      "Infanterist",
+      "Reitersoldat / Kavallerist",
+      "Bogenschütze",
+      "Armbrustschütze",
+      "Strategieberater",
+      "Stadtwache",
+      "Wache",
+      "Leibwächter",
+      "Patrouillenführer",
+      "Torkontrolleur",
+      "Nachtwächter",
+      "Turmwächter",
+      "Gefängniswärter",
+      "Türsteher",
+      "Paladin"
     ]
   },
   {
-    category: "Religion",
+    fieldId: "seefahrt",
+    category: "Seefahrt",
+    jobs: [
+      "Schiffer / Kapitän",
+      "Matrose",
+      "Steuermann",
+      "Fährmann",
+      "Hafenarbeiter",
+      "Navigator",
+      "Bootsmann"
+    ]
+  },
+  {
+    fieldId: "transport_logistik",
+    category: "Transport & Logistik",
+    jobs: [
+      "Fuhrmann",
+      "Kutschfahrer / Kutscher",
+      "Bote / Eilbote",
+      "Belademeister / Logistiker",
+      "Karrenlenker"
+    ]
+  },
+  {
+    fieldId: "kunst_kultur",
+    category: "Kunst & Kultur",
+    jobs: [
+      "Maler",
+      "Bildhauer",
+      "Dichter",
+      "Kunsthandwerker",
+      "Buchillustrator"
+    ]
+  },
+  {
+    fieldId: "unterhaltung",
+    category: "Unterhaltung",
+    jobs: [
+      "Barde / Musiker",
+      "Tänzer",
+      "Gaukler / Akrobat",
+      "Schauspieler",
+      "Hofnarr",
+      "Zirkusartist",
+      "Jongleur"
+    ]
+  },
+  {
+    fieldId: "religion_klerus",
+    category: "Religion & Klerus",
     jobs: [
       "Priester",
       "Kleriker",
@@ -197,59 +222,65 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Tempeldiener",
       "Exorzist",
       "Orakel",
-      "Hohepriester",
-      "Paladin"
+      "Hohepriester"
     ]
   },
   {
-    category: "Forschung & Bildung",
+    fieldId: "magie_arkana",
+    category: "Magie & Arkane Künste",
     jobs: [
-      "Gelehrter",
-      "Kartograf",
+      "Magieforscher",
+      "Verzauberer",
+      "Elementarmagier",
+      "Beschwörer",
+      "Nekromant",
+      "Illusionist",
+      "Artefaktforscher",
+      "Ritualmagier",
+      "Runenschmied"
+    ]
+  },
+  {
+    fieldId: "alchemie",
+    category: "Alchemie",
+    jobs: [
+      "Alchemist",
+      "Trankbrauer",
+      "Giftmischer",
+      "Essenzenforscher"
+    ]
+  },
+  {
+    fieldId: "bergbau_rohstoffe",
+    category: "Bergbau & Rohstoffe",
+    jobs: [
+      "Bergmann / Bergarbeiter",
+      "Schürfer",
+      "Erzsucher",
+      "Steinbrecher",
+      "Köhler"
+    ]
+  },
+  {
+    fieldId: "schrift_bildung",
+    category: "Schrift & Bildung",
+    jobs: [
       "Bibliothekar",
+      "Archivar",
       "Professor / Lehrmeister",
-      "Historiker",
-      "Astronom",
       "Student / Schüler",
-      "Philosoph",
-      "Archivar"
+      "Kalligraph",
+      "Buchbinder"
     ]
   },
   {
-    category: "Handwerkliche Spezialberufe",
-    jobs: [
-      "Büchsenmacher",
-      "Feinmechaniker",
-      "Uhrmacher",
-      "Goldschmied",
-      "Juwelier",
-      "Instrumentenbauer",
-      "Optiker",
-      "Graveur",
-      "Siegelstecher"
-    ]
-  },
-  {
-    category: "Natur & Wildnis",
-    jobs: [
-      "Jäger",
-      "Förster",
-      "Waldläufer",
-      "Falkner",
-      "Kräutersammler",
-      "Kundschafter",
-      "Trapper",
-      "Holzfäller"
-    ]
-  },
-  {
+    fieldId: "dienstleistungen",
     category: "Dienstleistungen",
     jobs: [
       "Tavernenwirt / Wirt",
       "Kellner",
       "Maid / Hausmädchen",
       "Magd",
-      "Koch / Chefkoch",
       "Barbier / Friseur",
       "Herbergsleiter",
       "Dienstbote",
@@ -259,35 +290,20 @@ export const JOB_CATEGORIES: JobCategory[] = [
     ]
   },
   {
-    category: "Unterhaltung",
+    fieldId: "adel_herrschaft",
+    category: "Adel & Herrschaft",
     jobs: [
-      "Barde / Musiker",
-      "Tänzer",
-      "Gaukler / Akrobat",
-      "Schauspieler",
-      "Hofnarr",
-      "Zirkusartist",
-      "Jongleur",
-      "Dichter"
-    ]
-  },
-  {
-    category: "Kriminelle Berufe",
-    jobs: [
-      "Dieb",
-      "Taschendieb",
-      "Schmuggler",
-      "Auftragsmörder / Assassine",
-      "Hehler",
-      "Fälscher",
-      "Räuber / Bandit",
-      "Schutzgeldeintreiber",
-      "Einbrecher"
-    ]
-  },
-  {
-    category: "Adel & Herrschaftstitel",
-    jobs: [
+      "Fürst / König",
+      "Königin",
+      "Herzog / Herzogin",
+      "Graf / Gräfin",
+      "Baron / Baronin",
+      "Freiherr / Freiin",
+      "Lord / Lady",
+      "Hofdame",
+      "Kronprinz / Kronprinzessin",
+      "Erbprinz / Erbprinzessin",
+      "Prinz / Prinzessin",
       "Herzogstochter",
       "Herzogsohn",
       "Erbherzogstochter",
@@ -299,16 +315,10 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Erbgraf",
       "Baronstochter",
       "Baronssohn",
-      "Freiin",
-      "Freiherr (Nachkomme)",
-      "Prinzessin",
-      "Prinz",
-      "Königstochter",
-      "Königssohn",
       "Fürstentochter",
       "Fürstensohn",
-      "Erbprinzessin",
-      "Erbprinz",
+      "Königstochter",
+      "Königssohn",
       "Erbtochter",
       "Erbsohn",
       "Edelfräulein",
@@ -319,7 +329,8 @@ export const JOB_CATEGORIES: JobCategory[] = [
     ]
   },
   {
-    category: "Abenteuerberufe",
+    fieldId: "abenteuer_sondergewerbe",
+    category: "Abenteuer & Sondergewerbe",
     jobs: [
       "Abenteurer",
       "Schatzsucher",
@@ -328,7 +339,16 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Ruinenerkunder",
       "Dungeon-Scout",
       "Söldner-Garde",
-      "Reliktsucher"
+      "Reliktsucher",
+      "Dieb",
+      "Taschendieb",
+      "Schmuggler",
+      "Auftragsmörder / Assassine",
+      "Hehler",
+      "Fälscher",
+      "Räuber / Bandit",
+      "Schutzgeldeintreiber",
+      "Einbrecher"
     ]
   }
 ];
@@ -362,3 +382,50 @@ export const NOBLE_CHILDREN_GROUPS: NobleChildGroup[] = [
     titles: ["Erbtochter", "Erbsohn", "Edelfräulein", "Junker", "Lordstochter", "Lordsohn", "Adelsnachkomme"]
   }
 ];
+
+/**
+ * Finds the matching Berufsfeld fieldId for a given job title.
+ */
+export function getFieldIdForJob(jobName: string): string | undefined {
+  if (!jobName || !jobName.trim()) return undefined;
+  const lower = jobName.toLowerCase().trim();
+
+  // 1. Check Noble titles
+  for (const group of NOBLE_CHILDREN_GROUPS) {
+    if (group.titles.some(t => t.toLowerCase() === lower)) {
+      return 'adel_herrschaft';
+    }
+  }
+
+  // 2. Direct match or alias match
+  for (const cat of JOB_CATEGORIES) {
+    for (const j of cat.jobs) {
+      const jLower = j.toLowerCase();
+      if (jLower === lower || jLower.split(' / ').some(part => part.trim() === lower)) {
+        return cat.fieldId;
+      }
+    }
+  }
+
+  // 3. Substring match for meaningful length strings (>= 4 characters)
+  if (lower.length >= 4) {
+    for (const cat of JOB_CATEGORIES) {
+      for (const j of cat.jobs) {
+        const jLower = j.toLowerCase();
+        // Check if the job name contains this title or vice versa
+        if (lower.includes(jLower) || jLower.split(' / ').some(part => part.trim().length >= 4 && lower.includes(part.trim()))) {
+          return cat.fieldId;
+        }
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Returns the category definition for a given fieldId or name.
+ */
+export function getJobCategoryByFieldId(fieldId: string): JobCategory | undefined {
+  return JOB_CATEGORIES.find(c => c.fieldId === fieldId || c.category.toLowerCase() === fieldId.toLowerCase());
+}

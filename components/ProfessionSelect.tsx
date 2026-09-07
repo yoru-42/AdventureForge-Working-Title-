@@ -1,9 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { JOB_CATEGORIES, ALL_PRESET_JOBS, NOBLE_CHILDREN_GROUPS } from './jobPresets';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  JOB_CATEGORIES,
+  ALL_PRESET_JOBS,
+  NOBLE_CHILDREN_GROUPS,
+  getFieldIdForJob,
+  getJobCategoryByFieldId
+} from './jobPresets';
 
 interface ProfessionSelectProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (value: string, detectedFieldId?: string) => void;
+  selectedField?: string;
+  onFieldChange?: (fieldId: string) => void;
   placeholder?: string;
   className?: string;
   selectClassName?: string;
@@ -14,13 +22,15 @@ interface ProfessionSelectProps {
 export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
   value = "",
   onChange,
-  placeholder = "Beruf oder Rolle wählen...",
-  selectClassName = "w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal",
-  inputClassName = "w-full mt-2 bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal",
+  selectedField = "",
+  onFieldChange,
+  placeholder = "Berufsbezeichnung wählen...",
+  selectClassName = "w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs outline-none focus:border-amber-500 transition shadow-inner font-normal",
+  inputClassName = "w-full mt-2 bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs outline-none focus:border-amber-500 transition shadow-inner font-normal",
   showNobleChildrenButton = true
 }) => {
   const safeValue = value || "";
-  const allNobleTitles = NOBLE_CHILDREN_GROUPS.flatMap(g => g.titles);
+  const allNobleTitles = useMemo(() => NOBLE_CHILDREN_GROUPS.flatMap(g => g.titles), []);
   const isValueInPresets = ALL_PRESET_JOBS.includes(safeValue);
   const isValueInNoble = allNobleTitles.includes(safeValue);
   const [isCustomMode, setIsCustomMode] = useState<boolean>(!isValueInPresets && !isValueInNoble && safeValue.trim().length > 0);
@@ -33,14 +43,39 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
     } else {
       setIsCustomMode(true);
     }
-  }, [value]);
+  }, [value, allNobleTitles]);
 
-  const selectValue = isCustomMode ? '__custom__' : (isValueInPresets ? safeValue : '');
+  const handleJobSelected = (job: string) => {
+    const detectedField = getFieldIdForJob(job);
+    if (detectedField && onFieldChange) {
+      onFieldChange(detectedField);
+    }
+    onChange(job, detectedField);
+  };
 
   const handleSelectTitle = (title: string) => {
     setIsCustomMode(false);
-    onChange(title);
+    const detectedField = getFieldIdForJob(title) || 'adel_herrschaft';
+    if (onFieldChange) {
+      onFieldChange(detectedField);
+    }
+    onChange(title, detectedField);
   };
+
+  // Organize categories: if selectedField is provided, ONLY include that specific field's jobs
+  const organizedCategories = useMemo(() => {
+    if (!selectedField) return JOB_CATEGORIES;
+    const activeCat = getJobCategoryByFieldId(selectedField);
+    if (!activeCat) return JOB_CATEGORIES;
+    return [activeCat];
+  }, [selectedField]);
+
+  // Check if current value exists in the filtered categories
+  const isValueInOrganized = useMemo(() => {
+    return organizedCategories.some(cat => cat.jobs.includes(safeValue));
+  }, [organizedCategories, safeValue]);
+
+  const selectValue = isCustomMode ? '__custom__' : (isValueInOrganized ? safeValue : '');
 
   return (
     <div className="flex flex-col w-full">
@@ -51,31 +86,46 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
           const val = e.target.value;
           if (val === '__custom__') {
             setIsCustomMode(true);
+          } else if (val) {
+            setIsCustomMode(false);
+            handleJobSelected(val);
           } else {
             setIsCustomMode(false);
-            onChange(val);
+            onChange('');
           }
         }}
       >
         <option value="">{placeholder}</option>
-        {JOB_CATEGORIES.map(cat => (
-          <optgroup key={cat.category} label={cat.category}>
-            {cat.jobs.map(job => (
-              <option key={job} value={job}>
-                {job}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-        <option value="__custom__">Eigene Rolle / Freitext eintragen...</option>
+        {organizedCategories.map(cat => {
+          return (
+            <optgroup
+              key={cat.fieldId}
+              label={`Passende Berufe: ${cat.category}`}
+            >
+              {cat.jobs.map(job => (
+                <option key={job} value={job}>
+                  {job}
+                </option>
+              ))}
+            </optgroup>
+          );
+        })}
+        <option value="__custom__">Eigene Berufsbezeichnung / Freitext eintragen...</option>
       </select>
 
       {isCustomMode && (
         <input
           type="text"
           value={safeValue}
-          onChange={e => onChange(e.target.value)}
-          placeholder="Eigene Rolle oder Beruf eintragen..."
+          onChange={e => {
+            const val = e.target.value;
+            const detectedField = getFieldIdForJob(val);
+            if (detectedField && onFieldChange) {
+              onFieldChange(detectedField);
+            }
+            onChange(val, detectedField);
+          }}
+          placeholder="Eigene Berufsbezeichnung eintragen..."
           className={inputClassName}
         />
       )}
@@ -87,7 +137,7 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
             onClick={() => setShowNobleChildrenSubmenu(!showNobleChildrenSubmenu)}
             className="text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
           >
-            <i className={`fa-solid ${showNobleChildrenSubmenu ? 'fa-chevron-up' : 'fa-chevron-down'} text-[9px]`}></i>
+            <span className="text-[10px]">{showNobleChildrenSubmenu ? '▲' : '▼'}</span>
             <span>
               {showNobleChildrenSubmenu ? 'Adelstitel ausblenden' : 'Adels- und Nachkommentitel auswählen'}
             </span>
