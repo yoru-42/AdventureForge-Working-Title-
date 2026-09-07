@@ -20,6 +20,7 @@ import { isClothingPlaceholder, isClothingItemTitle, consolidateLoreOutfits } fr
 import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
 import { WorldIntegrationService } from '../services/worldIntegrationService';
+import { WorldSimulationService } from '../services/worldSimulationService';
 import { applyProfessionCompetencyActivity } from '../services/professionCompetencyService';
 import { ProfessionCompetencyActivity } from '../types';
 
@@ -4669,6 +4670,23 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       // Advance stats locally first
       const statusWithTime = advanceGameTime(adventure.statusElements || []);
       
+      // Run World Simulation Step for current action
+      const simRes = WorldSimulationService.runSimulationStep({
+        world,
+        minutesToAdd: 0,
+        actionText: textToSend
+      });
+
+      const activeWorld = simRes.updatedWorld;
+
+      let simulationInstruction = '';
+      if (simRes.playerVisibleSummary) {
+        simulationInstruction = `
+      DYNAMISCHE WELT-SIMULATION & EREIGNISSE (EINGETRETEN IN DIESEM ZUG):
+      ${simRes.playerVisibleSummary}
+        `;
+      }
+
       const npcDocs = npcs.map(n => formatNPCForAIPrompt(n)).join('\n');
 
       const currentStatsStr = statusWithTime.map(s => `${s.label}: ${s.value}`).join(', ');
@@ -5003,6 +5021,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
 
       const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${world.title}".
       ${situationalActionDirective}
+      ${simulationInstruction}
       WELT: ${world.description} (Ton: ${world.tone})
       ${campaignPowerInstruction}
       ${techniqueRulesInstruction}

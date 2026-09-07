@@ -1232,6 +1232,50 @@ export interface WorldEventIntent {
   rawText?: string;
 }
 
+export interface EventPreconditions {
+  locationExists?: boolean;
+  territoryControlledByFactionId?: string;
+  routeActive?: boolean;
+  minimumUnitCount?: number;
+  customCheckKey?: string;
+  requiredWorldFactPredicate?: string;
+}
+
+export interface EventConsequences {
+  damageToLocation?: string;
+  controlTransferFactionId?: string;
+  spawnBattleInstance?: boolean;
+  economicImpact?: 'damaged' | 'under_siege' | 'operational' | 'boosted';
+  followUpEventDelayMinutes?: number;
+  followUpEventType?: string;
+  followUpEventTitle?: string;
+  holdingStatusUpdate?: { holdingId: string; status: 'operational' | 'under_siege' | 'damaged' | 'destroyed' };
+  generatedFactText?: string;
+}
+
+export interface WorldEvent {
+  id: string;
+  type: 'raid' | 'movement' | 'siege' | 'reinforcement' | 'trade_shift' | 'economic_payout' | 'observation' | 'general' | string;
+  title?: string;
+  description?: string;
+  createdAtWorldTime: WorldTime;
+  scheduledForWorldTime: WorldTime;
+  sourceType?: 'character' | 'faction' | 'territory' | 'location' | 'encounter_force' | 'system';
+  sourceId?: string;
+  territoryId?: string;
+  locationId?: string;
+  factionId?: string;
+  characterId?: string;
+  battleInstanceId?: string;
+  status: 'scheduled' | 'pending' | 'resolved' | 'cancelled';
+  priority?: number;
+  preconditions?: EventPreconditions;
+  consequences?: EventConsequences;
+  isPlayerVisible?: boolean;
+  processingDepth?: number;
+  data?: Record<string, any>;
+}
+
 export interface EncounterForce {
   id: string;
   name: string;
@@ -1372,9 +1416,12 @@ export interface DynamicWorldState {
   encounterForces?: Record<string, EncounterForce>;
   battleInstances?: Record<string, BattleInstance>;
   locations?: Record<string, WorldLocationReference>;
+  scheduledEvents?: WorldEvent[];
+  eventHistory?: WorldEvent[];
   activeThreats?: string[];
   activeEvents?: string[];
   recentCombatOutcomes?: CombatResultFeedback[];
+  simulationSeed?: number;
   lastUpdated?: number;
 }
 
@@ -1420,6 +1467,7 @@ export interface WorldSetting {
   conflicts?: WorldFactConflict[];
   changeLog?: WorldFactChangeLogEntry[];
   encounterForces?: EncounterForce[];
+  scheduledEvents?: WorldEvent[];
   dynamicWorldState?: DynamicWorldState;
   connections?: { id?: string; fromId?: string; toId?: string; fromPlace?: string; toPlace?: string; label?: string; travelTime?: string; distance?: string; duration?: string; type?: 'land' | 'sea' | 'air' | string; isUnlocked?: boolean }[];
   startLocationId?: string;
