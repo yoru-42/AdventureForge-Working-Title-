@@ -5,6 +5,7 @@ import { CompetencyCatalogModal } from './CompetencyCatalogModal';
 import { CompetencyEditModal } from './CompetencyEditModal';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { ProfessionSelect } from './ProfessionSelect';
+import { ProfessionSkillTree } from './ProfessionSkillTree';
 import { getFieldIdForJob } from './jobPresets';
 import {
   calculateCompetencyProgress,
@@ -28,7 +29,8 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  Compass
+  Compass,
+  Edit3
 } from 'lucide-react';
 
 export const COMMON_PROFESSION_RANKS = [
@@ -365,7 +367,7 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
           </span>
         </div>
 
-        {/* Struktur: Berufsfeld -> Berufsbezeichnung darunter -> Spezialisierung & Rang -> Erfahrung & Fortschritt */}
+        {/* Struktur: Berufsfeld -> Interaktiver Berufsskilltree -> Spezialisierung & Rang -> Erfahrung & Fortschritt */}
         <div className="flex flex-col gap-3">
           {/* Schritt 1: Übergeordnetes Berufsfeld */}
           <div className="flex flex-col gap-1">
@@ -403,46 +405,93 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
             </select>
           </div>
 
-          {/* Schritt 2: Passende Berufsbezeichnung (darunter) */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
-              <span>Passende Berufsbezeichnung</span>
-              {selectedFieldObj && (
-                <span className="text-[10px] text-amber-400/90 font-medium">
-                  Zugeordnetes Feld: {selectedFieldObj.name}
-                </span>
-              )}
-            </label>
-            {onProfessionNameChange ? (
-              <ProfessionSelect
-                value={professionName}
-                selectedField={currentField}
-                onFieldChange={val => {
-                  setLocalField(val);
-                  if (onProfessionFieldChange) onProfessionFieldChange(val);
-                  updateProgress({ fieldId: val });
-                }}
-                onChange={(val, detectedField) => {
-                  if (onProfessionNameChange) onProfessionNameChange(val, detectedField);
-                  const effectiveField = detectedField || currentField;
-                  if (detectedField) {
-                    setLocalField(detectedField);
-                    if (onProfessionFieldChange && detectedField !== currentField) {
-                      onProfessionFieldChange(detectedField);
-                    }
-                  }
-                  updateProgress({ fieldId: effectiveField, professionName: val });
-                }}
-                placeholder={selectedFieldObj ? `Passende Berufsbezeichnung für ${selectedFieldObj.name} wählen oder eintragen...` : "Berufsbezeichnung wählen oder eintragen..."}
-              />
-            ) : (
-              <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs">
-                {professionName || 'Keine Angabe'}
+          {/* Schritt 2: Echter interaktiver Berufsskilltree für das gewählte Berufsfeld */}
+          {currentField ? (
+            <ProfessionSkillTree
+              fieldId={currentField}
+              fieldName={selectedFieldObj?.name}
+              currentProfession={professionName}
+              currentSpecialization={professionSpecialization}
+              currentRank={currentRank}
+              experienceYears={currentExp.years}
+              competencies={competencies}
+              onSelectProfession={(newProf, newSpec, newField) => {
+                if (newField && newField !== currentField) {
+                  setLocalField(newField);
+                  if (onProfessionFieldChange) onProfessionFieldChange(newField);
+                }
+                if (onProfessionNameChange) {
+                  onProfessionNameChange(newProf, newField || currentField);
+                }
+                if (newSpec !== undefined && onSpecializationChange) {
+                  onSpecializationChange(newSpec);
+                }
+                updateProgress({
+                  fieldId: newField || currentField,
+                  professionName: newProf,
+                  specialization: newSpec !== undefined ? newSpec : professionSpecialization
+                });
+              }}
+            />
+          ) : (
+            <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-6 text-center text-xs text-slate-400">
+              Bitte wählen Sie oben ein Berufsfeld aus, um den dazugehörigen Berufsskilltree und die Entwicklungspfade anzuzeigen.
+            </div>
+          )}
+
+          {/* Schritt 3: Manuelle Anpassung / Freitext (optional einklappbar) */}
+          <div className="flex flex-col gap-2 pt-1 border-t border-slate-800/60">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-300">
+                Aktuell gewählte Berufsdaten
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowConditionsInput(prev => !prev)}
+                className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 transition"
+              >
+                <Edit3 className="w-3 h-3" />
+                <span>{showConditionsInput ? 'Manuelle Eingabe verbergen' : 'Manuelle Eingabe / Freitext'}</span>
+              </button>
+            </div>
+
+            {showConditionsInput && (
+              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
+                <label className="text-[11px] text-slate-400">
+                  Benutzerdefinierte Berufsbezeichnung
+                </label>
+                {onProfessionNameChange ? (
+                  <ProfessionSelect
+                    value={professionName}
+                    selectedField={currentField}
+                    onFieldChange={val => {
+                      setLocalField(val);
+                      if (onProfessionFieldChange) onProfessionFieldChange(val);
+                      updateProgress({ fieldId: val });
+                    }}
+                    onChange={(val, detectedField) => {
+                      if (onProfessionNameChange) onProfessionNameChange(val, detectedField);
+                      const effectiveField = detectedField || currentField;
+                      if (detectedField) {
+                        setLocalField(detectedField);
+                        if (onProfessionFieldChange && detectedField !== currentField) {
+                          onProfessionFieldChange(detectedField);
+                        }
+                      }
+                      updateProgress({ fieldId: effectiveField, professionName: val });
+                    }}
+                    placeholder="Berufsbezeichnung wählen oder eintragen..."
+                  />
+                ) : (
+                  <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs">
+                    {professionName || 'Keine Angabe'}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* Schritt 3: Spezialisierung & Berufsrang */}
+          {/* Schritt 4: Spezialisierung & Berufsrang */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-semibold text-slate-300">
