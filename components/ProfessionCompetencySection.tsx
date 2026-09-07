@@ -284,20 +284,26 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
     }
   };
 
-  // Handler: Add manual custom competency
+  // Handler: Add manual custom competency directly inline into list
   const handleAddManual = () => {
     const newComp: ProfessionCompetency = normalizeCompetency({
-      name: 'Neue Kompetenz',
+      name: 'Neue Fachkompetenz',
       category: activeCategoryFilter !== 'Alle' ? (activeCategoryFilter as ProfessionCompetency['category']) : 'Grundlage',
       proficiency: 0,
       experiencePoints: 0,
       talent: 3
     });
-    setEditingCompetency(newComp);
-    setIsEditModalOpen(true);
+    onCompetenciesChange([...competencies, newComp]);
   };
 
-  // Handler: Save edited or created competency
+  // Handler: Direct inline update for any competency field
+  const handleUpdateCompetency = (updated: ProfessionCompetency) => {
+    onCompetenciesChange(
+      competencies.map(c => (c.id === updated.id ? updated : c))
+    );
+  };
+
+  // Handler: Save edited or created competency (fallback from modal if used)
   const handleSaveCompetency = (saved: ProfessionCompetency) => {
     const exists = competencies.some(c => c.id === saved.id);
     if (exists) {
@@ -765,6 +771,7 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
               <CompetencyCard
                 key={comp.id}
                 competency={comp}
+                onUpdate={handleUpdateCompetency}
                 onPractice={handlePractice}
                 onEdit={c => {
                   setEditingCompetency(c);
