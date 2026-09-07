@@ -4307,10 +4307,10 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
           const encounter = WorldIntegrationService.createEncounterForce({
             name: `${count}x ${unitDisplayName}`,
             enemyTypeIdOrName: unitDisplayName,
-            factionIdOrName: unitDisplayName,
             originIdOrName: source,
             count,
             objective: 'raid',
+            status: 'engaged',
             world: updatedWorld,
             loreDatabase: updatedLore,
             characters: updatedPlayer ? [updatedPlayer] : [],

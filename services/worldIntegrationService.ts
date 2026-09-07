@@ -17,7 +17,9 @@ import {
   TacticalEntity,
   TacticalFormation,
   TacticalDirection,
-  TacticalSpawnSource
+  TacticalSpawnSource,
+  ResolutionResult,
+  WorldEventIntent
 } from '../types';
 import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { WorldKnowledgeService } from './worldKnowledgeService';
@@ -73,166 +75,412 @@ export interface CreateEncounterForceParams {
   context?: string;
   hostility?: 'neutral' | 'suspicious' | 'hostile';
   escalation?: 'local' | 'regional' | 'major' | 'unknown';
+  status?: EncounterForce['status'];
   world: WorldSetting;
   loreDatabase?: LoreEntry[];
   characters?: Character[];
   npcs?: NPC[];
 }
 
+export interface ProcessWorldEventResult {
+  intent: WorldEventIntent;
+  resolvedContext: ResolvedConnectedWorldData;
+  encounterForce: EncounterForce | null;
+  tacticalSpawnNeeded: boolean;
+  tacticalResult?: {
+    group: TacticalGroup;
+    entities: TacticalEntity[];
+    updatedCombatState: CombatState;
+    updatedEncounterForce: EncounterForce;
+  };
+  validationWarnings: string[];
+  generatedFacts: WorldFact[];
+  status: 'info_only' | 'force_created' | 'force_updated' | 'tactical_spawned' | 'unresolved';
+}
+
 export class WorldIntegrationService {
   // -------------------------------------------------------------
-  // 1. Stable String Matching & Helpers
+  // 1. Stable String Matching & Normalization Helpers
   // -------------------------------------------------------------
   private static normalizeStr(str: string): string {
     return (str || '')
       .toLowerCase()
       .trim()
-      .replace(/^(der|die|das|ein|eine|eines|stamm\s+der|orden\s+der|clan\s+der)\s+/i, '')
+      .replace(/^(der|die|das|ein|eine|eines|stamm\s+der|orden\s+der|clan\s+der|haus\s+der|stamm|clan|orden|haus)\s+/i, '')
       .replace(/[^a-z0-9äöüß]/gi, '');
   }
 
   // -------------------------------------------------------------
-  // 2. Entity Resolvers (Single Source of Truth)
+  // 2. Hardened Entity Resolvers with Priority & Ambiguity Handling
+  // Priority: 1. Exact ID -> 2. Exact Title -> 3. Explicit Alias -> 4. Normalized -> 5. Controlled Fuzzy -> Ambiguous -> Unresolved
   // -------------------------------------------------------------
 
   /**
-   * Resolves a generic LoreEntry by ID or Title/Alias
+   * Resolves a generic LoreEntry with full ResolutionResult metadata.
+   * Guarantees that generic names (e.g. "Goblin") NEVER fuzzy-match to specific compounds (e.g. "Goblin-Krieger").
+   */
+  static resolveLoreEntryDetailed(
+    loreDatabase: LoreEntry[] = [],
+    idOrName: string,
+    category?: string
+  ): ResolutionResult<LoreEntry> {
+    if (!idOrName || typeof idOrName !== 'string' || !loreDatabase || loreDatabase.length === 0) {
+      return {
+        value: null,
+        status: 'unresolved',
+        confidence: 0,
+        reason: 'Kein Suchbegriff oder leere Lore-Datenbank'
+      };
+    }
+
+    const trimmed = idOrName.trim();
+    if (!trimmed) {
+      return {
+        value: null,
+        status: 'unresolved',
+        confidence: 0,
+        reason: 'Leerer Suchbegriff'
+      };
+    }
+
+    const normalized = this.normalizeStr(trimmed);
+
+    // Candidates in scope (filtered by category if specified)
+    const pool = category ? loreDatabase.filter(e => e.category === category) : loreDatabase;
+    if (pool.length === 0) {
+      return {
+        value: null,
+        status: 'unresolved',
+        confidence: 0,
+        reason: category ? `Keine Einträge in Kategorie "${category}" gefunden` : 'Keine Einträge vorhanden'
+      };
+    }
+
+    // 1. Priority 1: Exact ID Match
+    const byId = pool.find(e => e.id === trimmed);
+    if (byId) {
+      return {
+        value: byId,
+        status: 'resolved',
+        confidence: 100,
+        source: 'id'
+      };
+    }
+
+    // 2. Priority 2: Exact Name/Title Match (Case-Insensitive)
+    const byExactTitle = pool.filter(e => e.title.trim().toLowerCase() === trimmed.toLowerCase());
+    if (byExactTitle.length === 1) {
+      return {
+        value: byExactTitle[0],
+        status: 'resolved',
+        confidence: 100,
+        source: 'exact_name'
+      };
+    } else if (byExactTitle.length > 1) {
+      return {
+        value: null,
+        status: 'ambiguous',
+        confidence: 60,
+        candidates: byExactTitle,
+        reason: `Mehrere Einträge mit identischem Titel "${trimmed}" gefunden`
+      };
+    }
+
+    // 3. Priority 3: Explicit Alias / Nickname Match
+    const byAlias = pool.filter(e => {
+      const d = e.details as any;
+      if (!d) return false;
+      const lower = trimmed.toLowerCase();
+      if (typeof d.alias === 'string' && d.alias.trim().toLowerCase() === lower) return true;
+      if (typeof d.nickname === 'string' && d.nickname.trim().toLowerCase() === lower) return true;
+      if (Array.isArray(d.aliases) && d.aliases.some((a: string) => typeof a === 'string' && a.trim().toLowerCase() === lower)) return true;
+      return false;
+    });
+
+    if (byAlias.length === 1) {
+      return {
+        value: byAlias[0],
+        status: 'resolved',
+        confidence: 95,
+        source: 'alias'
+      };
+    } else if (byAlias.length > 1) {
+      return {
+        value: null,
+        status: 'ambiguous',
+        confidence: 60,
+        candidates: byAlias,
+        reason: `Mehrere Einträge mit dem Alias "${trimmed}" gefunden`
+      };
+    }
+
+    // 4. Priority 4: Normalized Exact Match
+    if (normalized.length >= 2) {
+      const byNorm = pool.filter(e => {
+        if (this.normalizeStr(e.title) === normalized) return true;
+        const d = e.details as any;
+        if (d?.name && this.normalizeStr(d.name) === normalized) return true;
+        if (d?.nickname && this.normalizeStr(d.nickname) === normalized) return true;
+        return false;
+      });
+
+      if (byNorm.length === 1) {
+        return {
+          value: byNorm[0],
+          status: 'resolved',
+          confidence: 90,
+          source: 'normalized'
+        };
+      } else if (byNorm.length > 1) {
+        return {
+          value: null,
+          status: 'ambiguous',
+          confidence: 50,
+          candidates: byNorm,
+          reason: `Mehrere Einträge mit normalisierter Übereinstimmung für "${trimmed}"`
+        };
+      }
+    }
+
+    // 5. Priority 5: Controlled Modifier & Plural Matching
+    // Hard Rule: NEVER match a base word as a substring of a more specific compound entry!
+    // Example: Searching "Goblin" must NOT match "Goblin-Krieger", and searching "Goblin-Krieger" must NOT match "Goblin"!
+    if (normalized.length >= 3) {
+      const allowedPluralSuffixes = ['s', 'en', 'n', 'e'];
+      const allowedModifierPrefixes = ['wilder', 'wilde', 'alter', 'alte', 'junger', 'junge', 'grosser', 'grosse', 'kleiner', 'kleine', 'einfacher', 'einfache', 'gemeiner', 'gemeine'];
+
+      const fuzzyCandidates = pool.filter(e => {
+        const normTitle = this.normalizeStr(e.title);
+        if (!normTitle) return false;
+
+        // Plural check: e.g. "goblins" -> "goblin"
+        for (const suffix of allowedPluralSuffixes) {
+          if (normalized === normTitle + suffix) return true;
+        }
+
+        // Modifier prefix check: e.g. "wildergoblin" -> "goblin"
+        for (const pref of allowedModifierPrefixes) {
+          if (normalized === pref + normTitle) return true;
+        }
+
+        return false;
+      });
+
+      if (fuzzyCandidates.length === 1) {
+        return {
+          value: fuzzyCandidates[0],
+          status: 'resolved',
+          confidence: 80,
+          source: 'fuzzy'
+        };
+      } else if (fuzzyCandidates.length > 1) {
+        return {
+          value: null,
+          status: 'ambiguous',
+          confidence: 40,
+          candidates: fuzzyCandidates,
+          reason: `Mehrere unscharfe Kandidaten für "${trimmed}" gefunden`
+        };
+      }
+    }
+
+    // 6. No Match -> Unresolved
+    return {
+      value: null,
+      status: 'unresolved',
+      confidence: 0,
+      reason: `Kein passender Eintrag für "${trimmed}" gefunden`
+    };
+  }
+
+  /**
+   * Resolves a generic LoreEntry by ID or Title/Alias (Compatibility wrapper)
    */
   static resolveLoreEntry(
     loreDatabase: LoreEntry[] = [],
     idOrName: string,
     category?: string
   ): LoreEntry | null {
-    if (!idOrName || !loreDatabase) return null;
-    const trimmed = idOrName.trim();
-    const normalized = this.normalizeStr(trimmed);
+    return this.resolveLoreEntryDetailed(loreDatabase, idOrName, category).value;
+  }
 
-    // 1. Exact ID match
-    const byId = loreDatabase.find(e => e.id === trimmed);
-    if (byId && (!category || byId.category === category)) return byId;
+  /**
+   * Resolves a Faction with strict category 'Fraktionen'
+   */
+  static resolveFactionDetailed(loreDatabase: LoreEntry[] = [], idOrName: string): ResolutionResult<LoreEntry> {
+    return this.resolveLoreEntryDetailed(loreDatabase, idOrName, 'Fraktionen');
+  }
 
-    // 2. Exact Title match
-    const byTitle = loreDatabase.find(e => {
-      if (category && e.category !== category) return false;
-      return e.title.trim().toLowerCase() === trimmed.toLowerCase();
-    });
-    if (byTitle) return byTitle;
+  static resolveFaction(loreDatabase: LoreEntry[] = [], idOrName: string): LoreEntry | null {
+    return this.resolveFactionDetailed(loreDatabase, idOrName).value;
+  }
 
-    // 3. Normalized Title or Details Name match
-    const byNorm = loreDatabase.find(e => {
-      if (category && e.category !== category) return false;
-      if (this.normalizeStr(e.title) === normalized) return true;
-      if (e.details?.name && this.normalizeStr(e.details.name) === normalized) return true;
-      if (e.details?.nickname && this.normalizeStr(e.details.nickname) === normalized) return true;
-      return false;
-    });
-    if (byNorm) return byNorm;
+  /**
+   * Resolves an Enemy Definition with strict category 'Gegner'
+   */
+  static resolveEnemyTypeDetailed(loreDatabase: LoreEntry[] = [], idOrName: string): ResolutionResult<LoreEntry> {
+    return this.resolveLoreEntryDetailed(loreDatabase, idOrName, 'Gegner');
+  }
 
-    // 4. Fuzzy Substring match if name is long enough (>3 chars)
-    if (normalized.length >= 3) {
-      const bySub = loreDatabase.find(e => {
-        if (category && e.category !== category) return false;
-        const normTitle = this.normalizeStr(e.title);
-        return normTitle.includes(normalized) || normalized.includes(normTitle);
-      });
-      if (bySub) return bySub;
+  static resolveEnemyType(loreDatabase: LoreEntry[] = [], idOrName: string): LoreEntry | null {
+    return this.resolveEnemyTypeDetailed(loreDatabase, idOrName).value;
+  }
+
+  /**
+   * Resolves a Race / Species strictly from category 'Rassen'.
+   * STRICT: NO fallback to other categories (Weltregeln, etc.).
+   */
+  static resolveRaceDetailed(loreDatabase: LoreEntry[] = [], idOrName: string): ResolutionResult<LoreEntry> {
+    return this.resolveLoreEntryDetailed(loreDatabase, idOrName, 'Rassen');
+  }
+
+  static resolveRace(loreDatabase: LoreEntry[] = [], idOrName: string): LoreEntry | null {
+    return this.resolveRaceDetailed(loreDatabase, idOrName).value;
+  }
+
+  /**
+   * Resolves a Character or NPC strictly from character lists or Codex category 'Charaktere'
+   */
+  static resolveCharacterDetailed(
+    characters: Character[] = [],
+    npcs: NPC[] = [],
+    loreDatabase: LoreEntry[] = [],
+    idOrName: string
+  ): ResolutionResult<{ character?: Character | NPC; loreEntry?: LoreEntry }> {
+    if (!idOrName || typeof idOrName !== 'string') {
+      return { value: null, status: 'unresolved', confidence: 0, reason: 'Leerer Suchbegriff' };
     }
 
-    return null;
+    const trimmed = idOrName.trim();
+    if (!trimmed) return { value: null, status: 'unresolved', confidence: 0, reason: 'Leerer Suchbegriff' };
+    const normalized = this.normalizeStr(trimmed);
+
+    // 1. Check characters array by ID
+    const charById = characters.find(c => (c as any).id === trimmed);
+    if (charById) {
+      return { value: { character: charById }, status: 'resolved', confidence: 100, source: 'id' };
+    }
+
+    // 2. Check npcs array by ID
+    const npcById = npcs.find(n => (n as any).id === trimmed);
+    if (npcById) {
+      return { value: { character: npcById as any }, status: 'resolved', confidence: 100, source: 'id' };
+    }
+
+    // 3. Check exact name match in characters / npcs
+    const exactChars = characters.filter(c => c.name.trim().toLowerCase() === trimmed.toLowerCase());
+    const exactNpcs = npcs.filter(n => n.name.trim().toLowerCase() === trimmed.toLowerCase());
+
+    if (exactChars.length + exactNpcs.length === 1) {
+      const match = exactChars[0] || exactNpcs[0];
+      return { value: { character: match as any }, status: 'resolved', confidence: 100, source: 'exact_name' };
+    } else if (exactChars.length + exactNpcs.length > 1) {
+      return {
+        value: null,
+        status: 'ambiguous',
+        confidence: 60,
+        reason: `Mehrere Charaktere/NPCs mit dem Namen "${trimmed}" gefunden`
+      };
+    }
+
+    // 4. Check Codex under category 'Charaktere'
+    const loreRes = this.resolveLoreEntryDetailed(loreDatabase, idOrName, 'Charaktere');
+    if (loreRes.status === 'resolved' && loreRes.value) {
+      return {
+        value: { loreEntry: loreRes.value },
+        status: 'resolved',
+        confidence: loreRes.confidence,
+        source: loreRes.source
+      };
+    } else if (loreRes.status === 'ambiguous') {
+      return {
+        value: null,
+        status: 'ambiguous',
+        confidence: loreRes.confidence,
+        reason: loreRes.reason
+      };
+    }
+
+    // 5. Normalized match in characters / npcs
+    const normChars = characters.filter(c => this.normalizeStr(c.name) === normalized);
+    const normNpcs = npcs.filter(n => this.normalizeStr(n.name) === normalized);
+    if (normChars.length + normNpcs.length === 1) {
+      const match = normChars[0] || normNpcs[0];
+      return { value: { character: match as any }, status: 'resolved', confidence: 90, source: 'normalized' };
+    }
+
+    return { value: null, status: 'unresolved', confidence: 0, reason: `Charakter "${trimmed}" nicht gefunden` };
   }
 
-  /**
-   * Resolves a Faction from Codex / LoreDatabase
-   */
-  static resolveFaction(loreDatabase: LoreEntry[] = [], idOrName: string): LoreEntry | null {
-    return this.resolveLoreEntry(loreDatabase, idOrName, 'Fraktionen');
-  }
-
-  /**
-   * Resolves an Enemy Definition from Codex / LoreDatabase
-   */
-  static resolveEnemyType(loreDatabase: LoreEntry[] = [], idOrName: string): LoreEntry | null {
-    return this.resolveLoreEntry(loreDatabase, idOrName, 'Gegner');
-  }
-
-  /**
-   * Resolves a Race / Species from Codex / LoreDatabase
-   */
-  static resolveRace(loreDatabase: LoreEntry[] = [], idOrName: string): LoreEntry | null {
-    const raceEntry = this.resolveLoreEntry(loreDatabase, idOrName, 'Rassen');
-    if (raceEntry) return raceEntry;
-    // Fallback: check Weltregeln or other lore if category not strictly 'Rassen'
-    return this.resolveLoreEntry(loreDatabase, idOrName);
-  }
-
-  /**
-   * Resolves a Character or NPC from existing Character lists and Codex
-   */
   static resolveCharacter(
     characters: Character[] = [],
     npcs: NPC[] = [],
     loreDatabase: LoreEntry[] = [],
     idOrName: string
   ): { character?: Character | NPC; loreEntry?: LoreEntry } | null {
-    if (!idOrName) return null;
-    const trimmed = idOrName.trim();
-    const normalized = this.normalizeStr(trimmed);
-
-    // 1. Check characters array (Player / Companions)
-    const charById = characters.find(c => (c as any).id === trimmed);
-    if (charById) return { character: charById };
-
-    const charByName = characters.find(
-      c => c.name.toLowerCase() === trimmed.toLowerCase() || this.normalizeStr(c.name) === normalized
-    );
-    if (charByName) return { character: charByName };
-
-    // 2. Check npcs array
-    const npcById = npcs.find(n => (n as any).id === trimmed);
-    if (npcById) return { character: npcById as any };
-
-    const npcByName = npcs.find(
-      n => n.name.toLowerCase() === trimmed.toLowerCase() || this.normalizeStr(n.name) === normalized
-    );
-    if (npcByName) return { character: npcByName as any };
-
-    // 3. Check Codex LoreDatabase under 'Charaktere'
-    const loreChar = this.resolveLoreEntry(loreDatabase, idOrName, 'Charaktere');
-    if (loreChar) return { loreEntry: loreChar };
-
-    return null;
+    return this.resolveCharacterDetailed(characters, npcs, loreDatabase, idOrName).value;
   }
 
   /**
    * Resolves a Territory or Place from world territories
    */
-  static resolveTerritory(territories: Territory[] = [], idOrName: string): Territory | null {
-    if (!idOrName || !territories) return null;
+  static resolveTerritoryDetailed(territories: Territory[] = [], idOrName: string): ResolutionResult<Territory> {
+    if (!idOrName || typeof idOrName !== 'string' || !territories || territories.length === 0) {
+      return { value: null, status: 'unresolved', confidence: 0, reason: 'Leerer Suchbegriff' };
+    }
+
     const trimmed = idOrName.trim();
+    if (!trimmed) return { value: null, status: 'unresolved', confidence: 0, reason: 'Leerer Suchbegriff' };
     const normalized = this.normalizeStr(trimmed);
 
     // 1. Exact ID
     const byId = territories.find(t => t.id === trimmed);
-    if (byId) return byId;
+    if (byId) return { value: byId, status: 'resolved', confidence: 100, source: 'id' };
 
     // 2. Exact Name
-    const byName = territories.find(t => t.name.toLowerCase() === trimmed.toLowerCase());
-    if (byName) return byName;
-
-    // 3. Normalized Name
-    const byNorm = territories.find(t => this.normalizeStr(t.name) === normalized);
-    if (byNorm) return byNorm;
-
-    // 4. Substring if length >= 3
-    if (normalized.length >= 3) {
-      const bySub = territories.find(t => {
-        const normName = this.normalizeStr(t.name);
-        return normName.includes(normalized) || normalized.includes(normName);
-      });
-      if (bySub) return bySub;
+    const byExact = territories.filter(t => t.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (byExact.length === 1) {
+      return { value: byExact[0], status: 'resolved', confidence: 100, source: 'exact_name' };
+    } else if (byExact.length > 1) {
+      return {
+        value: null,
+        status: 'ambiguous',
+        confidence: 60,
+        candidates: byExact,
+        reason: `Mehrere Territorien mit Namen "${trimmed}" gefunden`
+      };
     }
 
-    return null;
+    // 3. Normalized Name
+    const byNorm = territories.filter(t => this.normalizeStr(t.name) === normalized);
+    if (byNorm.length === 1) {
+      return { value: byNorm[0], status: 'resolved', confidence: 90, source: 'normalized' };
+    } else if (byNorm.length > 1) {
+      return {
+        value: null,
+        status: 'ambiguous',
+        confidence: 50,
+        candidates: byNorm,
+        reason: `Mehrere Territorien mit normalisiertem Namen "${trimmed}"`
+      };
+    }
+
+    // 4. Controlled Substring
+    if (normalized.length >= 4) {
+      const bySub = territories.filter(t => {
+        const normName = this.normalizeStr(t.name);
+        return normalized.startsWith(normName);
+      });
+      if (bySub.length === 1) {
+        return { value: bySub[0], status: 'resolved', confidence: 75, source: 'fuzzy' };
+      }
+    }
+
+    return { value: null, status: 'unresolved', confidence: 0, reason: `Territorium "${trimmed}" nicht gefunden` };
+  }
+
+  static resolveTerritory(territories: Territory[] = [], idOrName: string): Territory | null {
+    return this.resolveTerritoryDetailed(territories, idOrName).value;
   }
 
   /**
@@ -245,7 +493,7 @@ export class WorldIntegrationService {
     characters?: Character[];
     npcs?: NPC[];
   }): WorldEntityReference | null {
-    const { idOrName, world, loreDatabase = [], characters = [], npcs = [] } = params;
+    const { idOrName, world, loreDatabase = world.loreDatabase || [], characters = [], npcs = [] } = params;
     if (!idOrName) return null;
 
     // 1. Territory
@@ -315,11 +563,148 @@ export class WorldIntegrationService {
   }
 
   // -------------------------------------------------------------
-  // 3. Context & Relation Extraction Layer
+  // 3. Bounded World-Fact Graph Traversal
+  // Traversing grounded relationships with depth limit, cycle protection & confidence weighting
+  // -------------------------------------------------------------
+
+  /**
+   * Performs a bounded BFS graph traversal through WorldFacts to discover grounded relationships.
+   * Max depth: 2 to 4 steps. Cycle protection via visited Set.
+   */
+  static traverseFactGraphForRelation(params: {
+    startEntityId: string;
+    targetCategory?: 'Fraktionen' | 'Charaktere' | 'Gegner' | 'Rassen' | 'Territory';
+    maxDepth?: number;
+    facts: WorldFact[];
+    loreDatabase?: LoreEntry[];
+    territories?: Territory[];
+    characters?: Character[];
+    npcs?: NPC[];
+  }): {
+    entityId: string;
+    loreEntry?: LoreEntry;
+    territory?: Territory;
+    character?: Character | NPC;
+    path: WorldFact[];
+    confidence: number;
+  } | null {
+    const {
+      startEntityId,
+      targetCategory,
+      maxDepth = 3,
+      facts = [],
+      loreDatabase = [],
+      territories = [],
+      characters = [],
+      npcs = []
+    } = params;
+
+    if (!startEntityId || facts.length === 0) return null;
+
+    const visited = new Set<string>([startEntityId]);
+    type QueueItem = {
+      currId: string;
+      depth: number;
+      path: WorldFact[];
+      cumConfidence: number;
+    };
+
+    const queue: QueueItem[] = [{ currId: startEntityId, depth: 0, path: [], cumConfidence: 100 }];
+
+    while (queue.length > 0) {
+      const { currId, depth, path, cumConfidence } = queue.shift()!;
+      if (depth >= maxDepth) continue;
+
+      // Find all valid WorldFacts where currId is subject or object
+      const relevantFacts = facts.filter(f => {
+        if (f.isCurrent === false || (f.status as string) === 'refuted') return false;
+        return f.subjectId === currId || (f.objectId && f.objectId === currId);
+      });
+
+      for (const fact of relevantFacts) {
+        const neighborId = fact.subjectId === currId ? fact.objectId : fact.subjectId;
+        if (!neighborId || visited.has(neighborId)) continue;
+        visited.add(neighborId);
+
+        const factConf = fact.confidence ?? 80;
+        const nextConf = Math.min(cumConfidence, factConf) * 0.95;
+        const nextPath = [...path, fact];
+
+        // Check if neighbor matches target category
+        if (targetCategory === 'Fraktionen') {
+          const faction = loreDatabase.find(e => e.id === neighborId && e.category === 'Fraktionen');
+          if (faction) {
+            return {
+              entityId: neighborId,
+              loreEntry: faction,
+              path: nextPath,
+              confidence: Math.round(nextConf)
+            };
+          }
+        } else if (targetCategory === 'Gegner') {
+          const enemy = loreDatabase.find(e => e.id === neighborId && e.category === 'Gegner');
+          if (enemy) {
+            return {
+              entityId: neighborId,
+              loreEntry: enemy,
+              path: nextPath,
+              confidence: Math.round(nextConf)
+            };
+          }
+        } else if (targetCategory === 'Rassen') {
+          const race = loreDatabase.find(e => e.id === neighborId && e.category === 'Rassen');
+          if (race) {
+            return {
+              entityId: neighborId,
+              loreEntry: race,
+              path: nextPath,
+              confidence: Math.round(nextConf)
+            };
+          }
+        } else if (targetCategory === 'Charaktere') {
+          const charObj = characters.find(c => (c as any).id === neighborId || c.name === neighborId);
+          const npcObj = npcs.find(n => (n as any).id === neighborId || n.name === neighborId);
+          const loreChar = loreDatabase.find(e => e.id === neighborId && e.category === 'Charaktere');
+          if (charObj || npcObj || loreChar) {
+            return {
+              entityId: neighborId,
+              character: (charObj || npcObj) as any,
+              loreEntry: loreChar,
+              path: nextPath,
+              confidence: Math.round(nextConf)
+            };
+          }
+        } else if (targetCategory === 'Territory') {
+          const terr = territories.find(t => t.id === neighborId || t.name === neighborId);
+          if (terr) {
+            return {
+              entityId: terr.id,
+              territory: terr,
+              path: nextPath,
+              confidence: Math.round(nextConf)
+            };
+          }
+        }
+
+        queue.push({
+          currId: neighborId,
+          depth: depth + 1,
+          path: nextPath,
+          cumConfidence: nextConf
+        });
+      }
+    }
+
+    return null;
+  }
+
+  // -------------------------------------------------------------
+  // 4. Context & Relation Extraction Layer
   // -------------------------------------------------------------
 
   /**
    * Connects all components of a situation (Faction -> Leader -> Race -> Enemy -> Location -> WorldFacts)
+   * Grounded in strict resolution and bounded graph relations.
    */
   static extractConnectedWorldData(params: {
     factionIdOrName?: string;
@@ -349,63 +734,122 @@ export class WorldIntegrationService {
     const warnings: string[] = [];
     const allFacts = WorldKnowledgeService.getAllWorldFacts(world, loreDatabase, characters);
 
-    // 1. Resolve Faction
-    let factionEntry: LoreEntry | null = null;
-    if (factionIdOrName) {
-      factionEntry = this.resolveFaction(loreDatabase, factionIdOrName);
-      if (!factionEntry) {
-        warnings.push(`Faction "${factionIdOrName}" could not be resolved in Codex.`);
-      }
-    }
-
-    // 2. Resolve Enemy Type
+    // 1. Resolve Enemy Type strictly (Category 'Gegner')
     let enemyTypeEntry: LoreEntry | null = null;
     if (enemyTypeIdOrName) {
-      enemyTypeEntry = this.resolveEnemyType(loreDatabase, enemyTypeIdOrName);
-      if (!enemyTypeEntry) {
-        warnings.push(`EnemyType "${enemyTypeIdOrName}" could not be resolved in Codex.`);
+      const res = this.resolveEnemyTypeDetailed(loreDatabase, enemyTypeIdOrName);
+      if (res.status === 'resolved' && res.value) {
+        enemyTypeEntry = res.value;
+      } else if (res.status === 'ambiguous') {
+        warnings.push(`Gegnerart "${enemyTypeIdOrName}" ist mehrdeutig (${res.candidates?.map(c => c.title).join(', ')}).`);
+      } else {
+        warnings.push(`Gegnerart "${enemyTypeIdOrName}" existiert nicht im Codex.`);
       }
     }
 
-    // 3. Resolve Race
+    // 2. Resolve Race strictly (Category 'Rassen')
     let raceEntry: LoreEntry | null = null;
     const raceCandidate = raceIdOrName || (enemyTypeEntry?.details as any)?.species;
     if (raceCandidate) {
-      raceEntry = this.resolveRace(loreDatabase, raceCandidate);
-    }
-
-    // 4. Resolve Leader
-    let leaderCharacter: Character | NPC | null = null;
-    let leaderLoreEntry: LoreEntry | null = null;
-    const leaderCandidate = leaderIdOrName || (factionEntry?.details as any)?.leader;
-    if (leaderCandidate) {
-      const charRes = this.resolveCharacter(characters, npcs, loreDatabase, leaderCandidate);
-      if (charRes) {
-        leaderCharacter = charRes.character || null;
-        leaderLoreEntry = charRes.loreEntry || null;
-      } else if (leaderIdOrName) {
-        warnings.push(`Leader "${leaderIdOrName}" could not be resolved in Character lists or Codex.`);
+      const res = this.resolveRaceDetailed(loreDatabase, raceCandidate);
+      if (res.status === 'resolved' && res.value) {
+        raceEntry = res.value;
+      } else if (res.status === 'ambiguous') {
+        warnings.push(`Rasse "${raceCandidate}" ist mehrdeutig.`);
+      } else if (raceIdOrName) {
+        warnings.push(`Rasse "${raceIdOrName}" existiert nicht im Codex.`);
       }
     }
 
-    // 5. Resolve Origin & Target
+    // 3. Resolve Faction strictly (Category 'Fraktionen')
+    // STRICT RULE: Never assume enemyType or race is a faction!
+    let factionEntry: LoreEntry | null = null;
+    if (factionIdOrName) {
+      const res = this.resolveFactionDetailed(loreDatabase, factionIdOrName);
+      if (res.status === 'resolved' && res.value) {
+        factionEntry = res.value;
+      } else if (res.status === 'ambiguous') {
+        warnings.push(`Fraktion "${factionIdOrName}" ist mehrdeutig (${res.candidates?.map(c => c.title).join(', ')}).`);
+      } else {
+        warnings.push(`Fraktion "${factionIdOrName}" existiert nicht im Codex.`);
+      }
+    }
+
+    // If Faction was NOT explicitly specified by the caller, attempt grounded Fact-Graph resolution from EnemyType
+    if (!factionIdOrName && !factionEntry && enemyTypeEntry) {
+      // Check explicit enemyType.details.faction
+      const detailFactionName = (enemyTypeEntry.details as any)?.faction;
+      if (detailFactionName) {
+        factionEntry = this.resolveFaction(loreDatabase, detailFactionName);
+      }
+
+      // If still not found, traverse World-Fact graph
+      if (!factionEntry) {
+        const graphResult = this.traverseFactGraphForRelation({
+          startEntityId: enemyTypeEntry.id,
+          targetCategory: 'Fraktionen',
+          facts: allFacts,
+          loreDatabase
+        });
+        if (graphResult?.loreEntry) {
+          factionEntry = graphResult.loreEntry;
+        }
+      }
+    }
+
+    // 4. Resolve Leader strictly
+    let leaderCharacter: Character | NPC | null = null;
+    let leaderLoreEntry: LoreEntry | null = null;
+    const leaderCandidate = leaderIdOrName || (factionEntry?.details as any)?.leader;
+
+    if (leaderCandidate) {
+      const charRes = this.resolveCharacterDetailed(characters, npcs, loreDatabase, leaderCandidate);
+      if (charRes.status === 'resolved' && charRes.value) {
+        leaderCharacter = charRes.value.character || null;
+        leaderLoreEntry = charRes.value.loreEntry || null;
+      } else if (leaderIdOrName) {
+        warnings.push(`Anführer "${leaderIdOrName}" konnte in Charakteren oder Codex nicht gefunden werden.`);
+      }
+    }
+
+    // If no leader candidate but faction exists, check World-Fact graph for leader
+    if (!leaderCharacter && !leaderLoreEntry && factionEntry) {
+      const leaderGraphResult = this.traverseFactGraphForRelation({
+        startEntityId: factionEntry.id,
+        targetCategory: 'Charaktere',
+        facts: allFacts,
+        loreDatabase,
+        characters,
+        npcs
+      });
+      if (leaderGraphResult) {
+        leaderCharacter = leaderGraphResult.character || null;
+        leaderLoreEntry = leaderGraphResult.loreEntry || null;
+      }
+    }
+
+    // 5. Resolve Origin & Target Territories strictly
     let originTerritory: Territory | null = null;
     if (originIdOrName) {
-      originTerritory = this.resolveTerritory(world.territories || [], originIdOrName);
-      if (!originTerritory) {
-        warnings.push(`Origin "${originIdOrName}" could not be resolved on World Map.`);
+      const res = this.resolveTerritoryDetailed(world.territories || [], originIdOrName);
+      if (res.status === 'resolved' && res.value) {
+        originTerritory = res.value;
+      } else {
+        warnings.push(`Herkunftsort "${originIdOrName}" existiert nicht auf der Weltkarte.`);
       }
     }
 
     let targetTerritory: Territory | null = null;
     if (targetIdOrName) {
-      targetTerritory = this.resolveTerritory(world.territories || [], targetIdOrName);
-      if (!targetTerritory) {
-        warnings.push(`Target "${targetIdOrName}" could not be resolved on World Map.`);
+      const res = this.resolveTerritoryDetailed(world.territories || [], targetIdOrName);
+      if (res.status === 'resolved' && res.value) {
+        targetTerritory = res.value;
+      } else {
+        warnings.push(`Zielort "${targetIdOrName}" existiert nicht auf der Weltkarte.`);
       }
     }
 
-    // 6. Filter connected WorldFacts
+    // 6. Connect relevant WorldFacts for the situation
     const subjectIds = new Set<string>();
     if (factionEntry) subjectIds.add(factionEntry.id);
     if (enemyTypeEntry) subjectIds.add(enemyTypeEntry.id);
@@ -422,28 +866,28 @@ export class WorldIntegrationService {
     return {
       factionEntry,
       factionId: factionEntry?.id || null,
-      factionName: factionEntry?.title || factionIdOrName || null,
+      factionName: factionEntry?.title || null,
 
       enemyTypeEntry,
       enemyTypeId: enemyTypeEntry?.id || null,
-      enemyTypeName: enemyTypeEntry?.title || enemyTypeIdOrName || null,
+      enemyTypeName: enemyTypeEntry?.title || null,
 
       raceEntry,
       raceId: raceEntry?.id || null,
-      raceName: raceEntry?.title || raceCandidate || null,
+      raceName: raceEntry?.title || null,
 
       leaderCharacter,
       leaderLoreEntry,
       leaderId: (leaderCharacter as any)?.id || leaderLoreEntry?.id || null,
-      leaderName: leaderCharacter?.name || leaderLoreEntry?.title || leaderCandidate || null,
+      leaderName: leaderCharacter?.name || leaderLoreEntry?.title || null,
 
       originTerritory,
       originId: originTerritory?.id || null,
-      originName: originTerritory?.name || originIdOrName || null,
+      originName: originTerritory?.name || null,
 
       targetTerritory,
       targetId: targetTerritory?.id || null,
-      targetName: targetTerritory?.name || targetIdOrName || null,
+      targetName: targetTerritory?.name || null,
 
       connectedFacts,
       warnings
@@ -451,12 +895,12 @@ export class WorldIntegrationService {
   }
 
   // -------------------------------------------------------------
-  // 4. Encounter Force Management
+  // 5. Encounter Force Management & Duplicate Prevention
   // -------------------------------------------------------------
 
   /**
-   * Creates an EncounterForce without duplicating enemy or faction definitions.
-   * Generates accompanying observation/situation facts safely.
+   * Creates or updates an EncounterForce without duplicating enemy or faction definitions.
+   * Prevents uncontrolled duplicate forces when AI re-parses narratives.
    */
   static createEncounterForce(params: CreateEncounterForceParams): {
     encounterForce: EncounterForce;
@@ -476,6 +920,7 @@ export class WorldIntegrationService {
       context = 'Normale Patrouille / Truppenbewegung',
       hostility = 'hostile',
       escalation = 'local',
+      status = 'detected',
       world,
       loreDatabase = world.loreDatabase || [],
       characters = [],
@@ -495,10 +940,48 @@ export class WorldIntegrationService {
       npcs
     });
 
+    const safeCount = Math.max(1, count);
+
+    // Check for existing active matching EncounterForce (Duplicate Prevention)
+    const existingForces = [
+      ...(world.encounterForces || []),
+      ...Object.values(world.dynamicWorldState?.encounterForces || {})
+    ];
+
+    const duplicateCandidate = existingForces.find(f => {
+      if (f.status === 'defeated' || f.status === 'resolved' || f.status === 'dispersed') return false;
+      // Match enemy type or race
+      const matchesEnemy = resolved.enemyTypeId ? f.enemyTypeId === resolved.enemyTypeId : true;
+      const matchesRace = resolved.raceId ? f.raceId === resolved.raceId : true;
+      const matchesFaction = resolved.factionId ? f.factionId === resolved.factionId : (!f.factionId);
+      const matchesOrigin = resolved.originId ? f.originId === resolved.originId : true;
+      const matchesTarget = resolved.targetId ? f.targetId === resolved.targetId : true;
+      const matchesObjective = f.objective === objective;
+
+      return matchesEnemy && matchesRace && matchesFaction && (matchesOrigin || matchesTarget) && matchesObjective;
+    });
+
+    if (duplicateCandidate) {
+      // Merge / update existing force instead of creating an unneeded duplicate
+      const updatedForce: EncounterForce = {
+        ...duplicateCandidate,
+        count: safeCount,
+        hostility,
+        status: status || duplicateCandidate.status,
+        updatedAt: Date.now()
+      };
+
+      return {
+        encounterForce: updatedForce,
+        worldFacts: [],
+        validationWarnings: resolved.warnings
+      };
+    }
+
     const forceId = `force_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 5)}`;
     const forceName =
       name ||
-      `${count}x ${resolved.enemyTypeName || resolved.raceName || 'Einheiten'}${
+      `${safeCount}x ${resolved.enemyTypeName || resolved.raceName || 'Einheiten'}${
         resolved.factionName ? ` (${resolved.factionName})` : ''
       }`;
 
@@ -517,18 +1000,18 @@ export class WorldIntegrationService {
       originName: resolved.originName || undefined,
       targetId: resolved.targetId || undefined,
       targetName: resolved.targetName || undefined,
-      count: Math.max(1, count),
+      count: safeCount,
       objective,
       context,
       hostility,
       escalation,
-      status: 'detected',
+      status,
       isTacticalSpawned: false,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
 
-    // Construct grounded WorldFacts (inference/observation, NOT false canonical dogma)
+    // Construct grounded WorldFacts (observation/situation facts, NOT dogma)
     const generatedFacts: WorldFact[] = [];
 
     // Fact 1: Active force detected
@@ -537,11 +1020,11 @@ export class WorldIntegrationService {
       subjectId: forceId,
       subjectName: forceName,
       predicate: 'has_trait',
-      value: `Streitmacht von ${count} ${resolved.enemyTypeName || 'Einheiten'} aktiv`,
+      value: `Streitmacht von ${safeCount} ${resolved.enemyTypeName || resolved.raceName || 'Einheiten'} aktiv`,
       sourceType: 'ai_inference',
       status: 'known',
       knowledgeType: 'fact',
-      confidence: 90,
+      confidence: 85,
       isCurrent: true,
       createdAt: Date.now()
     });
@@ -573,7 +1056,123 @@ export class WorldIntegrationService {
   }
 
   // -------------------------------------------------------------
-  // 5. Tactical Spawn Bridge
+  // 6. Structured World Event Pipeline
+  // Clean pipeline: AI/Narrative -> Intent -> Validation -> World State -> Optional Tactical Spawn
+  // -------------------------------------------------------------
+
+  /**
+   * Processes a structured WorldEventIntent through full validation, context resolution, and tactical gating.
+   */
+  static processWorldEventIntent(params: {
+    intent: WorldEventIntent;
+    world: WorldSetting;
+    combatState?: CombatState;
+    loreDatabase?: LoreEntry[];
+    characters?: Character[];
+    npcs?: NPC[];
+    allowTacticalSpawn?: boolean;
+  }): ProcessWorldEventResult {
+    const {
+      intent,
+      world,
+      combatState,
+      loreDatabase = world.loreDatabase || [],
+      characters = [],
+      npcs = [],
+      allowTacticalSpawn = true
+    } = params;
+
+    const resolved = this.extractConnectedWorldData({
+      factionIdOrName: intent.faction,
+      enemyTypeIdOrName: intent.enemyType || intent.subject,
+      raceIdOrName: intent.race,
+      leaderIdOrName: intent.leader,
+      originIdOrName: intent.origin,
+      targetIdOrName: intent.target,
+      world,
+      loreDatabase,
+      characters,
+      npcs
+    });
+
+    const isInformationOnly =
+      intent.type === 'info' ||
+      intent.type === 'observation' ||
+      (!intent.attack && !intent.movement && !intent.discoveredByPlayer && !intent.tacticalRelevant);
+
+    // Fall A: Pure information / observation
+    if (isInformationOnly) {
+      const obsFact = this.recordObservationOrInference({
+        subjectId: resolved.enemyTypeId || resolved.factionId || resolved.raceId || 'info_event',
+        subjectName: resolved.enemyTypeName || resolved.factionName || resolved.raceName || intent.subject || 'Ereignis',
+        predicate: 'located_in',
+        value: `Präsenz von ${intent.count || 'Gruppen'} in ${resolved.originName || intent.origin || 'der Region'} bekannt`,
+        objectId: resolved.originId || undefined,
+        objectName: resolved.originName || intent.origin || undefined,
+        confidence: intent.confidence || 75
+      });
+
+      return {
+        intent,
+        resolvedContext: resolved,
+        encounterForce: null,
+        tacticalSpawnNeeded: false,
+        validationWarnings: resolved.warnings,
+        generatedFacts: [obsFact],
+        status: 'info_only'
+      };
+    }
+
+    // Fall B / C / D: Active Encounter
+    const isAttack = Boolean(intent.attack || intent.objective === 'raid' || intent.objective === 'assault');
+    const isMovement = Boolean(intent.movement && !isAttack);
+
+    const initialStatus: EncounterForce['status'] = isAttack ? 'engaged' : isMovement ? 'moving' : 'detected';
+
+    const encounterRes = this.createEncounterForce({
+      name: intent.subject ? `${intent.count || ''} ${intent.subject}`.trim() : undefined,
+      factionIdOrName: intent.faction,
+      enemyTypeIdOrName: intent.enemyType || intent.subject,
+      raceIdOrName: intent.race,
+      leaderIdOrName: intent.leader,
+      originIdOrName: intent.origin,
+      targetIdOrName: intent.target,
+      count: intent.count || 1,
+      objective: intent.objective || (isAttack ? 'raid' : isMovement ? 'patrol' : 'scout'),
+      hostility: intent.hostility || (isAttack ? 'hostile' : 'suspicious'),
+      status: initialStatus,
+      world,
+      loreDatabase,
+      characters,
+      npcs
+    });
+
+    const tacticalNeeded = Boolean(isAttack && allowTacticalSpawn && combatState);
+    let tacticalResult: ProcessWorldEventResult['tacticalResult'];
+
+    if (tacticalNeeded && combatState) {
+      const spawnRes = this.spawnEncounterForceToTactical({
+        encounterForce: encounterRes.encounterForce,
+        combatState,
+        spawnSource: resolved.originName || 'forest_edge'
+      });
+      tacticalResult = spawnRes;
+    }
+
+    return {
+      intent,
+      resolvedContext: resolved,
+      encounterForce: tacticalResult?.updatedEncounterForce || encounterRes.encounterForce,
+      tacticalSpawnNeeded: tacticalNeeded,
+      tacticalResult,
+      validationWarnings: encounterRes.validationWarnings,
+      generatedFacts: encounterRes.worldFacts,
+      status: tacticalNeeded ? 'tactical_spawned' : 'force_created'
+    };
+  }
+
+  // -------------------------------------------------------------
+  // 7. Tactical Spawn Bridge
   // -------------------------------------------------------------
 
   /**
@@ -683,7 +1282,7 @@ export class WorldIntegrationService {
   }
 
   // -------------------------------------------------------------
-  // 6. Combat Result Feedback -> World State
+  // 8. Combat Result Feedback -> World State
   // -------------------------------------------------------------
 
   /**
@@ -820,7 +1419,7 @@ export class WorldIntegrationService {
   }
 
   // -------------------------------------------------------------
-  // 7. Grounding & Hypothesis Guard (Inference vs Canon)
+  // 9. Grounding & Hypothesis Guard (Inference vs Canon)
   // -------------------------------------------------------------
 
   /**

@@ -1199,6 +1199,35 @@ export interface WorldEntityReference {
   metadata?: Record<string, any>;
 }
 
+export interface ResolutionResult<T> {
+  value: T | null;
+  status: 'resolved' | 'ambiguous' | 'unresolved';
+  confidence: number;
+  candidates?: T[];
+  reason?: string;
+  source?: 'id' | 'exact_name' | 'alias' | 'normalized' | 'fact' | 'fuzzy';
+}
+
+export interface WorldEventIntent {
+  type?: 'observation' | 'movement' | 'raid' | 'attack' | 'discovery' | 'camp' | 'threat' | 'info' | string;
+  subject?: string;
+  faction?: string;
+  race?: string;
+  enemyType?: string;
+  leader?: string;
+  origin?: string;
+  target?: string;
+  count?: number;
+  objective?: string;
+  hostility?: 'neutral' | 'suspicious' | 'hostile';
+  movement?: boolean;
+  attack?: boolean;
+  discoveredByPlayer?: boolean;
+  tacticalRelevant?: boolean;
+  confidence?: number;
+  rawText?: string;
+}
+
 export interface EncounterForce {
   id: string;
   name: string;
@@ -1219,7 +1248,7 @@ export interface EncounterForce {
   context?: string;
   hostility?: 'neutral' | 'suspicious' | 'hostile';
   escalation?: 'local' | 'regional' | 'major' | 'unknown';
-  status?: 'detected' | 'mobilized' | 'engaged' | 'defeated' | 'retreated' | 'dispersed';
+  status?: 'detected' | 'moving' | 'mobilized' | 'engaged' | 'retreated' | 'defeated' | 'dispersed' | 'resolved';
   tacticalGroupId?: string;
   isTacticalSpawned?: boolean;
   createdAt?: number;

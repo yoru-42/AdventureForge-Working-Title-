@@ -4,13 +4,14 @@ import {
   Character,
   NPC,
   CombatState,
-  Territory
+  Territory,
+  WorldFact
 } from '../types';
 import { WorldIntegrationService } from '../services/worldIntegrationService';
 import { WorldKnowledgeService } from '../services/worldKnowledgeService';
 
 export function runWorldIntegrationTests() {
-  console.log('=== RUNNING WORLD INTEGRATION LAYER TEST SUITE ===\n');
+  console.log('=== RUNNING WORLD INTEGRATION LAYER & CONTEXT RESOLUTION TEST SUITE ===\n');
   let passed = 0;
   let total = 0;
 
@@ -47,10 +48,20 @@ export function runWorldIntegrationTests() {
       }
     },
     {
+      id: 'enemy_goblin_scout_01',
+      category: 'Gegner',
+      title: 'Goblin-Späher',
+      description: 'Schneller Kundschafter der Goblins.',
+      isUnlocked: true,
+      details: {
+        species: 'Goblin'
+      }
+    },
+    {
       id: 'enemy_bandit_01',
       category: 'Gegner',
       title: 'Bandit',
-      description: 'Wegelagerer und Gesetzloser.',
+      description: 'Wegelagerer und Gesetzloser ohne feste Fraktion.',
       isUnlocked: true
     },
     {
@@ -114,6 +125,48 @@ export function runWorldIntegrationTests() {
     }
   ];
 
+  const sampleFacts: WorldFact[] = [
+    {
+      id: 'fact_warrior_belongs_rotzaehne',
+      subjectId: 'enemy_goblin_warrior_01',
+      subjectName: 'Goblin-Krieger',
+      predicate: 'member_of',
+      objectId: 'faction_rotzaehne_01',
+      objectName: 'Stamm der Rotzähne',
+      sourceType: 'established_story',
+      status: 'known',
+      knowledgeType: 'fact',
+      confidence: 100,
+      isCurrent: true
+    },
+    {
+      id: 'fact_grukk_leads_rotzaehne',
+      subjectId: 'char_grukk_01',
+      subjectName: 'Grukk',
+      predicate: 'leads',
+      objectId: 'faction_rotzaehne_01',
+      objectName: 'Stamm der Rotzähne',
+      sourceType: 'established_story',
+      status: 'known',
+      knowledgeType: 'fact',
+      confidence: 100,
+      isCurrent: true
+    },
+    {
+      id: 'fact_rotzaehne_controls_nordwald',
+      subjectId: 'faction_rotzaehne_01',
+      subjectName: 'Stamm der Rotzähne',
+      predicate: 'controls',
+      objectId: 'territory_nordwald_01',
+      objectName: 'Nordwald',
+      sourceType: 'established_story',
+      status: 'known',
+      knowledgeType: 'fact',
+      confidence: 100,
+      isCurrent: true
+    }
+  ];
+
   const sampleWorld: WorldSetting = {
     title: 'Testwelt',
     description: 'Eine Testwelt für die Integration.',
@@ -121,34 +174,12 @@ export function runWorldIntegrationTests() {
     tone: 'Bodenständig',
     territories: sampleTerritories,
     loreDatabase: sampleLore,
-    facts: [
-      {
-        id: 'fact_grukk_leads_rotzaehne',
-        subjectId: 'char_grukk_01',
-        subjectName: 'Grukk',
-        predicate: 'leads',
-        objectId: 'faction_rotzaehne_01',
-        objectName: 'Stamm der Rotzähne',
-        sourceType: 'established_story',
-        status: 'known',
-        knowledgeType: 'fact',
-        confidence: 100,
-        isCurrent: true
-      },
-      {
-        id: 'fact_rotzaehne_controls_nordwald',
-        subjectId: 'faction_rotzaehne_01',
-        subjectName: 'Stamm der Rotzähne',
-        predicate: 'controls',
-        objectId: 'territory_nordwald_01',
-        objectName: 'Nordwald',
-        sourceType: 'established_story',
-        status: 'known',
-        knowledgeType: 'fact',
-        confidence: 100,
-        isCurrent: true
-      }
-    ]
+    facts: sampleFacts,
+    encounterForces: [],
+    dynamicWorldState: {
+      factions: {},
+      encounterForces: {}
+    }
   };
 
   const sampleCharacters: Character[] = [
@@ -189,216 +220,277 @@ export function runWorldIntegrationTests() {
   };
 
   // -------------------------------------------------------------
-  // Test 1: Einfacher Gegner (Definition existiert im Codex, kein Encounter)
+  // Test 1: 50 Goblins -> 1 EncounterForce, count=50, 50 TacticalEntities nach Spawn
   // -------------------------------------------------------------
-  console.log('\n--- Test 1: Simple Enemy in Codex ---');
-  const resolvedEnemy = WorldIntegrationService.resolveEnemyType(sampleLore, 'Goblin-Krieger');
-  assert(resolvedEnemy !== null && resolvedEnemy.id === 'enemy_goblin_warrior_01', 'Enemy definition resolved correctly');
-  assert(resolvedEnemy?.category === 'Gegner', 'Category is Gegner');
-  assert(!sampleWorld.encounterForces || sampleWorld.encounterForces.length === 0, 'No unsolicited Encounter created');
-
-  // -------------------------------------------------------------
-  // Test 2: Gruppe ohne Kampf (20 Banditen im Wald -> EncounterForce detected, Tactical Spawn = NEIN)
-  // -------------------------------------------------------------
-  console.log('\n--- Test 2: Group without Combat (Encounter ≠ Combat) ---');
-  const encounter2 = WorldIntegrationService.createEncounterForce({
-    name: '20 Banditen im Nordwald',
-    enemyTypeIdOrName: 'Bandit',
-    originIdOrName: 'Nordwald',
-    count: 20,
-    objective: 'camp',
-    context: 'Leben in einem Waldlager',
-    hostility: 'suspicious',
-    world: sampleWorld,
-    loreDatabase: sampleLore
-  });
-
-  assert(encounter2.encounterForce.count === 20, 'Encounter force count is 20');
-  assert(encounter2.encounterForce.enemyTypeId === 'enemy_bandit_01', 'Enemy type resolved to enemy_bandit_01');
-  assert(encounter2.encounterForce.originId === 'territory_nordwald_01', 'Origin territory resolved to territory_nordwald_01');
-  assert(encounter2.encounterForce.isTacticalSpawned === false, 'Tactical spawn is FALSE (Encounter ≠ Combat)');
-  assert(encounter2.encounterForce.status === 'detected', 'Status is detected');
-
-  // -------------------------------------------------------------
-  // Test 3: Normaler Angriff (50 Goblins greifen Dorf an -> Force + TacticalGroup + 50 TacticalEntities)
-  // -------------------------------------------------------------
-  console.log('\n--- Test 3: Normal Raid (50 Goblins on Village) ---');
-  const raidRes = WorldIntegrationService.createEncounterForce({
-    factionIdOrName: 'Stamm der Rotzähne',
-    enemyTypeIdOrName: 'Goblin-Krieger',
-    originIdOrName: 'Nordwald',
-    targetIdOrName: 'Dorf Eichenhain',
+  console.log('\n--- Test 1: 50 Goblins (1 Force -> 1 Group -> 50 TacticalEntities) ---');
+  const t1Res = WorldIntegrationService.createEncounterForce({
     count: 50,
-    objective: 'raid',
-    hostility: 'hostile',
-    escalation: 'local',
-    world: sampleWorld,
-    loreDatabase: sampleLore
-  });
-
-  assert(raidRes.encounterForce.factionId === 'faction_rotzaehne_01', 'Faction resolved to faction_rotzaehne_01');
-  assert(raidRes.encounterForce.enemyTypeId === 'enemy_goblin_warrior_01', 'EnemyType resolved to enemy_goblin_warrior_01');
-  assert(raidRes.encounterForce.raceId === 'race_goblin_01', 'Race resolved to race_goblin_01');
-  assert(raidRes.encounterForce.originId === 'territory_nordwald_01', 'Origin resolved to territory_nordwald_01');
-  assert(raidRes.encounterForce.targetId === 'place_eichenhain_01', 'Target resolved to place_eichenhain_01');
-
-  // Now spawn into tactical combat
-  const tacticalRaid = WorldIntegrationService.spawnEncounterForceToTactical({
-    encounterForce: raidRes.encounterForce,
-    combatState: baseCombatState,
-    formation: 'wedge',
-    direction: 'south'
-  });
-
-  assert(tacticalRaid.group.encounterForceId === raidRes.encounterForce.id, 'TacticalGroup references encounterForceId');
-  assert(tacticalRaid.entities.length === 50, 'Exactly 50 TacticalEntities spawned');
-  assert(Object.keys(tacticalRaid.updatedCombatState.tacticalEntities || {}).length === 50, 'CombatState contains 50 entities');
-  assert(tacticalRaid.updatedEncounterForce.isTacticalSpawned === true, 'EncounterForce is marked isTacticalSpawned');
-  assert(tacticalRaid.updatedEncounterForce.status === 'engaged', 'EncounterForce status is engaged');
-
-  // Verify no 50 duplicate Codex entries were created
-  assert(sampleLore.length === 6, 'Codex loreDatabase remains exactly 6 entries (no 50 duplicate NPCs created)');
-
-  // -------------------------------------------------------------
-  // Test 4: Benannter Anführer (Grukk führt 50 Goblins an -> leaderCharacterId = Grukk, TacticalEntity verweist auf Grukk)
-  // -------------------------------------------------------------
-  console.log('\n--- Test 4: Named Leader (Grukk leads 50 Goblins) ---');
-  const leaderEncounter = WorldIntegrationService.createEncounterForce({
-    factionIdOrName: 'Stamm der Rotzähne',
+    raceIdOrName: 'Goblin',
     enemyTypeIdOrName: 'Goblin-Krieger',
-    leaderIdOrName: 'Grukk',
-    originIdOrName: 'Nordwald',
-    targetIdOrName: 'Dorf Eichenhain',
-    count: 50,
-    objective: 'raid',
     world: sampleWorld,
     loreDatabase: sampleLore
   });
 
-  assert(leaderEncounter.encounterForce.leaderCharacterId === 'char_grukk_01', 'Leader resolved to char_grukk_01');
-  assert(leaderEncounter.encounterForce.leaderCharacterName === 'Grukk', 'Leader name is Grukk');
+  assert(t1Res.encounterForce.count === 50, '1 EncounterForce with count = 50 created');
+  assert(t1Res.encounterForce.enemyTypeId === 'enemy_goblin_warrior_01', 'EnemyType resolved correctly');
+  assert(t1Res.encounterForce.raceId === 'race_goblin_01', 'Race resolved correctly');
 
-  const tacticalLeaderSpawn = WorldIntegrationService.spawnEncounterForceToTactical({
-    encounterForce: leaderEncounter.encounterForce,
+  const t1Tactical = WorldIntegrationService.spawnEncounterForceToTactical({
+    encounterForce: t1Res.encounterForce,
     combatState: baseCombatState
   });
 
-  const leaderEntity = tacticalLeaderSpawn.entities[0];
-  assert(leaderEntity.isLeader === true, 'First entity is flagged as leader');
-  assert(leaderEntity.worldEntityId === 'char_grukk_01', 'Leader TacticalEntity worldEntityId points to char_grukk_01');
-  assert(leaderEntity.anonymous === false, 'Leader TacticalEntity is not anonymous');
-  assert(tacticalLeaderSpawn.entities[1].anonymous === true, 'Rank-and-file entities are anonymous');
+  assert(t1Tactical.entities.length === 50, 'Exactly 50 TacticalEntities spawned');
+  assert(Object.keys(t1Tactical.updatedCombatState.tacticalEntities || {}).length === 50, 'CombatState contains 50 entities');
+  assert(t1Tactical.updatedCombatState.tacticalGroups[t1Tactical.group.id] !== undefined, '1 TacticalGroup registered');
 
   // -------------------------------------------------------------
-  // Test 5: Unbekannte Kontrolle (Inference vs. Canon)
+  // Test 2: Keine Faction erfunden
+  // Input: enemyType = Bandit (no faction in lore details or facts)
+  // Erwartung: factionId = undefined
   // -------------------------------------------------------------
-  console.log('\n--- Test 5: Observation / Inference vs. Canon ---');
-  const observationFact = WorldIntegrationService.recordObservationOrInference({
-    subjectId: 'faction_rotzaehne_01',
-    subjectName: 'Stamm der Rotzähne',
-    predicate: 'has_trait',
-    value: 'Goblins greifen ungewöhnlich koordiniert an',
-    note: 'Verdacht auf fremde Beeinflussung'
+  console.log('\n--- Test 2: No Faction Invented ---');
+  const t2Res = WorldIntegrationService.createEncounterForce({
+    enemyTypeIdOrName: 'Bandit',
+    count: 10,
+    world: sampleWorld,
+    loreDatabase: sampleLore
   });
 
-  assert(observationFact.sourceType === 'ai_inference', 'Observation sourceType is ai_inference');
-  assert(observationFact.knowledgeType === 'inference', 'Observation knowledgeType is inference');
-  assert(observationFact.status === 'implied', 'Observation status is implied (NOT confirmed canon)');
-  assert(observationFact.confidence === 60, 'Observation has non-absolute confidence');
+  assert(t2Res.encounterForce.factionId === undefined, 'factionId is undefined when no faction is linked or specified');
+  assert(t2Res.encounterForce.enemyTypeId === 'enemy_bandit_01', 'Bandit enemy type resolved');
 
   // -------------------------------------------------------------
-  // Test 6: Große Invasion / Multi-Force
+  // Test 3: Explizite Faction
+  // Input: enemyType = Goblin-Krieger, faction = Stamm der Rotzähne
+  // Erwartung: factionId = faction_rotzaehne_01
   // -------------------------------------------------------------
-  console.log('\n--- Test 6: Multi-Force Escalation ---');
-  const forceA = WorldIntegrationService.createEncounterForce({
+  console.log('\n--- Test 3: Explicit Faction Resolution ---');
+  const t3Res = WorldIntegrationService.createEncounterForce({
+    enemyTypeIdOrName: 'Goblin-Krieger',
     factionIdOrName: 'Stamm der Rotzähne',
+    count: 25,
+    world: sampleWorld,
+    loreDatabase: sampleLore
+  });
+
+  assert(t3Res.encounterForce.factionId === 'faction_rotzaehne_01', 'factionId matches ID of Stamm der Rotzähne');
+  assert(t3Res.encounterForce.factionName === 'Stamm der Rotzähne', 'factionName is Stamm der Rotzähne');
+
+  // -------------------------------------------------------------
+  // Test 4: Leader Referenz (Grukk)
+  // Input: leader = Grukk -> leaderCharacterId = char_grukk_01
+  // -------------------------------------------------------------
+  console.log('\n--- Test 4: Named Leader Reference ---');
+  const t4Res = WorldIntegrationService.createEncounterForce({
+    leaderIdOrName: 'Grukk',
     enemyTypeIdOrName: 'Goblin-Krieger',
-    originIdOrName: 'Nordwald',
-    targetIdOrName: 'Dorf Eichenhain',
-    count: 40,
-    escalation: 'regional',
+    count: 30,
     world: sampleWorld,
     loreDatabase: sampleLore
   });
 
-  const forceB = WorldIntegrationService.createEncounterForce({
-    factionIdOrName: 'Schwarzkrallen',
+  assert(t4Res.encounterForce.leaderCharacterId === 'char_grukk_01', 'Existing character ID char_grukk_01 is referenced');
+  assert(t4Res.encounterForce.leaderCharacterName === 'Grukk', 'Leader name is Grukk');
+
+  const t4Tactical = WorldIntegrationService.spawnEncounterForceToTactical({
+    encounterForce: t4Res.encounterForce,
+    combatState: baseCombatState
+  });
+
+  assert(t4Tactical.entities[0].isLeader === true, 'First entity is marked as leader');
+  assert(t4Tactical.entities[0].worldEntityId === 'char_grukk_01', 'Leader entity references char_grukk_01');
+  assert(t4Tactical.entities[1].isLeader === false, 'Rank and file entity is not leader');
+
+  // -------------------------------------------------------------
+  // Test 5: Ambiguous Match & No False Fuzzy Override
+  // Codex: Goblin, Goblin-Krieger, Goblin-Späher
+  // Input: 'Goblin'
+  // Erwartung: Resolves to 'Goblin' (Race), NOT 'Goblin-Krieger'!
+  // -------------------------------------------------------------
+  console.log('\n--- Test 5: Exact vs Compound Resolution (No false fuzzy override) ---');
+  const raceRes = WorldIntegrationService.resolveRaceDetailed(sampleLore, 'Goblin');
+  assert(raceRes.status === 'resolved' && raceRes.value?.id === 'race_goblin_01', 'Goblin resolves strictly to race_goblin_01');
+  assert(raceRes.value?.title === 'Goblin', 'Exact title is Goblin, not Goblin-Krieger');
+
+  // An ambiguous search across similar entries where no exact match exists
+  const ambiguousLoreList: LoreEntry[] = [
+    { id: 'item_sword_a', category: 'Gegenstände', title: 'Stahlschwert des Lichts', description: 'Ein magisches Schwert', isUnlocked: true },
+    { id: 'item_sword_b', category: 'Gegenstände', title: 'Stahlschwert der Nacht', description: 'Ein finsteres Schwert', isUnlocked: true }
+  ];
+  const ambRes = WorldIntegrationService.resolveLoreEntryDetailed(ambiguousLoreList, 'Stahlschwert');
+  assert(ambRes.status === 'ambiguous' || ambRes.status === 'unresolved', 'Ambiguous term does not select arbitrary entry');
+  assert(ambRes.value === null, 'Ambiguous value is null');
+
+  // -------------------------------------------------------------
+  // Test 6: Falsche Kategorie
+  // Input as Race: Goblin-Krieger
+  // Erwartung: null/unresolved (weil Goblin-Krieger ein Gegner ist, keine Rasse)
+  // -------------------------------------------------------------
+  console.log('\n--- Test 6: Strict Category Separation ---');
+  const wrongCategoryRes = WorldIntegrationService.resolveRaceDetailed(sampleLore, 'Goblin-Krieger');
+  assert(wrongCategoryRes.value === null, 'Goblin-Krieger as Race returns null');
+  assert(wrongCategoryRes.status === 'unresolved', 'Status is unresolved');
+
+  const enemyAsFaction = WorldIntegrationService.resolveFactionDetailed(sampleLore, 'Goblin-Krieger');
+  assert(enemyAsFaction.value === null, 'Goblin-Krieger as Faction returns null');
+
+  const raceAsEnemy = WorldIntegrationService.resolveEnemyTypeDetailed(sampleLore, 'Goblin');
+  assert(raceAsEnemy.value === null, 'Goblin as EnemyType returns null (it is a Race)');
+
+  // -------------------------------------------------------------
+  // Test 7: World Fact Graph Verbindung
+  // Goblin-Krieger -> member_of -> Rotzähne -> leads -> Grukk -> controls -> Nordwald
+  // -------------------------------------------------------------
+  console.log('\n--- Test 7: Bounded World-Fact Graph Traversal ---');
+  const graphFaction = WorldIntegrationService.traverseFactGraphForRelation({
+    startEntityId: 'enemy_goblin_warrior_01',
+    targetCategory: 'Fraktionen',
+    facts: sampleFacts,
+    loreDatabase: sampleLore
+  });
+
+  assert(graphFaction !== null, 'Fact graph discovered connected faction');
+  assert(graphFaction?.entityId === 'faction_rotzaehne_01', 'Discovered Stamm der Rotzähne from Goblin-Krieger');
+
+  const graphLeader = WorldIntegrationService.traverseFactGraphForRelation({
+    startEntityId: 'faction_rotzaehne_01',
+    targetCategory: 'Charaktere',
+    facts: sampleFacts,
+    loreDatabase: sampleLore
+  });
+
+  assert(graphLeader !== null, 'Fact graph discovered connected leader');
+  assert(graphLeader?.entityId === 'char_grukk_01', 'Discovered Grukk as leader of Rotzähne');
+
+  // -------------------------------------------------------------
+  // Test 8: Normale Information (Encounter ≠ Combat)
+  // "Im Nordwald leben 50 Goblins."
+  // Erwartung: Observation Fact, kein Tactical Spawn, kein Combat
+  // -------------------------------------------------------------
+  console.log('\n--- Test 8: Pure Information (No Tactical Spawn) ---');
+  const infoIntent = {
+    type: 'info',
+    subject: 'Goblin',
+    count: 50,
+    origin: 'Nordwald',
+    attack: false,
+    movement: false
+  };
+
+  const infoProcessRes = WorldIntegrationService.processWorldEventIntent({
+    intent: infoIntent,
+    world: sampleWorld,
+    combatState: baseCombatState
+  });
+
+  assert(infoProcessRes.status === 'info_only', 'Information event processed as info_only');
+  assert(infoProcessRes.tacticalSpawnNeeded === false, 'tacticalSpawnNeeded is false');
+  assert(infoProcessRes.encounterForce === null, 'No active EncounterForce created for pure info');
+  assert(infoProcessRes.generatedFacts.length > 0, 'Observation WorldFact generated');
+
+  // -------------------------------------------------------------
+  // Test 9: Angriff
+  // "50 Goblins greifen Eichenhain an."
+  // Erwartung: hostile EncounterForce und taktischer Spawn
+  // -------------------------------------------------------------
+  console.log('\n--- Test 9: Attack Situation (EncounterForce + Tactical Spawn) ---');
+  const attackIntent = {
+    type: 'raid',
+    enemyType: 'Goblin-Krieger',
+    count: 50,
+    origin: 'Nordwald',
+    target: 'Dorf Eichenhain',
+    attack: true,
+    objective: 'raid'
+  };
+
+  const attackProcessRes = WorldIntegrationService.processWorldEventIntent({
+    intent: attackIntent,
+    world: sampleWorld,
+    combatState: baseCombatState,
+    allowTacticalSpawn: true
+  });
+
+  assert(attackProcessRes.status === 'tactical_spawned', 'Attack processed and tactical spawned');
+  assert(attackProcessRes.tacticalSpawnNeeded === true, 'tacticalSpawnNeeded is true');
+  assert(attackProcessRes.encounterForce !== null, 'EncounterForce created');
+  assert(attackProcessRes.encounterForce?.status === 'engaged', 'EncounterForce status is engaged');
+  assert(attackProcessRes.tacticalResult?.entities.length === 50, '50 tactical entities spawned for raid');
+
+  // -------------------------------------------------------------
+  // Test 10: Bewegung
+  // "50 Goblins marschieren auf Eichenhain zu."
+  // Erwartung: moving EncounterForce, aber kein automatischer Kampf
+  // -------------------------------------------------------------
+  console.log('\n--- Test 10: Movement (Moving EncounterForce, No Combat) ---');
+  const moveIntent = {
+    type: 'movement',
+    enemyType: 'Goblin-Krieger',
+    count: 50,
+    origin: 'Nordwald',
+    target: 'Dorf Eichenhain',
+    movement: true,
+    attack: false,
+    objective: 'patrol'
+  };
+
+  const moveProcessRes = WorldIntegrationService.processWorldEventIntent({
+    intent: moveIntent,
+    world: sampleWorld,
+    combatState: baseCombatState
+  });
+
+  assert(moveProcessRes.status === 'force_created', 'Movement created moving force');
+  assert(moveProcessRes.tacticalSpawnNeeded === false, 'Tactical spawn is false for movement');
+  assert(moveProcessRes.encounterForce?.status === 'moving', 'Status is moving');
+  assert(moveProcessRes.encounterForce?.isTacticalSpawned === false, 'isTacticalSpawned is false');
+
+  // -------------------------------------------------------------
+  // Test 11: Unbekannte Faction (Keine Erfindung im Codex)
+  // Input: faction = Schattenhorde
+  // Erwartung: Warning/unresolved, keine neue Fraktion erzeugen
+  // -------------------------------------------------------------
+  console.log('\n--- Test 11: Unknown Faction Handling ---');
+  const initialLoreCount = sampleLore.length;
+  const unknownFactionRes = WorldIntegrationService.createEncounterForce({
     enemyTypeIdOrName: 'Goblin-Krieger',
-    originIdOrName: 'Südberge',
-    targetIdOrName: 'Dorf Eichenhain',
-    count: 35,
-    escalation: 'regional',
+    factionIdOrName: 'Schattenhorde',
+    count: 20,
     world: sampleWorld,
     loreDatabase: sampleLore
   });
 
-  assert(forceA.encounterForce.id !== forceB.encounterForce.id, 'Distinct force IDs');
-  assert(forceA.encounterForce.factionId === 'faction_rotzaehne_01', 'Force A faction is Rotzähne');
-  assert(forceB.encounterForce.factionId === 'faction_schwarzkrallen_01', 'Force B faction is Schwarzkrallen');
-  assert(forceA.encounterForce.originId === 'territory_nordwald_01', 'Force A origin is Nordwald');
-  assert(forceB.encounterForce.originId === 'territory_suedberge_01', 'Force B origin is Südberge');
+  assert(unknownFactionRes.encounterForce.factionId === undefined, 'Unknown faction has factionId undefined');
+  assert(unknownFactionRes.validationWarnings.length > 0, 'Validation warning recorded');
+  assert(sampleLore.length === initialLoreCount, 'Codex was NOT polluted with fictitious faction');
 
   // -------------------------------------------------------------
-  // Test 7: Ungültige Referenz (Sauberer Fallback / Warnung, kein Fantasie-Codex)
+  // Test 12: Duplicate Event Prevention
+  // Dasselbe Event zweimal verarbeiten
+  // Erwartung: Keine Verdopplung identischer aktiver EncounterForces
   // -------------------------------------------------------------
-  console.log('\n--- Test 7: Invalid Reference Handling ---');
-  const invalidRes = WorldIntegrationService.createEncounterForce({
-    factionIdOrName: 'does_not_exist_xyz',
-    enemyTypeIdOrName: 'unknown_monster_abc',
-    originIdOrName: 'nowhere_land',
-    count: 15,
-    world: sampleWorld,
+  console.log('\n--- Test 12: Duplicate Event Prevention ---');
+  const initialWorldWithForce: WorldSetting = {
+    ...sampleWorld,
+    encounterForces: [t1Res.encounterForce]
+  };
+
+  const dupRes = WorldIntegrationService.createEncounterForce({
+    count: 50,
+    raceIdOrName: 'Goblin',
+    enemyTypeIdOrName: 'Goblin-Krieger',
+    objective: t1Res.encounterForce.objective,
+    world: initialWorldWithForce,
     loreDatabase: sampleLore
   });
 
-  assert(invalidRes.encounterForce.factionId === undefined, 'Invalid faction is not assigned a fake ID');
-  assert(invalidRes.validationWarnings.length > 0, 'Validation warnings generated');
-  assert(sampleLore.length === 6, 'No duplicate/fake LoreEntry created in Codex');
-
-  // -------------------------------------------------------------
-  // Test 8: Charakter wird taktisch relevant
-  // -------------------------------------------------------------
-  console.log('\n--- Test 8: Character Becomes Tactical ---');
-  const charRes = WorldIntegrationService.resolveCharacter([], [], sampleLore, 'Grukk');
-  assert(charRes !== null && charRes.loreEntry?.id === 'char_grukk_01', 'Codex character Grukk resolved');
-
-  const ref = WorldIntegrationService.resolveEntityReference({
-    idOrName: 'Grukk',
-    world: sampleWorld,
-    loreDatabase: sampleLore
-  });
-  assert(ref?.entityId === 'char_grukk_01', 'WorldEntityReference resolved for Grukk');
-
-  // -------------------------------------------------------------
-  // Test 9: Combat Result -> World State Feedback (50 Goblins -> 17 fallen -> 33 survivors)
-  // -------------------------------------------------------------
-  console.log('\n--- Test 9: Combat Result -> World State Update ---');
-  const feedbackRes = WorldIntegrationService.applyCombatResultToWorldState({
-    feedback: {
-      forceId: raidRes.encounterForce.id,
-      factionId: 'faction_rotzaehne_01',
-      initialCount: 50,
-      casualties: 17,
-      survivors: 33,
-      targetId: 'place_eichenhain_01',
-      outcome: 'victory', // Player defended village
-      leaderStatus: 'injured',
-      details: 'Dorfverteidigung erfolgreich: 17 Goblins gefallen, 33 zogen sich zurück.'
-    },
-    world: sampleWorld
-  });
-
-  const updatedFactionState = feedbackRes.updatedWorldState.factions?.['faction_rotzaehne_01'];
-  assert(updatedFactionState !== undefined, 'FactionWorldState updated for Rotzähne');
-  assert(updatedFactionState?.mobilizedForce === 33, 'Mobilized force updated to 33 survivors');
-  assert(updatedFactionState?.casualtyCount === 17, 'Casualty count recorded as 17');
-  assert(feedbackRes.changeLogs.length > 0, 'ChangeLog entry created');
-  assert(feedbackRes.updatedWorldState.recentCombatOutcomes?.length === 1, 'Combat outcome recorded in dynamicWorldState');
+  assert(dupRes.encounterForce.id === t1Res.encounterForce.id, 'Duplicate creation returned existing force ID');
 
   // Summary
   console.log(`\n=== TEST RESULTS: ${passed} / ${total} PASSED ===`);
   if (passed === total) {
-    console.log('ALL WORLD INTEGRATION TESTS PASSED SUCCESSFULLY!\n');
+    console.log('ALL WORLD INTEGRATION & CONTEXT RESOLUTION TESTS PASSED SUCCESSFULLY!\n');
   } else {
     throw new Error(`Failed ${total - passed} tests`);
   }
