@@ -17,9 +17,11 @@ export const MAX_EVENT_PROCESSING_DEPTH = 10;
 
 export interface SimulationStepParams {
   world: WorldSetting;
-  minutesToAdd: number;
+  minutesToAdd?: number;
   seed?: number;
   actionText?: string;
+  mode?: 'action' | 'dialogue';
+  dialogueParticipantCount?: number;
 }
 
 export interface SimulationStepResult {
@@ -134,7 +136,11 @@ export class WorldSimulationService {
     const createdAtWorldTime = event.createdAtWorldTime || { ...currentWorldTime };
     const scheduledForWorldTime = event.scheduledForWorldTime || { ...currentWorldTime };
 
-    const eventId = event.id || `event_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+    const src = event.sourceId || event.territoryId || event.factionId || 'sys';
+    const day = scheduledForWorldTime.day || 1;
+    const hour = scheduledForWorldTime.hour || 0;
+    const min = scheduledForWorldTime.minute || 0;
+    const eventId = event.id || `event_${event.type}_${src}_d${day}_h${hour}_m${min}`;
 
     const createdEvent: WorldEvent = {
       id: eventId,
@@ -398,24 +404,33 @@ export class WorldSimulationService {
    * Runs whenever player sends a message / performs an action in the game.
    */
   static runSimulationStep(params: SimulationStepParams): SimulationStepResult {
-    const { world, minutesToAdd, seed = 42, actionText } = params;
+    const { world, minutesToAdd, seed = 42, actionText, mode = 'action', dialogueParticipantCount } = params;
 
-    const actualMinsToAdd = minutesToAdd > 0 ? minutesToAdd : this.estimateActionDurationMinutes(actionText);
+    let actualMinsToAdd: number;
+    if (typeof minutesToAdd === 'number' && minutesToAdd > 0) {
+      actualMinsToAdd = minutesToAdd;
+    } else if (mode === 'dialogue') {
+      const count = dialogueParticipantCount ?? 1;
+      actualMinsToAdd = Math.min(5, Math.max(1, count));
+    } else {
+      actualMinsToAdd = this.estimateActionDurationMinutes(actionText);
+    }
 
     const timeStart = world.worldTime || { day: 1, hour: 8, minute: 0, totalMinutes: 480 };
     const timeEnd = this.addMinutes(timeStart, actualMinsToAdd);
 
     let currentWorld: WorldSetting = { ...world, worldTime: timeEnd };
 
+    // Read scheduled events prioritizing canonical WorldSetting, then runtime mirror
     const rawScheduledEvents = [
-      ...(currentWorld.dynamicWorldState?.scheduledEvents || []),
-      ...(currentWorld.scheduledEvents || [])
+      ...(currentWorld.scheduledEvents || []),
+      ...(currentWorld.dynamicWorldState?.scheduledEvents || [])
     ];
 
-    // Deduplicate by event ID
+    // Deduplicate by event ID (canonical entries retained)
     const eventMap = new Map<string, WorldEvent>();
     for (const evt of rawScheduledEvents) {
-      if (evt && evt.id) {
+      if (evt && evt.id && !eventMap.has(evt.id)) {
         eventMap.set(evt.id, evt);
       }
     }

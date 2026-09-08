@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, Character, LoreEntry, Territory } from '../types';
+import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, Character, LoreEntry, Territory, WorldSetting } from '../types';
 import { GeminiService, audioUtils } from '../services/geminiService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import ReactMarkdown from 'react-markdown';
@@ -2017,11 +2017,11 @@ Text:
     return parts.join(', ');
   };
 
-  const getActiveTerritoryInstruction = () => {
+  const getActiveTerritoryInstruction = (worldOverride?: WorldSetting) => {
     const currentLocName = (adventure?.player?.appearance?.currentLocation || '').trim();
     if (!currentLocName) return '';
 
-    const territories = adventure?.world?.territories || [];
+    const territories = (worldOverride || adventure?.world)?.territories || [];
     
     // Clean coordinates and parentheses from location name for comparison
     const cleanLocName = currentLocName.replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '').split('(')[0].trim().toLowerCase();
@@ -3359,7 +3359,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
     };
   };
 
-  const parseLoreAndCharUpdates = (text: string, currentAdventure: Adventure, forceHp?: number, forceMp?: number) => {
+  const parseLoreAndCharUpdates = (text: string, currentAdventure: Adventure, forceHp?: number, forceMp?: number, worldOverride?: WorldSetting) => {
     let updatedLore = [...(currentAdventure.loreDatabase || [])];
     let updatedNpcs = [...(currentAdventure.npcs || [])];
     let updatedPlayer = { 
@@ -3370,7 +3370,9 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
     let updatedStructuredInventory = currentAdventure.structuredInventory 
       ? JSON.parse(JSON.stringify(currentAdventure.structuredInventory)) 
       : { armor: {}, accessories: {}, weapons: [], generalItems: [], money: 0, currencyLabel: 'Goldstücke' };
-    let updatedWorld = currentAdventure.world 
+    let updatedWorld = worldOverride
+      ? JSON.parse(JSON.stringify(worldOverride))
+      : currentAdventure.world 
       ? JSON.parse(JSON.stringify(currentAdventure.world)) 
       : { territories: [], connections: [] };
     if (!Array.isArray(updatedWorld.territories)) updatedWorld.territories = [];
@@ -5019,15 +5021,15 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       4. BEREITE BEIM ERWACHEN SOFORT DIE NÄCHSTE HANDLUNG VOR: Der Spieler erwacht und sieht sich SOFORT mit einem neuen Vorfall, einer Aktion oder Situation konfrontiert, auf die er in seiner nächsten Nachricht reagieren kann (z. B. lautes Klopfen an der Tür, ein NPC tritt ein, Aufruhr oder Schritte im Haus)!
       ` : '';
 
-      const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${world.title}".
+      const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || world.title}".
       ${situationalActionDirective}
       ${simulationInstruction}
-      WELT: ${world.description} (Ton: ${world.tone})
+      WELT: ${activeWorld.description || world.description} (Ton: ${activeWorld.tone || world.tone})
       ${campaignPowerInstruction}
       ${techniqueRulesInstruction}
       ${loreInstruction}
       ${economyInstruction}
-      ${getActiveTerritoryInstruction()}
+      ${getActiveTerritoryInstruction(activeWorld)}
 
       ${nsfwInstruction}
       ${heroicInstruction}
@@ -5196,11 +5198,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
             * Beispiel: [[PROFESSION_ACTIVITY: Spieler | Schmied | Schmiedefeuer entzünden | easy | true | true]]
           - STRIKTES VERBOT WILLKÜRLICHER STAT-AUSGABEN: Gib niemals direkte Prozentwerte oder Erfahrungsstufen im Text oder als Tags wie [[PROFESSION: Schmieden=100%]] aus. Die Beherrschung und XP-Berechnung wird ausschließlich deterministisch und mathematisch vom Regelsystem auf Basis der Aktivität berechnet!`;
       
-      const response = await GeminiService.chat(updatedMessages, systemInstruction, world.isNsfw, adventure.summaryLog);
+      const response = await GeminiService.chat(updatedMessages, systemInstruction, activeWorld.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
       
       const { cleanedText: statusCleaned, newStatus } = parseStatusUpdates(rawText, statusWithTime);
-      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, forceNextHp, forceNextMp);
+      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, forceNextHp, forceNextMp, activeWorld);
 
       if (notifications.length > 0) {
         addLoreNotifications(notifications);
@@ -5418,12 +5420,41 @@ REGELN FÜR DEINE ANTWORT (STRENG EINZUHALTEN):
     setMessages(prev => [...prev, userMsg]);
     
     try {
+      // Calculate active dialogue participants (User = 1 + active NPCs)
+      let activeParticipantCount = 1;
+      if (dialogueType === 'user_npc') {
+        activeParticipantCount = 2; // User (1) + speaker NPC (1)
+      } else if (dialogueType === 'npc_npc') {
+        activeParticipantCount = 3; // Speaker NPC (1) + target NPC (1) + user (1)
+      } else {
+        activeParticipantCount = 1 + groupNpcs.length; // User (1) + group NPCs
+      }
+
+      // Run World Simulation Step for dialogue action
+      const simRes = WorldSimulationService.runSimulationStep({
+        world: adventure.world,
+        mode: 'dialogue',
+        dialogueParticipantCount: activeParticipantCount,
+        actionText: text || userDisplayMsgText
+      });
+
+      const activeWorld = simRes.updatedWorld;
+
+      let simulationInstruction = '';
+      if (simRes.playerVisibleSummary) {
+        simulationInstruction = `
+      DYNAMISCHE WELT-SIMULATION & EREIGNISSE (EINGETRETEN IN DIESEM ZUG):
+      ${simRes.playerVisibleSummary}
+        `;
+      }
+
       const currentStatsStr = (adventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
-      const campaignPowerInstruction = adventure.world.campaignPowerSettings ? "Grundwerte: " + JSON.stringify(adventure.world.campaignPowerSettings) : "";
+      const campaignPowerInstruction = activeWorld.campaignPowerSettings ? "Grundwerte: " + JSON.stringify(activeWorld.campaignPowerSettings) : "";
       
-      const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${adventure.world.title}".
+      const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || adventure.world.title}".
+      ${simulationInstruction}
       
-WELT: ${adventure.world.description} (Ton: ${adventure.world.tone})
+WELT: ${activeWorld.description || adventure.world.description} (Ton: ${activeWorld.tone || adventure.world.tone})
 ${campaignPowerInstruction}
 
 SPIELER-CHARAKTER:
@@ -5440,7 +5471,7 @@ WICHTIGSTE REGEL:
 Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben! Keine Erzählungen, keine Handlungen in Sternchen, keine Szenenbeschreibungen. Nur der nackte, gesprochene Text.`;
 
       const updatedMessages = [...messages, userMsg];
-      const response = await GeminiService.chat(updatedMessages, systemInstruction, adventure.world.isNsfw, adventure.summaryLog);
+      const response = await GeminiService.chat(updatedMessages, systemInstruction, activeWorld.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
       
       const newModelMsg: ChatMessage = {
@@ -5457,7 +5488,8 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       const nextChatHistory: ChatMessage[] = [...updatedMessages, newModelMsg];
 
       onUpdateAdventure({
-        ...adventure,
+        ...adventureRef.current,
+        world: activeWorld,
         chatHistory: nextChatHistory
       });
       

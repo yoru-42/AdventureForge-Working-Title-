@@ -262,6 +262,54 @@ export function runWorldSimulationTests(): { passed: number; failed: number; err
   assert(simResDetA.timeEnd.totalMinutes === simResDetB.timeEnd.totalMinutes, 'Deterministic simulation end times match');
   assert(simResDetA.processedEvents.length === simResDetB.processedEvents.length, 'Deterministic simulation processed event counts match');
 
+  // -------------------------------------------------------------
+  // Test 10: Dialogue Mode Simulation Step & Time Scaling
+  // -------------------------------------------------------------
+  const baseDialogueWorld: WorldSetting = {
+    ...simResVis.updatedWorld,
+    worldTime: { day: 1, hour: 12, minute: 0, totalMinutes: 720 }
+  };
+
+  const diagRes1 = WorldSimulationService.runSimulationStep({
+    world: baseDialogueWorld,
+    mode: 'dialogue',
+    dialogueParticipantCount: 2
+  });
+  assert(diagRes1.timeEnd.totalMinutes - diagRes1.timeStart.totalMinutes === 2, '2 dialogue participants advance world time by 2 minutes');
+
+  const diagRes2 = WorldSimulationService.runSimulationStep({
+    world: baseDialogueWorld,
+    mode: 'dialogue',
+    dialogueParticipantCount: 3
+  });
+  assert(diagRes2.timeEnd.totalMinutes - diagRes2.timeStart.totalMinutes === 3, '3 dialogue participants advance world time by 3 minutes');
+
+  const diagRes3 = WorldSimulationService.runSimulationStep({
+    world: baseDialogueWorld,
+    mode: 'dialogue',
+    dialogueParticipantCount: 10
+  });
+  assert(diagRes3.timeEnd.totalMinutes - diagRes3.timeStart.totalMinutes === 5, '10 dialogue participants capped at 5 minutes world time advancement');
+
+  // Triggering scheduled event during dialogue
+  const dialogueEvent: Partial<WorldEvent> & { type: string } = {
+    type: 'general',
+    title: 'Eintreffen des Boten',
+    description: 'Ein Bote unterbricht das Gespräch',
+    scheduledForWorldTime: { day: 1, hour: 12, minute: 2, totalMinutes: 722 },
+    isPlayerVisible: true
+  };
+
+  const schedDiagWorld = WorldSimulationService.scheduleEvent({ world: baseDialogueWorld, event: dialogueEvent });
+  const diagTriggerRes = WorldSimulationService.runSimulationStep({
+    world: schedDiagWorld.updatedWorld,
+    mode: 'dialogue',
+    dialogueParticipantCount: 2 // Advances 2 minutes (720 -> 722), triggering event
+  });
+
+  assert(diagTriggerRes.processedEvents.length === 1, 'Dialogue step triggered 1 scheduled event');
+  assert(diagTriggerRes.playerVisibleSummary.includes('Eintreffen des Boten'), 'Dialogue step player summary includes triggered event description');
+
   console.log(`--- WORLD SIMULATION TESTS COMPLETE: ${passed} PASSED, ${failed} FAILED ---`);
 
   return { passed, failed, errors };
