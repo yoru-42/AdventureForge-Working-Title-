@@ -500,18 +500,17 @@ export class TravelService {
 
     // Step 4: Check Interruption (BattleInstance spawned during travel)
     const hasCombatInterruption = simResult.spawnedBattleInstances.length > 0;
-    let finalLocation = routeRes.toLocation;
+    let finalLocation: WorldLocationReference | null = routeRes.toLocation;
     let interruptedAtLocationName: string | undefined = undefined;
 
     if (hasCombatInterruption) {
       const battleInst = simResult.spawnedBattleInstances[0];
       let resolvedInterLocation: WorldLocationReference | null = null;
 
-      // 1. Try resolving battleInst locationId or locationName
-      const targetLocIdOrName = battleInst.locationId || battleInst.locationName;
-      if (targetLocIdOrName) {
+      // 1. Try resolving battleInst locationId
+      if (battleInst.locationId) {
         const interRes = WorldIntegrationService.resolveLocationReference({
-          idOrName: targetLocIdOrName,
+          idOrName: battleInst.locationId,
           world: activeWorld,
           loreDatabase: adventure.loreDatabase
         });
@@ -520,53 +519,52 @@ export class TravelService {
         }
       }
 
-      // 2. Try resolving via territoryId if no location resolved yet
-      if (!resolvedInterLocation && battleInst.territoryId) {
-        const locInTerritory = (activeWorld.locations || []).find(l => l.territoryId === battleInst.territoryId);
-        if (locInTerritory) {
-          const interRes = WorldIntegrationService.resolveLocationReference({
-            idOrName: locInTerritory.id,
-            world: activeWorld,
-            loreDatabase: adventure.loreDatabase
-          });
-          if (interRes.value) {
-            resolvedInterLocation = interRes.value;
-          }
+      // 2. Try resolving battleInst locationName
+      if (!resolvedInterLocation && battleInst.locationName) {
+        const interRes = WorldIntegrationService.resolveLocationReference({
+          idOrName: battleInst.locationName,
+          world: activeWorld,
+          loreDatabase: adventure.loreDatabase
+        });
+        if (interRes.value) {
+          resolvedInterLocation = interRes.value;
         }
       }
 
-      // 3. Apply resolved intermediate location or safely keep last confirmed origin location
+      // 3. Apply resolved intermediate location or safely keep last confirmed position unchanged
       if (resolvedInterLocation) {
         finalLocation = resolvedInterLocation;
         interruptedAtLocationName = finalLocation.name;
       } else {
-        // Fallback to origin / current location before travel without guessing or teleporting
-        const originRes = WorldIntegrationService.resolveLocationReference({
-          idOrName: currentLocName,
-          world: activeWorld,
-          loreDatabase: adventure.loreDatabase
-        });
-        if (originRes.value) {
-          finalLocation = originRes.value;
-        } else {
-          finalLocation = routeRes.fromLocation;
-        }
-        interruptedAtLocationName = finalLocation.name;
+        // DO NOT claim the origin location as the interruption site!
+        // Position remains unchanged from before travel, but interruption location is undefined.
+        finalLocation = null;
+        interruptedAtLocationName = undefined;
       }
     }
 
     // Update canonical location references in activeWorld and player appearance
-    activeWorld.currentLocationId = finalLocation.id;
-    activeWorld.currentTerritoryId = finalLocation.territoryId;
-    if (!activeWorld.dynamicWorldState) activeWorld.dynamicWorldState = {};
-    activeWorld.dynamicWorldState.currentLocationId = finalLocation.id;
-    activeWorld.dynamicWorldState.currentTerritoryId = finalLocation.territoryId;
+    if (finalLocation) {
+      activeWorld.currentLocationId = finalLocation.id;
+      activeWorld.currentTerritoryId = finalLocation.territoryId;
+      if (!activeWorld.dynamicWorldState) activeWorld.dynamicWorldState = {};
+      activeWorld.dynamicWorldState.currentLocationId = finalLocation.id;
+      activeWorld.dynamicWorldState.currentTerritoryId = finalLocation.territoryId;
+    } else {
+      // Leave position unchanged from the last confirmed world state
+      activeWorld.currentLocationId = adventure.world.currentLocationId;
+      activeWorld.currentTerritoryId = adventure.world.currentTerritoryId;
+      if (activeWorld.dynamicWorldState) {
+        activeWorld.dynamicWorldState.currentLocationId = adventure.world.currentLocationId;
+        activeWorld.dynamicWorldState.currentTerritoryId = adventure.world.currentTerritoryId;
+      }
+    }
 
     const updatedPlayer = {
       ...adventure.player,
       appearance: {
         ...adventure.player.appearance,
-        currentLocation: finalLocation.name
+        currentLocation: finalLocation ? finalLocation.name : adventure.player.appearance.currentLocation
       }
     };
 
@@ -593,12 +591,22 @@ export class TravelService {
         simulationInstruction = `\nDYNAMISCHE WELT-SIMULATION & EREIGNISSE (WÄHREND DER REISE EINGETRETEN):\n${simResult.playerVisibleSummary}\n`;
       }
 
+      let travelStatusDesc = 'Erfolgreich am Ziel angekommen';
+      if (hasCombatInterruption) {
+        if (interruptedAtLocationName) {
+          travelStatusDesc = `REISE DURCH KAMPF/EREIGNIS UNTERBROCHEN bei ${interruptedAtLocationName}`;
+        } else {
+          travelStatusDesc = 'REISE DURCH KAMPF/EREIGNIS UNTERBROCHEN (genauer Ort des Gefechts auf dem Reiseweg unbestimmt)';
+        }
+      }
+
       let travelContextInstruction = `\nREISE-DETAILS:
 - Startort: ${currentLocName}
 - Zielort: ${routeRes.toLocation.name}
 - Zurückgelegte Strecke: ${routeRes.totalDistanceKm} km
 - Benötigte Reisezeit: ${travelMinutes} Minuten
-- Aktueller Standort nach Reise: ${finalLocation.name}${hasCombatInterruption ? ` (REISE DURCH KAMPF/EREIGNIS UNTERBROCHEN bei ${finalLocation.name})` : ' (Erfolgreich am Ziel angekommen)'}`;
+- Status: ${travelStatusDesc}
+- Aktueller Standort: ${finalLocation ? finalLocation.name : (updatedPlayer.appearance.currentLocation || 'unbestimmt')}`;
 
       const currentStatsStr = (adventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
 
@@ -641,24 +649,45 @@ AKTUELLE WERTE: ${currentStatsStr}`;
     }
 
     // Enforce canonical player location in parsed result
-    parsedResult.updatedPlayer = {
-      ...parsedResult.updatedPlayer,
-      appearance: {
-        ...(parsedResult.updatedPlayer.appearance || {}),
-        currentLocation: finalLocation.name
-      }
-    };
+    if (finalLocation) {
+      parsedResult.updatedPlayer = {
+        ...parsedResult.updatedPlayer,
+        appearance: {
+          ...(parsedResult.updatedPlayer.appearance || {}),
+          currentLocation: finalLocation.name
+        }
+      };
 
-    parsedResult.updatedWorld = {
-      ...parsedResult.updatedWorld,
-      currentLocationId: finalLocation.id,
-      currentTerritoryId: finalLocation.territoryId,
-      dynamicWorldState: {
-        ...(parsedResult.updatedWorld.dynamicWorldState || {}),
+      parsedResult.updatedWorld = {
+        ...parsedResult.updatedWorld,
         currentLocationId: finalLocation.id,
-        currentTerritoryId: finalLocation.territoryId
-      }
-    };
+        currentTerritoryId: finalLocation.territoryId,
+        dynamicWorldState: {
+          ...(parsedResult.updatedWorld.dynamicWorldState || {}),
+          currentLocationId: finalLocation.id,
+          currentTerritoryId: finalLocation.territoryId
+        }
+      };
+    } else {
+      parsedResult.updatedPlayer = {
+        ...parsedResult.updatedPlayer,
+        appearance: {
+          ...(parsedResult.updatedPlayer.appearance || {}),
+          currentLocation: adventure.player.appearance.currentLocation
+        }
+      };
+
+      parsedResult.updatedWorld = {
+        ...parsedResult.updatedWorld,
+        currentLocationId: adventure.world.currentLocationId,
+        currentTerritoryId: adventure.world.currentTerritoryId,
+        dynamicWorldState: {
+          ...(parsedResult.updatedWorld.dynamicWorldState || {}),
+          currentLocationId: adventure.world.currentLocationId,
+          currentTerritoryId: adventure.world.currentTerritoryId
+        }
+      };
+    }
 
     const modelMsg = {
       id: `model-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,

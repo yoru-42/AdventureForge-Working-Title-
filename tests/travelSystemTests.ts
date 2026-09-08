@@ -400,7 +400,7 @@ export async function runTravelSystemTests() {
   });
 
   // Test K – BattleInstance without locationName/locationId (Keine Teleportation oder falscher Orts-Fallback)
-  await test('Test K: BattleInstance without locationName/locationId keeps last confirmed origin location', async () => {
+  await test('Test K: BattleInstance without locationName/locationId does not claim origin as interruption location', async () => {
     let simCalls = 0;
     const origSim = WorldSimulationService.runSimulationStep;
     WorldSimulationService.runSimulationStep = (params) => {
@@ -440,7 +440,8 @@ export async function runTravelSystemTests() {
 
       assert(simCalls === 1, 'Test K: Exactly 1 simulation step executed');
       assert(result.isInterrupted === true, 'Test K: Travel marked as interrupted');
-      assert(result.updatedAdventure.player.appearance.currentLocation === 'Dorf A', 'Test K: Player location remains at last confirmed origin location Dorf A when battle location is undefined');
+      assert(result.interruptedAtLocation === undefined, 'Test K: Interrupted location is undefined (never claimed origin Dorf A as interruption site)');
+      assert(result.updatedAdventure.player.appearance.currentLocation === 'Dorf A', 'Test K: Player location remains unchanged at last confirmed state without guessing');
     } finally {
       WorldSimulationService.runSimulationStep = origSim;
     }
