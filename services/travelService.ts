@@ -1,7 +1,7 @@
 import { Adventure, WorldSetting, WorldLocationReference, Territory, LoreEntry, BattleInstance } from '../types';
 import { WorldIntegrationService } from './worldIntegrationService';
 import { WorldSimulationService, SimulationStepResult } from './worldSimulationService';
-import { GameTurnService, ProcessPlayerTurnParams, ProcessPlayerTurnResult } from './gameTurnService';
+import type { ProcessPlayerTurnParams, ProcessPlayerTurnResult } from './turnTypes';
 import { GeminiService } from './geminiService';
 
 export interface RouteSegment {
@@ -46,14 +46,14 @@ export class TravelService {
     const hourMatch = str.match(/([\d.,]+)\s*(std|stunden?|h|hours?)/);
     if (hourMatch) {
       const hours = parseFloat(hourMatch[1].replace(',', '.'));
-      if (!isNaN(hours)) return Math.round(hours * 60);
+      if (!isNaN(hours) && hours > 0) return Math.round(hours * 60);
     }
 
     // Check minutes
     const minMatch = str.match(/([\d.,]+)\s*(min|minuten?|m)/);
     if (minMatch) {
       const mins = parseFloat(minMatch[1].replace(',', '.'));
-      if (!isNaN(mins)) return Math.round(mins);
+      if (!isNaN(mins) && mins > 0) return Math.round(mins);
     }
 
     // Pure number fallback
@@ -74,39 +74,56 @@ export class TravelService {
     const match = distStr.trim().toLowerCase().match(/([\d.,]+)/);
     if (match) {
       const dist = parseFloat(match[1].replace(',', '.'));
-      if (!isNaN(dist)) return dist;
+      if (!isNaN(dist) && dist > 0) return dist;
     }
     return null;
   }
 
   /**
-   * Calculates duration in minutes for a segment based on distance, connection data, and terrain.
+   * Calculates duration in minutes and distance in Km for a connection based strictly on connection data and terrain.
+   * Returns null if connection data is insufficient (neither explicit travelTime/duration nor distance provided).
    */
-  public static calculateSegmentMinutes(connection: any, terrainTypes: string[] = []): number {
-    // 1. Explicit connection duration/travelTime
+  public static calculateSegmentData(
+    connection: any,
+    terrainTypes: string[] = []
+  ): { durationMinutes: number; distanceKm: number } | null {
+    if (!connection) return null;
+
     const explicitMins = this.parseDurationStringToMinutes(connection.travelTime || connection.duration);
+    const explicitDist = this.parseDistanceStringToKm(connection.distance);
+
     if (explicitMins && explicitMins > 0) {
-      return explicitMins;
+      return {
+        durationMinutes: explicitMins,
+        distanceKm: explicitDist || 0
+      };
     }
 
-    // 2. Calculate via distance + terrain
-    const distKm = this.parseDistanceStringToKm(connection.distance) || 10;
-    
-    // Base walking speed: 4 km/h = 15 min per km
-    let baseMinPerKm = 15;
-    if (connection.type === 'sea' || connection.type === 'ship') baseMinPerKm = 3; // ~20 km/h
-    if (connection.type === 'air') baseMinPerKm = 1.5; // ~40 km/h
+    if (explicitDist && explicitDist > 0) {
+      // Base walking speed: 4 km/h = 15 min per km
+      let baseMinPerKm = 15;
+      if (connection.type === 'sea' || connection.type === 'ship') baseMinPerKm = 3; // ~20 km/h
+      if (connection.type === 'air') baseMinPerKm = 1.5; // ~40 km/h
 
-    let terrainMultiplier = 1.0;
-    for (const t of terrainTypes) {
-      const lower = t.toLowerCase();
-      if (lower.includes('berg') || lower.includes('gebirge') || lower.includes('pass')) terrainMultiplier = Math.max(terrainMultiplier, 1.8);
-      else if (lower.includes('sumpf')) terrainMultiplier = Math.max(terrainMultiplier, 2.0);
-      else if (lower.includes('wald')) terrainMultiplier = Math.max(terrainMultiplier, 1.3);
-      else if (lower.includes('wüste') || lower.includes('schnee')) terrainMultiplier = Math.max(terrainMultiplier, 1.5);
+      let terrainMultiplier = 1.0;
+      for (const t of terrainTypes) {
+        if (!t) continue;
+        const lower = t.toLowerCase();
+        if (lower.includes('berg') || lower.includes('gebirge') || lower.includes('pass')) terrainMultiplier = Math.max(terrainMultiplier, 1.8);
+        else if (lower.includes('sumpf')) terrainMultiplier = Math.max(terrainMultiplier, 2.0);
+        else if (lower.includes('wald')) terrainMultiplier = Math.max(terrainMultiplier, 1.3);
+        else if (lower.includes('wüste') || lower.includes('schnee')) terrainMultiplier = Math.max(terrainMultiplier, 1.5);
+      }
+
+      const durationMinutes = Math.max(1, Math.round(explicitDist * baseMinPerKm * terrainMultiplier));
+      return {
+        durationMinutes,
+        distanceKm: explicitDist
+      };
     }
 
-    return Math.max(15, Math.round(distKm * baseMinPerKm * terrainMultiplier));
+    // Insufficient connection data -> cannot be deterministically resolved
+    return null;
   }
 
   /**
@@ -143,6 +160,8 @@ export class TravelService {
 
   /**
    * Resolves a route between source and destination using canonical World State connections.
+   * Employs Dijkstra's weighted shortest-travel-time path search across unblocked connections.
+   * Completely excludes coordinate-teleport fallbacks or invented default distance/time values.
    */
   public static resolveRoute(params: {
     world: WorldSetting;
@@ -188,147 +207,139 @@ export class TravelService {
     const connections = world.connections || [];
     const territories = world.territories || [];
 
-    // Helper to check connection match
-    const isConnMatch = (conn: any, locA: WorldLocationReference, locB: WorldLocationReference) => {
-      const fromMatch = (conn.fromId && conn.fromId === locA.id) ||
-        (conn.fromPlace && conn.fromPlace.toLowerCase() === locA.name.toLowerCase());
-      const toMatch = (conn.toId && conn.toId === locB.id) ||
-        (conn.toPlace && conn.toPlace.toLowerCase() === locB.name.toLowerCase());
+    // Track if any blocked connections exist in the world for error messaging
+    let hasBlockedConnections = false;
 
-      const revFromMatch = (conn.fromId && conn.fromId === locB.id) ||
-        (conn.fromPlace && conn.fromPlace.toLowerCase() === locB.name.toLowerCase());
-      const revToMatch = (conn.toId && conn.toId === locA.id) ||
-        (conn.toPlace && conn.toPlace.toLowerCase() === locA.name.toLowerCase());
-
-      return (fromMatch && toMatch) || (revFromMatch && revToMatch);
-    };
-
-    // 1. Direct connection check
-    const directConn = connections.find(c => isConnMatch(c, fromLoc, toLoc));
-    if (directConn) {
-      if (directConn.isBlocked) {
-        return {
-          status: 'blocked',
-          fromLocation: fromLoc,
-          toLocation: toLoc,
-          segments: [],
-          totalDistanceKm: 0,
-          totalTravelMinutes: 0,
-          traversedTerritories: [],
-          isBlocked: true,
-          blockReason: directConn.label ? `Verbindung ist blockiert: ${directConn.label}` : 'Die Route ist derzeit blockiert.',
-          reason: 'Verbindung blockiert.'
-        };
-      }
-
-      const dist = this.parseDistanceStringToKm(directConn.distance) || 15;
-      const duration = this.calculateSegmentMinutes(directConn, [fromLoc.terrainType, toLoc.terrainType].filter(Boolean) as string[]);
-      
-      const traversedTerrs: Territory[] = [];
-      if (fromLoc.territoryId) {
-        const t1 = territories.find(t => t.id === fromLoc.territoryId);
-        if (t1) traversedTerrs.push(t1);
-      }
-      if (toLoc.territoryId && toLoc.territoryId !== fromLoc.territoryId) {
-        const t2 = territories.find(t => t.id === toLoc.territoryId);
-        if (t2) traversedTerrs.push(t2);
-      }
-
-      const segment: RouteSegment = {
-        fromLocationId: fromLoc.id,
-        fromLocationName: fromLoc.name,
-        toLocationId: toLoc.id,
-        toLocationName: toLoc.name,
-        connectionId: directConn.id,
-        label: directConn.label,
-        distanceKm: dist,
-        durationMinutes: duration,
-        terrain: [fromLoc.terrainType, toLoc.terrainType].filter(Boolean) as string[],
-        territoryId: toLoc.territoryId
-      };
-
-      return {
-        status: 'resolved',
-        fromLocation: fromLoc,
-        toLocation: toLoc,
-        segments: [segment],
-        totalDistanceKm: dist,
-        totalTravelMinutes: duration,
-        traversedTerritories: traversedTerrs
-      };
+    // Build adjacency list for Dijkstra's search
+    interface Edge {
+      targetLoc: WorldLocationReference;
+      conn: any;
+      durationMinutes: number;
+      distanceKm: number;
     }
 
-    // 2. BFS Graph Search across all connections
-    // Collect all unique location nodes in connections
-    const locMap = new Map<string, WorldLocationReference>();
-    const registerLoc = (ref: WorldLocationReference) => {
-      locMap.set(ref.id, ref);
-      locMap.set(ref.name.toLowerCase(), ref);
-    };
-
-    registerLoc(fromLoc);
-    registerLoc(toLoc);
-
-    (world.locations || []).forEach(registerLoc);
-
-    // Build adjacency list
-    const adj = new Map<string, { targetLoc: WorldLocationReference; conn: any }[]>();
-    const addEdge = (locA: WorldLocationReference, locB: WorldLocationReference, conn: any) => {
+    const adj = new Map<string, Edge[]>();
+    const addEdge = (locA: WorldLocationReference, locB: WorldLocationReference, conn: any, durationMinutes: number, distanceKm: number) => {
       if (!adj.has(locA.id)) adj.set(locA.id, []);
-      adj.get(locA.id)!.push({ targetLoc: locB, conn });
+      adj.get(locA.id)!.push({ targetLoc: locB, conn, durationMinutes, distanceKm });
     };
 
     for (const c of connections) {
-      if (c.isBlocked) continue;
-      
+      if (c.isBlocked) {
+        hasBlockedConnections = true;
+        continue; // Blocked connection is removed from routing graph
+      }
+
       const resA = WorldIntegrationService.resolveLocationReference({ idOrName: c.fromId || c.fromPlace, world, loreDatabase });
       const resB = WorldIntegrationService.resolveLocationReference({ idOrName: c.toId || c.toPlace, world, loreDatabase });
 
       if (resA.value && resB.value) {
-        addEdge(resA.value, resB.value, c);
-        addEdge(resB.value, resA.value, c);
-      }
-    }
-
-    // BFS Queue
-    const queue: { currentId: string; path: { loc: WorldLocationReference; conn: any }[] }[] = [
-      { currentId: fromLoc.id, path: [] }
-    ];
-    const visited = new Set<string>([fromLoc.id]);
-
-    let foundPath: { loc: WorldLocationReference; conn: any }[] | null = null;
-
-    while (queue.length > 0) {
-      const { currentId, path } = queue.shift()!;
-
-      if (currentId === toLoc.id) {
-        foundPath = path;
-        break;
-      }
-
-      const neighbors = adj.get(currentId) || [];
-      for (const { targetLoc, conn } of neighbors) {
-        if (!visited.has(targetLoc.id)) {
-          visited.add(targetLoc.id);
-          queue.push({
-            currentId: targetLoc.id,
-            path: [...path, { loc: targetLoc, conn }]
-          });
+        const segData = this.calculateSegmentData(c, [resA.value.terrainType, resB.value.terrainType].filter(Boolean) as string[]);
+        if (segData && segData.durationMinutes > 0) {
+          addEdge(resA.value, resB.value, c, segData.durationMinutes, segData.distanceKm);
+          addEdge(resB.value, resA.value, c, segData.durationMinutes, segData.distanceKm);
         }
       }
     }
 
-    if (foundPath && foundPath.length > 0) {
+    // Dijkstra's algorithm for shortest travelTimeMinutes
+    interface PathState {
+      totalMins: number;
+      totalDist: number;
+      hops: number;
+      steps: Edge[];
+    }
+
+    const bestMap = new Map<string, PathState>();
+    bestMap.set(fromLoc.id, { totalMins: 0, totalDist: 0, hops: 0, steps: [] });
+
+    const unvisited = new Set<string>([fromLoc.id]);
+
+    while (unvisited.size > 0) {
+      // Pick node u in unvisited with minimum totalMins
+      let bestNodeId: string | null = null;
+      let bestState: PathState | null = null;
+
+      for (const nodeId of unvisited) {
+        const state = bestMap.get(nodeId)!;
+        if (!bestState) {
+          bestNodeId = nodeId;
+          bestState = state;
+        } else {
+          if (state.totalMins < bestState.totalMins) {
+            bestNodeId = nodeId;
+            bestState = state;
+          } else if (state.totalMins === bestState.totalMins) {
+            // Tie-breaker 1: Total distance
+            if (state.totalDist < bestState.totalDist) {
+              bestNodeId = nodeId;
+              bestState = state;
+            } else if (state.totalDist === bestState.totalDist) {
+              // Tie-breaker 2: Hops
+              if (state.hops < bestState.hops) {
+                bestNodeId = nodeId;
+                bestState = state;
+              } else if (state.hops === bestState.hops && nodeId < bestNodeId!) {
+                // Tie-breaker 3: Lexicographical order for determinism
+                bestNodeId = nodeId;
+                bestState = state;
+              }
+            }
+          }
+        }
+      }
+
+      if (!bestNodeId || !bestState) break;
+      unvisited.delete(bestNodeId);
+
+      if (bestNodeId === toLoc.id) {
+        // Target reached!
+        break;
+      }
+
+      const neighbors = adj.get(bestNodeId) || [];
+      for (const edge of neighbors) {
+        const targetId = edge.targetLoc.id;
+        const candMins = bestState.totalMins + edge.durationMinutes;
+        const candDist = bestState.totalDist + edge.distanceKm;
+        const candHops = bestState.hops + 1;
+
+        const candSteps = [...bestState.steps, edge];
+
+        const prevBest = bestMap.get(targetId);
+        let isBetter = false;
+
+        if (!prevBest) {
+          isBetter = true;
+        } else if (candMins < prevBest.totalMins) {
+          isBetter = true;
+        } else if (candMins === prevBest.totalMins && candDist < prevBest.totalDist) {
+          isBetter = true;
+        } else if (candMins === prevBest.totalMins && candDist === prevBest.totalDist && candHops < prevBest.hops) {
+          isBetter = true;
+        }
+
+        if (isBetter) {
+          bestMap.set(targetId, {
+            totalMins: candMins,
+            totalDist: candDist,
+            hops: candHops,
+            steps: candSteps
+          });
+          unvisited.add(targetId);
+        }
+      }
+    }
+
+    const finalPath = bestMap.get(toLoc.id);
+
+    if (finalPath && finalPath.steps.length > 0) {
       const segments: RouteSegment[] = [];
-      let totalDist = 0;
-      let totalMins = 0;
       const traversedTerrs = new Map<string, Territory>();
 
       let prevLoc = fromLoc;
-      for (const step of foundPath) {
-        const stepLoc = step.loc;
-        const dist = this.parseDistanceStringToKm(step.conn?.distance) || 10;
-        const dur = this.calculateSegmentMinutes(step.conn, [prevLoc.terrainType, stepLoc.terrainType].filter(Boolean) as string[]);
+      for (const step of finalPath.steps) {
+        const stepLoc = step.targetLoc;
 
         segments.push({
           fromLocationId: prevLoc.id,
@@ -337,13 +348,10 @@ export class TravelService {
           toLocationName: stepLoc.name,
           connectionId: step.conn?.id,
           label: step.conn?.label,
-          distanceKm: dist,
-          durationMinutes: dur,
+          distanceKm: step.distanceKm,
+          durationMinutes: step.durationMinutes,
           territoryId: stepLoc.territoryId
         });
-
-        totalDist += dist;
-        totalMins += dur;
 
         if (stepLoc.territoryId) {
           const t = territories.find(ter => ter.id === stepLoc.territoryId);
@@ -353,55 +361,38 @@ export class TravelService {
         prevLoc = stepLoc;
       }
 
+      // Add starting location territory if available
+      if (fromLoc.territoryId) {
+        const tFrom = territories.find(ter => ter.id === fromLoc.territoryId);
+        if (tFrom) traversedTerrs.set(tFrom.id, tFrom);
+      }
+
       return {
         status: 'resolved',
         fromLocation: fromLoc,
         toLocation: toLoc,
         segments,
-        totalDistanceKm: totalDist,
-        totalTravelMinutes: totalMins,
+        totalDistanceKm: finalPath.totalDist,
+        totalTravelMinutes: finalPath.totalMins,
         traversedTerritories: Array.from(traversedTerrs.values())
       };
     }
 
-    // Fallback: Check coordinates if both locations have x, y
-    if (typeof fromLoc.x === 'number' && typeof fromLoc.y === 'number' && typeof toLoc.x === 'number' && typeof toLoc.y === 'number') {
-      const dx = toLoc.x - fromLoc.x;
-      const dy = toLoc.y - fromLoc.y;
-      const pixelDist = Math.sqrt(dx * dx + dy * dy);
-      const distKm = Math.round(pixelDist * 0.5); // scale
-      const durMins = this.calculateSegmentMinutes({ distance: `${distKm} km` });
-
-      const traversedTerrs: Territory[] = [];
-      if (fromLoc.territoryId) {
-        const t1 = territories.find(t => t.id === fromLoc.territoryId);
-        if (t1) traversedTerrs.push(t1);
-      }
-      if (toLoc.territoryId && toLoc.territoryId !== fromLoc.territoryId) {
-        const t2 = territories.find(t => t.id === toLoc.territoryId);
-        if (t2) traversedTerrs.push(t2);
-      }
-
+    // No route found via graph search
+    if (hasBlockedConnections) {
       return {
-        status: 'resolved',
+        status: 'blocked',
         fromLocation: fromLoc,
         toLocation: toLoc,
-        segments: [{
-          fromLocationId: fromLoc.id,
-          fromLocationName: fromLoc.name,
-          toLocationId: toLoc.id,
-          toLocationName: toLoc.name,
-          distanceKm: distKm,
-          durationMinutes: durMins,
-          territoryId: toLoc.territoryId
-        }],
-        totalDistanceKm: distKm,
-        totalTravelMinutes: durMins,
-        traversedTerritories: traversedTerrs
+        segments: [],
+        totalDistanceKm: 0,
+        totalTravelMinutes: 0,
+        traversedTerritories: [],
+        isBlocked: true,
+        reason: `Verbindung oder Route nach "${toLoc.name}" ist derzeit blockiert.`
       };
     }
 
-    // If no route exists and no coordinates
     return {
       status: 'unreachable',
       fromLocation: fromLoc,
@@ -418,7 +409,7 @@ export class TravelService {
    * Executes an atomic production travel turn for the player.
    * Pipeline:
    * 1. Get current player location
-   * 2. Resolve route to destination
+   * 2. Resolve route to destination using Dijkstra
    * 3. Handle unreachable/not_found without moving player or advancing time
    * 4. Perform EXACTLY ONE WorldSimulationStep with calculated travelMinutes
    * 5. Check if simulation spawned combat/encounter interruption mid-travel:
@@ -458,7 +449,7 @@ export class TravelService {
     });
 
     if (routeRes.status !== 'resolved') {
-      // Unreachable or not found -> Do NOT advance time or move player
+      // Unreachable, blocked, or not found -> Do NOT advance time or move player
       const userMsg = {
         id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         role: 'user' as const,
@@ -501,7 +492,7 @@ export class TravelService {
     }
 
     // Step 3: Calculate Travel Minutes & Run EXACTLY ONE Simulation Step
-    const travelMinutes = routeRes.totalTravelMinutes > 0 ? routeRes.totalTravelMinutes : 30;
+    const travelMinutes = routeRes.totalTravelMinutes;
 
     const simResult = WorldSimulationService.runSimulationStep({
       world: adventure.world,
