@@ -8038,8 +8038,96 @@ ${keepExistingDetails && Object.keys(existingDetails).length > 0 ? `### BESTEHEN
     });
   }
 
+  static async smartFillTechnique(
+    input: {
+      powerSourceName?: string;
+      powerSourceId?: string;
+      baseAbilityId: string;
+      baseAbilityName: string;
+      element: string;
+      abilityType: string;
+      additionalBaseAbilities?: { id: string; name: string; element: string; abilityType: string }[];
+      description: string;
+      characterName?: string;
+      characterRole?: string;
+      worldTitle?: string;
+    }
+  ): Promise<{
+    name: string;
+    description: string;
+    type: string;
+    subtype: string;
+    tier: string;
+    targetType: string;
+    effects: string[];
+    costResourceName: string;
+    costValue: number;
+    cost: string;
+    range?: string;
+    duration?: string;
+  }> {
+    return this.callWithRetry(async () => {
+      const ai = this.getAI();
+      const prompt = `Du bist ein erfahrener Rollenspiel- und Kampfsystem-Architekt für AdventureForge.
+Erstelle eine neue, präzise und balancierte RPG-Technik basierend auf der vorgegebenen Fähigkeitshierarchie.
+
+HIERARCHIE & VORGABEN:
+- Kraftquelle: "${input.powerSourceName || 'Standard-Kraftquelle'}"
+- Grundfähigkeit: "${input.baseAbilityName}"
+- Element / Aspekt: "${input.element}"
+- Fähigkeitsart: "${input.abilityType}"
+${input.additionalBaseAbilities && input.additionalBaseAbilities.length > 0 
+  ? `- Weitere verknüpfte Grundfähigkeiten: ${input.additionalBaseAbilities.map(b => `${b.name} (${b.element} · ${b.abilityType})`).join(', ')}`
+  : ''}
+${input.characterName ? `- Charakter: "${input.characterName}" (${input.characterRole || 'Abenteurer'})` : ''}
+${input.worldTitle ? `- Welt: "${input.worldTitle}"` : ''}
+
+NUTZERBESCHREIBUNGS-WUNSCH:
+"${input.description}"
+
+STRENGE REGELN:
+1. TECHNIK MUSS AUF DER GRUNDFÄHIGKEIT BASIEREN: Die Technik darf nicht unabhängig von der Grundfähigkeit erzeugt werden, sondern muss direkt aus "${input.baseAbilityName}" (${input.element} · ${input.abilityType}) hervorgehen.
+2. ABSOLUT KEINE EMOJIS! Verwende in keinem Feld Emojis, Symbole oder Icons.
+3. Name: Erfinde einen prägnanten, unverwechselbaren Namen für die Technik (z.B. "Eiskuppel", "Flammenlanze", "Schattenschleier", "Gefrorener Sturm").
+4. Description: Präzise Beschreibung (30-60 Wörter) von Ablauf, visueller Wirkung und mechanischem Nutzen.
+5. Typ: Wähle das passendste aus: 'Angriff', 'Verteidigung', 'Transformation', 'Support', 'Heilung', 'Zustandseffekt', 'Spezial', 'Beschwörung'.
+6. Subtyp: Konkreter Subtyp (z.B. 'Barriere / Gebietskontrolle', 'Projektil / Fernkampf', 'Nahkampf-Klinge', 'Schild', 'Flächenangriff', 'Verstärkung').
+7. Tier: 'Tier 1' (Standard / Grundtechnik), 'Tier 2' (Fortgeschritten), 'Tier 3' (Meisterhaft), 'Tier 4' (Ultimativ).
+8. targetType: Geeignetes Ziel (z.B. 'Selbst / Verbündete / Feinde', 'Einzelziel (Gegner)', 'Fläche (Gegner)', 'Selbst', 'Verbündete').
+9. effects: Array von 2-4 prägnanten Anwendungsmöglichkeiten / Effekten (z.B. ["Schutz", "Einsperren", "Gebietskontrolle"]).
+10. costResourceName & costValue: Passende Ressourcenbezeichnung (z.B. 'Mana', 'Ausdauer', 'Energie') und Kosten (z.B. 10 für Tier 1, 25 für Tier 2, 50 für Tier 3, 100 für Tier 4).
+
+Antworte ausschließlich mit einem validen JSON-Objekt.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response.text?.trim() || '{}');
+      return {
+        name: parsed.name || 'Neue Technik',
+        description: parsed.description || input.description,
+        type: parsed.type || 'Angriff',
+        subtype: parsed.subtype || 'Einzelschuss',
+        tier: parsed.tier || 'Tier 1',
+        targetType: parsed.targetType || 'Selbst / Verbündete / Feinde',
+        effects: Array.isArray(parsed.effects) ? parsed.effects : (parsed.applications || ['Schaden', 'Effekt']),
+        costResourceName: parsed.costResourceName || 'Mana',
+        costValue: typeof parsed.costValue === 'number' ? parsed.costValue : 15,
+        cost: parsed.cost || `${parsed.costValue || 15} ${parsed.costResourceName || 'Mana'}`,
+        range: parsed.range || 'Nahkampf / Mittlere Distanz',
+        duration: parsed.duration || 'Sofort'
+      };
+    });
+  }
+
 }
 
+export const smartFillTechnique = GeminiService.smartFillTechnique.bind(GeminiService);
 export const generateEconomyHoldings = GeminiService.generateEconomyHoldings.bind(GeminiService);
 export const smartFillEconomyHolding = async (world: WorldSetting, holding: Partial<EconomyHolding>, loreDatabase: any[] = [], isSupplementMode: boolean = true, customPrompt?: string): Promise<Partial<EconomyHolding>> => {
   const finalPrompt = customPrompt || 'Ergänze alle Felder vollständig basierend auf dem Betriebstyp und den Weltinformationen';

@@ -23,9 +23,16 @@ import {
   TacticalDirection,
   TacticalSpawnSource,
   ResolutionResult,
-  WorldEventIntent
+  WorldEventIntent,
+  BattleParticipantRelation
 } from '../types';
-import { spawnTacticalGroup } from '../utils/tacticalEngine';
+import { 
+  spawnTacticalGroup,
+  calculateMultiGroupSpawnPositions,
+  getForceRelation,
+  areForcesHostile,
+  areForcesAllied
+} from '../utils/tacticalEngine';
 import { WorldKnowledgeService } from './worldKnowledgeService';
 
 export interface ResolveWorldContextParams {
@@ -1291,6 +1298,107 @@ export class WorldIntegrationService {
     };
   }
 
+  /**
+   * Spawns multiple EncounterForces into the Tactical Combat Engine.
+   * Allocates non-overlapping spawn anchors/centers for each force and preserves unit counts.
+   */
+  static spawnEncounterForcesToTactical(params: {
+    encounterForces: EncounterForce[];
+    combatState: CombatState;
+    participantRelations?: BattleParticipantRelation[];
+    gridWidth?: number;
+    gridHeight?: number;
+    defaultBaseHp?: number;
+  }): {
+    groups: TacticalGroup[];
+    entities: TacticalEntity[];
+    updatedCombatState: CombatState;
+    updatedEncounterForces: EncounterForce[];
+    participantRelations: BattleParticipantRelation[];
+  } {
+    const {
+      encounterForces,
+      combatState,
+      participantRelations = combatState.participantRelations || [],
+      gridWidth = combatState.gridWidth || 30,
+      gridHeight = combatState.gridHeight || 20,
+      defaultBaseHp = 30
+    } = params;
+
+    const spawnedGroups: TacticalGroup[] = [];
+    const spawnedEntities: TacticalEntity[] = [];
+    const updatedForces: EncounterForce[] = [];
+    let currentCombatState: CombatState = { ...combatState };
+
+    const spawnAnchors = calculateMultiGroupSpawnPositions(
+      encounterForces.length + 1,
+      gridWidth,
+      gridHeight
+    );
+
+    encounterForces.forEach((force, idx) => {
+      const anchor = spawnAnchors[idx + 1] || {
+        center: { x: Math.floor(gridWidth / 2), y: Math.floor(gridHeight * 0.2) },
+        direction: 'south' as TacticalDirection
+      };
+
+      const spawnRes = this.spawnEncounterForceToTactical({
+        encounterForce: force,
+        combatState: currentCombatState,
+        formation: 'loose',
+        direction: anchor.direction,
+        sourcePosition: anchor.center,
+        baseHp: defaultBaseHp
+      });
+
+      spawnedGroups.push(spawnRes.group);
+      spawnedEntities.push(...spawnRes.entities);
+      updatedForces.push(spawnRes.updatedEncounterForce);
+      currentCombatState = spawnRes.updatedCombatState;
+    });
+
+    const computedRelations = [...participantRelations];
+    
+    encounterForces.forEach(f => {
+      const forceKey = f.id;
+      if (!computedRelations.some(r => (r.fromForceId === 'player' && r.toForceId === forceKey) || (r.fromForceId === forceKey && r.toForceId === 'player'))) {
+        computedRelations.push({
+          fromForceId: 'player',
+          toForceId: forceKey,
+          relation: f.hostility === 'neutral' ? 'neutral' : 'hostile'
+        });
+      }
+    });
+
+    for (let i = 0; i < encounterForces.length; i++) {
+      for (let j = i + 1; j < encounterForces.length; j++) {
+        const fa = encounterForces[i];
+        const fb = encounterForces[j];
+        if (!computedRelations.some(r => (r.fromForceId === fa.id && r.toForceId === fb.id) || (r.fromForceId === fb.id && r.toForceId === fa.id))) {
+          const sameFaction = fa.factionId && fb.factionId && fa.factionId === fb.factionId;
+          computedRelations.push({
+            fromForceId: fa.id,
+            toForceId: fb.id,
+            relation: sameFaction ? 'ally' : 'hostile'
+          });
+        }
+      }
+    }
+
+    currentCombatState = {
+      ...currentCombatState,
+      participantRelations: computedRelations
+    };
+
+    return {
+      groups: spawnedGroups,
+      entities: spawnedEntities,
+      updatedCombatState: currentCombatState,
+      updatedEncounterForces: updatedForces,
+      participantRelations: computedRelations
+    };
+  }
+
   // -------------------------------------------------------------
   // 8. Combat Result Feedback -> World State
   // -------------------------------------------------------------
@@ -1788,6 +1896,311 @@ export class WorldIntegrationService {
       location,
       updatedWorld,
       updatedCombatState
+    };
+  }
+
+  /**
+   * Creates a multi-force BattleInstance supporting player force, allied forces, and multiple enemy forces.
+   */
+  static createMultiForceBattleInstance(params: {
+    territoryId: string;
+    locationIdOrName?: string;
+    world: WorldSetting;
+    loreDatabase?: LoreEntry[];
+    forces: Array<{
+      encounterForce: EncounterForce;
+      formation?: TacticalFormation;
+      direction?: TacticalDirection;
+      spawnSource?: TacticalSpawnSource | string;
+      sourcePosition?: { x: number; y: number };
+      baseHp?: number;
+      behavior?: string;
+    }>;
+    playerForce?: {
+      groupName?: string;
+      count?: number;
+      unitDisplayName?: string;
+      formation?: TacticalFormation;
+      direction?: TacticalDirection;
+      sourcePosition?: { x: number; y: number };
+      baseHp?: number;
+      characterIds?: string[];
+    };
+    alliedForces?: Array<{
+      name: string;
+      count: number;
+      unitDisplayName?: string;
+      factionId?: string;
+      formation?: TacticalFormation;
+      direction?: TacticalDirection;
+      sourcePosition?: { x: number; y: number };
+      baseHp?: number;
+      characterIds?: string[];
+    }>;
+    participantRelations?: BattleParticipantRelation[];
+    startedAtWorldTime?: WorldTime;
+    gridWidth?: number;
+    gridHeight?: number;
+  }): {
+    battleInstance: BattleInstance;
+    location: WorldLocationReference | null;
+    updatedWorld: WorldSetting;
+    updatedCombatState: CombatState;
+    tacticalGroups: TacticalGroup[];
+    tacticalEntities: TacticalEntity[];
+    encounterForces: EncounterForce[];
+  } {
+    const {
+      territoryId,
+      locationIdOrName,
+      world,
+      loreDatabase = world.loreDatabase || [],
+      forces = [],
+      playerForce,
+      alliedForces = [],
+      participantRelations = [],
+      startedAtWorldTime = world.worldTime,
+      gridWidth = 30,
+      gridHeight = 20
+    } = params;
+
+    const terr = world.territories?.find(t => t.id === territoryId) || null;
+    const locRes = locationIdOrName
+      ? this.resolveLocationReference({ idOrName: locationIdOrName, territoryId, world, loreDatabase })
+      : { value: null, status: 'unresolved' as const, confidence: 0 };
+
+    const location = locRes.value;
+    const derivedMap = this.deriveBattleMapFromLocation({ territory: terr, location, gridWidth, gridHeight });
+
+    const battleId = `battle_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+
+    let currentCombatState: CombatState = {
+      isCombatActive: true,
+      selectedEnemyId: forces[0]?.encounterForce?.id || '',
+      customEnemyName: forces.map(f => f.encounterForce.name).join(', '),
+      opponents: [],
+      playerHp: 100,
+      playerMaxHp: 100,
+      playerMp: 100,
+      playerMaxMp: 100,
+      enemyHp: 100,
+      enemyMaxHp: 100,
+      combatSubMenu: 'main',
+      gridWidth: derivedMap.gridWidth,
+      gridHeight: derivedMap.gridHeight,
+      placedObjects: derivedMap.placedObjects,
+      tacticalMode: true,
+      tacticalEntities: {},
+      tacticalGroups: {},
+      tacticalCommands: [],
+      battleInstanceId: battleId,
+      territoryId,
+      locationId: location?.id,
+      locationName: location?.name || (terr ? terr.name : 'Unbekannter Schauplatz'),
+      participantRelations: [...participantRelations]
+    };
+
+    const spawnedGroups: TacticalGroup[] = [];
+    const spawnedEntities: TacticalEntity[] = [];
+    const updatedForces: EncounterForce[] = [];
+    const participatingFactionIds = new Set<string>();
+    const participatingCharacterIds = new Set<string>();
+    const participatingEncounterForceIds = new Set<string>();
+    const tacticalGroupIds: string[] = [];
+
+    const totalGroupsCount = (playerForce ? 1 : 1) + alliedForces.length + forces.length;
+    const spawnAnchors = calculateMultiGroupSpawnPositions(totalGroupsCount, derivedMap.gridWidth, derivedMap.gridHeight);
+    let anchorIdx = 0;
+
+    // 1. Spawn Player Force
+    const playerAnchor = spawnAnchors[anchorIdx++] || { center: { x: 15, y: 16 }, direction: 'north' as TacticalDirection };
+    const pCount = playerForce?.count || 1;
+    const pSpawnRes = spawnTacticalGroup({
+      combatState: currentCombatState,
+      groupName: playerForce?.groupName || 'Spieler-Gruppe',
+      count: pCount,
+      unitDisplayName: playerForce?.unitDisplayName || 'Spieler',
+      formation: playerForce?.formation || 'wedge',
+      direction: playerForce?.direction || playerAnchor.direction,
+      sourcePosition: playerForce?.sourcePosition || playerAnchor.center,
+      existingCharacterIds: playerForce?.characterIds || ['player'],
+      baseHp: playerForce?.baseHp || 100
+    });
+    
+    const playerGroup: TacticalGroup = {
+      ...pSpawnRes.group,
+      sourceType: 'player',
+      sourceId: 'player'
+    };
+    currentCombatState = {
+      ...pSpawnRes.updatedCombatState,
+      tacticalGroups: {
+        ...(pSpawnRes.updatedCombatState.tacticalGroups || {}),
+        [playerGroup.id]: playerGroup
+      }
+    };
+    spawnedGroups.push(playerGroup);
+    tacticalGroupIds.push(playerGroup.id);
+    playerForce?.characterIds?.forEach(cId => participatingCharacterIds.add(cId));
+    pSpawnRes.entities.forEach(e => spawnedEntities.push(e));
+
+    // 2. Spawn Allied Forces
+    alliedForces.forEach((ally) => {
+      const allyAnchor = spawnAnchors[anchorIdx++] || { center: { x: 10, y: 16 }, direction: 'north' as TacticalDirection };
+      const aSpawnRes = spawnTacticalGroup({
+        combatState: currentCombatState,
+        groupName: ally.name,
+        count: ally.count,
+        unitDisplayName: ally.unitDisplayName || ally.name,
+        factionId: ally.factionId,
+        formation: ally.formation || 'line',
+        direction: ally.direction || allyAnchor.direction,
+        sourcePosition: ally.sourcePosition || allyAnchor.center,
+        existingCharacterIds: ally.characterIds || [],
+        baseHp: ally.baseHp || 50
+      });
+      const allyGroup: TacticalGroup = {
+        ...aSpawnRes.group,
+        sourceType: 'ally',
+        factionId: ally.factionId
+      };
+      currentCombatState = {
+        ...aSpawnRes.updatedCombatState,
+        tacticalGroups: {
+          ...(aSpawnRes.updatedCombatState.tacticalGroups || {}),
+          [allyGroup.id]: allyGroup
+        }
+      };
+      spawnedGroups.push(allyGroup);
+      tacticalGroupIds.push(allyGroup.id);
+      if (ally.factionId) participatingFactionIds.add(ally.factionId);
+      ally.characterIds?.forEach(cId => participatingCharacterIds.add(cId));
+      aSpawnRes.entities.forEach(e => spawnedEntities.push(e));
+    });
+
+    // 3. Spawn Enemy EncounterForces
+    const opponentsList: any[] = [];
+    forces.forEach((f) => {
+      const enemyAnchor = spawnAnchors[anchorIdx++] || { center: { x: 15, y: 4 }, direction: 'south' as TacticalDirection };
+      const eForce = f.encounterForce;
+      participatingEncounterForceIds.add(eForce.id);
+      if (eForce.factionId) participatingFactionIds.add(eForce.factionId);
+      if (eForce.leaderCharacterId) participatingCharacterIds.add(eForce.leaderCharacterId);
+
+      const spawnRes = this.spawnEncounterForceToTactical({
+        encounterForce: eForce,
+        combatState: currentCombatState,
+        formation: f.formation || 'loose',
+        direction: f.direction || enemyAnchor.direction,
+        sourcePosition: f.sourcePosition || enemyAnchor.center,
+        baseHp: f.baseHp || 30,
+        behavior: f.behavior || 'aggressive'
+      });
+
+      spawnedGroups.push(spawnRes.group);
+      tacticalGroupIds.push(spawnRes.group.id);
+      spawnedEntities.push(...spawnRes.entities);
+      updatedForces.push(spawnRes.updatedEncounterForce);
+      currentCombatState = spawnRes.updatedCombatState;
+
+      opponentsList.push({
+        id: eForce.id,
+        name: eForce.name,
+        count: eForce.count,
+        hp: eForce.count * (f.baseHp || 30),
+        maxHp: eForce.count * (f.baseHp || 30),
+        enemyType: eForce.enemyTypeName || eForce.raceName || 'Gegner',
+        spawnSource: f.spawnSource || 'point'
+      });
+    });
+
+    // 4. Resolve full relations
+    const finalRelations = [...(currentCombatState.participantRelations || [])];
+    forces.forEach(f => {
+      const forceId = f.encounterForce.id;
+      if (!finalRelations.some(r => (r.fromForceId === 'player' && r.toForceId === forceId) || (r.fromForceId === forceId && r.toForceId === 'player'))) {
+        finalRelations.push({
+          fromForceId: 'player',
+          toForceId: forceId,
+          relation: f.encounterForce.hostility === 'neutral' ? 'neutral' : 'hostile'
+        });
+      }
+      if (!finalRelations.some(r => (r.fromForceId === playerGroup.id && r.toForceId === forceId) || (r.fromForceId === forceId && r.toForceId === playerGroup.id))) {
+        finalRelations.push({
+          fromForceId: playerGroup.id,
+          toForceId: forceId,
+          relation: f.encounterForce.hostility === 'neutral' ? 'neutral' : 'hostile'
+        });
+      }
+    });
+
+    const battleInstance: BattleInstance = {
+      id: battleId,
+      territoryId,
+      locationId: location?.id,
+      locationName: location?.name || (terr ? terr.name : 'Unbekannter Schauplatz'),
+      startedAtWorldTime,
+      status: 'active',
+      participatingFactionIds: Array.from(participatingFactionIds),
+      participatingCharacterIds: Array.from(participatingCharacterIds),
+      participatingEncounterForceIds: Array.from(participatingEncounterForceIds),
+      tacticalGroupIds,
+      participantRelations: finalRelations,
+      terrainSnapshot: {
+        terrainType: derivedMap.terrainType,
+        biome: derivedMap.biome,
+        gridWidth: derivedMap.gridWidth,
+        gridHeight: derivedMap.gridHeight,
+        blockedCells: derivedMap.blockedCells,
+        terrainCells: derivedMap.terrainCells
+      },
+      objectSnapshot: {
+        placedObjects: derivedMap.placedObjects
+      },
+      createdAt: Date.now()
+    };
+
+    currentCombatState = {
+      ...currentCombatState,
+      opponents: opponentsList,
+      participantRelations: finalRelations
+    };
+
+    const existingBattleInstances = { ...(world.dynamicWorldState?.battleInstances || {}) };
+    existingBattleInstances[battleId] = battleInstance;
+
+    const existingForces = { ...(world.dynamicWorldState?.encounterForces || {}) };
+    updatedForces.forEach(uf => {
+      existingForces[uf.id] = uf;
+    });
+
+    const existingLocations = { ...(world.dynamicWorldState?.locations || {}) };
+    if (location) {
+      existingLocations[location.id] = location;
+    }
+
+    const updatedWorldState: DynamicWorldState = {
+      ...(world.dynamicWorldState || {}),
+      battleInstances: existingBattleInstances,
+      encounterForces: existingForces,
+      locations: existingLocations,
+      lastUpdated: Date.now()
+    };
+
+    const updatedWorld: WorldSetting = {
+      ...world,
+      dynamicWorldState: updatedWorldState,
+      battleInstances: [...(world.battleInstances || []), battleInstance]
+    };
+
+    return {
+      battleInstance,
+      location,
+      updatedWorld,
+      updatedCombatState: currentCombatState,
+      tacticalGroups: spawnedGroups,
+      tacticalEntities: spawnedEntities,
+      encounterForces: updatedForces
     };
   }
 

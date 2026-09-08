@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, Character, LoreEntry, Territory, WorldSetting } from '../types';
+import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, Character, LoreEntry, Territory, WorldSetting, TacticalFormation, TacticalDirection } from '../types';
 import { GeminiService, audioUtils } from '../services/geminiService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import ReactMarkdown from 'react-markdown';
@@ -502,6 +502,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [aiExtractedEnemies, setAiExtractedEnemies] = useState<{id: string, name: string, type: 'npc'|'group', subtitle?: string}[]>([]);
   const [isExtractingEnemies, setIsExtractingEnemies] = useState(false);
   const [lastExtractedMessageId, setLastExtractedMessageId] = useState('');
+  const [selectedPrepEnemyIds, setSelectedPrepEnemyIds] = useState<string[]>([]);
 
   const [newItemName, setNewItemName] = useState('');
   const [newItemType, setNewItemType] = useState('Waffen');
@@ -6057,6 +6058,134 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
     }
   };
 
+  const startMultiForceCombat = (
+    selectedEnemiesList: Array<{ id: string; name: string; type: 'npc' | 'group' | 'dynamic'; subtitle?: string }>,
+    customName?: string
+  ) => {
+    const targetEnemies = [...selectedEnemiesList];
+    if (customName && customName.trim()) {
+      targetEnemies.push({
+        id: `custom-${Date.now()}`,
+        name: customName.trim(),
+        type: 'dynamic',
+        subtitle: 'Manuelle Bedrohung'
+      });
+    }
+
+    if (targetEnemies.length === 0) {
+      setError('Bitte wähle mindestens einen Gegner oder gib einen Namen ein!');
+      return;
+    }
+
+    const isHero = adventure.world.isHeroic !== false;
+    let initialPlayerHp = isHero ? 150 : 100;
+    let maxPlayerHp = isHero ? 150 : 100;
+    let initialPlayerMp = isHero ? 120 : 80;
+    let maxPlayerMp = isHero ? 120 : 80;
+
+    const nextHp = playerHp <= 0 ? initialPlayerHp : playerHp;
+    const nextMaxHp = playerMaxHp <= 0 ? maxPlayerHp : playerMaxHp;
+    const nextMp = playerMp <= 0 ? initialPlayerMp : playerMp;
+    const nextMaxMp = playerMaxMp <= 0 ? maxPlayerMp : playerMaxMp;
+
+    setPlayerHp(nextHp);
+    setPlayerMaxHp(nextMaxHp);
+    setPlayerMp(nextMp);
+    setPlayerMaxMp(nextMaxMp);
+
+    const currentLocId = adventure.player?.appearance?.currentLocation || (adventure.player as any)?.currentLocationId;
+    const currentTerrId = adventure.world?.territories?.[0]?.id || 'territory_default';
+
+    const friendlyCompanions = (adventure.npcs || []).filter(
+      n => !n.isHostile && isNpcCurrentlyPresent(n) && !isNameMatch(adventure.player?.name || '', adventure.player?.nickname, n.name)
+    );
+
+    const forcesParams: Array<{
+      encounterForce: any;
+      formation?: TacticalFormation;
+      direction?: TacticalDirection;
+      baseHp?: number;
+    }> = [];
+
+    const fullMessagesText = messages.map(m => m.text || '').join(' ');
+
+    targetEnemies.forEach((enemyItem) => {
+      const npcObj = findNpcByIdOrName(enemyItem.id, enemyItem.name);
+      const isGroup = enemyItem.type === 'group' ||
+                      enemyItem.name.toLowerCase().includes('bande') ||
+                      enemyItem.name.toLowerCase().includes('rudel') ||
+                      enemyItem.name.toLowerCase().includes('trupp') ||
+                      enemyItem.name.toLowerCase().includes('wachen') ||
+                      enemyItem.name.toLowerCase().includes('soldaten') ||
+                      enemyItem.name.toLowerCase().includes('marinesoldat') ||
+                      enemyItem.name.toLowerCase().includes('infanterie');
+
+      const parsedCount = parseGroupCountFromText(enemyItem.name, fullMessagesText);
+      const count = parsedCount || (isGroup ? 8 : 1);
+
+      const forceCreation = WorldIntegrationService.createEncounterForce({
+        name: enemyItem.name,
+        factionIdOrName: enemyItem.subtitle,
+        count,
+        hostility: 'hostile',
+        world: adventure.world,
+        loreDatabase: adventure.loreDatabase,
+        npcs: adventure.npcs
+      });
+
+      const enemyBaseHp = npcObj ? Math.max(20, Math.round(getNPCMaxHp(npcObj) / count)) : (count > 1 ? 30 : 100);
+
+      forcesParams.push({
+        encounterForce: forceCreation.encounterForce,
+        formation: isGroup ? 'loose' : 'wedge',
+        baseHp: enemyBaseHp
+      });
+    });
+
+    const multiBattleRes = WorldIntegrationService.createMultiForceBattleInstance({
+      territoryId: currentTerrId,
+      locationIdOrName: currentLocId,
+      world: adventure.world,
+      loreDatabase: adventure.loreDatabase,
+      forces: forcesParams,
+      playerForce: {
+        groupName: `${adventure.player.name || 'Spieler'} (Gruppe)`,
+        count: 1,
+        unitDisplayName: adventure.player.name || 'Spieler',
+        characterIds: ['player'],
+        baseHp: nextHp
+      },
+      alliedForces: friendlyCompanions.length > 0 ? [{
+        name: 'Verbündete Gefährten',
+        count: friendlyCompanions.length,
+        unitDisplayName: 'Gefährte',
+        characterIds: friendlyCompanions.map(c => c.id),
+        baseHp: 80
+      }] : []
+    });
+
+    setIsCombatActive(true);
+    setSelectedEnemyId(targetEnemies[0]?.id || 'custom');
+    setSelectedEnemyIds(targetEnemies.map(e => e.id));
+    setCustomEnemyName(targetEnemies.map(e => e.name).join(', '));
+    setOpponents(multiBattleRes.updatedCombatState.opponents || []);
+    setCombatSubMenu('main');
+    setIsCombatMenuExpanded(false);
+
+    onUpdateAdventure({
+      ...adventure,
+      world: multiBattleRes.updatedWorld,
+      combatState: {
+        ...multiBattleRes.updatedCombatState,
+        playerHp: nextHp,
+        playerMaxHp: nextMaxHp,
+        playerMp: nextMp,
+        playerMaxMp: nextMaxMp,
+        isCombatActive: true
+      }
+    });
+  };
+
   const handleCancelCombat = () => {
     setIsCombatActive(false);
     setIsCombatMenuExpanded(false);
@@ -8210,53 +8339,93 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
               {/* SubMenu: START (Wenn Kampf inaktiv) */}
               <div className="space-y-3">
-                <p className="text-[11px] text-slate-400">
-                  Wähle einen anwesenden Gegner oder eine Gruppe aus den jüngsten Chat-Ereignissen, um den Kampf zu starten:
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] text-slate-400">
+                    Anwesende Streitkräfte und Bedrohungen:
+                  </p>
+                  {combinedDetectedEnemies.length > 1 && (
+                    <button
+                      onClick={() => {
+                        if (selectedPrepEnemyIds.length === combinedDetectedEnemies.length) {
+                          setSelectedPrepEnemyIds([]);
+                        } else {
+                          setSelectedPrepEnemyIds(combinedDetectedEnemies.map(e => e.id));
+                        }
+                      }}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 font-semibold transition-colors"
+                    >
+                      {selectedPrepEnemyIds.length === combinedDetectedEnemies.length ? 'Keine wählen' : 'Alle wählen'}
+                    </button>
+                  )}
+                </div>
 
                 {/* Erkannte anwesende Gegner und Gruppen */}
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                   {isExtractingEnemies && combinedDetectedEnemies.length === 0 && (
                     <div className="text-center py-3 text-[10px] text-slate-400 italic bg-slate-900/40 rounded-xl border border-slate-800 animate-pulse">
                       <i className="fa-solid fa-microchip text-amber-500 mr-2"></i>
-                      KI analysiert Text nach Gegnern...
+                      Textanalyse nach anwesenden Streitkräften...
                     </div>
                   )}
                   {combinedDetectedEnemies.length > 0 ? (
-                    combinedDetectedEnemies.map((enemy, enIdx) => (
-                      <button
-                        key={enemy.id ? `det-enemy-${enemy.id}-${enIdx}` : `det-enemy-${enIdx}`}
-                        onClick={() => {
-                          if (enemy.type === 'npc') {
-                            startCombat(enemy.id, enemy.name);
-                          } else {
-                            startCombat('custom', enemy.name);
-                          }
-                        }}
-                        className="w-full text-left p-2.5 rounded-xl border border-red-500/30 bg-red-950/20 hover:bg-red-950/40 hover:border-red-500/50 transition-all flex items-center justify-between group"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-red-500 group-hover:scale-110 transition-transform text-xs">
-                            {enemy.type === 'npc' ? '' : enemy.type === 'group' ? '' : ''}
-                          </span>
-                          <div>
-                            <div className="text-xs font-bold text-slate-200">
-                              {enemy.name} {enemy.type === 'group' && !enemy.id.startsWith('ai-extracted') && (() => {
-                                const count = parseGroupCountFromText(enemy.name, messages.map(m => m.text || '').join(' '));
-                                return count ? `(Gruppe von ca. ${count})` : '(Gruppe)';
-                              })()}
-                            </div>
-                            <div className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">
-                              {enemy.subtitle || (enemy.type === 'npc' ? 'Anwesender Charakter' : 'Erkannte Bedrohung / Gruppe')}
+                    combinedDetectedEnemies.map((enemy, enIdx) => {
+                      const isChecked = selectedPrepEnemyIds.includes(enemy.id);
+                      return (
+                        <div
+                          key={enemy.id ? `det-enemy-${enemy.id}-${enIdx}` : `det-enemy-${enIdx}`}
+                          className={`w-full p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 ${
+                            isChecked
+                              ? 'border-red-500/60 bg-red-950/40 shadow-sm'
+                              : 'border-slate-800 bg-slate-950/40 hover:border-slate-700'
+                          }`}
+                        >
+                          <div 
+                            onClick={() => {
+                              setSelectedPrepEnemyIds(prev => 
+                                prev.includes(enemy.id) ? prev.filter(id => id !== enemy.id) : [...prev, enemy.id]
+                              );
+                            }}
+                            className="flex items-center gap-2.5 flex-1 cursor-pointer select-none"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {}} // handled by parent div onClick
+                              className="accent-red-500 rounded cursor-pointer pointer-events-none"
+                            />
+                            <div>
+                              <div className="text-xs font-bold text-slate-200">
+                                {enemy.name} {enemy.type === 'group' && !enemy.id.startsWith('ai-extracted') && (() => {
+                                  const count = parseGroupCountFromText(enemy.name, messages.map(m => m.text || '').join(' '));
+                                  return count ? `(${count} Einheiten)` : '(Gruppe)';
+                                })()}
+                              </div>
+                              <div className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">
+                                {enemy.subtitle || (enemy.type === 'npc' ? 'Anwesender Charakter' : 'Erkannte Streitkraft')}
+                              </div>
                             </div>
                           </div>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (enemy.type === 'npc') {
+                                startCombat(enemy.id, enemy.name);
+                              } else {
+                                startCombat('custom', enemy.name);
+                              }
+                            }}
+                            title="Nur diesen Gegner einzeln herausfordern"
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold shrink-0 transition-colors"
+                          >
+                            Einzeln
+                          </button>
                         </div>
-                        <i className="fa-solid fa-chevron-right text-[10px] text-red-500/60 group-hover:translate-x-0.5 transition-transform"></i>
-                      </button>
-                    ))
+                      );
+                    })
                   ) : !isExtractingEnemies ? (
                     <div className="text-center py-3 text-[10px] text-slate-500 italic bg-slate-950/40 rounded-xl border border-slate-900">
-                      Keine anwesenden Bedrohungen im Chat erkannt.
+                      Keine anwesenden Bedrohungen im Text erkannt.
                     </div>
                   ) : null}
                 </div>
@@ -8264,7 +8433,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 {/* Trennlinie */}
                 <div className="flex items-center gap-2 my-2">
                   <div className="h-px bg-slate-800 flex-1"></div>
-                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Oder manuell eingeben</span>
+                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Oder manuell hinzufügen</span>
                   <div className="h-px bg-slate-800 flex-1"></div>
                 </div>
 
@@ -8273,24 +8442,45 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     type="text"
                     value={customEnemyName}
                     onChange={e => setCustomEnemyName(e.target.value)}
-                    placeholder="z.B. Großer Bär, Ninja-Assassinen, Banditen..."
+                    placeholder="z.B. Banditen-Stoßtrupp, Kaidos Elite..."
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 placeholder-slate-600"
                   />
                 </div>
 
-                <button
-                  onClick={() => {
-                    if (!customEnemyName.trim()) {
-                      setError("Bitte gib einen Gegner an!");
-                      return;
-                    }
-                    
-                    startCombat('custom', customEnemyName);
-                  }}
-                  className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-1.5"
-                >
-                  <i className="fa-solid fa-crosshairs"></i> Kampf beginnen
-                </button>
+                {/* Start Actions */}
+                <div className="space-y-1.5 pt-1">
+                  {selectedPrepEnemyIds.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const chosen = combinedDetectedEnemies.filter(e => selectedPrepEnemyIds.includes(e.id));
+                        startMultiForceCombat(chosen, customEnemyName);
+                      }}
+                      className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-1.5"
+                    >
+                      <i className="fa-solid fa-crosshairs"></i> Kampf beginnen ({selectedPrepEnemyIds.length + (customEnemyName.trim() ? 1 : 0)} Streitkräfte)
+                    </button>
+                  )}
+
+                  {selectedPrepEnemyIds.length === 0 && (
+                    <button
+                      onClick={() => {
+                        if (!customEnemyName.trim()) {
+                          if (combinedDetectedEnemies.length > 0) {
+                            startMultiForceCombat(combinedDetectedEnemies);
+                            return;
+                          }
+                          setError("Bitte gib einen Gegner an oder wähle eine Streitkraft!");
+                          return;
+                        }
+                        
+                        startCombat('custom', customEnemyName);
+                      }}
+                      className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-1.5"
+                    >
+                      <i className="fa-solid fa-crosshairs"></i> {combinedDetectedEnemies.length > 0 && !customEnemyName.trim() ? `Alle ${combinedDetectedEnemies.length} Streitkräfte bekämpfen` : 'Kampf beginnen'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}

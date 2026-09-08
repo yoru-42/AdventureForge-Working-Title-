@@ -16,7 +16,11 @@ import {
   executeTacticalCommand,
   moveTacticalEntity,
   moveTacticalGroup,
-  parseTacticalCommandsFromText
+  parseTacticalCommandsFromText,
+  getForceRelation,
+  areForcesHostile,
+  areForcesAllied,
+  canTargetEntity
 } from '../utils/tacticalEngine';
 import { formatDisplayLocationName } from '../utils/mapUtils';
 
@@ -3559,6 +3563,42 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
                 if (!pos) return null;
 
                 const isSelectedGroup = activeTacticalGroup?.id === entity.groupId;
+                const isPlayerEntity = group?.sourceType === 'player' || entity.id.startsWith('player') || entity.worldEntityId === 'player' || (entity as any).characterId === 'player';
+                const isAllyEntity = group?.sourceType === 'ally' || (group && areForcesAllied(combatState, 'player', group.id));
+                const isNeutralEntity = group && getForceRelation(combatState, 'player', group.id) === 'neutral';
+
+                let entityStyle = 'bg-red-800/80 border-red-500/80 hover:scale-110';
+                let tooltipBg = 'bg-slate-950 text-red-200 border-red-800';
+
+                if (isPlayerEntity) {
+                  entityStyle = isSelected
+                    ? 'scale-125 ring-4 ring-amber-500/60 z-30 border-amber-300 bg-indigo-600 shadow-[0_0_14px_rgba(245,158,11,0.9)]'
+                    : isSelectedGroup
+                      ? 'ring-2 ring-indigo-400/50 bg-indigo-700 border-indigo-400 hover:scale-115'
+                      : 'bg-indigo-800 border-indigo-500 hover:scale-110 shadow-sm';
+                  tooltipBg = 'bg-indigo-950 text-amber-200 border-amber-500/50';
+                } else if (isAllyEntity) {
+                  entityStyle = isSelected
+                    ? 'scale-125 ring-4 ring-emerald-500/60 z-30 border-emerald-300 bg-emerald-600 shadow-[0_0_14px_rgba(16,185,129,0.9)]'
+                    : isSelectedGroup
+                      ? 'ring-2 ring-emerald-400/50 bg-emerald-700 border-emerald-400 hover:scale-115'
+                      : 'bg-emerald-800 border-emerald-500 hover:scale-110 shadow-sm';
+                  tooltipBg = 'bg-emerald-950 text-emerald-200 border-emerald-800';
+                } else if (isNeutralEntity) {
+                  entityStyle = isSelected
+                    ? 'scale-125 ring-4 ring-yellow-500/60 z-30 border-yellow-300 bg-yellow-600 shadow-[0_0_14px_rgba(234,179,8,0.9)]'
+                    : isSelectedGroup
+                      ? 'ring-2 ring-yellow-400/50 bg-yellow-700 border-yellow-400 hover:scale-115'
+                      : 'bg-yellow-800/80 border-yellow-500 hover:scale-110';
+                  tooltipBg = 'bg-yellow-950 text-yellow-200 border-yellow-800';
+                } else {
+                  entityStyle = isSelected 
+                    ? 'scale-125 ring-4 ring-amber-500/50 z-30 border-amber-400 bg-red-600 shadow-[0_0_14px_rgba(245,158,11,0.9)]' 
+                    : isSelectedGroup
+                      ? 'ring-2 ring-red-400/40 bg-red-700/90 border-red-400 hover:scale-115'
+                      : 'bg-red-800/80 border-red-500/80 hover:scale-110';
+                  tooltipBg = 'bg-slate-950 text-red-200 border-red-800';
+                }
 
                 return (
                   <motion.div
@@ -3579,15 +3619,9 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
                         setSelectedToken(isSelected ? null : entity.id);
                         if (entity.groupId) setSelectedGroupId(entity.groupId);
                       }}
-                      className={`w-full h-full rounded-full flex items-center justify-center text-[9px] sm:text-[11px] font-bold border cursor-pointer select-none relative group transition-all duration-300 ${
-                        isSelected 
-                          ? 'scale-125 ring-4 ring-amber-500/50 z-30 border-amber-400 bg-red-600 shadow-[0_0_14px_rgba(245,158,11,0.9)]' 
-                          : isSelectedGroup
-                            ? 'ring-2 ring-red-400/40 bg-red-700/90 border-red-400 hover:scale-115'
-                            : 'bg-red-800/80 border-red-500/80 hover:scale-110'
-                      }`}
+                      className={`w-full h-full rounded-full flex items-center justify-center text-[9px] sm:text-[11px] font-bold border cursor-pointer select-none relative group transition-all duration-300 ${entityStyle}`}
                     >
-                      {getCharacterSprite(entity.displayName, 'enemy', selectedSetting)}
+                      {getCharacterSprite(entity.displayName, isPlayerEntity ? 'player' : isAllyEntity ? 'companion' : 'enemy', selectedSetting)}
 
                       {/* Index badge */}
                       <span className="absolute -bottom-1 -right-1 bg-slate-950/90 text-amber-300 font-mono text-[6.5px] px-0.5 py-0.1 rounded border border-slate-700 pointer-events-none">
@@ -3595,7 +3629,7 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
                       </span>
 
                       {/* Tooltip */}
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-[8.5px] font-extrabold shadow-lg pointer-events-none whitespace-nowrap border scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100 transition-all z-50 duration-200 bg-slate-950 text-red-200 border-red-800">
+                      <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-[8.5px] font-extrabold shadow-lg pointer-events-none whitespace-nowrap border scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100 transition-all z-50 duration-200 ${tooltipBg}`}>
                         {entity.displayName} #{entity.assignedSlotIndex !== undefined ? entity.assignedSlotIndex + 1 : ''} {group ? `• ${group.name} [${group.formation || 'Locker'}]` : ''} ({pos.x}, {pos.y})
                       </div>
 

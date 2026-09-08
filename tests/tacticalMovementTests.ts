@@ -2,7 +2,12 @@ import { CombatState } from '../types';
 import {
   spawnTacticalGroup,
   splitTacticalGroup,
-  validateTacticalState
+  validateTacticalState,
+  calculateMultiGroupSpawnPositions,
+  getForceRelation,
+  areForcesHostile,
+  areForcesAllied,
+  canTargetEntity
 } from '../utils/tacticalEngine';
 import {
   findPath,
@@ -10,6 +15,7 @@ import {
   moveTacticalGroup,
   executeTacticalCommand
 } from '../utils/tacticalMovementEngine';
+import { WorldIntegrationService } from '../services/worldIntegrationService';
 
 function runTests() {
   console.log('=== RUNNING TACTICAL MOVEMENT & PATHFINDING TEST SUITE ===\n');
@@ -361,6 +367,154 @@ function runTests() {
   assert(cmdResult.success === true, 'Test 11: formation_move command executed successfully');
   assert(cmdResult.command.status === 'completed', 'Test 11: Command status updated to completed');
   assert(cmdResult.updatedCombatState.tacticalCommands?.some(c => c.id === 'cmd_test_01'), 'Test 11: Command logged in tacticalCommands');
+
+  // -------------------------------------------------------------
+  // Test 12: Multi-Group Spawn Anchors & Non-Overlapping Spawns
+  // -------------------------------------------------------------
+  console.log('\n--- Test 12: Multi-Group Spawn Anchors & Non-Overlapping Spawns ---');
+  const anchors = calculateMultiGroupSpawnPositions(4, 30, 20);
+  assert(anchors.length === 4, 'Test 12: Generated 4 distinct spawn anchors');
+  
+  // Verify anchor distance separation
+  let allSeparated = true;
+  for (let i = 0; i < anchors.length; i++) {
+    for (let j = i + 1; j < anchors.length; j++) {
+      const dx = anchors[i].center.x - anchors[j].center.x;
+      const dy = anchors[i].center.y - anchors[j].center.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 4) allSeparated = false;
+    }
+  }
+  assert(allSeparated === true, 'Test 12: All 4 spawn anchors are well separated');
+
+  // Spawn 3 groups into the anchors
+  let multiState: CombatState = { ...baseCombatState };
+  const g1Res = spawnTacticalGroup({
+    combatState: multiState,
+    groupName: 'Player Vanguard',
+    count: 5,
+    sourcePosition: anchors[0].center,
+    direction: anchors[0].direction
+  });
+  multiState = g1Res.updatedCombatState;
+
+  const g2Res = spawnTacticalGroup({
+    combatState: multiState,
+    groupName: 'Enemy Frontline',
+    count: 10,
+    sourcePosition: anchors[1].center,
+    direction: anchors[1].direction
+  });
+  multiState = g2Res.updatedCombatState;
+
+  const g3Res = spawnTacticalGroup({
+    combatState: multiState,
+    groupName: 'Allied Flank',
+    count: 5,
+    sourcePosition: anchors[2].center,
+    direction: anchors[2].direction
+  });
+  multiState = g3Res.updatedCombatState;
+
+  const occupiedPositions = new Set<string>();
+  Object.values(multiState.tacticalEntities || {}).forEach(ent => {
+    occupiedPositions.add(`${ent.position.x},${ent.position.y}`);
+  });
+  assert(occupiedPositions.size === 20, 'Test 12: All 20 units across 3 spawned forces occupy unique non-overlapping cells');
+
+  // -------------------------------------------------------------
+  // Test 13: Multi-Force Relations & Targeting Rules
+  // -------------------------------------------------------------
+  console.log('\n--- Test 13: Multi-Force Relations & Targeting Rules ---');
+  multiState = {
+    ...multiState,
+    tacticalGroups: {
+      ...multiState.tacticalGroups,
+      [g1Res.group.id]: { ...g1Res.group, sourceType: 'player' },
+      [g2Res.group.id]: { ...g2Res.group, sourceType: 'enemy' },
+      [g3Res.group.id]: { ...g3Res.group, sourceType: 'ally' }
+    },
+    participantRelations: [
+      { fromForceId: g1Res.group.id, toForceId: g2Res.group.id, relation: 'hostile' },
+      { fromForceId: g1Res.group.id, toForceId: g3Res.group.id, relation: 'ally' },
+      { fromForceId: g2Res.group.id, toForceId: g3Res.group.id, relation: 'hostile' }
+    ]
+  };
+
+  assert(areForcesHostile(multiState, g1Res.group.id, g2Res.group.id) === true, 'Test 13: Player group and Enemy group are hostile');
+  assert(areForcesAllied(multiState, g1Res.group.id, g3Res.group.id) === true, 'Test 13: Player group and Allied group are allied');
+  assert(areForcesHostile(multiState, g2Res.group.id, g3Res.group.id) === true, 'Test 13: Enemy group and Allied group are hostile');
+
+  const playerUnitId = g1Res.group.unitIds[0];
+  const enemyUnitId = g2Res.group.unitIds[0];
+  const allyUnitId = g3Res.group.unitIds[0];
+
+  const targetEnemyCheck = canTargetEntity(multiState, playerUnitId, enemyUnitId);
+  assert(targetEnemyCheck.allowed === true, 'Test 13: Player can target Enemy unit');
+
+  const targetAllyCheck = canTargetEntity(multiState, playerUnitId, allyUnitId);
+  assert(targetAllyCheck.allowed === false, 'Test 13: Player CANNOT target Ally unit (blocked)');
+  assert(targetAllyCheck.reason === 'allied', 'Test 13: Block reason is correctly identified as "allied"');
+
+  // -------------------------------------------------------------
+  // Test 14: WorldIntegrationService createMultiForceBattleInstance
+  // -------------------------------------------------------------
+  console.log('\n--- Test 14: WorldIntegrationService createMultiForceBattleInstance ---');
+  const dummyWorld: any = {
+    id: 'world_test',
+    territories: [
+      { id: 'terr_1', name: 'Drachenkamm', biome: 'mountain' }
+    ],
+    worldTime: { day: 10, hour: 14, minute: 0 }
+  };
+
+  const dummyEncounter1 = {
+    id: 'force_pirates_1',
+    name: 'Piraten-Stoßtrupp',
+    count: 6,
+    hostility: 'hostile' as const,
+    enemyTypeName: 'Pirat'
+  };
+
+  const dummyEncounter2 = {
+    id: 'force_beasts_2',
+    name: 'Schattenwolf-Rudel',
+    count: 4,
+    hostility: 'hostile' as const,
+    enemyTypeName: 'Wolf'
+  };
+
+  const multiBattleInstanceRes = WorldIntegrationService.createMultiForceBattleInstance({
+    territoryId: 'terr_1',
+    locationIdOrName: 'Schmugglerbucht',
+    world: dummyWorld,
+    forces: [
+      { encounterForce: dummyEncounter1, formation: 'loose' },
+      { encounterForce: dummyEncounter2, formation: 'wedge' }
+    ],
+    playerForce: {
+      groupName: 'Heldengruppe',
+      count: 1,
+      unitDisplayName: 'Held'
+    },
+    alliedForces: [
+      { name: 'Dorfmiliz', count: 3, unitDisplayName: 'Milizionär' }
+    ]
+  });
+
+  assert(!!multiBattleInstanceRes.battleInstance, 'Test 14: BattleInstance created successfully');
+  assert(multiBattleInstanceRes.battleInstance.territoryId === 'terr_1', 'Test 14: Correct territoryId mapped');
+  assert(multiBattleInstanceRes.tacticalGroups.length === 4, 'Test 14: 4 TacticalGroups spawned (Player, Militia, Pirates, Beasts)');
+  // Total units: 1 Player + 3 Militia + 6 Pirates + 4 Beasts = 14 units
+  assert(multiBattleInstanceRes.tacticalEntities.length === 14, 'Test 14: Exactly 14 tactical units spawned with individual entities');
+  
+  // Verify all 14 units have unique positions
+  const battlePosSet = new Set<string>();
+  multiBattleInstanceRes.tacticalEntities.forEach(ent => {
+    battlePosSet.add(`${ent.position.x},${ent.position.y}`);
+  });
+  assert(battlePosSet.size === 14, 'Test 14: All 14 units occupy distinct coordinates on the derived battle grid');
+  assert(multiBattleInstanceRes.updatedWorld.battleInstances?.length === 1, 'Test 14: BattleInstance persisted in world');
 
   console.log(`\n=== TEST RESULTS: ${passed} / ${total} PASSED ===`);
   if (passed === total) {

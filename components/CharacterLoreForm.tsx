@@ -21,6 +21,8 @@ import { GeminiService } from '../services/geminiService';
 import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArchetypesData';
 import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore } from '../lib/relationshipHelper';
 import { migrateLegacyProfessionData } from '../services/professionCompetencyService';
+import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
+import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 
 export interface CharacterAbility {
   id: string;
@@ -2637,146 +2639,169 @@ export const CharacterLoreForm: React.FC<Props> = ({
                 })}
               </div>
 
-              {/* Button zum Hinzufügen im aktiven Tab */}
-              <div className="flex justify-end">
-                <button 
-                  type="button"
-                  onClick={() => {
-                    const currentAbilities: CharacterAbility[] = editForm.details?.abilities || [];
-                    const globalSource = activePowerSource.source || '';
-                    const globalCost = activePowerSource.cost || '';
-                    updateDetail('abilities', [
-                      ...currentAbilities,
-                      {
-                        id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-                        name: '',
-                        category: activeAbilityTab,
-                        source: globalSource,
-                        cost: globalCost,
-                        description: '',
-                        techniques: '',
-                        powerSourceId: activePowerSource.id
-                      }
-                    ]);
-                  }}
-                  className="px-3 py-1.5 bg-amber-600/20 border border-amber-500/30 text-amber-400 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-amber-600/30 transition-all shadow-sm cursor-pointer"
-                >
-                  <i className="fa-solid fa-plus"></i> {activeAbilityTab} hinzufügen
-                </button>
-              </div>
-
-              {/* Fähigkeiten-Liste für aktiven Tab */}
-              {(() => {
-                const currentAbilities: CharacterAbility[] = editForm.details?.abilities || [];
-                const activeAbilities = currentAbilities.filter(ability => {
-                  const matchesCategory = !ability.category ? activeAbilityTab === 'Passive Fähigkeiten' : ability.category === activeAbilityTab;
-                  if (!matchesCategory) return false;
-                  const belongsToActive = ability.powerSourceId === activePowerSource.id || (!ability.powerSourceId && activePowerSource.id === powerSourcesList[0]?.id);
-                  return belongsToActive;
-                });
-
-                if (activeAbilities.length === 0) {
+              {activeAbilityTab === 'Techniken' ? (
+                (() => {
+                  const { powerSources, baseAbilities, techniques } = normalizeAbilityHierarchy(editForm.details || {});
                   return (
-                    <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl bg-slate-900/10">
-                      <span className="text-2xl block mb-2">✨</span>
-                      <p className="text-xs text-slate-500 italic">Keine Einträge für &ldquo;{activeAbilityTab}&rdquo; definiert.</p>
-                      <p className="text-[10px] text-slate-600 mt-1">Klicke oben auf &ldquo;{activeAbilityTab} hinzufügen&rdquo;, um loszulegen.</p>
+                    <div className="mt-2">
+                      <TechniqueHierarchyTree
+                        powerSources={powerSources}
+                        baseAbilities={baseAbilities}
+                        techniques={techniques}
+                        onChange={(newPs, newBa, newTech) => {
+                          const updated = syncCharacterAbilityTree(editForm.details || {}, newPs, newBa, newTech);
+                          updateMultipleDetails(updated);
+                        }}
+                        characterName={editForm.title || ''}
+                        characterRole={getDetail('role', '')}
+                        worldTitle={worldTitle}
+                      />
                     </div>
                   );
-                }
+                })()
+              ) : (
+                <>
+                  {/* Button zum Hinzufügen im aktiven Tab */}
+                  <div className="flex justify-end">
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const currentAbilities: CharacterAbility[] = editForm.details?.abilities || [];
+                        const globalSource = activePowerSource.source || '';
+                        const globalCost = activePowerSource.cost || '';
+                        updateDetail('abilities', [
+                          ...currentAbilities,
+                          {
+                            id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                            name: '',
+                            category: activeAbilityTab,
+                            source: globalSource,
+                            cost: globalCost,
+                            description: '',
+                            techniques: '',
+                            powerSourceId: activePowerSource.id
+                          }
+                        ]);
+                      }}
+                      className="px-3 py-1.5 bg-amber-600/20 border border-amber-500/30 text-amber-400 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-amber-600/30 transition-all shadow-sm cursor-pointer"
+                    >
+                      <i className="fa-solid fa-plus"></i> {activeAbilityTab} hinzufügen
+                    </button>
+                  </div>
 
-                return (
-                  <div className="flex flex-col gap-4">
-                    {activeAbilities.map((ability, idx) => {
+                  {/* Fähigkeiten-Liste für aktiven Tab */}
+                  {(() => {
+                    const currentAbilities: CharacterAbility[] = editForm.details?.abilities || [];
+                    const activeAbilities = currentAbilities.filter(ability => {
+                      const matchesCategory = !ability.category ? activeAbilityTab === 'Passive Fähigkeiten' : ability.category === activeAbilityTab;
+                      if (!matchesCategory) return false;
+                      const belongsToActive = ability.powerSourceId === activePowerSource.id || (!ability.powerSourceId && activePowerSource.id === powerSourcesList[0]?.id);
+                      return belongsToActive;
+                    });
+
+                    if (activeAbilities.length === 0) {
                       return (
-                        <div key={ability.id || `ability-${idx}`} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col gap-3 relative shadow-inner">
-                          <button 
-                            type="button"
-                            onClick={() => updateDetail('abilities', currentAbilities.filter(a => a.id !== ability.id))}
-                            className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-red-400 hover:bg-red-400/20 rounded-lg transition-colors text-xs border border-transparent hover:border-red-500/20 cursor-pointer"
-                            title="Löschen"
-                          >
-                            <i className="fa-solid fa-trash"></i>
-                          </button>
-                          
-                          <div className="text-[10px] font-extrabold text-amber-500 uppercase tracking-widest flex items-center gap-1.5">
-                            <i className="fa-solid fa-cube"></i>
-                            <span>{activeAbilityTab} #{idx + 1}</span>
-                          </div>
-
-                          {activeAbilityTab === 'Passive Fähigkeiten' ? (
-                            <div className="grid grid-cols-1 gap-3">
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Name der passiven Fähigkeit</label>
-                                <input 
-                                  type="text"
-                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 font-semibold"
-                                  placeholder="z.B. Regeneration, Eiserner Wille..."
-                                  value={ability.name || ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, name: val } : a));
-                                  }}
-                                />
-                              </div>
-
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Effekt</label>
-                                <AutoExpandingTextarea 
-                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white min-h-[60px] text-xs outline-none focus:border-amber-500" 
-                                  placeholder="z.B. Erhöht die Verteidigung um 15%..." 
-                                  value={ability.description || ''} 
-                                  onChange={e => updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, description: e.target.value } : a))} 
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Name der Fähigkeit / Technik</label>
-                                <input 
-                                  type="text"
-                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 font-semibold"
-                                  placeholder="z.B. Schattenschlag"
-                                  value={ability.name || ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, name: val } : a));
-                                  }}
-                                />
-                              </div>
-
-                              <div className="flex flex-col gap-1">
-                                <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Kosten / Verbrauch</label>
-                                <input 
-                                  type="text"
-                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 font-semibold"
-                                  placeholder="z.B. 15 MP"
-                                  value={ability.cost || ''}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, cost: val } : a));
-                                  }}
-                                />
-                              </div>
-
-                              <div className="col-span-1 md:col-span-2 flex flex-col gap-1">
-                                <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Wirkung &amp; Beschreibung</label>
-                                <AutoExpandingTextarea 
-                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white min-h-[50px] text-xs outline-none focus:border-amber-500" 
-                                  placeholder="Detaillierte Beschreibung der Wirkung..."
-                                  value={ability.description || ''}
-                                  onChange={e => updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, description: e.target.value } : a))}
-                                />
-                              </div>
-                            </div>
-                          )}
+                        <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl bg-slate-900/10">
+                          <p className="text-xs text-slate-500 italic">Keine Einträge für &ldquo;{activeAbilityTab}&rdquo; definiert.</p>
+                          <p className="text-[10px] text-slate-600 mt-1">Klicke oben auf &ldquo;{activeAbilityTab} hinzufügen&rdquo;, um loszulegen.</p>
                         </div>
                       );
-                    })}
-                  </div>
-                );
-              })()}
+                    }
+
+                    return (
+                      <div className="flex flex-col gap-4">
+                        {activeAbilities.map((ability, idx) => {
+                          return (
+                            <div key={ability.id || `ability-${idx}`} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col gap-3 relative shadow-inner">
+                              <button 
+                                type="button"
+                                onClick={() => updateDetail('abilities', currentAbilities.filter(a => a.id !== ability.id))}
+                                className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center text-red-400 hover:bg-red-400/20 rounded-lg transition-colors text-xs border border-transparent hover:border-red-500/20 cursor-pointer"
+                                title="Löschen"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                              
+                              <div className="text-[10px] font-extrabold text-amber-500 uppercase tracking-widest flex items-center gap-1.5">
+                                <i className="fa-solid fa-cube"></i>
+                                <span>{activeAbilityTab} #{idx + 1}</span>
+                              </div>
+
+                              {activeAbilityTab === 'Passive Fähigkeiten' ? (
+                                <div className="grid grid-cols-1 gap-3">
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Name der passiven Fähigkeit</label>
+                                    <input 
+                                      type="text"
+                                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 font-semibold"
+                                      placeholder="z.B. Regeneration, Eiserner Wille..."
+                                      value={ability.name || ''}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, name: val } : a));
+                                      }}
+                                    />
+                                  </div>
+
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Effekt</label>
+                                    <AutoExpandingTextarea 
+                                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white min-h-[60px] text-xs outline-none focus:border-amber-500" 
+                                      placeholder="z.B. Erhöht die Verteidigung um 15%..." 
+                                      value={ability.description || ''} 
+                                      onChange={e => updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, description: e.target.value } : a))} 
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Name der Fähigkeit / Technik</label>
+                                    <input 
+                                      type="text"
+                                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 font-semibold"
+                                      placeholder="z.B. Schattenschlag"
+                                      value={ability.name || ''}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, name: val } : a));
+                                      }}
+                                    />
+                                  </div>
+
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Kosten / Verbrauch</label>
+                                    <input 
+                                      type="text"
+                                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 font-semibold"
+                                      placeholder="z.B. 15 MP"
+                                      value={ability.cost || ''}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, cost: val } : a));
+                                      }}
+                                    />
+                                  </div>
+
+                                  <div className="col-span-1 md:col-span-2 flex flex-col gap-1">
+                                    <label className="text-[9px] text-slate-400 font-bold uppercase ml-1">Wirkung &amp; Beschreibung</label>
+                                    <AutoExpandingTextarea 
+                                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white min-h-[50px] text-xs outline-none focus:border-amber-500" 
+                                      placeholder="Detaillierte Beschreibung der Wirkung..."
+                                      value={ability.description || ''}
+                                      onChange={e => updateDetail('abilities', currentAbilities.map(a => a.id === ability.id ? { ...a, description: e.target.value } : a))}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
             </div>
           </div>
         </div>

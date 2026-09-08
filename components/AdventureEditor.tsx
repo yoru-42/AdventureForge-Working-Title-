@@ -40,6 +40,8 @@ import {
   EP_DEFAULT_COST_NAMES,
   createEpDefaultWorldSettings
 } from '../lib/progressionDefaults';
+import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
+import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 
 interface Props {
   onSave: (adventure: Adventure) => void;
@@ -5375,59 +5377,81 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       })}
                     </div>
 
-                    {/* Button zum Hinzufügen im aktiven Tab */}
-                    <div className="flex justify-end">
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const globalSource = activePowerSource.source || '';
-                          const globalCost = activePowerSource.cost || '';
-                          setPlayer({
-                            ...player,
-                            abilities: [
-                              ...(player.abilities || []),
-                              {
-                                id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-                                name: '',
-                                category: activeAbilityTab,
-                                source: globalSource,
-                                cost: globalCost,
-                                description: '',
-                                techniques: '',
-                                powerSourceId: activePowerSource.id
-                              }
-                            ]
-                          });
-                        }}
-                        className="px-3 py-1.5 bg-amber-600/20 border border-amber-500/30 text-amber-400 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-amber-600/30 transition-all shadow-sm"
-                      >
-                        <i className="fa-solid fa-plus"></i> {activeAbilityTab} hinzufügen
-                      </button>
-                    </div>
-
-                    {/* Fähigkeiten-Liste für aktiven Tab */}
-                    {(() => {
-                      const currentAbilities = player.abilities || [];
-                      const activeAbilities = currentAbilities.filter(ability => {
-                        const matchesCategory = !ability.category ? activeAbilityTab === 'Passive Fähigkeiten' : ability.category === activeAbilityTab;
-                        if (!matchesCategory) return false;
-                        
-                        const belongsToActive = ability.powerSourceId === activePowerSource.id || (!ability.powerSourceId && activePowerSource.id === playerPowerSourcesList[0]?.id);
-                        return belongsToActive;
-                      });
-
-                      if (activeAbilities.length === 0) {
+                    {activeAbilityTab === 'Techniken' ? (
+                      (() => {
+                        const { powerSources, baseAbilities, techniques } = normalizeAbilityHierarchy(player);
                         return (
-                          <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl bg-slate-900/10">
-                            <LucideIcons.Sparkles className="w-6 h-6 text-amber-400 mx-auto mb-2" />
-                            <p className="text-xs text-slate-500 italic">Keine Einträge für &ldquo;{activeAbilityTab}&rdquo; definiert.</p>
-                            <p className="text-[10px] text-slate-600 mt-1">Klicke oben auf &ldquo;{activeAbilityTab} hinzufügen&rdquo;, um loszulegen.</p>
+                          <div className="mt-2">
+                            <TechniqueHierarchyTree
+                              powerSources={powerSources}
+                              baseAbilities={baseAbilities}
+                              techniques={techniques}
+                              onChange={(newPs, newBa, newTech) => {
+                                const updatedPlayer = syncCharacterAbilityTree(player, newPs, newBa, newTech);
+                                setPlayer(updatedPlayer as Character);
+                              }}
+                              characterName={player.name}
+                              characterRole={player.role}
+                              worldTitle={world.title}
+                            />
                           </div>
                         );
-                      }
+                      })()
+                    ) : (
+                      <>
+                        {/* Button zum Hinzufügen im aktiven Tab */}
+                        <div className="flex justify-end">
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              const globalSource = activePowerSource.source || '';
+                              const globalCost = activePowerSource.cost || '';
+                              setPlayer({
+                                ...player,
+                                abilities: [
+                                  ...(player.abilities || []),
+                                  {
+                                    id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                                    name: '',
+                                    category: activeAbilityTab,
+                                    source: globalSource,
+                                    cost: globalCost,
+                                    description: '',
+                                    techniques: '',
+                                    powerSourceId: activePowerSource.id
+                                  }
+                                ]
+                              });
+                            }}
+                            className="px-3 py-1.5 bg-amber-600/20 border border-amber-500/30 text-amber-400 hover:text-white rounded-lg text-xs font-bold flex items-center gap-1.5 hover:bg-amber-600/30 transition-all shadow-sm"
+                          >
+                            <i className="fa-solid fa-plus"></i> {activeAbilityTab} hinzufügen
+                          </button>
+                        </div>
 
-                      return (
-                        <div className="flex flex-col gap-4">
+                        {/* Fähigkeiten-Liste für aktiven Tab */}
+                        {(() => {
+                          const currentAbilities = player.abilities || [];
+                          const activeAbilities = currentAbilities.filter(ability => {
+                            const matchesCategory = !ability.category ? activeAbilityTab === 'Passive Fähigkeiten' : ability.category === activeAbilityTab;
+                            if (!matchesCategory) return false;
+                            
+                            const belongsToActive = ability.powerSourceId === activePowerSource.id || (!ability.powerSourceId && activePowerSource.id === playerPowerSourcesList[0]?.id);
+                            return belongsToActive;
+                          });
+
+                          if (activeAbilities.length === 0) {
+                            return (
+                              <div className="text-center py-8 border border-dashed border-slate-800 rounded-xl bg-slate-900/10">
+                                <LucideIcons.Sparkles className="w-6 h-6 text-amber-400 mx-auto mb-2" />
+                                <p className="text-xs text-slate-500 italic">Keine Einträge für &ldquo;{activeAbilityTab}&rdquo; definiert.</p>
+                                <p className="text-[10px] text-slate-600 mt-1">Klicke oben auf &ldquo;{activeAbilityTab} hinzufügen&rdquo;, um loszulegen.</p>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="flex flex-col gap-4">
                           {activeAbilities.map((ability, idx) => {
                             return (
                               <div key={ability.id || `ability-${idx}`} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col gap-3 relative shadow-inner">
@@ -6560,6 +6584,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                         </div>
                       );
                     })()}
+                  </>
+                )}
                   </div>
                 </div>
                 

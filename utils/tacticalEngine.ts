@@ -5,7 +5,8 @@ import {
   TacticalDirection, 
   TacticalSpawnSource,
   CombatState,
-  PlacedCombatObject
+  PlacedCombatObject,
+  BattleParticipantRelation
 } from '../types';
 
 export interface FormationPosition {
@@ -1003,6 +1004,229 @@ export function validateTacticalState(combatState: CombatState): {
     valid: errors.length === 0,
     errors
   };
+}
+
+// -------------------------------------------------------------
+// 8. Multi-Force Tactical Relations & Helpers
+// -------------------------------------------------------------
+
+/**
+ * Resolves the relation between two forces, factions, or groups.
+ * Supports getForceRelation(fromId, toId, relations) and getForceRelation(combatState, fromId, toId).
+ */
+export function getForceRelation(
+  arg1: string | CombatState,
+  arg2: string,
+  arg3?: BattleParticipantRelation[] | string,
+  arg4?: 'ally' | 'hostile' | 'neutral' | 'disputed'
+): 'ally' | 'hostile' | 'neutral' | 'disputed' {
+  let fromId: string;
+  let toId: string;
+  let relations: BattleParticipantRelation[] = [];
+  let defaultRelation: 'ally' | 'hostile' | 'neutral' | 'disputed' = 'hostile';
+
+  if (typeof arg1 === 'object' && arg1 !== null && 'isCombatActive' in arg1) {
+    relations = (arg1 as CombatState).participantRelations || [];
+    fromId = arg2;
+    toId = typeof arg3 === 'string' ? arg3 : '';
+    if (arg4) defaultRelation = arg4;
+  } else {
+    fromId = typeof arg1 === 'string' ? arg1 : '';
+    toId = arg2;
+    if (Array.isArray(arg3)) relations = arg3;
+    if (arg4) defaultRelation = arg4;
+  }
+
+  if (!fromId || !toId) return defaultRelation;
+  if (fromId === toId) return 'ally';
+
+  // Check direct relation
+  const direct = relations.find(
+    r => (r.fromForceId === fromId && r.toForceId === toId) ||
+         (r.fromForceId === toId && r.toForceId === fromId)
+  );
+  if (direct) return direct.relation;
+
+  // Check aliases / prefixes (e.g. 'player' or faction names)
+  const normFrom = fromId.toLowerCase().trim();
+  const normTo = toId.toLowerCase().trim();
+  if (normFrom === normTo) return 'ally';
+
+  return defaultRelation;
+}
+
+/**
+ * Checks whether two forces/groups are hostile to each other.
+ * Supports areForcesHostile(fromId, toId, relations) and areForcesHostile(combatState, fromId, toId).
+ */
+export function areForcesHostile(
+  arg1: string | CombatState,
+  arg2: string,
+  arg3?: BattleParticipantRelation[] | string
+): boolean {
+  if (typeof arg1 === 'object' && arg1 !== null) {
+    const rel = getForceRelation(arg1, arg2, arg3 as string);
+    return rel === 'hostile' || rel === 'disputed';
+  } else {
+    const rel = getForceRelation(arg1, arg2, arg3 as BattleParticipantRelation[]);
+    return rel === 'hostile' || rel === 'disputed';
+  }
+}
+
+/**
+ * Checks whether two forces/groups are allied with each other.
+ * Supports areForcesAllied(fromId, toId, relations) and areForcesAllied(combatState, fromId, toId).
+ */
+export function areForcesAllied(
+  arg1: string | CombatState,
+  arg2: string,
+  arg3?: BattleParticipantRelation[] | string
+): boolean {
+  if (typeof arg1 === 'object' && arg1 !== null) {
+    const rel = getForceRelation(arg1, arg2, arg3 as string, 'ally');
+    return rel === 'ally';
+  } else {
+    const rel = getForceRelation(arg1, arg2, arg3 as BattleParticipantRelation[], 'ally');
+    return rel === 'ally';
+  }
+}
+
+export interface TargetValidationResult {
+  allowed: boolean;
+  reason?: 'self' | 'same_group' | 'allied' | 'neutral' | 'invalid_target';
+}
+
+/**
+ * Validates whether an attacker entity can target/attack another entity on the tactical grid.
+ * Supports canTargetEntity(attacker, target, combatState) and canTargetEntity(combatState, attackerId, targetId).
+ */
+export function canTargetEntity(
+  arg1: TacticalEntity | string | CombatState,
+  arg2: TacticalEntity | string,
+  arg3?: CombatState | string
+): TargetValidationResult & { valueOf: () => boolean; toString: () => string } {
+  let attacker: TacticalEntity | null = null;
+  let target: TacticalEntity | null = null;
+  let combatState: CombatState | null = null;
+
+  if (typeof arg1 === 'object' && arg1 !== null && 'isCombatActive' in arg1) {
+    combatState = arg1 as CombatState;
+    const attackerId = typeof arg2 === 'string' ? arg2 : arg2?.id;
+    const targetId = typeof arg3 === 'string' ? arg3 : (arg3 as any)?.id;
+    attacker = combatState.tacticalEntities?.[attackerId] || null;
+    target = combatState.tacticalEntities?.[targetId] || null;
+  } else {
+    combatState = (typeof arg3 === 'object' && arg3 !== null && 'isCombatActive' in arg3) ? (arg3 as CombatState) : null;
+    if (combatState) {
+      const attackerId = typeof arg1 === 'string' ? arg1 : (arg1 && typeof arg1 === 'object' && 'id' in arg1 ? arg1.id : '');
+      const targetId = typeof arg2 === 'string' ? arg2 : (arg2 && typeof arg2 === 'object' && 'id' in arg2 ? arg2.id : '');
+      attacker = combatState.tacticalEntities?.[attackerId] || (typeof arg1 === 'object' && 'position' in arg1 ? arg1 as TacticalEntity : null);
+      target = combatState.tacticalEntities?.[targetId] || (typeof arg2 === 'object' && 'position' in arg2 ? arg2 as TacticalEntity : null);
+    } else {
+      attacker = typeof arg1 === 'object' && 'position' in arg1 ? arg1 as TacticalEntity : null;
+      target = typeof arg2 === 'object' && 'position' in arg2 ? arg2 as TacticalEntity : null;
+    }
+  }
+
+  const makeRes = (allowed: boolean, reason?: 'self' | 'same_group' | 'allied' | 'neutral' | 'invalid_target') => {
+    return Object.assign(
+      { allowed, reason },
+      {
+        valueOf: () => allowed,
+        toString: () => String(allowed)
+      }
+    );
+  };
+
+  if (!attacker || !target) {
+    return makeRes(false, 'invalid_target');
+  }
+  if (attacker.id === target.id) {
+    return makeRes(false, 'self');
+  }
+
+  const groups = combatState?.tacticalGroups || {};
+  const attackerGroup = attacker.groupId ? groups[attacker.groupId] : null;
+  const targetGroup = target.groupId ? groups[target.groupId] : null;
+
+  // Same group is always allied
+  if (attacker.groupId && target.groupId && attacker.groupId === target.groupId) {
+    return makeRes(false, 'same_group');
+  }
+
+  // Check group sourceType
+  if (attackerGroup?.sourceType === 'player' && targetGroup?.sourceType === 'player') {
+    return makeRes(false, 'allied');
+  }
+  if (attackerGroup?.sourceType === 'player' && targetGroup?.sourceType === 'ally') {
+    return makeRes(false, 'allied');
+  }
+  if (attackerGroup?.sourceType === 'ally' && targetGroup?.sourceType === 'player') {
+    return makeRes(false, 'allied');
+  }
+
+  const relations = combatState?.participantRelations || [];
+
+  // Determine force/faction keys to check
+  const attackerKey = attackerGroup?.encounterForceId || attacker.factionId || attacker.groupId || attacker.id;
+  const targetKey = targetGroup?.encounterForceId || target.factionId || target.groupId || target.id;
+
+  const relation = getForceRelation(attackerKey, targetKey, relations, 'hostile');
+  if (relation === 'ally') {
+    return makeRes(false, 'allied');
+  }
+  if (relation === 'neutral') {
+    return makeRes(false, 'neutral');
+  }
+
+  return makeRes(true);
+}
+
+/**
+ * Calculates distinct, non-overlapping spawn centers and facing directions for multiple tactical groups.
+ */
+export function calculateMultiGroupSpawnPositions(
+  groupsCount: number,
+  gridWidth: number = 30,
+  gridHeight: number = 20
+): Array<{ center: FormationPosition; direction: TacticalDirection; name?: string }> {
+  const positions: Array<{ center: FormationPosition; direction: TacticalDirection }> = [];
+
+  const defaultLocations: Array<{ center: FormationPosition; direction: TacticalDirection }> = [
+    // South / Player & Allies
+    { center: { x: Math.floor(gridWidth / 2), y: Math.floor(gridHeight * 0.8) }, direction: 'north' },
+    // North / Main Enemy Force
+    { center: { x: Math.floor(gridWidth / 2), y: Math.floor(gridHeight * 0.2) }, direction: 'south' },
+    // East / Flanking Force 1
+    { center: { x: Math.floor(gridWidth * 0.8), y: Math.floor(gridHeight * 0.35) }, direction: 'west' },
+    // West / Flanking Force 2
+    { center: { x: Math.floor(gridWidth * 0.2), y: Math.floor(gridHeight * 0.35) }, direction: 'east' },
+    // North-East / Secondary Enemy Group
+    { center: { x: Math.floor(gridWidth * 0.75), y: Math.floor(gridHeight * 0.15) }, direction: 'south' },
+    // North-West / Secondary Enemy Group
+    { center: { x: Math.floor(gridWidth * 0.25), y: Math.floor(gridHeight * 0.15) }, direction: 'south' },
+    // South-East / Allied Reinforcements
+    { center: { x: Math.floor(gridWidth * 0.8), y: Math.floor(gridHeight * 0.75) }, direction: 'north' },
+    // South-West / Allied Reinforcements
+    { center: { x: Math.floor(gridWidth * 0.2), y: Math.floor(gridHeight * 0.75) }, direction: 'north' }
+  ];
+
+  for (let i = 0; i < groupsCount; i++) {
+    if (i < defaultLocations.length) {
+      positions.push(defaultLocations[i]);
+    } else {
+      // Dynamic fallback distribution
+      const angle = (i / groupsCount) * 2 * Math.PI;
+      const radiusX = Math.floor(gridWidth * 0.35);
+      const radiusY = Math.floor(gridHeight * 0.35);
+      const cx = Math.max(2, Math.min(gridWidth - 3, Math.floor(gridWidth / 2 + Math.cos(angle) * radiusX)));
+      const cy = Math.max(2, Math.min(gridHeight - 3, Math.floor(gridHeight / 2 + Math.sin(angle) * radiusY)));
+      const dir: TacticalDirection = cy > gridHeight / 2 ? 'north' : 'south';
+      positions.push({ center: { x: cx, y: cy }, direction: dir });
+    }
+  }
+
+  return positions;
 }
 
 // Re-export Movement and Pathfinding Engine functions

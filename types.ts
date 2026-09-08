@@ -282,15 +282,73 @@ export interface UserProfile {
   };
 }
 
+export type AbilityType = 'creation' | 'manipulation' | 'creation_manipulation' | string;
+
+export interface BaseAbility {
+  id: string;
+  powerSourceId?: string;
+  powerSourceName?: string;
+  name?: string;
+  displayName: string;
+  element: string;
+  abilityType: AbilityType;
+  description?: string;
+  techniqueIds?: string[];
+}
+
+export interface TechniqueItem {
+  id: string; 
+  name: string; 
+  description?: string; 
+  type?: 'Angriff' | 'Transformation' | 'Verteidigung' | 'Support' | 'Heilung' | 'Zustandseffekt' | 'Spezial' | 'Beschwörung' | string; 
+  subtype?: string;
+  baseAbilityIds?: string[]; // Liste verknüpfter Grundfähigkeiten
+  baseAbilityNames?: string[]; // Anzeigenamen (z.B. ["Kryokinese", "Aerokinese"])
+  powerSourceId?: string;
+  powerSourceName?: string;
+  element?: string;
+  abilityType?: string;
+  targetType?: string; // z.B. "Selbst / Verbündete / Feinde"
+  effects?: string[]; // z.B. ["Schutz", "Einsperren", "Gebietskontrolle"]
+  applications?: string[];
+  range?: string;
+  duration?: string;
+  level?: number;
+  xp?: number;
+  maxLevel?: number;
+  xpNeeded?: number;
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
+  xpGainPerUse?: number;
+  trainingRequired?: number;
+  trainingProgress?: number;
+  milestoneRequirement?: string;
+  staticCost?: string;
+  cost?: string;
+  tier?: string;
+  baseValue?: number;
+  effectValue?: string;
+  costFormula?: 'absolut' | 'proz.';
+  costValue?: number;
+  costResourceName?: string;
+  metamorphosisInfluence?: number; // 0-100% (Standard 100%) - Wie stark diese Technik zur Metamorphose beiträgt
+  scaling?: string;
+  summonCount?: number;
+}
+
 export interface PowerAbility {
   id: string;
   name?: string;
+  displayName?: string;
   category?: string;
   source: string;
   cost: string;
   description: string;
   techniques: string;
   powerSourceId?: string;
+  element?: string; // z.B. "Eis"
+  abilityType?: AbilityType; // z.B. "creation_manipulation"
+  baseAbilityIds?: string[];
+  baseAbilities?: BaseAbility[];
   activationCondition?: string;
   transformHairColor?: string;
   transformEyeColor?: string;
@@ -336,34 +394,7 @@ export interface PowerAbility {
   transformSwappedCharacterSource?: 'codex' | 'npc';
   transformSwappedOriginalData?: any;
   transformRelationships?: CharacterRelationship[];
-  techniqueList?: { 
-    id: string; 
-    name: string; 
-    description?: string; 
-    type?: 'Angriff' | 'Transformation' | 'Verteidigung' | 'Support' | 'Heilung' | 'Zustandseffekt' | 'Spezial' | 'Beschwörung'; 
-    subtype?: string;
-    level?: number;
-    xp?: number;
-    maxLevel?: number;
-    xpNeeded?: number;
-    progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
-    xpGainPerUse?: number;
-    trainingRequired?: number;
-    trainingProgress?: number;
-    milestoneRequirement?: string;
-    staticCost?: string;
-    cost?: string;
-    tier?: string;
-    baseValue?: number;
-    effectValue?: string;
-    costFormula?: 'absolut' | 'proz.';
-    costValue?: number;
-    costResourceName?: string;
-    metamorphosisInfluence?: number; // 0-100% (Standard 100%) - Wie stark diese Technik zur Metamorphose beiträgt
-    applications?: string[];
-    scaling?: string;
-    summonCount?: number;
-  }[];
+  techniqueList?: TechniqueItem[];
 }
 
 export interface CharacterPowerSource {
@@ -372,6 +403,7 @@ export interface CharacterPowerSource {
   cost?: string;
   powerName?: string;
   powerDescription?: string;
+  baseAbilities?: BaseAbility[];
 }
 
 export interface DirectionalRelationshipValues {
@@ -642,7 +674,9 @@ export interface Character {
   powerSource?: string;
   powerCost?: string;
   powerSources?: CharacterPowerSource[];
+  baseAbilities?: BaseAbility[];
   techniques?: string;
+  techniqueList?: TechniqueItem[];
   abilities?: PowerAbility[];
   campaignPowerLevels?: Record<string, { value: number; potentialMax: number; xp?: number }>;
   relationship?: string;
@@ -1343,6 +1377,12 @@ export interface WorldLocationReference {
   metadata?: Record<string, any>;
 }
 
+export interface BattleParticipantRelation {
+  fromForceId: string;
+  toForceId: string;
+  relation: 'ally' | 'hostile' | 'neutral' | 'disputed';
+}
+
 export interface BattleInstance {
   id: string;
   worldStateId?: string;
@@ -1357,6 +1397,7 @@ export interface BattleInstance {
   participatingCharacterIds: string[];
   participatingEncounterForceIds?: string[];
   tacticalGroupIds: string[];
+  participantRelations?: BattleParticipantRelation[];
 
   terrainSnapshot?: {
     terrainType?: string;
@@ -2002,6 +2043,7 @@ export interface CombatState {
   tacticalMode?: boolean;
   legacyAutoMove?: boolean;
   fireTurnCount?: number;
+  participantRelations?: BattleParticipantRelation[];
 }
 
 export type TacticalFormation =
