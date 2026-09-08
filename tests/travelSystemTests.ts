@@ -399,6 +399,235 @@ export async function runTravelSystemTests() {
     assert(typeof GameTurnService.processPlayerTurn === 'function', 'Test J: GameTurnService.processPlayerTurn exists');
   });
 
+  // Test K – BattleInstance without locationName/locationId (Keine Teleportation oder falscher Orts-Fallback)
+  await test('Test K: BattleInstance without locationName/locationId keeps last confirmed origin location', async () => {
+    let simCalls = 0;
+    const origSim = WorldSimulationService.runSimulationStep;
+    WorldSimulationService.runSimulationStep = (params) => {
+      simCalls++;
+      const res = origSim.call(WorldSimulationService, params);
+      const mockBattle: BattleInstance = {
+        id: 'battle_encounter_no_loc',
+        territoryId: 'terr_01',
+        status: 'active',
+        participatingFactionIds: ['faction_bandits'],
+        participatingCharacterIds: ['player_01'],
+        tacticalGroupIds: ['group_bandits_01']
+      };
+      return {
+        ...res,
+        spawnedBattleInstances: [mockBattle]
+      };
+    };
+
+    try {
+      const adv = createMockAdventure();
+      const result = await GameTurnService.processPlayerTurn({
+        adventure: adv,
+        mode: 'travel',
+        destinationIdOrName: 'Festung C',
+        generateAiResponse: async () => 'Ein unvorhergesehenes Scharmützel bricht aus!',
+        parserFn: (text, currentAdv, hp, mp, worldOverride) => ({
+          cleanedText: text,
+          updatedLore: [],
+          updatedPlayer: currentAdv.player,
+          updatedNpcs: [],
+          notifications: [],
+          updatedStructuredInventory: undefined,
+          updatedWorld: worldOverride || currentAdv.world
+        })
+      });
+
+      assert(simCalls === 1, 'Test K: Exactly 1 simulation step executed');
+      assert(result.isInterrupted === true, 'Test K: Travel marked as interrupted');
+      assert(result.updatedAdventure.player.appearance.currentLocation === 'Dorf A', 'Test K: Player location remains at last confirmed origin location Dorf A when battle location is undefined');
+    } finally {
+      WorldSimulationService.runSimulationStep = origSim;
+    }
+  });
+
+  // Test L – Multi-segment battle interruption at intermediate location
+  await test('Test L: Multi-segment battle interruption stops at confirmed intermediate location', async () => {
+    const origSim = WorldSimulationService.runSimulationStep;
+    WorldSimulationService.runSimulationStep = (params) => {
+      const res = origSim.call(WorldSimulationService, params);
+      const mockBattle: BattleInstance = {
+        id: 'battle_encounter_mid',
+        locationId: 'loc_stadt_b',
+        locationName: 'Stadt B',
+        territoryId: 'terr_01',
+        status: 'active',
+        participatingFactionIds: ['faction_bandits'],
+        participatingCharacterIds: ['player_01'],
+        tacticalGroupIds: ['group_bandits_01']
+      };
+      return {
+        ...res,
+        spawnedBattleInstances: [mockBattle]
+      };
+    };
+
+    try {
+      const adv = createMockAdventure();
+      const result = await GameTurnService.processPlayerTurn({
+        adventure: adv,
+        mode: 'travel',
+        destinationIdOrName: 'Festung C',
+        generateAiResponse: async () => 'In Stadt B wirst du angegriffen!',
+        parserFn: (text, currentAdv, hp, mp, worldOverride) => ({
+          cleanedText: text,
+          updatedLore: [],
+          updatedPlayer: currentAdv.player,
+          updatedNpcs: [],
+          notifications: [],
+          updatedStructuredInventory: undefined,
+          updatedWorld: worldOverride || currentAdv.world
+        })
+      });
+
+      assert(result.isInterrupted === true, 'Test L: Travel interrupted');
+      assert(result.updatedAdventure.player.appearance.currentLocation === 'Stadt B', 'Test L: Player stopped at intermediate Stadt B (not start Dorf A, not destination Festung C)');
+    } finally {
+      WorldSimulationService.runSimulationStep = origSim;
+    }
+  });
+
+  // Test M – Unabhängig blockierte Verbindung liefert 'unreachable'
+  await test('Test M: Unrelated blocked connection in world returns unreachable (not blocked)', async () => {
+    const adv = createMockAdventure();
+    // Add unrelated blocked connection X -> Y
+    adv.world.connections!.push({
+      id: 'conn_unrelated_blocked',
+      fromId: 'loc_x',
+      toId: 'loc_y',
+      isBlocked: true
+    });
+
+    const routeRes = TravelService.resolveRoute({
+      world: adv.world,
+      fromIdOrName: 'Dorf A',
+      toIdOrName: 'Unerreichbare Insel Z'
+    });
+
+    assert(routeRes.status === 'unreachable', 'Test M: Unconnected target returns unreachable despite unrelated blocked connection elsewhere');
+  });
+
+  // Test N – Relevante Blockierung ohne Alternative liefert 'blocked'
+  await test('Test N: Relevant blockage without alternative route returns blocked', async () => {
+    const adv = createMockAdventure();
+    // Block the only connection between Dorf A and Stadt B
+    adv.world.connections![0].isBlocked = true;
+
+    const routeRes = TravelService.resolveRoute({
+      world: adv.world,
+      fromIdOrName: 'Dorf A',
+      toIdOrName: 'Stadt B'
+    });
+
+    assert(routeRes.status === 'blocked', 'Test N: Relevant blockage returns blocked');
+  });
+
+  // Test O – Relevante Blockierung mit unblockierter Alternative liefert 'resolved'
+  await test('Test O: Relevant direct blockage with unblocked alternative route returns resolved', async () => {
+    const adv = createMockAdventure();
+    // Direct A -> C is blocked
+    adv.world.connections!.push({
+      id: 'conn_direct_blocked',
+      fromId: 'loc_dorf_a',
+      toId: 'loc_festung_c',
+      isBlocked: true
+    });
+
+    // Unblocked route A -> B -> C exists via conn_a_b and conn_b_c
+    const routeRes = TravelService.resolveRoute({
+      world: adv.world,
+      fromIdOrName: 'Dorf A',
+      toIdOrName: 'Festung C'
+    });
+
+    assert(routeRes.status === 'resolved', 'Test O: Unblocked alternative path resolved despite blocked direct connection');
+    assert(routeRes.segments.length === 2, 'Test O: Path goes through alternative (2 segments)');
+  });
+
+  // Test P – Kein Fallback auf Koordinaten
+  await test('Test P: No coordinate fallback when no connection exists', async () => {
+    const adv = createMockAdventure();
+    const routeRes = TravelService.resolveRoute({
+      world: adv.world,
+      fromIdOrName: 'Dorf A',
+      toIdOrName: 'Unerreichbare Insel Z'
+    });
+
+    assert(routeRes.status === 'unreachable', 'Test P: Unreachable when no connection exists, coordinates ignored');
+    assert(routeRes.segments.length === 0, 'Test P: Zero segments returned');
+  });
+
+  // Test Q – Kein künstlicher Zeitwert bei fehlerhafter Connection
+  await test('Test Q: Connection missing travelTime and distance cannot be resolved', async () => {
+    const adv = createMockAdventure();
+    adv.world.connections!.push({
+      id: 'conn_empty',
+      fromId: 'loc_dorf_a',
+      toId: 'loc_insel_z'
+      // Missing distance and travelTime
+    });
+
+    const routeRes = TravelService.resolveRoute({
+      world: adv.world,
+      fromIdOrName: 'Dorf A',
+      toIdOrName: 'Unerreichbare Insel Z'
+    });
+
+    assert(routeRes.status === 'unreachable', 'Test Q: Missing connection metrics result in unreachable route');
+    assert(routeRes.totalTravelMinutes === 0, 'Test Q: 0 travel minutes calculated');
+  });
+
+  // Test R – Genau ein Simulation-Step
+  await test('Test R: Single WorldSimulation step executed for successful travel', async () => {
+    let simCalls = 0;
+    const origSim = WorldSimulationService.runSimulationStep;
+    WorldSimulationService.runSimulationStep = (params) => {
+      simCalls++;
+      return origSim.call(WorldSimulationService, params);
+    };
+
+    try {
+      const adv = createMockAdventure();
+      await GameTurnService.processPlayerTurn({
+        adventure: adv,
+        mode: 'travel',
+        destinationIdOrName: 'Stadt B',
+        generateAiResponse: async () => 'Du kommst sicher an.'
+      });
+
+      assert(simCalls === 1, 'Test R: Exactly 1 simulation step executed');
+    } finally {
+      WorldSimulationService.runSimulationStep = origSim;
+    }
+  });
+
+  // Test S – Save / Reload Persistence State Consistency
+  await test('Test S: WorldState, Location, and Time persist identically after save and reload', async () => {
+    const adv = createMockAdventure();
+    let savedStorage: Adventure | null = null;
+
+    await GameTurnService.processPlayerTurn({
+      adventure: adv,
+      mode: 'travel',
+      destinationIdOrName: 'Stadt B',
+      generateAiResponse: async () => 'Du reist nach Stadt B.',
+      saveAdventure: async (updated) => {
+        savedStorage = JSON.parse(JSON.stringify(updated));
+      }
+    });
+
+    assert(savedStorage !== null, 'Test S: Save executed');
+    const reloaded = savedStorage as unknown as Adventure;
+    assert(reloaded.player.appearance.currentLocation === 'Stadt B', 'Test S: Reloaded player location matches');
+    assert(reloaded.world.worldTime?.totalMinutes === 600, 'Test S: Reloaded world time matches');
+    assert(reloaded.world.currentLocationId === 'loc_stadt_b', 'Test S: Reloaded currentLocationId matches');
+  });
+
   console.log(`\n=== TRAVEL SYSTEM TEST RESULTS: ${passed} PASSED, ${failed} FAILED ===\n`);
   return { passed, failed };
 }

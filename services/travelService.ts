@@ -207,10 +207,7 @@ export class TravelService {
     const connections = world.connections || [];
     const territories = world.territories || [];
 
-    // Track if any blocked connections exist in the world for error messaging
-    let hasBlockedConnections = false;
-
-    // Build adjacency list for Dijkstra's search
+    // Helper to run Dijkstra search over connections
     interface Edge {
       targetLoc: WorldLocationReference;
       conn: any;
@@ -218,31 +215,6 @@ export class TravelService {
       distanceKm: number;
     }
 
-    const adj = new Map<string, Edge[]>();
-    const addEdge = (locA: WorldLocationReference, locB: WorldLocationReference, conn: any, durationMinutes: number, distanceKm: number) => {
-      if (!adj.has(locA.id)) adj.set(locA.id, []);
-      adj.get(locA.id)!.push({ targetLoc: locB, conn, durationMinutes, distanceKm });
-    };
-
-    for (const c of connections) {
-      if (c.isBlocked) {
-        hasBlockedConnections = true;
-        continue; // Blocked connection is removed from routing graph
-      }
-
-      const resA = WorldIntegrationService.resolveLocationReference({ idOrName: c.fromId || c.fromPlace, world, loreDatabase });
-      const resB = WorldIntegrationService.resolveLocationReference({ idOrName: c.toId || c.toPlace, world, loreDatabase });
-
-      if (resA.value && resB.value) {
-        const segData = this.calculateSegmentData(c, [resA.value.terrainType, resB.value.terrainType].filter(Boolean) as string[]);
-        if (segData && segData.durationMinutes > 0) {
-          addEdge(resA.value, resB.value, c, segData.durationMinutes, segData.distanceKm);
-          addEdge(resB.value, resA.value, c, segData.durationMinutes, segData.distanceKm);
-        }
-      }
-    }
-
-    // Dijkstra's algorithm for shortest travelTimeMinutes
     interface PathState {
       totalMins: number;
       totalDist: number;
@@ -250,95 +222,116 @@ export class TravelService {
       steps: Edge[];
     }
 
-    const bestMap = new Map<string, PathState>();
-    bestMap.set(fromLoc.id, { totalMins: 0, totalDist: 0, hops: 0, steps: [] });
+    const findShortestPath = (includeBlocked: boolean): PathState | null => {
+      const adj = new Map<string, Edge[]>();
+      const addEdge = (locA: WorldLocationReference, locB: WorldLocationReference, conn: any, durationMinutes: number, distanceKm: number) => {
+        if (!adj.has(locA.id)) adj.set(locA.id, []);
+        adj.get(locA.id)!.push({ targetLoc: locB, conn, durationMinutes, distanceKm });
+      };
 
-    const unvisited = new Set<string>([fromLoc.id]);
+      for (const c of connections) {
+        if (c.isBlocked && !includeBlocked) {
+          continue; // Skip blocked connections when searching unblocked graph
+        }
 
-    while (unvisited.size > 0) {
-      // Pick node u in unvisited with minimum totalMins
-      let bestNodeId: string | null = null;
-      let bestState: PathState | null = null;
+        const resA = WorldIntegrationService.resolveLocationReference({ idOrName: c.fromId || c.fromPlace, world, loreDatabase });
+        const resB = WorldIntegrationService.resolveLocationReference({ idOrName: c.toId || c.toPlace, world, loreDatabase });
 
-      for (const nodeId of unvisited) {
-        const state = bestMap.get(nodeId)!;
-        if (!bestState) {
-          bestNodeId = nodeId;
-          bestState = state;
-        } else {
-          if (state.totalMins < bestState.totalMins) {
-            bestNodeId = nodeId;
-            bestState = state;
-          } else if (state.totalMins === bestState.totalMins) {
-            // Tie-breaker 1: Total distance
-            if (state.totalDist < bestState.totalDist) {
-              bestNodeId = nodeId;
-              bestState = state;
-            } else if (state.totalDist === bestState.totalDist) {
-              // Tie-breaker 2: Hops
-              if (state.hops < bestState.hops) {
-                bestNodeId = nodeId;
-                bestState = state;
-              } else if (state.hops === bestState.hops && nodeId < bestNodeId!) {
-                // Tie-breaker 3: Lexicographical order for determinism
-                bestNodeId = nodeId;
-                bestState = state;
-              }
-            }
+        if (resA.value && resB.value) {
+          const segData = TravelService.calculateSegmentData(c, [resA.value.terrainType, resB.value.terrainType].filter(Boolean) as string[]);
+          if (segData && segData.durationMinutes > 0) {
+            addEdge(resA.value, resB.value, c, segData.durationMinutes, segData.distanceKm);
+            addEdge(resB.value, resA.value, c, segData.durationMinutes, segData.distanceKm);
           }
         }
       }
 
-      if (!bestNodeId || !bestState) break;
-      unvisited.delete(bestNodeId);
+      const bestMap = new Map<string, PathState>();
+      bestMap.set(fromLoc.id, { totalMins: 0, totalDist: 0, hops: 0, steps: [] });
+      const unvisited = new Set<string>([fromLoc.id]);
 
-      if (bestNodeId === toLoc.id) {
-        // Target reached!
-        break;
-      }
+      while (unvisited.size > 0) {
+        let bestNodeId: string | null = null;
+        let bestState: PathState | null = null;
 
-      const neighbors = adj.get(bestNodeId) || [];
-      for (const edge of neighbors) {
-        const targetId = edge.targetLoc.id;
-        const candMins = bestState.totalMins + edge.durationMinutes;
-        const candDist = bestState.totalDist + edge.distanceKm;
-        const candHops = bestState.hops + 1;
-
-        const candSteps = [...bestState.steps, edge];
-
-        const prevBest = bestMap.get(targetId);
-        let isBetter = false;
-
-        if (!prevBest) {
-          isBetter = true;
-        } else if (candMins < prevBest.totalMins) {
-          isBetter = true;
-        } else if (candMins === prevBest.totalMins && candDist < prevBest.totalDist) {
-          isBetter = true;
-        } else if (candMins === prevBest.totalMins && candDist === prevBest.totalDist && candHops < prevBest.hops) {
-          isBetter = true;
+        for (const nodeId of unvisited) {
+          const state = bestMap.get(nodeId)!;
+          if (!bestState) {
+            bestNodeId = nodeId;
+            bestState = state;
+          } else {
+            if (state.totalMins < bestState.totalMins) {
+              bestNodeId = nodeId;
+              bestState = state;
+            } else if (state.totalMins === bestState.totalMins) {
+              if (state.totalDist < bestState.totalDist) {
+                bestNodeId = nodeId;
+                bestState = state;
+              } else if (state.totalDist === bestState.totalDist) {
+                if (state.hops < bestState.hops) {
+                  bestNodeId = nodeId;
+                  bestState = state;
+                } else if (state.hops === bestState.hops && nodeId < bestNodeId!) {
+                  bestNodeId = nodeId;
+                  bestState = state;
+                }
+              }
+            }
+          }
         }
 
-        if (isBetter) {
-          bestMap.set(targetId, {
-            totalMins: candMins,
-            totalDist: candDist,
-            hops: candHops,
-            steps: candSteps
-          });
-          unvisited.add(targetId);
+        if (!bestNodeId || !bestState) break;
+        unvisited.delete(bestNodeId);
+
+        if (bestNodeId === toLoc.id) {
+          break;
+        }
+
+        const neighbors = adj.get(bestNodeId) || [];
+        for (const edge of neighbors) {
+          const targetId = edge.targetLoc.id;
+          const candMins = bestState.totalMins + edge.durationMinutes;
+          const candDist = bestState.totalDist + edge.distanceKm;
+          const candHops = bestState.hops + 1;
+          const candSteps = [...bestState.steps, edge];
+
+          const prevBest = bestMap.get(targetId);
+          let isBetter = false;
+
+          if (!prevBest) {
+            isBetter = true;
+          } else if (candMins < prevBest.totalMins) {
+            isBetter = true;
+          } else if (candMins === prevBest.totalMins && candDist < prevBest.totalDist) {
+            isBetter = true;
+          } else if (candMins === prevBest.totalMins && candDist === prevBest.totalDist && candHops < prevBest.hops) {
+            isBetter = true;
+          }
+
+          if (isBetter) {
+            bestMap.set(targetId, {
+              totalMins: candMins,
+              totalDist: candDist,
+              hops: candHops,
+              steps: candSteps
+            });
+            unvisited.add(targetId);
+          }
         }
       }
-    }
 
-    const finalPath = bestMap.get(toLoc.id);
+      return bestMap.get(toLoc.id) || null;
+    };
 
-    if (finalPath && finalPath.steps.length > 0) {
+    // 1. First search on unblocked connections
+    const unblockedPath = findShortestPath(false);
+
+    if (unblockedPath && unblockedPath.steps.length > 0) {
       const segments: RouteSegment[] = [];
       const traversedTerrs = new Map<string, Territory>();
 
       let prevLoc = fromLoc;
-      for (const step of finalPath.steps) {
+      for (const step of unblockedPath.steps) {
         const stepLoc = step.targetLoc;
 
         segments.push({
@@ -361,7 +354,6 @@ export class TravelService {
         prevLoc = stepLoc;
       }
 
-      // Add starting location territory if available
       if (fromLoc.territoryId) {
         const tFrom = territories.find(ter => ter.id === fromLoc.territoryId);
         if (tFrom) traversedTerrs.set(tFrom.id, tFrom);
@@ -372,14 +364,16 @@ export class TravelService {
         fromLocation: fromLoc,
         toLocation: toLoc,
         segments,
-        totalDistanceKm: finalPath.totalDist,
-        totalTravelMinutes: finalPath.totalMins,
+        totalDistanceKm: unblockedPath.totalDist,
+        totalTravelMinutes: unblockedPath.totalMins,
         traversedTerritories: Array.from(traversedTerrs.values())
       };
     }
 
-    // No route found via graph search
-    if (hasBlockedConnections) {
+    // 2. Check if a route exists when including blocked connections
+    const fullPathIncludingBlocked = findShortestPath(true);
+
+    if (fullPathIncludingBlocked && fullPathIncludingBlocked.steps.length > 0) {
       return {
         status: 'blocked',
         fromLocation: fromLoc,
@@ -393,6 +387,7 @@ export class TravelService {
       };
     }
 
+    // 3. Otherwise, unreachable
     return {
       status: 'unreachable',
       fromLocation: fromLoc,
@@ -509,24 +504,54 @@ export class TravelService {
     let interruptedAtLocationName: string | undefined = undefined;
 
     if (hasCombatInterruption) {
-      // Interrupted! Use intermediate location or origin location
       const battleInst = simResult.spawnedBattleInstances[0];
-      if (battleInst.locationName) {
-        interruptedAtLocationName = battleInst.locationName;
-      } else if (routeRes.segments.length > 0) {
-        interruptedAtLocationName = routeRes.segments[0].fromLocationName;
-      } else {
-        interruptedAtLocationName = currentLocName;
+      let resolvedInterLocation: WorldLocationReference | null = null;
+
+      // 1. Try resolving battleInst locationId or locationName
+      const targetLocIdOrName = battleInst.locationId || battleInst.locationName;
+      if (targetLocIdOrName) {
+        const interRes = WorldIntegrationService.resolveLocationReference({
+          idOrName: targetLocIdOrName,
+          world: activeWorld,
+          loreDatabase: adventure.loreDatabase
+        });
+        if (interRes.value) {
+          resolvedInterLocation = interRes.value;
+        }
       }
 
-      // Resolve intermediate location ref
-      const interRes = WorldIntegrationService.resolveLocationReference({
-        idOrName: interruptedAtLocationName,
-        world: activeWorld,
-        loreDatabase: adventure.loreDatabase
-      });
-      if (interRes.value) {
-        finalLocation = interRes.value;
+      // 2. Try resolving via territoryId if no location resolved yet
+      if (!resolvedInterLocation && battleInst.territoryId) {
+        const locInTerritory = (activeWorld.locations || []).find(l => l.territoryId === battleInst.territoryId);
+        if (locInTerritory) {
+          const interRes = WorldIntegrationService.resolveLocationReference({
+            idOrName: locInTerritory.id,
+            world: activeWorld,
+            loreDatabase: adventure.loreDatabase
+          });
+          if (interRes.value) {
+            resolvedInterLocation = interRes.value;
+          }
+        }
+      }
+
+      // 3. Apply resolved intermediate location or safely keep last confirmed origin location
+      if (resolvedInterLocation) {
+        finalLocation = resolvedInterLocation;
+        interruptedAtLocationName = finalLocation.name;
+      } else {
+        // Fallback to origin / current location before travel without guessing or teleporting
+        const originRes = WorldIntegrationService.resolveLocationReference({
+          idOrName: currentLocName,
+          world: activeWorld,
+          loreDatabase: adventure.loreDatabase
+        });
+        if (originRes.value) {
+          finalLocation = originRes.value;
+        } else {
+          finalLocation = routeRes.fromLocation;
+        }
+        interruptedAtLocationName = finalLocation.name;
       }
     }
 
