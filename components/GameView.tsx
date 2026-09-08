@@ -5214,25 +5214,24 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       
       let syncedStatus = [...newStatus];
 
-      // Automatic robust time advance and recovery for sleep/rest/unconscious if model didn't update Zeit
-      if (isSleepOrRestOrUnconscious) {
+      // Automatic robust HUD status time sync with activeWorld.worldTime if model didn't update Zeit
+      if (activeWorld.worldTime) {
         const timeIdx = syncedStatus.findIndex(el => {
           const l = (el.label || '').toLowerCase();
           return l === 'zeit' || l === 'uhrzeit' || l.includes('zeit');
         });
         const hadModelTimeUpdate = rawText.includes('STATUS:') && /zeit\s*=/i.test(rawText);
         if (timeIdx > -1 && !hadModelTimeUpdate) {
-          const currentVal = syncedStatus[timeIdx].value || '22:00';
-          const timeParts = currentVal.split(':');
-          if (timeParts.length === 2) {
-            const hoursToAdd = isSleep ? 8 : 2;
-            const nextHour = (parseInt(timeParts[0], 10) + hoursToAdd) % 24;
-            syncedStatus[timeIdx] = {
-              ...syncedStatus[timeIdx],
-              value: `${String(nextHour).padStart(2, '0')}:${timeParts[1]}`
-            };
-          }
+          const hStr = String(activeWorld.worldTime.hour).padStart(2, '0');
+          const mStr = String(activeWorld.worldTime.minute).padStart(2, '0');
+          syncedStatus[timeIdx] = {
+            ...syncedStatus[timeIdx],
+            value: `${hStr}:${mStr}`
+          };
         }
+      }
+
+      if (isSleepOrRestOrUnconscious) {
         if (isSleep) {
           const ausdauerIdx = syncedStatus.findIndex(el => {
             const l = (el.label || '').toLowerCase();
@@ -7056,7 +7055,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       const rawText = response.text || '';
       
       const { cleanedText: statusCleaned, newStatus } = parseStatusUpdates(rawText, statusWithTime);
-      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure);
+      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, undefined, undefined, adventure.world);
 
       if (notifications.length > 0) {
         addLoreNotifications(notifications);
