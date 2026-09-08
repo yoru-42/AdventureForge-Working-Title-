@@ -21,6 +21,7 @@ import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
 import { WorldIntegrationService } from '../services/worldIntegrationService';
 import { WorldSimulationService } from '../services/worldSimulationService';
+import { GameTurnService } from '../services/gameTurnService';
 import { applyProfessionCompetencyActivity } from '../services/professionCompetencyService';
 import { ProfessionCompetencyActivity } from '../types';
 
@@ -4669,13 +4670,10 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
         setPlayerMp(mpValToUse);
       }
       
-      // Advance stats locally first
-      const statusWithTime = advanceGameTime(adventure.statusElements || []);
-      
       // Run World Simulation Step for current action
       const simRes = WorldSimulationService.runSimulationStep({
         world,
-        minutesToAdd: 0,
+        mode: 'action',
         actionText: textToSend
       });
 
@@ -4691,7 +4689,7 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
 
       const npcDocs = npcs.map(n => formatNPCForAIPrompt(n)).join('\n');
 
-      const currentStatsStr = statusWithTime.map(s => `${s.label}: ${s.value}`).join(', ');
+      const currentStatsStr = (adventure.statusElements || []).map(s => `${s.label}: ${s.value}`).join(', ');
 
       const lore = adventure.loreDatabase || []; // prompt_build_first
       
@@ -5201,7 +5199,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       const response = await GeminiService.chat(updatedMessages, systemInstruction, activeWorld.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
       
-      const { cleanedText: statusCleaned, newStatus } = parseStatusUpdates(rawText, statusWithTime);
+      const { cleanedText: statusCleaned, newStatus } = parseStatusUpdates(rawText, adventure.statusElements || []);
       const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, forceNextHp, forceNextMp, activeWorld);
 
       if (notifications.length > 0) {

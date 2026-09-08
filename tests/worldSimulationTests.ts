@@ -1,7 +1,8 @@
 import { WorldSimulationService, MAX_EVENT_PROCESSING_DEPTH } from '../services/worldSimulationService';
+import { GameTurnService } from '../services/gameTurnService';
 import { WorldSetting, WorldEvent, WorldTime, Adventure } from '../types';
 
-export function runWorldSimulationTests(): { passed: number; failed: number; errors: string[] } {
+export async function runWorldSimulationTests(): Promise<{ passed: number; failed: number; errors: string[] }> {
   let passed = 0;
   let failed = 0;
   const errors: string[] = [];
@@ -434,6 +435,11 @@ export function runWorldSimulationTests(): { passed: number; failed: number; err
 
   // End-to-End GameView Handler Simulator (Matches GameView.tsx sendActionText and handleSendDialogue)
   let simStepCallCount = 0;
+  const originalRunSimStep = WorldSimulationService.runSimulationStep;
+  WorldSimulationService.runSimulationStep = (params: any) => {
+    simStepCallCount++;
+    return originalRunSimStep.call(WorldSimulationService, params);
+  };
   const resetSimCallCount = () => { simStepCallCount = 0; };
 
   const simulateGameViewActionTurn = (adventure: Adventure, userText: string): { adventure: Adventure; promptTime: WorldTime } => {
@@ -545,22 +551,60 @@ export function runWorldSimulationTests(): { passed: number; failed: number; err
     chatHistory: []
   };
 
+  // Test J: Normaler GameView Turn (End-to-End via GameTurnService)
   resetSimCallCount();
-  const testJ_turnRes = simulateGameViewActionTurn(mockAdvJ, 'Ich untersuche den Raum.');
-  assert(simStepCallCount === 1, 'Test J: Simulation step executed exactly 1 time in end-to-end action turn');
-  assert(testJ_turnRes.promptTime.totalMinutes === 480 + WorldSimulationService.estimateActionDurationMinutes('Ich untersuche den Raum.'), 'Test J: Gemini prompt received updated activeWorld time');
-  assert(testJ_turnRes.adventure.world.worldTime.totalMinutes === 480 + WorldSimulationService.estimateActionDurationMinutes('Ich untersuche den Raum.'), 'Test J: Final saved adventure world matches updated time');
+  let testJ_capturedWorldTime: WorldTime | undefined = undefined;
 
-  // Test K: Dialog GameView Turn (User + 1 active NPC = exakt +2 Minuten End-to-End)
+  const testJ_turnRes = await GameTurnService.processPlayerTurn({
+    adventure: mockAdvJ,
+    mode: 'action',
+    actionText: 'Ich untersuche den Raum.',
+    generateAiResponse: async (ctx) => {
+      testJ_capturedWorldTime = ctx.activeWorld.worldTime;
+      return 'Du untersuchst den Raum gründlich.';
+    },
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
+  assert(simStepCallCount === 1, 'Test J: Simulation step executed exactly 1 time in production GameTurnService turn');
+  assert(testJ_capturedWorldTime?.totalMinutes === 480 + WorldSimulationService.estimateActionDurationMinutes('Ich untersuche den Raum.'), 'Test J: Gemini prompt received updated activeWorld time');
+  assert(testJ_turnRes.updatedAdventure.world.worldTime.totalMinutes === 480 + WorldSimulationService.estimateActionDurationMinutes('Ich untersuche den Raum.'), 'Test J: Final saved adventure world matches updated time');
+
+  // Test K: Dialog GameView Turn (User + 1 active NPC = exakt +2 Minuten End-to-End via GameTurnService)
   resetSimCallCount();
   const createMockNpc = (id: string, name: string): any => ({
     id, name, isHostile: false, role: 'Einwohner', personality: 'freundlich', bio: ''
   });
 
   const speakerK = createMockNpc('npc_1', 'Bürgermeister');
-  const testK_turnRes = simulateGameViewDialogueTurn(mockAdvJ, 'user_npc', speakerK, undefined, [], 'Hallo Herr Bürgermeister.');
-  assert(simStepCallCount === 1, 'Test K: Simulation step executed exactly 1 time in end-to-end dialogue turn');
-  assert(testK_turnRes.adventure.world.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 2, 'Test K: User + 1 active NPC advances exactly +2 minutes in end-to-end dialogue');
+  const testK_turnRes = await GameTurnService.processPlayerTurn({
+    adventure: mockAdvJ,
+    mode: 'dialogue',
+    dialogueType: 'user_npc',
+    speakerNpc: speakerK,
+    actionText: 'Hallo Herr Bürgermeister.',
+    generateAiResponse: async () => 'Bürgermeister: "Hallo!"',
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
+  assert(simStepCallCount === 1, 'Test K: Simulation step executed exactly 1 time in production GameTurnService turn');
+  assert(testK_turnRes.updatedAdventure.world.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 2, 'Test K: User + 1 active NPC advances exactly +2 minutes in end-to-end dialogue');
 
   // Test L: Dialog mit 3 aktiven NPCs (User + 3 active NPCs = exakt +4 Minuten End-to-End)
   resetSimCallCount();
@@ -569,22 +613,73 @@ export function runWorldSimulationTests(): { passed: number; failed: number; err
     createMockNpc('npc_2', 'Wache'),
     createMockNpc('npc_3', 'Schmied')
   ];
-  const testL_turnRes = simulateGameViewDialogueTurn(mockAdvJ, 'group', undefined, undefined, groupL, 'Was meint ihr alle dazu?');
-  assert(testL_turnRes.adventure.world.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 4, 'Test L: User + 3 active NPCs advances exactly +4 minutes in end-to-end group dialogue');
+  const testL_turnRes = await GameTurnService.processPlayerTurn({
+    adventure: mockAdvJ,
+    mode: 'dialogue',
+    dialogueType: 'group',
+    groupNpcs: groupL,
+    actionText: 'Was meint ihr alle dazu?',
+    generateAiResponse: async () => 'Bürgermeister: "Einverstanden!"',
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
+  assert(testL_turnRes.updatedAdventure.world.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 4, 'Test L: User + 3 active NPCs advances exactly +4 minutes in end-to-end group dialogue');
 
   // Test M: Szene mit passiven NPCs (User + 1 active NPC + 5 passive scene NPCs = exakt +2 Minuten)
   resetSimCallCount();
   const speakerM = createMockNpc('npc_1', 'Sprechender NPC');
   const passiveNpcsM = [createMockNpc('npc_2', 'Passiv 1'), createMockNpc('npc_3', 'Passiv 2'), createMockNpc('npc_4', 'Passiv 3')];
   const mockAdvM: Adventure = { ...mockAdvJ, npcs: [speakerM, ...passiveNpcsM] };
-  const testM_turnRes = simulateGameViewDialogueTurn(mockAdvM, 'user_npc', speakerM, undefined, [], 'Hallo.');
-  assert(testM_turnRes.adventure.world.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 2, 'Test M: Only 1 active NPC counted despite passive NPCs in scene');
+  const testM_turnRes = await GameTurnService.processPlayerTurn({
+    adventure: mockAdvM,
+    mode: 'dialogue',
+    dialogueType: 'user_npc',
+    speakerNpc: speakerM,
+    actionText: 'Hallo.',
+    generateAiResponse: async () => 'Sprechender NPC: "Hallo!"',
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
+  assert(testM_turnRes.updatedAdventure.world.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 2, 'Test M: Only 1 active NPC counted despite passive NPCs in scene');
 
   // Test N: Dialog-Cap (User + 10 active NPCs = exakt +5 Minuten)
   resetSimCallCount();
   const groupN = Array.from({ length: 10 }, (_, i) => createMockNpc(`npc_${i}`, `NPC ${i}`));
-  const testN_turnRes = simulateGameViewDialogueTurn(mockAdvJ, 'group', undefined, undefined, groupN, 'Ansprache an die Menge.');
-  assert(testN_turnRes.adventure.world.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 5, 'Test N: 11 active participants capped at exactly +5 minutes');
+  const testN_turnRes = await GameTurnService.processPlayerTurn({
+    adventure: mockAdvJ,
+    mode: 'dialogue',
+    dialogueType: 'group',
+    groupNpcs: groupN,
+    actionText: 'Ansprache an die Menge.',
+    generateAiResponse: async () => 'Menge: "Jubel!"',
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
+  assert(testN_turnRes.updatedAdventure.world.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 5, 'Test N: 11 active participants capped at exactly +5 minutes');
 
   // Test O: World-State-Persistenz (Simulation event updates state, retained after parser merge)
   const testO_event: Partial<WorldEvent> & { type: string } = {
@@ -596,50 +691,117 @@ export function runWorldSimulationTests(): { passed: number; failed: number; err
   };
   const testO_sched = WorldSimulationService.scheduleEvent({ world: testJ_startWorld, event: testO_event });
   const mockAdvO: Adventure = { ...mockAdvJ, world: testO_sched.updatedWorld };
-  const testO_turnRes = simulateGameViewActionTurn(mockAdvO, 'Ich kaufe Vorräte.');
-  assert(testO_turnRes.adventure.world.worldTime.totalMinutes === 490, 'Test O: World time persistent after end-to-end turn');
-  assert(testO_turnRes.adventure.world.dynamicWorldState?.eventHistory.some(e => e.title === 'Preisanstieg am Markt'), 'Test O: Event history persistent after end-to-end turn');
+  const testO_turnRes = await GameTurnService.processPlayerTurn({
+    adventure: mockAdvO,
+    mode: 'action',
+    actionText: 'Ich kaufe Vorräte.',
+    generateAiResponse: async () => 'Händler: "Das kostet doppelt so viel!"',
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
+  assert(testO_turnRes.updatedAdventure.world.worldTime.totalMinutes === 490, 'Test O: World time persistent after end-to-end turn');
+  assert(testO_turnRes.updatedAdventure.world.dynamicWorldState?.eventHistory.some(e => e.title === 'Preisanstieg am Markt'), 'Test O: Event history persistent after end-to-end turn');
 
   // Test P: Kein Double Step (Full chat turn advances time exactly once)
   resetSimCallCount();
-  const testP_turnRes = simulateGameViewActionTurn(mockAdvJ, 'Ich gehe spazieren.');
+  const testP_turnRes = await GameTurnService.processPlayerTurn({
+    adventure: mockAdvJ,
+    mode: 'action',
+    actionText: 'Ich gehe spazieren.',
+    generateAiResponse: async () => 'Du gehst im Park spazieren.',
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
   assert(simStepCallCount === 1, 'Test P: Single user turn invoked runSimulationStep exactly 1 time');
-  const deltaP = testP_turnRes.adventure.world.worldTime.totalMinutes - mockAdvJ.world.worldTime.totalMinutes;
+  const deltaP = testP_turnRes.updatedAdventure.world.worldTime.totalMinutes - mockAdvJ.world.worldTime.totalMinutes;
   assert(deltaP === WorldSimulationService.estimateActionDurationMinutes('Ich gehe spazieren.'), 'Test P: Time delta matches single step duration');
 
   // Test Q: Save/Reload State Comparison
   // 1. After normal action turn
-  const actionSaveJSON = JSON.stringify(testP_turnRes.adventure);
+  let savedActionAdv: Adventure | null = null;
+  await GameTurnService.processPlayerTurn({
+    adventure: mockAdvJ,
+    mode: 'action',
+    actionText: 'Ich gehe spazieren.',
+    generateAiResponse: async () => 'Spaziergang beendet.',
+    saveAdventure: (adv) => { savedActionAdv = adv; },
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
+  assert(savedActionAdv !== null, 'Test Q1: Save callback executed successfully');
+  const actionSaveJSON = JSON.stringify(savedActionAdv);
   const actionReloaded: Adventure = JSON.parse(actionSaveJSON);
-  assert(JSON.stringify(actionReloaded.world.worldTime) === JSON.stringify(testP_turnRes.adventure.world.worldTime), 'Test Q1: Save/Reload after action produces identical worldTime');
-  assert(JSON.stringify(actionReloaded.world.scheduledEvents) === JSON.stringify(testP_turnRes.adventure.world.scheduledEvents), 'Test Q1: Save/Reload after action produces identical scheduledEvents');
+  assert(JSON.stringify(actionReloaded.world.worldTime) === JSON.stringify(savedActionAdv!.world.worldTime), 'Test Q1: Save/Reload after action produces identical worldTime');
+  assert(JSON.stringify(actionReloaded.world.scheduledEvents) === JSON.stringify(savedActionAdv!.world.scheduledEvents), 'Test Q1: Save/Reload after action produces identical scheduledEvents');
 
   // 2. After dialogue turn
-  const dialogueTurnRes = simulateGameViewDialogueTurn(testP_turnRes.adventure, 'user_npc', speakerK, undefined, [], 'Wie geht es weiter?');
-  const dialogueSaveJSON = JSON.stringify(dialogueTurnRes.adventure);
+  let savedDialogueAdv: Adventure | null = null;
+  await GameTurnService.processPlayerTurn({
+    adventure: savedActionAdv!,
+    mode: 'dialogue',
+    dialogueType: 'user_npc',
+    speakerNpc: speakerK,
+    actionText: 'Wie geht es weiter?',
+    generateAiResponse: async () => 'Bürgermeister: "Folge mir."',
+    saveAdventure: (adv) => { savedDialogueAdv = adv; },
+    parserFn: (text, currentAdv, fHp, fMp, worldOverride) => ({
+      cleanedText: text,
+      updatedLore: currentAdv.loreDatabase || [],
+      updatedPlayer: currentAdv.player,
+      updatedNpcs: currentAdv.npcs || [],
+      notifications: [],
+      updatedStructuredInventory: currentAdv.structuredInventory,
+      updatedWorld: worldOverride ? JSON.parse(JSON.stringify(worldOverride)) : currentAdv.world
+    })
+  });
+
+  assert(savedDialogueAdv !== null, 'Test Q2: Save callback executed successfully for dialogue');
+  const dialogueSaveJSON = JSON.stringify(savedDialogueAdv);
   const dialogueReloaded: Adventure = JSON.parse(dialogueSaveJSON);
-  assert(JSON.stringify(dialogueReloaded.world.worldTime) === JSON.stringify(dialogueTurnRes.adventure.world.worldTime), 'Test Q2: Save/Reload after dialogue produces identical worldTime');
-  assert(JSON.stringify(dialogueReloaded.world.scheduledEvents) === JSON.stringify(dialogueTurnRes.adventure.world.scheduledEvents), 'Test Q2: Save/Reload after dialogue produces identical scheduledEvents');
+  assert(JSON.stringify(dialogueReloaded.world.worldTime) === JSON.stringify(savedDialogueAdv!.world.worldTime), 'Test Q2: Save/Reload after dialogue produces identical worldTime');
+  assert(JSON.stringify(dialogueReloaded.world.scheduledEvents) === JSON.stringify(savedDialogueAdv!.world.scheduledEvents), 'Test Q2: Save/Reload after dialogue produces identical scheduledEvents');
 
   // Test R: Simulation Failure / Error Handling (No partial state persisted, chat history rolled back)
-  let testR_adventureState = { ...mockAdvJ };
-  let testR_caughtError = false as boolean;
+  let testR_caughtError = false;
+  let testR_savedAdventure: Adventure | null = null;
 
-  const simulateFailingGameViewTurn = (adventure: Adventure): Adventure => {
-    try {
-      // Simulate failure in simulation step
-      throw new Error('Simulation Engine Failure');
-    } catch (err) {
-      testR_caughtError = true;
-      // Handler rollback logic: return original adventure unchanged
-      return adventure;
-    }
-  };
+  try {
+    await GameTurnService.processPlayerTurn({
+      adventure: null as any, // Null adventure causes simulation error safety trigger
+      mode: 'action',
+      actionText: 'Fehlerzug',
+      saveAdventure: (adv) => { testR_savedAdventure = adv; }
+    });
+  } catch (err) {
+    testR_caughtError = true;
+  }
 
-  const testR_result = simulateFailingGameViewTurn(testR_adventureState);
-  assert(testR_caughtError === true, 'Test R: Simulation failure was caught gracefully');
-  assert(testR_result.world.worldTime.totalMinutes === 480, 'Test R: World time remained unchanged (480) on failure');
-  assert(testR_result.chatHistory.length === 0, 'Test R: Chat history was not populated with failed user message');
+  assert(testR_caughtError === true, 'Test R: Simulation failure caught cleanly by GameTurnService');
+  assert(testR_savedAdventure === null, 'Test R: Persistence was not triggered on simulation failure');
 
   console.log(`--- WORLD SIMULATION TESTS COMPLETE: ${passed} PASSED, ${failed} FAILED ---`);
 
@@ -647,8 +809,9 @@ export function runWorldSimulationTests(): { passed: number; failed: number; err
 }
 
 if (process.argv[1]?.includes('worldSimulationTests')) {
-  const res = runWorldSimulationTests();
-  if (res.failed > 0) {
-    throw new Error(`Failed ${res.failed} tests in worldSimulationTests`);
-  }
+  runWorldSimulationTests().then(res => {
+    if (res.failed > 0) {
+      throw new Error(`Failed ${res.failed} tests in worldSimulationTests`);
+    }
+  });
 }

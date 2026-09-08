@@ -86,21 +86,21 @@ function sanitizeContents(contents: any): any {
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
-    'gemini-3.8-flash',
-    'gemini-flash-latest',
-    'gemini-3.1-flash-lite',
-    'gemini-3.1-pro-preview'
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-2.5-pro'
   ];
   
-  // Map legacy, alias, or overloaded model requests to gemini-3.8-flash for optimal stability
-  const preferFlash38 = !requestedModel || 
+  // Map legacy, alias, fake, or overloaded model requests to gemini-2.5-flash for optimal stability
+  const preferFlash25 = !requestedModel || 
     requestedModel === 'gemini-flash-latest' || 
-    requestedModel.includes('2.0') || 
-    requestedModel.includes('1.5') || 
-    requestedModel.includes('2.5') ||
+    requestedModel === 'gemini-3.8-flash' ||
+    requestedModel.includes('3.8') ||
+    requestedModel.includes('3.1') ||
     requestedModel === 'gemini-pro';
 
-  const targetModel = preferFlash38 ? 'gemini-3.8-flash' : requestedModel;
+  const targetModel = preferFlash25 ? 'gemini-2.5-flash' : requestedModel;
   
   // Build deduplicated ordered candidate models list
   const modelsToTry = Array.from(new Set([targetModel, ...defaultModels]));
