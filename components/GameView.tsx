@@ -5419,15 +5419,18 @@ REGELN FÜR DEINE ANTWORT (STRENG EINZUHALTEN):
     setMessages(prev => [...prev, userMsg]);
     
     try {
-      // Calculate active dialogue participants (User = 1 + active NPCs)
-      let activeParticipantCount = 1;
+      // Calculate active dialogue participants: User (1) + unique active NPCs involved in dialogue
+      let activeNpcs: NPC[] = [];
       if (dialogueType === 'user_npc') {
-        activeParticipantCount = 2; // User (1) + speaker NPC (1)
+        if (speakerNpc) activeNpcs.push(speakerNpc);
       } else if (dialogueType === 'npc_npc') {
-        activeParticipantCount = 3; // Speaker NPC (1) + target NPC (1) + user (1)
-      } else {
-        activeParticipantCount = 1 + groupNpcs.length; // User (1) + group NPCs
+        if (speakerNpc) activeNpcs.push(speakerNpc);
+        if (targetNpc && targetNpc.id !== speakerNpc?.id) activeNpcs.push(targetNpc);
+      } else if (dialogueType === 'group') {
+        activeNpcs = groupNpcs;
       }
+      const uniqueActiveNpcIds = new Set(activeNpcs.map(n => n.id || n.name).filter(Boolean));
+      const activeParticipantCount = 1 + uniqueActiveNpcIds.size;
 
       // Run World Simulation Step for dialogue action
       const simRes = WorldSimulationService.runSimulationStep({
@@ -5452,6 +5455,7 @@ REGELN FÜR DEINE ANTWORT (STRENG EINZUHALTEN):
       
       const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || adventure.world.title}".
       ${simulationInstruction}
+      ${getActiveTerritoryInstruction(activeWorld)}
       
 WELT: ${activeWorld.description || adventure.world.description} (Ton: ${activeWorld.tone || adventure.world.tone})
 ${campaignPowerInstruction}
@@ -5473,10 +5477,16 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       const response = await GeminiService.chat(updatedMessages, systemInstruction, activeWorld.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
       
+      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedWorld } = parseLoreAndCharUpdates(rawText, adventure, undefined, undefined, activeWorld);
+
+      if (notifications.length > 0) {
+        addLoreNotifications(notifications);
+      }
+
       const newModelMsg: ChatMessage = {
         id: `dialogue-model-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         role: 'model',
-        text: rawText.trim(),
+        text: finalCleanedText.trim(),
         isDialogue: true,
         dialogueType,
         dialogueSpeakerName: speakerName,
@@ -5488,7 +5498,11 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
 
       onUpdateAdventure({
         ...adventureRef.current,
-        world: activeWorld,
+        world: updatedWorld,
+        player: updatedPlayer,
+        npcs: updatedNpcs,
+        loreDatabase: updatedLore,
+        structuredInventory: updatedStructuredInventory,
         chatHistory: nextChatHistory
       });
       

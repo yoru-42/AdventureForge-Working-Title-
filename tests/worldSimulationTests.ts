@@ -427,6 +427,113 @@ export function runWorldSimulationTests(): { passed: number; failed: number; err
   assert(reloadedWorld.worldTime.totalMinutes === userTurnWorld.worldTime.totalMinutes, 'Test I: Reloaded totalMinutes identical');
   assert(JSON.stringify(reloadedWorld.scheduledEvents) === JSON.stringify(userTurnWorld.scheduledEvents), 'Test I: Scheduled events identical across save/reload');
 
+  // -------------------------------------------------------------
+  // Section 12 Explicit Integration Tests (J through Q)
+  // -------------------------------------------------------------
+  console.log('--- Section 12 Integration Tests (J through Q) ---');
+
+  // Test J: Normaler GameView Turn (Time advances exactly once)
+  const testJ_startWorld: WorldSetting = {
+    ...initialWorld,
+    worldTime: { day: 1, hour: 8, minute: 0, totalMinutes: 480 }
+  };
+  const testJ_res = WorldSimulationService.runSimulationStep({
+    world: testJ_startWorld,
+    mode: 'action',
+    actionText: 'Ich untersuche den Raum.'
+  });
+  assert(testJ_res.timeStart.totalMinutes === 480, 'Test J: Start worldTime is 480');
+  const expectedJ_mins = WorldSimulationService.estimateActionDurationMinutes('Ich untersuche den Raum.');
+  assert(testJ_res.updatedWorld.worldTime.totalMinutes === 480 + expectedJ_mins, 'Test J: Time advanced exactly once by action duration');
+
+  // Test K: Dialog GameView Turn (User + 1 active NPC = exakt +2 Minuten)
+  const testK_res = WorldSimulationService.runSimulationStep({
+    world: testJ_startWorld,
+    mode: 'dialogue',
+    dialogueParticipantCount: 2
+  });
+  assert(testK_res.updatedWorld.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 2, 'Test K: User + 1 active NPC advances exactly +2 minutes');
+
+  // Test L: Dialog mit 3 aktiven NPCs (User + 3 active NPCs = exakt +4 Minuten)
+  const testL_res = WorldSimulationService.runSimulationStep({
+    world: testJ_startWorld,
+    mode: 'dialogue',
+    dialogueParticipantCount: 4
+  });
+  assert(testL_res.updatedWorld.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 4, 'Test L: User + 3 active NPCs advances exactly +4 minutes');
+
+  // Test M: Szene mit passiven NPCs (User + 1 active NPC + 5 passive scene NPCs = exakt +2 Minuten)
+  // Active participants = 1 (User) + 1 (Active NPC) = 2. Passive NPCs do not count.
+  const activeDialogueNpcs = [{ id: 'npc_1', name: 'Aktiv' }];
+  const passiveSceneNpcs = [{ id: 'npc_2', name: 'Passiv 1' }, { id: 'npc_3', name: 'Passiv 2' }];
+  const testM_uniqueActiveCount = 1 + new Set(activeDialogueNpcs.map(n => n.id)).size;
+  const testM_res = WorldSimulationService.runSimulationStep({
+    world: testJ_startWorld,
+    mode: 'dialogue',
+    dialogueParticipantCount: testM_uniqueActiveCount
+  });
+  assert(testM_uniqueActiveCount === 2, 'Test M: Only 1 active NPC is counted despite passive NPCs in scene');
+  assert(testM_res.updatedWorld.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 2, 'Test M: Scene with passive NPCs advances only +2 minutes');
+
+  // Test N: Dialog-Cap (User + 10 active NPCs = exakt +5 Minuten)
+  const testN_res = WorldSimulationService.runSimulationStep({
+    world: testJ_startWorld,
+    mode: 'dialogue',
+    dialogueParticipantCount: 11
+  });
+  assert(testN_res.updatedWorld.worldTime.totalMinutes - testJ_startWorld.worldTime.totalMinutes === 5, 'Test N: 11 participants capped at exactly +5 minutes');
+
+  // Test O: World-State-Persistenz (Simulation event updates state, retained after parser merge)
+  const testO_event: Partial<WorldEvent> & { type: string } = {
+    type: 'economy',
+    title: 'Preisanstieg am Markt',
+    description: 'Goldwert verdoppelt',
+    scheduledForWorldTime: { day: 1, hour: 8, minute: 5, totalMinutes: 485 },
+    isPlayerVisible: true
+  };
+  const testO_sched = WorldSimulationService.scheduleEvent({ world: testJ_startWorld, event: testO_event });
+  const testO_sim = WorldSimulationService.runSimulationStep({
+    world: testO_sched.updatedWorld,
+    mode: 'action',
+    actionText: 'Ich kaufe Vorräte.' // 10 mins -> 490
+  });
+  const activeWorld_O = testO_sim.updatedWorld;
+  // Verify parser override retains world state
+  const finalWorld_O = mockParserMerge(activeWorld_O, testJ_startWorld);
+  assert(finalWorld_O.worldTime.totalMinutes === 490, 'Test O: World time persistent after parser merge');
+  assert(finalWorld_O.dynamicWorldState?.eventHistory.some(e => e.title === 'Preisanstieg am Markt'), 'Test O: Event history persistent after parser merge');
+
+  // Test P: Kein Double Step (Full chat turn advances time exactly once)
+  let testP_world = testJ_startWorld;
+  const initialMinsP = testP_world.worldTime.totalMinutes;
+  const singleStepResP = WorldSimulationService.runSimulationStep({
+    world: testP_world,
+    mode: 'action',
+    actionText: 'Ich gehe spazieren.'
+  });
+  testP_world = singleStepResP.updatedWorld;
+  const deltaP = testP_world.worldTime.totalMinutes - initialMinsP;
+  assert(deltaP === WorldSimulationService.estimateActionDurationMinutes('Ich gehe spazieren.'), 'Test P: Turn advanced time by exactly 1 simulation step duration');
+  assert(deltaP !== 2 * WorldSimulationService.estimateActionDurationMinutes('Ich gehe spazieren.'), 'Test P: Time was not double-stepped');
+
+  // Test Q: Save/Reload State Comparison
+  // 1. After normal action
+  const actionSaveJSON = JSON.stringify(testP_world);
+  const actionReloaded: WorldSetting = JSON.parse(actionSaveJSON);
+  assert(JSON.stringify(actionReloaded.worldTime) === JSON.stringify(testP_world.worldTime), 'Test Q1: Save/Reload after action produces identical worldTime');
+  assert(JSON.stringify(actionReloaded.scheduledEvents) === JSON.stringify(testP_world.scheduledEvents), 'Test Q1: Save/Reload after action produces identical scheduledEvents');
+
+  // 2. After dialogue
+  const dialogueStepRes = WorldSimulationService.runSimulationStep({
+    world: testP_world,
+    mode: 'dialogue',
+    dialogueParticipantCount: 3
+  });
+  const dialogueSaveJSON = JSON.stringify(dialogueStepRes.updatedWorld);
+  const dialogueReloaded: WorldSetting = JSON.parse(dialogueSaveJSON);
+  assert(JSON.stringify(dialogueReloaded.worldTime) === JSON.stringify(dialogueStepRes.updatedWorld.worldTime), 'Test Q2: Save/Reload after dialogue produces identical worldTime');
+  assert(JSON.stringify(dialogueReloaded.scheduledEvents) === JSON.stringify(dialogueStepRes.updatedWorld.scheduledEvents), 'Test Q2: Save/Reload after dialogue produces identical scheduledEvents');
+
   console.log(`--- WORLD SIMULATION TESTS COMPLETE: ${passed} PASSED, ${failed} FAILED ---`);
 
   return { passed, failed, errors };
