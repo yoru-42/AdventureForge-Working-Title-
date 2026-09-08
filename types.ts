@@ -1416,6 +1416,8 @@ export interface DynamicWorldState {
   encounterForces?: Record<string, EncounterForce>;
   battleInstances?: Record<string, BattleInstance>;
   locations?: Record<string, WorldLocationReference>;
+  currentLocationId?: string;
+  currentTerritoryId?: string;
   scheduledEvents?: WorldEvent[];
   eventHistory?: WorldEvent[];
   activeThreats?: string[];
@@ -1469,9 +1471,11 @@ export interface WorldSetting {
   encounterForces?: EncounterForce[];
   scheduledEvents?: WorldEvent[];
   dynamicWorldState?: DynamicWorldState;
-  connections?: { id?: string; fromId?: string; toId?: string; fromPlace?: string; toPlace?: string; label?: string; travelTime?: string; distance?: string; duration?: string; type?: 'land' | 'sea' | 'air' | string; isUnlocked?: boolean }[];
+  connections?: { id?: string; fromId?: string; toId?: string; fromPlace?: string; toPlace?: string; label?: string; travelTime?: string; distance?: string; duration?: string; type?: 'land' | 'sea' | 'air' | string; isUnlocked?: boolean; isBlocked?: boolean; blockReason?: string }[];
   startLocationId?: string;
   startLocationName?: string;
+  currentLocationId?: string;
+  currentTerritoryId?: string;
   borders?: { id: string; name: string; points: { x: number; y: number }[]; color?: string; isLandmass?: boolean; isClosed?: boolean; isDashed?: boolean; cx?: number; cy?: number; radius?: number }[];
   campaignPowerSettings?: Record<string, number | CampaignPowerParameter>;
   healthPowerName?: string;

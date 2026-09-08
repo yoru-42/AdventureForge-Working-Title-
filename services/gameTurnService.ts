@@ -1,11 +1,13 @@
 import { Adventure, WorldSetting, NPC, ChatMessage, LoreEntry } from '../types';
 import { WorldSimulationService, SimulationStepResult } from './worldSimulationService';
 import { GeminiService } from './geminiService';
+import { TravelService, RouteResolution } from './travelService';
 
 export interface ProcessPlayerTurnParams {
   adventure: Adventure;
-  mode: 'action' | 'dialogue';
+  mode: 'action' | 'dialogue' | 'travel';
   actionText?: string;
+  destinationIdOrName?: string;
   dialogueType?: 'user_npc' | 'npc_npc' | 'group';
   speakerNpc?: NPC | any;
   targetNpc?: NPC | any;
@@ -51,6 +53,9 @@ export interface ProcessPlayerTurnResult {
   notifications: any[];
   userMsg: ChatMessage;
   modelMsg: ChatMessage;
+  routeResolution?: RouteResolution;
+  isInterrupted?: boolean;
+  interruptedAtLocation?: string;
 }
 
 export class GameTurnService {
@@ -70,6 +75,7 @@ export class GameTurnService {
       adventure,
       mode,
       actionText = '',
+      destinationIdOrName,
       dialogueType,
       speakerNpc,
       targetNpc,
@@ -85,6 +91,14 @@ export class GameTurnService {
 
     if (!adventure || !adventure.world) {
       throw new Error("Ungültiger Abenteuer-Zustand für Spielerzug.");
+    }
+
+    if (mode === 'travel' || destinationIdOrName) {
+      const dest = destinationIdOrName || actionText.replace(/^(ich reise nach|reise nach|gehe nach)\s+/i, '').trim();
+      return TravelService.executeTravelTurn({
+        ...params,
+        destinationIdOrName: dest
+      });
     }
 
     // Step 1: Calculate active dialogue participants & simulation parameters
