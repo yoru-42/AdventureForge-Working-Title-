@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { jsonrepair } from "jsonrepair";
 import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
-import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
+import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
 import {
   executeDrawingPlan,
   validateDrawingPlanAndGeometries,
@@ -298,11 +298,11 @@ export class GeminiService {
       // The systemInstruction already contains all world, player and NPC profile info.
       const maxHistoryCount = 12;
       let historyToPass = history;
-      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}`;
+      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}`;
 
       if (history.length > maxHistoryCount) {
         if (history[0] && history[0].text) {
-          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
+          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
         }
         historyToPass = history.slice(-maxHistoryCount);
       }
@@ -615,7 +615,9 @@ ANWEISUNGEN:
   Du als Erzähler darfst NIEMALS wörtliche Zitate oder Aussagen des Spielers/Nutzers in deiner Beschreibung oder Narration wiederholen oder nachplappern. NPCs dürfen den Spieler jedoch in ihren eigenen Dialogen (in wörtlicher Rede) zitieren oder sich darauf beziehen.
 - GLAUBWÜRDIGKEIT, ALLTÄGLICHKEIT & BODENSTÄNDIGKEIT (KI-REGEL):
   Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe. Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
-  Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.`;
+  Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
+- WISSENSISOLATION BEZÜGLICH ZUKÜNFTIGER ABSICHTEN & PLÄNE (KEIN WISSEN OHNE LAUT GESAGTES WORT IM PROLOG/SPIELSTART UND NUR BEI PHYSISCHER ANWESENHEIT):
+  Charaktere und NPCs besitzen KEINERLEI Vorwissen über die zukünftigen Absichten, Pläne, geheimen Vorhaben oder Zielsetzungen des Spielers oder anderer Figuren! Ein Charakter kann und darf von einer zukünftigen Absicht oder einem Plan AUSSCHLIESSLICH DANN wissen, wenn diese im Prolog oder beim Spielstart / in der Ersten Szene EXPLIZIT laut ausgesprochen wurde UND der betreffende Charakter zu diesem Zeitpunkt WIRKLICH PHYSISCH ANWESEND war. Charaktere, die nicht persönlich anwesend waren, wissen absolut nichts davon!`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -4021,7 +4023,8 @@ Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.
     existingCharacter?: any, 
     worldContext?: any, 
     existingFactions?: string[],
-    existingCodexCharacters?: any[]
+    existingCodexCharacters?: any[],
+    targetSection?: string
   ): Promise<any> {
     return this.callWithRetry(async () => {
       const ai = this.getAI();
@@ -4191,6 +4194,24 @@ ${existingCodexCharacters.map(c => `- Name: "${c.name}"
   * RPG-Rolle: "${c.role || 'Unbekannt'}"
   * Familie/Zugehörigkeit: "${c.family || 'Keine'}"
   * Beziehung/Verhalten/Details: "${c.relation || c.description || 'Keine Angabe'}"`).join('\n')}`;
+      }
+
+      if (targetSection && targetSection !== 'all') {
+        const sectionDescriptions: Record<string, string> = {
+          appearance: 'Statur & Erscheinung (Geschlecht, Alter, Statur, Haare, Augen, Kleidung, Looks, Rasse, Rassemerkmale, Maße, Körbchengröße und Verwandlungen)',
+          personality: 'Persönlichkeit (Wesenszüge, Archetyp, Eigenschaften, Vorlieben/Abneigungen, Temperament)',
+          bio: 'Vergangenheit / Biografie (Lebenslauf, Herkunft, Kindheit, prägende Ereignisse, Familie)',
+          situation: 'Aktuelle Situation (Gegenwärtiger Aufenthaltsort, aktuelle Lebenslage, Herausforderungen)',
+          motivation: 'Motivationskern & Handlungsantrieb (Hauptziel/Goal, innere Antriebe, Ideale, Schwüre, Ängste, Werte)',
+          secrets: 'Geheimnis-Stufen / Verborgenes Wissen (secretsStage1: Öffentliches Wissen, secretsStage2: Gerüchte & Indizien, secretsStage3: Verborgenes Geheimnis, knowledge)',
+          relationships: 'Beziehungen (Verhältnis zu anderen Charakteren, Gilden, Familie, Anredeformen, Verhalten)',
+          combat: 'Kampffähigkeiten & Techniken (Kräfte, Spezialfähigkeiten, Techniken, Kraftquelle, Kraftkosten, Machtlevel)',
+          professions: 'Berufe & Talente (Hauptberuf, Berufsrang, Nebenberufe, Handwerkskünste, Talente, Alltagsfertigkeiten)'
+        };
+        const desc = sectionDescriptions[targetSection] || targetSection;
+        contextPrompt += `\n\n### GEZIELTER BEARBEITUNGS-FOKUS: "${desc}"
+MANDATORISCHE DIRECTIVE: Der Nutzer möchte gezielt diesen Bereich bearbeiten oder verfeinern!
+Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend zur Freitext-Eingabe. Behalte bestehende, ausgefüllte Daten anderer Bereiche bei bzw. passe sie nur an, wenn dies zur logischen Stimmigkeit mit dem bearbeiteten Bereich zwingend erforderlich ist.`;
       }
 
       contextPrompt += `\n\nText: "${text}"\n`;

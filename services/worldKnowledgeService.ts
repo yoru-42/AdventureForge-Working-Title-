@@ -120,6 +120,22 @@ export const ACTION_AND_TIMESKIP_DIRECTIVE = `
    - Jede Antwort soll in einem aktiven Handlungsmoment gipfeln (eine Aktion eines NPCs, ein unerwartetes Geräusch, ein Eintreffen oder eine veränderte Lage), worauf der Spieler direkt mit seiner nächsten Nachricht reagieren kann (ohne billige Floskel-Fragen wie "Was tust du?").
 `;
 
+export const FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE = `
+### STRIKTE REGEL ZUR WISSENSISOLATION BEZÜGLICH ZUKÜNFTIGER ABSICHTEN & PLÄNE:
+1. ABSOLUTES VERBOT DES WISSENS ÜBER ZUKÜNFTIGE ABSICHTEN UND PLÄNE (KEINE HELLSEHEREI, KEIN GEDANKENLESEN):
+   - Charaktere und NPCs wissen NIEMALS etwas von den zukünftigen Absichten, Plänen, Vorhaben, geheimen Zielen oder nächsten Schritten anderer Figuren (weder des Spielers noch anderer NPCs oder Fraktionen).
+   - Selbst wenn ein Ziel, eine geheime Mission, ein Kampagnenschritt oder eine Motivation im Charakterbogen (z. B. "Ziel", "Goal", "Bio", "Verbotenes Wissen"), im Codex oder in der Weltenbeschreibung hinterlegt ist, ist dies für alle anderen Charaktere vollkommen unbekannt und unsichtbar.
+
+2. AUSNAHME NUR DURCH EXPLIZITES GESAGTES WORT IM PROLOG ODER BEIM SPIELSTART / ERSTE SZENE (ODER LAUFENDEN CHAT):
+   - Ein Charakter kann und darf von einer zukünftigen Absicht oder einem Plan AUSSCHLIESSLICH DANN wissen, wenn diese Absicht oder dieser Plan im Prolog ODER beim Spielstart / in der Ersten Szene (oder im laufenden Chat) EXPLIZIT und laut ausgesprochen bzw. verbal geäußert und mitgeteilt wurde.
+   - Wenn eine Absicht oder ein Plan nur gedacht, innerlich erwogen oder in Gedanken gefasst wurde, weiß kein anderer Charakter davon – selbst wenn er daneben stand!
+
+3. ZWINGENDE VORAUSSETZUNG DER PHYSISCHEN ANWESENHEIT:
+   - Selbst wenn ein Plan oder eine Absicht im Prolog oder beim Spielstart / in der Ersten Szene laut ausgesprochen wurde, wissen davon AUSNAHMSLOS NUR CHARAKTERE, DIE ZU DIESEM ZEITPUNKT WIRKLICH PHYSISCH ANWESEND WAREN (im selben Raum bzw. in direkter Hörweite)!
+   - Alle Charaktere, die im Prolog oder beim Spielstart / in der Ersten Szene NICHT physisch anwesend waren (weil sie an einem anderen Ort waren, erst später dazustoßen, in einer anderen Fraktion sind oder erst neu die Szene betreten), wissen ABSOLUT NICHTS von diesen Absichten und Plänen!
+   - Sie dürfen weder darauf anspielen, noch danach handeln, noch Vorkehrungen treffen oder so tun, als hätten sie Vorwissen. Sie erfahren von diesen Absichten und Plänen ERST DANN, wenn ihnen ein anwesender Charakter im Chat persönlich und direkt davon erzählt.
+`;
+
 export class WorldKnowledgeService {
   /**
    * Evaluates if sourceNew has higher or equal priority over sourceOld

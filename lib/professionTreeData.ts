@@ -411,7 +411,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         description: 'Herstellung von Hart-, Weich- und Schnittkäse, Butter und Milchprodukten.',
         prerequisites: [],
         careerRoutes: [
-          { id: 'k_exp', name: 'Alm- und Sennereipraxis', type: 'experience', description: 'Arbeit in Käsereien.', requirementsSummary: 'Praxis' }
+          { id: 'kaese_exp', name: 'Alm- und Sennereipraxis', type: 'experience', description: 'Arbeit in Käsereien.', requirementsSummary: 'Praxis' }
         ],
         suggestedCompetencies: ['Milch dicklegen', 'Bruch schneiden', 'Käselaibe pflegen'],
         possibleRanks: ['Senner', 'Käsermeister']
@@ -581,7 +581,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
           { type: 'profession', label: 'Schmied', targetId: 'schmied' }
         ],
         careerRoutes: [
-          { id: 'hs_exp', name: 'Stall- & Wanderpraxis', type: 'experience', description: 'Beschlagpraxis an Reit- und Zugtieren.', requirementsSummary: 'Praxis' }
+          { id: 'huf_exp', name: 'Stall- & Wanderpraxis', type: 'experience', description: 'Beschlagpraxis an Reit- und Zugtieren.', requirementsSummary: 'Praxis' }
         ],
         suggestedCompetencies: ['Hufeisen anpassen', 'Hufkorrektur', 'Nagelung'],
         possibleRanks: ['Hufschmied']
@@ -604,14 +604,14 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         suggestedCompetencies: ['Damaszenerstahl falten', 'Katana schmieden', 'Rüstungsmeisterwerk'],
         possibleRanks: ['Zunftmeister', 'Großschmied']
       },
-      // SCHREINER / ZIMMERMANN / MAURER / GERBER / SCHNEIDER
+      // SCHREINER / TISCHLER BRANCH
       {
         id: 'schreiner',
         fieldId: 'bau_handwerk',
         name: 'Schreiner & Tischler',
         tier: 'beruf',
         parentIds: ['handwerk_root'],
-        childIds: [],
+        childIds: ['kunsttischler', 'bautischler', 'drechsler'],
         description: 'Möbelbau, Türen, Fenster, Holzverbindungen und Schnitzarbeiten.',
         prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
         careerRoutes: [{ id: 'schr_exam', name: 'Tischlergeselle', type: 'exam', description: 'Zunftabschluss.', requirementsSummary: 'Zunftnachweis' }],
@@ -619,12 +619,87 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         possibleRanks: ['Geselle', 'Schreinermeister']
       },
       {
+        id: 'kunsttischler',
+        fieldId: 'bau_handwerk',
+        name: 'Kunsttischler & Intarsienschneider',
+        tier: 'spezialisierung',
+        specializationOf: 'schreiner',
+        parentIds: ['schreiner'],
+        childIds: ['tischlermeister'],
+        description: 'Edelmöbel, Furniertechniken, feine Einlegearbeiten und kunstvolle Schnitzereien.',
+        prerequisites: [
+          { type: 'profession', label: 'Schreiner & Tischler', targetId: 'schreiner' },
+          { type: 'experience_years', label: '2 Jahre Tischlererfahrung', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'kt_exp', name: 'Kunsttischlerei', type: 'experience', description: 'Arbeit an Prunkmöbeln und Chorgestühl.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Furnieren & Intarsien', 'Holzschnitzerei', 'Schellackpolitur'],
+        possibleRanks: ['Kunsttischler', 'Kabinettmacher']
+      },
+      {
+        id: 'bautischler',
+        fieldId: 'bau_handwerk',
+        name: 'Bautischler & Treppenbauer',
+        tier: 'spezialisierung',
+        specializationOf: 'schreiner',
+        parentIds: ['schreiner'],
+        childIds: ['tischlermeister'],
+        description: 'Passgenaue Tore, Schiebefenster, Wendeltreppen und wetterfester Holzausbau.',
+        prerequisites: [
+          { type: 'profession', label: 'Schreiner & Tischler', targetId: 'schreiner' }
+        ],
+        careerRoutes: [
+          { id: 'bt_exp', name: 'Bauausbaupraxis', type: 'experience', description: 'Ausbau städtischer Häuser und Herrensitze.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Treppenwangen anreißen', 'Fensterbeschläge', 'Bautischlerei'],
+        possibleRanks: ['Bautischler']
+      },
+      {
+        id: 'drechsler',
+        fieldId: 'bau_handwerk',
+        name: 'Drechsler & Holzgestalter',
+        tier: 'spezialisierung',
+        specializationOf: 'schreiner',
+        parentIds: ['schreiner'],
+        childIds: [],
+        description: 'Drechseln von Säulen, Geländersprossen, Schalen, Griffen und Pfeifenkörpern.',
+        prerequisites: [
+          { type: 'profession', label: 'Schreiner & Tischler', targetId: 'schreiner' }
+        ],
+        careerRoutes: [
+          { id: 'dr_exp', name: 'Drechselbankpraxis', type: 'experience', description: 'Rotationstechnik an Drehbank und Werkbank.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Drehbankführung', 'Langholzdrehen', 'Querholzdrehen'],
+        possibleRanks: ['Drechsler']
+      },
+      {
+        id: 'tischlermeister',
+        fieldId: 'bau_handwerk',
+        name: 'Zunftmeister des Tischlerhandwerks',
+        tier: 'meister',
+        parentIds: ['kunsttischler', 'bautischler'],
+        childIds: [],
+        description: 'Höchste Möbelbaukunst, Meisterstücke, Zunftleitung und Bauleitung nobler Innenausbauten.',
+        prerequisites: [
+          { type: 'experience_years', label: '5 Jahre Erfahrung', minValue: 5 },
+          { type: 'rank', label: 'Meistergrad' }
+        ],
+        careerRoutes: [
+          { id: 'tm_exam', name: 'Meisterstück', type: 'exam', description: 'Meistermöbel vor der Prüfungskommission.', requirementsSummary: '5 Jahre Praxis + Meisterprüfung' }
+        ],
+        suggestedCompetencies: ['Meisterstückbau', 'Zunftgerichtsbarkeit', 'Restaurierung'],
+        possibleRanks: ['Zunftmeister', 'Hofebenist']
+      },
+
+      // ZIMMERMANN / DACHDECKER BRANCH
+      {
         id: 'zimmermann',
         fieldId: 'bau_handwerk',
         name: 'Zimmermann & Dachdecker',
         tier: 'beruf',
         parentIds: ['handwerk_root'],
-        childIds: [],
+        childIds: ['fachwerkzimmermann', 'brueckenbauer', 'schiffszimmermann'],
         description: 'Dachstühle, Fachwerkbauten, Brücken und schwere Holzkonstruktionen.',
         prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
         careerRoutes: [{ id: 'zim_exam', name: 'Walz & Wanderschaft', type: 'experience', description: 'Wanderschaft auf traditioneller Walz.', requirementsSummary: '1+ Jahr Praxis' }],
@@ -632,25 +707,175 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         possibleRanks: ['Wandergeselle', 'Zimmermeister']
       },
       {
+        id: 'fachwerkzimmermann',
+        fieldId: 'bau_handwerk',
+        name: 'Fachwerk- & Dachstuhlbauer',
+        tier: 'spezialisierung',
+        specializationOf: 'zimmermann',
+        parentIds: ['zimmermann'],
+        childIds: ['zimmermeister'],
+        description: 'Monumentale Dachstühle, Hängewerke, Giebelbindungen und mehrgeschossige Fachwerkbauten.',
+        prerequisites: [
+          { type: 'profession', label: 'Zimmermann & Dachdecker', targetId: 'zimmermann' },
+          { type: 'experience_years', label: '2 Jahre Zimmermannserfahrung', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'fw_exp', name: 'Fachwerkabbund', type: 'experience', description: 'Großprojekte für Rathäuser und Scheunen.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Hängewerke berechnen', 'Kerve & Zapfen', 'Firstausrichtung'],
+        possibleRanks: ['Fachwerkzimmermann']
+      },
+      {
+        id: 'brueckenbauer',
+        fieldId: 'bau_handwerk',
+        name: 'Brücken- & Mühlenbauer',
+        tier: 'spezialisierung',
+        specializationOf: 'zimmermann',
+        parentIds: ['zimmermann'],
+        childIds: ['zimmermeister'],
+        description: 'Tragfähige Flussbrücken, Wasserradkonstruktionen, Windmühlenflügel und Hebewerke.',
+        prerequisites: [
+          { type: 'profession', label: 'Zimmermann & Dachdecker', targetId: 'zimmermann' }
+        ],
+        careerRoutes: [
+          { id: 'bb_exp', name: 'Ingenieurholzbau', type: 'experience', description: 'Bau von Wehranlagen und Mühlengetrieben.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Wasserräder zimmern', 'Pfahlgründung im Wasser', 'Kammräder verzapfen'],
+        possibleRanks: ['Mühlenbaumeister']
+      },
+      {
+        id: 'schiffszimmermann',
+        fieldId: 'bau_handwerk',
+        name: 'Schiffszimmermann & Werftbauer',
+        tier: 'spezialisierung',
+        specializationOf: 'zimmermann',
+        parentIds: ['zimmermann'],
+        childIds: [],
+        description: 'Kiellegung, Spantenbiegen unter Dampf, Decksbeplankung und Kalfatern von Schiffskörpern.',
+        prerequisites: [
+          { type: 'profession', label: 'Zimmermann & Dachdecker', targetId: 'zimmermann' }
+        ],
+        careerRoutes: [
+          { id: 'sz_exp', name: 'Werftarbeit', type: 'experience', description: 'Bau von Koggen, Galeeren und Flusskähnen.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Spanten anreißen', 'Planken dämpfen', 'Kalfatern'],
+        possibleRanks: ['Schiffszimmermann']
+      },
+      {
+        id: 'zimmermeister',
+        fieldId: 'bau_handwerk',
+        name: 'Großzimmermeister & Werkbaumeister',
+        tier: 'meister',
+        parentIds: ['fachwerkzimmermann', 'brueckenbauer'],
+        childIds: [],
+        description: 'Oberleitung gewaltiger Holzgroßbauten, Festungsbrücken und städtischer Dachlandschaften.',
+        prerequisites: [
+          { type: 'experience_years', label: '5 Jahre Erfahrung', minValue: 5 },
+          { type: 'rank', label: 'Meistergrad' }
+        ],
+        careerRoutes: [
+          { id: 'zm_exam', name: 'Großmeisterprüfung', type: 'exam', description: 'Statische Abnahme eines Hallendachstuhls.', requirementsSummary: '5 Jahre Praxis + Prüfung' }
+        ],
+        suggestedCompetencies: ['Großbaustellenleitung', 'Holzstatik', 'Kran- und Hebewerkbau'],
+        possibleRanks: ['Werkmeister', 'Oberzimmermann']
+      },
+
+      // MAURER / STEINMETZ BRANCH
+      {
         id: 'maurer',
         fieldId: 'bau_handwerk',
         name: 'Maurer & Steinmetz',
         tier: 'beruf',
         parentIds: ['handwerk_root'],
-        childIds: [],
+        childIds: ['steinmetz', 'gewoelbemeister', 'stuckateur'],
         description: 'Mauerwerk, Gewölbebau, Natursteinbearbeitung und Fundamentlegung.',
         prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
-        careerRoutes: [{ id: 'mau_exp', name: 'Bauhuttenpraxis', type: 'experience', description: 'Arbeit an Burgen und Sakralbauten.', requirementsSummary: 'Praxis' }],
+        careerRoutes: [{ id: 'mau_exp', name: 'Bauhüttenpraxis', type: 'experience', description: 'Arbeit an Burgen und Sakralbauten.', requirementsSummary: 'Praxis' }],
         suggestedCompetencies: ['Bruchsteinmauerwerk', 'Gewölbebogen setzen', 'Mörtelmischung'],
         possibleRanks: ['Steinmetzgeselle', 'Bauhüttenmeister']
       },
+      {
+        id: 'steinmetz',
+        fieldId: 'bau_handwerk',
+        name: 'Steinmetz & Bildhauer',
+        tier: 'spezialisierung',
+        specializationOf: 'maurer',
+        parentIds: ['maurer'],
+        childIds: ['bauhuettenmeister'],
+        description: 'Filigranes Maßwerk, Fialen, Wappenreliefs, Skulpturen und präzise Werksteinquader.',
+        prerequisites: [
+          { type: 'profession', label: 'Maurer & Steinmetz', targetId: 'maurer' },
+          { type: 'experience_years', label: '2 Jahre Steinmetzerfahrung', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'steinbild_exp', name: 'Dombauhütte', type: 'experience', description: 'Steinschnitt an Kathedralen und Palästen.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Maßwerk behauen', 'Reliefschnitt', 'Steinverankerung'],
+        possibleRanks: ['Steinbildhauer', 'Hüttengeselle']
+      },
+      {
+        id: 'gewoelbemeister',
+        fieldId: 'bau_handwerk',
+        name: 'Gewölbe- & Festungsbauer',
+        tier: 'spezialisierung',
+        specializationOf: 'maurer',
+        parentIds: ['maurer'],
+        childIds: ['bauhuettenmeister'],
+        description: 'Kreuzrippengewölbe, Wehrgänge, Pechnasen, Zugbrückenportale und massive Wehrmauern.',
+        prerequisites: [
+          { type: 'profession', label: 'Maurer & Steinmetz', targetId: 'maurer' }
+        ],
+        careerRoutes: [
+          { id: 'gm_exp', name: 'Festungsbau', type: 'experience', description: 'Befestigung von Stadtmauern und Bergfrieden.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Gewölbeschalung setzen', 'Wehrbauten konstruieren', 'Schießscharten schneiden'],
+        possibleRanks: ['Festungsmaurer']
+      },
+      {
+        id: 'stuckateur',
+        fieldId: 'bau_handwerk',
+        name: 'Stuckateur & Fassadenputzer',
+        tier: 'spezialisierung',
+        specializationOf: 'maurer',
+        parentIds: ['maurer'],
+        childIds: [],
+        description: 'Kalkglättung, Reliefstuckaturen, Sgraffito und wasserfester Außenschutz.',
+        prerequisites: [
+          { type: 'profession', label: 'Maurer & Steinmetz', targetId: 'maurer' }
+        ],
+        careerRoutes: [
+          { id: 'stuck_exp', name: 'Putz- & Stuckpraxis', type: 'experience', description: 'Gestaltung repräsentativer Hallen.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Kalkputz zubereiten', 'Stuckgesimse ziehen', 'Sgraffito'],
+        possibleRanks: ['Stuckateur']
+      },
+      {
+        id: 'bauhuettenmeister',
+        fieldId: 'bau_handwerk',
+        name: 'Bauhüttenmeister & Dombaumeister',
+        tier: 'meister',
+        parentIds: ['steinmetz', 'gewoelbemeister'],
+        childIds: [],
+        description: 'Gesamtleitung der Bauhütte, statische Berechnungen, Risszeichnungen und Sakralarchitektur.',
+        prerequisites: [
+          { type: 'experience_years', label: '5 Jahre Erfahrung', minValue: 5 },
+          { type: 'rank', label: 'Meistergrad' }
+        ],
+        careerRoutes: [
+          { id: 'bm_exam', name: 'Hüttenprüfung', type: 'exam', description: 'Prüfung der Hüttengeheimnisse und Bauplanzeichnung.', requirementsSummary: '5 Jahre Praxis + Bauwerksabnahme' }
+        ],
+        suggestedCompetencies: ['Bauplanung & Risszeichnung', 'Hüttengeheimnisse', 'Gewölbestatik'],
+        possibleRanks: ['Dombaumeister', 'Hüttenmeister']
+      },
+
+      // GERBER / LEDERER BRANCH
       {
         id: 'gerber',
         fieldId: 'bau_handwerk',
         name: 'Gerber & Lederer',
         tier: 'beruf',
         parentIds: ['handwerk_root'],
-        childIds: [],
+        childIds: ['ruestleder_gerber', 'feingerber', 'saemischgerber'],
         description: 'Pflanzliche und mineralische Gerbung von Häuten zu Rüst-, Sohl- und Bekleidungsleder.',
         prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
         careerRoutes: [{ id: 'ger_exp', name: 'Gerberhof', type: 'experience', description: 'Praxis in Gerbbottichen und Trockenböden.', requirementsSummary: 'Praxis' }],
@@ -658,17 +883,165 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         possibleRanks: ['Lohgerber', 'Gerbermeister']
       },
       {
+        id: 'ruestleder_gerber',
+        fieldId: 'bau_handwerk',
+        name: 'Rüstleder- & Harnischgerber',
+        tier: 'spezialisierung',
+        specializationOf: 'gerber',
+        parentIds: ['gerber'],
+        childIds: ['gerbermeister'],
+        description: 'Gehärtetes Leder (Cuir Bouilli), stoßfeste Schutzkragen, Schilde und Rüstungsleder.',
+        prerequisites: [
+          { type: 'profession', label: 'Gerber & Lederer', targetId: 'gerber' },
+          { type: 'experience_years', label: '2 Jahre Gerberpraxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'rl_exp', name: 'Harnischlederpraxis', type: 'experience', description: 'Kombiniertes Wachsen und Heißhärten.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Cuir-Bouilli-Härtung', 'Schweres Rinderleder zurichten', 'Sohlleder walzen'],
+        possibleRanks: ['Rüstlederer']
+      },
+      {
+        id: 'feingerber',
+        fieldId: 'bau_handwerk',
+        name: 'Fein- & Weißgerber',
+        tier: 'spezialisierung',
+        specializationOf: 'gerber',
+        parentIds: ['gerber'],
+        childIds: ['gerbermeister'],
+        description: 'Mineralgerbung mit Alaun für geschmeidige Handschuh-, Pergament- und Buchbinderleder.',
+        prerequisites: [
+          { type: 'profession', label: 'Gerber & Lederer', targetId: 'gerber' }
+        ],
+        careerRoutes: [
+          { id: 'fg_exp', name: 'Weißgerberei', type: 'experience', description: 'Verarbeitung von Ziegen- und Kalbhäuten.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Pergament schaben', 'Alaungerbung', 'Leder färben'],
+        possibleRanks: ['Weißgerber', 'Pergamentmacher']
+      },
+      {
+        id: 'saemischgerber',
+        fieldId: 'bau_handwerk',
+        name: 'Sämischgerber & Wildlederer',
+        tier: 'spezialisierung',
+        specializationOf: 'gerber',
+        parentIds: ['gerber'],
+        childIds: [],
+        description: 'Tran- und Fettgerbung von Hirsch-, Reh- und Gamsfellen zu samtigem, wasserabweisendem Leder.',
+        prerequisites: [
+          { type: 'profession', label: 'Gerber & Lederer', targetId: 'gerber' }
+        ],
+        careerRoutes: [
+          { id: 'sg_exp', name: 'Fettgerberei', type: 'experience', description: 'Walken mit Tran und Schabetechniken.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Fettgerbung', 'Wildfelle zurichten', 'Samtleder walken'],
+        possibleRanks: ['Sämischgerber']
+      },
+      {
+        id: 'gerbermeister',
+        fieldId: 'bau_handwerk',
+        name: 'Zunftmeister der Gerber & Lederer',
+        tier: 'meister',
+        parentIds: ['ruestleder_gerber', 'feingerber'],
+        childIds: [],
+        description: 'Oberaufsicht über Gerbereien, Gerbbrühen-Reinheit, Wasserrechte und Luxuslederfertigung.',
+        prerequisites: [
+          { type: 'experience_years', label: '5 Jahre Erfahrung', minValue: 5 },
+          { type: 'rank', label: 'Meistergrad' }
+        ],
+        careerRoutes: [
+          { id: 'gm_exam', name: 'Gerbermeisterstück', type: 'exam', description: 'Herstellung makellosen Meisterleders.', requirementsSummary: '5 Jahre Praxis + Prüfung' }
+        ],
+        suggestedCompetencies: ['Lohgrubenmanagement', 'Luxuslederzurichtung', 'Wasserrechtekontrolle'],
+        possibleRanks: ['Obermeister', 'Zunftältester']
+      },
+
+      // SCHNEIDER / GEWANDMACHER BRANCH
+      {
         id: 'schneider',
         fieldId: 'bau_handwerk',
         name: 'Schneider & Gewandmacher',
         tier: 'beruf',
         parentIds: ['handwerk_root'],
-        childIds: [],
+        childIds: ['harnischschneider', 'hofschneider', 'tuchmacher'],
         description: 'Zuschnitt, Nähen, Passform und Veredelung von Stoff- und Lederkleidung.',
         prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
         careerRoutes: [{ id: 'schn_exam', name: 'Schneiderzunft', type: 'exam', description: 'Zunftnachweis für Gewandmacherei.', requirementsSummary: 'Zunftbrief' }],
         suggestedCompetencies: ['Schnittmuster erstellen', 'Handnaht', 'Gewandverzierung'],
         possibleRanks: ['Schneidergeselle', 'Gewandmeister']
+      },
+      {
+        id: 'harnischschneider',
+        fieldId: 'bau_handwerk',
+        name: 'Harnisch- & Waffenschneider',
+        tier: 'spezialisierung',
+        specializationOf: 'schneider',
+        parentIds: ['schneider'],
+        childIds: ['gewandmeister'],
+        description: 'Mehrlagige gesteppte Gambesons, Lederwämser, Polsterhauben und Waffenröcke.',
+        prerequisites: [
+          { type: 'profession', label: 'Schneider & Gewandmacher', targetId: 'schneider' },
+          { type: 'experience_years', label: '2 Jahre Schneidererfahrung', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'waffenschneider_exp', name: 'Waffenschneiderei', type: 'experience', description: 'Arbeit für Kriegsknechte und Rittergefolge.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Gambeson steppen', 'Lederdopplung', 'Waffenrockpassung'],
+        possibleRanks: ['Waffenschneider']
+      },
+      {
+        id: 'hofschneider',
+        fieldId: 'bau_handwerk',
+        name: 'Hof- & Prachtgewandmacher',
+        tier: 'spezialisierung',
+        specializationOf: 'schneider',
+        parentIds: ['schneider'],
+        childIds: ['gewandmeister'],
+        description: 'Kostbare Seidengewänder, Samtumhänge, Goldborten und edle Festkleidung.',
+        prerequisites: [
+          { type: 'profession', label: 'Schneider & Gewandmacher', targetId: 'schneider' }
+        ],
+        careerRoutes: [
+          { id: 'hfs_exp', name: 'Hofschneiderei', type: 'experience', description: 'Fertigung für Edelleute und Hofgesellschaft.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Goldstickerei', 'Seidenzuschnitt', 'Plissieren'],
+        possibleRanks: ['Hofschneider', 'Gewandschöpfer']
+      },
+      {
+        id: 'tuchmacher',
+        fieldId: 'bau_handwerk',
+        name: 'Tuchmacher & Pelzer',
+        tier: 'spezialisierung',
+        specializationOf: 'schneider',
+        parentIds: ['schneider'],
+        childIds: [],
+        description: 'Schwere Wolllodentuche, wetterfeste Reisemäntel, Futterpelze und Kappen.',
+        prerequisites: [
+          { type: 'profession', label: 'Schneider & Gewandmacher', targetId: 'schneider' }
+        ],
+        careerRoutes: [
+          { id: 'tm_exp', name: 'Tuch- & Pelzpraxis', type: 'experience', description: 'Verarbeitung von Loden und Pelzwerk.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Loden walken', 'Pelznaht', 'Wetterfeste Trachten'],
+        possibleRanks: ['Tuchmacher', 'Kürschner']
+      },
+      {
+        id: 'gewandmeister',
+        fieldId: 'bau_handwerk',
+        name: 'Zunftmeister der Gewandmacher',
+        tier: 'meister',
+        parentIds: ['harnischschneider', 'hofschneider'],
+        childIds: [],
+        description: 'Oberaufsicht über die Gewandschneiderzunft, Krönungsgewänder und Schnittmeisterwerke.',
+        prerequisites: [
+          { type: 'experience_years', label: '5 Jahre Erfahrung', minValue: 5 },
+          { type: 'rank', label: 'Meistergrad' }
+        ],
+        careerRoutes: [
+          { id: 'gwm_exam', name: 'Meistergewand', type: 'exam', description: 'Herstellung eines maßgeschneiderten Meisterornats.', requirementsSummary: '5 Jahre Praxis + Prüfung' }
+        ],
+        suggestedCompetencies: ['Meisterornat entwerfen', 'Zunftordnung', 'Heraldische Gewandkunst'],
+        possibleRanks: ['Obermeister', 'Gewandmeister']
       }
     ]
   },
@@ -886,7 +1259,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         description: 'Segel setzen, Rigg klettern, Rudergehen und Schiffsunterhalt bei Sturm und Flaute.',
         prerequisites: [{ type: 'experience_years', label: '1 Seefahrtsjahr', minValue: 1 }],
         careerRoutes: [
-          { id: 'sm_exp', name: 'Jahre auf hoher See', type: 'experience', description: 'Fahrten über raue Meere.', requirementsSummary: '1+ Jahr Seefahrt' }
+          { id: 'seemann_exp', name: 'Jahre auf hoher See', type: 'experience', description: 'Fahrten über raue Meere.', requirementsSummary: '1+ Jahr Seefahrt' }
         ],
         suggestedCompetencies: ['Takelage bedienen', 'Segel reffen', 'Rudergehen', 'Schiffszimmerei'],
         possibleRanks: ['Vollmatrose', 'Obermatrose']
@@ -921,7 +1294,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         ],
         careerRoutes: [
           { id: 'st_exam', name: 'Steuermannspatent', type: 'exam', description: 'Nautische Navigationsprüfung.', requirementsSummary: 'Patent' },
-          { id: 'st_exp', name: 'Erfahrung auf Langstrecke', type: 'experience', description: 'Praxis bei Ozeanüberquerungen.', requirementsSummary: '2 Jahre Praxis' }
+          { id: 'steuermann_exp', name: 'Erfahrung auf Langstrecke', type: 'experience', description: 'Praxis bei Ozeanüberquerungen.', requirementsSummary: '2 Jahre Praxis' }
         ],
         suggestedCompetencies: ['Sternennavigation', 'Seekarten lesen', 'Koppelkurs berechnen'],
         possibleRanks: ['Zweiter Steuermann', 'Erster Steuermann']
@@ -1081,7 +1454,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         childIds: [],
         description: 'Auffinden und schonendes Ernten seltener Heilpflanzen, Pilze und Waldfrüchte.',
         prerequisites: [],
-        careerRoutes: [{ id: 'k_exp', name: 'Kräuterkunde in freier Natur', type: 'experience', description: 'Sammeln in Mooren und Bergen.', requirementsSummary: 'Praxis' }],
+        careerRoutes: [{ id: 'kraeuter_exp', name: 'Kräuterkunde in freier Natur', type: 'experience', description: 'Sammeln in Mooren und Bergen.', requirementsSummary: 'Praxis' }],
         suggestedCompetencies: ['Heilpflanzen erkennen', 'Schonende Ernte', 'Trocknung'],
         possibleRanks: ['Kräuterweib / Kräutermann', 'Meistersammler']
       },

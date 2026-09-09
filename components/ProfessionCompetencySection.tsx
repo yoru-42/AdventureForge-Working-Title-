@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ProfessionCompetency, ProfessionProgress, ProfessionExperience } from '../types';
+import { ProfessionCompetency, ProfessionProgress, ProfessionExperience, SecondaryProfession } from '../types';
+import { ProfessionNodeTier } from '../lib/professionTreeData';
 import { CompetencyCard } from './CompetencyCard';
 import { CompetencyCatalogModal } from './CompetencyCatalogModal';
 import { CompetencyEditModal } from './CompetencyEditModal';
@@ -59,6 +60,11 @@ interface ProfessionCompetencySectionProps {
   onExperienceChange?: (exp: ProfessionExperience) => void;
   competencies: ProfessionCompetency[];
   onCompetenciesChange: (comps: ProfessionCompetency[]) => void;
+  // Multi-direction support (Secondary professions / Additional talent paths)
+  secondaryProfessions?: SecondaryProfession[];
+  onSecondaryProfessionsChange?: (secondaries: SecondaryProfession[]) => void;
+  additionalDirections?: string[];
+  onAdditionalDirectionsChange?: (directions: string[]) => void;
   // Legacy sync handlers for backward compatibility
   onProficiencyScoreChange?: (score: number) => void;
   onExperiencePointsChange?: (xp: number) => void;
@@ -83,6 +89,10 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
   onExperienceChange,
   competencies = [],
   onCompetenciesChange,
+  secondaryProfessions = [],
+  onSecondaryProfessionsChange,
+  additionalDirections,
+  onAdditionalDirectionsChange,
   onProficiencyScoreChange,
   onExperiencePointsChange,
   onPromotionConditionsChange,
@@ -95,7 +105,56 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [practiceFeedback, setPracticeFeedback] = useState<string | null>(null);
   const [showConditionsInput, setShowConditionsInput] = useState<boolean>(false);
+  const [showManualJobInput, setShowManualJobInput] = useState<boolean>(false);
   const [localField, setLocalField] = useState<string>(professionField || professionProgress?.fieldId || '');
+  const [localAdditionalDirections, setLocalAdditionalDirections] = useState<string[]>([]);
+
+  // Collect active additional directions from secondaryProfessions, props, and local state
+  const activeAdditionalDirections = useMemo(() => {
+    const set = new Set<string>();
+    if (additionalDirections) {
+      additionalDirections.forEach(d => set.add(d));
+    }
+    if (secondaryProfessions) {
+      secondaryProfessions.forEach(s => {
+        if (s.profession) set.add(s.profession);
+        if (s.specialization) set.add(s.specialization);
+      });
+    }
+    localAdditionalDirections.forEach(d => set.add(d));
+    return Array.from(set);
+  }, [additionalDirections, secondaryProfessions, localAdditionalDirections]);
+
+  const handleToggleAdditionalDirection = (directionName: string, tier: ProfessionNodeTier, fieldId?: string) => {
+    const isAlreadyActive = activeAdditionalDirections.includes(directionName);
+
+    if (onSecondaryProfessionsChange && secondaryProfessions) {
+      if (isAlreadyActive) {
+        const updated = secondaryProfessions.filter(
+          s => s.profession !== directionName && s.specialization !== directionName
+        );
+        onSecondaryProfessionsChange(updated);
+      } else {
+        const newSec: SecondaryProfession = {
+          id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `sec_${Date.now()}`,
+          profession: tier === 'spezialisierung' ? (professionName || directionName) : directionName,
+          professionLevel: 'Lehrling / Einsteiger',
+          professionField: fieldId || localField || professionField,
+          specialization: tier === 'spezialisierung' ? directionName : '',
+          description: `Zusätzlicher Entwicklungspfad im Bereich ${fieldId || localField || professionField}`
+        };
+        onSecondaryProfessionsChange([...secondaryProfessions, newSec]);
+      }
+    }
+
+    const next = isAlreadyActive
+      ? activeAdditionalDirections.filter(d => d !== directionName)
+      : [...activeAdditionalDirections, directionName];
+    setLocalAdditionalDirections(next);
+    if (onAdditionalDirectionsChange) {
+      onAdditionalDirectionsChange(next);
+    }
+  };
 
   useEffect(() => {
     if (professionField !== undefined && professionField !== '') {
@@ -251,7 +310,13 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
   // Handler: Add from catalog
   const handleAddFromCatalog = (newComps: ProfessionCompetency[]) => {
     const existingIds = new Set(competencies.map(c => c.id));
-    const toAdd = newComps.filter(c => !existingIds.has(c.id));
+    const existingNames = new Set(
+      competencies.map(c => c.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, ''))
+    );
+    const toAdd = newComps.filter(c => {
+      const norm = c.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '');
+      return !existingIds.has(c.id) && !existingNames.has(norm);
+    });
     if (toAdd.length > 0) {
       onCompetenciesChange([...competencies, ...toAdd]);
     }
@@ -262,6 +327,7 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
     const catalog = getCatalogCompetenciesForProfession(professionName);
     const foundations = catalog.filter(def => def.category === 'Grundlage');
 
+    const existingIds = new Set(competencies.map(c => c.id));
     const existingNames = new Set(
       competencies.map(c => c.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, ''))
     );
@@ -269,7 +335,7 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
     const toAdd: ProfessionCompetency[] = [];
     foundations.forEach(f => {
       const norm = f.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '');
-      if (!existingNames.has(norm)) {
+      if (!existingIds.has(f.id) && !existingNames.has(norm)) {
         toAdd.push(createCompetencyFromDefinition(f, 3, 0));
       }
     });
@@ -332,7 +398,7 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
   return (
     <div
       id={`profession-competency-section-${professionName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'main'}`}
-      className="flex flex-col gap-5 bg-slate-950/70 border border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-inner"
+      className="flex flex-col gap-6 w-full"
     >
       {/* Feedback toast if practicing */}
       {practiceFeedback && (
@@ -359,191 +425,206 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
       {/* ========================================================================= */}
       <div
         id="profession-section-a-overview"
-        className="flex flex-col gap-4 bg-slate-900/60 border border-slate-800 rounded-xl p-4"
+        className="flex flex-col gap-4"
       >
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-          <div className="flex items-center gap-2">
-            <Award className="w-4 h-4 text-amber-400" />
-            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-              {sectionTitle}: {professionName || 'Nicht zugewiesen'}
-            </h4>
-          </div>
-          <span className="text-xs font-semibold text-amber-400/90 bg-amber-950/40 border border-amber-800/40 px-2.5 py-0.5 rounded-full">
-            {currentRank}
-          </span>
-        </div>
-
-        {/* Struktur: Berufsfeld -> Interaktiver Berufsskilltree -> Spezialisierung & Rang -> Erfahrung & Fortschritt */}
-        <div className="flex flex-col gap-3">
-          {/* Schritt 1: Übergeordnetes Berufsfeld */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-              <Compass className="w-3.5 h-3.5 text-amber-400" />
-              <span>Berufsfeld</span>
-            </label>
-            <select
-              id="profession-field-select"
-              value={currentField}
-              onChange={e => {
-                const val = e.target.value;
-                setLocalField(val);
-                if (onProfessionFieldChange) onProfessionFieldChange(val);
-                
-                // If a new field is chosen, check if current professionName belongs to a different field
-                if (val && professionName) {
-                  const matchingField = getFieldIdForJob(professionName);
-                  if (matchingField && matchingField !== val) {
-                    if (onProfessionNameChange) onProfessionNameChange('', val);
-                    updateProgress({ fieldId: val, professionName: '' });
-                    return;
-                  }
-                }
-                updateProgress({ fieldId: val });
-              }}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs outline-none focus:border-amber-500 cursor-pointer transition"
-            >
-              <option value="">Berufsfeld wählen...</option>
-              {PROFESSION_FIELDS.map(f => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Schritt 2: Echter interaktiver Berufsskilltree für das gewählte Berufsfeld */}
-          {currentField ? (
-            <ProfessionSkillTree
-              fieldId={currentField}
-              fieldName={selectedFieldObj?.name}
-              currentProfession={professionName}
-              currentSpecialization={professionSpecialization}
-              currentRank={currentRank}
-              experienceYears={currentExp.years}
-              competencies={competencies}
-              onSelectProfession={(newProf, newSpec, newField) => {
-                if (newField && newField !== currentField) {
-                  setLocalField(newField);
-                  if (onProfessionFieldChange) onProfessionFieldChange(newField);
-                }
-                if (onProfessionNameChange) {
-                  onProfessionNameChange(newProf, newField || currentField);
-                }
-                if (newSpec !== undefined && onSpecializationChange) {
-                  onSpecializationChange(newSpec);
-                }
-                updateProgress({
-                  fieldId: newField || currentField,
-                  professionName: newProf,
-                  specialization: newSpec !== undefined ? newSpec : professionSpecialization
-                });
-              }}
-            />
-          ) : (
-            <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-6 text-center text-xs text-slate-400">
-              Bitte wählen Sie oben ein Berufsfeld aus, um den dazugehörigen Berufsskilltree und die Entwicklungspfade anzuzeigen.
-            </div>
-          )}
-
-          {/* Schritt 3: Manuelle Anpassung / Freitext (optional einklappbar) */}
-          <div className="flex flex-col gap-2 pt-1 border-t border-slate-800/60">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-slate-300">
-                Aktuell gewählte Berufsdaten
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowConditionsInput(prev => !prev)}
-                className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 transition"
-              >
-                <Edit3 className="w-3 h-3" />
-                <span>{showConditionsInput ? 'Manuelle Eingabe verbergen' : 'Manuelle Eingabe / Freitext'}</span>
-              </button>
-            </div>
-
-            {showConditionsInput && (
-              <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
-                <label className="text-[11px] text-slate-400">
-                  Benutzerdefinierte Berufsbezeichnung
-                </label>
-                {onProfessionNameChange ? (
-                  <ProfessionSelect
-                    value={professionName}
-                    selectedField={currentField}
-                    onFieldChange={val => {
-                      setLocalField(val);
-                      if (onProfessionFieldChange) onProfessionFieldChange(val);
-                      updateProgress({ fieldId: val });
-                    }}
-                    onChange={(val, detectedField) => {
-                      if (onProfessionNameChange) onProfessionNameChange(val, detectedField);
-                      const effectiveField = detectedField || currentField;
-                      if (detectedField) {
-                        setLocalField(detectedField);
-                        if (onProfessionFieldChange && detectedField !== currentField) {
-                          onProfessionFieldChange(detectedField);
-                        }
-                      }
-                      updateProgress({ fieldId: effectiveField, professionName: val });
-                    }}
-                    placeholder="Berufsbezeichnung wählen oder eintragen..."
-                  />
-                ) : (
-                  <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs">
-                    {professionName || 'Keine Angabe'}
-                  </div>
-                )}
+        {/* Berufsfeld Toolbar & Active Status - Prominent, high-visibility highlight banner */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-3.5 sm:p-4 bg-slate-900/90 border-2 border-amber-500/40 rounded-xl shadow-md shadow-amber-950/20 ring-1 ring-amber-500/20 transition">
+          {/* Berufsfeld Selection */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+            <div className="flex items-center gap-2.5 shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
+                <Compass className="w-5 h-5 text-amber-400" />
               </div>
-            )}
-          </div>
-
-          {/* Schritt 4: Spezialisierung & Berufsrang */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold text-slate-300">
-                Spezialisierung / Schwerpunkt
-              </label>
-              <input
-                type="text"
-                id="profession-specialization-input"
-                value={professionSpecialization}
-                onChange={e => {
-                  const val = e.target.value;
-                  if (onSpecializationChange) onSpecializationChange(val);
-                  updateProgress({ specialization: val });
-                }}
-                placeholder="Spezialisierung oder handwerklicher Schwerpunkt..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs outline-none focus:border-amber-500 transition"
-              />
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                  Berufsfeld
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Ausrichtung wählen
+                </span>
+              </div>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] font-semibold text-slate-300">
-                Berufsrang / Grad
-              </label>
+            {/* Prominent Dropdown Select */}
+            <div className="flex-1 max-w-md min-w-[240px]">
               <select
-                id="profession-rank-select"
-                value={currentRank}
+                id="profession-field-select"
+                value={currentField}
                 onChange={e => {
                   const val = e.target.value;
-                  if (onProfessionRankChange) onProfessionRankChange(val);
-                  updateProgress({ rank: val, level: val });
+                  setLocalField(val);
+                  if (onProfessionFieldChange) onProfessionFieldChange(val);
+                  
+                  // If a new field is chosen, check if current professionName belongs to a different field
+                  if (val && professionName) {
+                    const matchingField = getFieldIdForJob(professionName);
+                    if (matchingField && matchingField !== val) {
+                      if (onProfessionNameChange) onProfessionNameChange('', val);
+                      updateProgress({ fieldId: val, professionName: '' });
+                      return;
+                    }
+                  }
+                  updateProgress({ fieldId: val });
                 }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs outline-none focus:border-amber-500 cursor-pointer transition"
+                className="w-full bg-slate-950 border-2 border-amber-500/60 hover:border-amber-400 focus:border-amber-400 text-amber-100 font-semibold text-sm rounded-xl px-3.5 py-2 outline-none focus:ring-2 focus:ring-amber-500/30 cursor-pointer transition shadow-inner"
               >
-                {COMMON_PROFESSION_RANKS.map(r => (
-                  <option key={r} value={r}>
-                    {r}
+                <option value="" className="bg-slate-950 text-slate-400">
+                  Berufsfeld auswählen...
+                </option>
+                {PROFESSION_FIELDS.map(f => (
+                  <option key={f.id} value={f.id} className="bg-slate-950 text-slate-200">
+                    {f.name}
                   </option>
                 ))}
-                {!COMMON_PROFESSION_RANKS.includes(currentRank) && currentRank && (
-                  <option value={currentRank}>{currentRank}</option>
-                )}
               </select>
             </div>
           </div>
 
-          {/* Zeile 3: Berufserfahrung */}
+          {/* Active Status Badges & Manual Text Toggle */}
+          <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800/80">
+            {professionName ? (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-950/60 border border-amber-700/60 text-amber-300 text-xs font-semibold shadow-sm">
+                <span className="text-slate-400 font-normal">Hauptberuf:</span>
+                <span>{professionName}</span>
+                {professionSpecialization && <span className="text-slate-400 font-normal">({professionSpecialization})</span>}
+              </span>
+            ) : (
+              <span className="text-slate-500 text-xs italic px-2 py-1">Kein Beruf zugewiesen</span>
+            )}
+            <span className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium">
+              {currentRank}
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowManualJobInput(prev => !prev)}
+              className="px-3 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs flex items-center gap-1.5 transition cursor-pointer"
+              title="Freitext oder benutzerdefinierte Berufsbezeichnung eingeben"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+              <span>{showManualJobInput ? 'Schließen' : 'Freitext'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Manuelle Eingabe / Freitext (optional) */}
+        {showManualJobInput && (
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 animate-in fade-in duration-150">
+            <label className="text-[11px] text-slate-400">
+              Benutzerdefinierte Berufsbezeichnung
+            </label>
+            {onProfessionNameChange ? (
+              <ProfessionSelect
+                value={professionName}
+                selectedField={currentField}
+                onFieldChange={val => {
+                  setLocalField(val);
+                  if (onProfessionFieldChange) onProfessionFieldChange(val);
+                  updateProgress({ fieldId: val });
+                }}
+                onChange={(val, detectedField) => {
+                  if (onProfessionNameChange) onProfessionNameChange(val, detectedField);
+                  const effectiveField = detectedField || currentField;
+                  if (detectedField) {
+                    setLocalField(detectedField);
+                    if (onProfessionFieldChange && detectedField !== currentField) {
+                      onProfessionFieldChange(detectedField);
+                    }
+                  }
+                  updateProgress({ fieldId: effectiveField, professionName: val });
+                }}
+                placeholder="Berufsbezeichnung wählen oder eintragen..."
+              />
+            ) : (
+              <div className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white text-xs">
+                {professionName || 'Keine Angabe'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Interaktiver Berufsskilltree für das gewählte Berufsfeld */}
+        {currentField ? (
+          <ProfessionSkillTree
+            fieldId={currentField}
+            fieldName={selectedFieldObj?.name}
+            currentProfession={professionName}
+            currentSpecialization={professionSpecialization}
+            currentRank={currentRank}
+            experienceYears={currentExp.years}
+            competencies={competencies}
+            onCompetenciesChange={onCompetenciesChange}
+            onPracticeCompetency={handlePractice}
+            additionalDirections={activeAdditionalDirections}
+            onToggleAdditionalDirection={handleToggleAdditionalDirection}
+            onSelectProfession={(newProf, newSpec, newField) => {
+              if (newField && newField !== currentField) {
+                setLocalField(newField);
+                if (onProfessionFieldChange) onProfessionFieldChange(newField);
+              }
+              if (onProfessionNameChange) {
+                onProfessionNameChange(newProf, newField || currentField);
+              }
+              if (newSpec !== undefined && onSpecializationChange) {
+                onSpecializationChange(newSpec);
+              }
+              updateProgress({
+                fieldId: newField || currentField,
+                professionName: newProf,
+                specialization: newSpec !== undefined ? newSpec : professionSpecialization
+              });
+            }}
+          />
+        ) : (
+          <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-6 text-center text-xs text-slate-400">
+            Bitte wählen Sie oben ein Berufsfeld aus, um den dazugehörigen Berufsskilltree und die Entwicklungspfade anzuzeigen.
+          </div>
+        )}
+
+        {/* Spezialisierung, Berufsrang & Berufserfahrung in einer aufgeräumten 3-Spalten-Zeile */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800/60">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-300">
+              Spezialisierung / Schwerpunkt
+            </label>
+            <input
+              type="text"
+              id="profession-specialization-input"
+              value={professionSpecialization}
+              onChange={e => {
+                const val = e.target.value;
+                if (onSpecializationChange) onSpecializationChange(val);
+                updateProgress({ specialization: val });
+              }}
+              placeholder="Spezialisierung eingeben..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500 transition"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold text-slate-300">
+              Berufsrang / Grad
+            </label>
+            <select
+              id="profession-rank-select"
+              value={currentRank}
+              onChange={e => {
+                const val = e.target.value;
+                if (onProfessionRankChange) onProfessionRankChange(val);
+                updateProgress({ rank: val, level: val });
+              }}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500 cursor-pointer transition"
+            >
+              {COMMON_PROFESSION_RANKS.map(r => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+              {!COMMON_PROFESSION_RANKS.includes(currentRank) && currentRank && (
+                <option value={currentRank}>{currentRank}</option>
+              )}
+            </select>
+          </div>
+
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
@@ -664,7 +745,7 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
       {/* ========================================================================= */}
       {/* BEREICH B: FACHKOMPETENZEN (Katalog, eigene Kompetenzen, Üben)             */}
       {/* ========================================================================= */}
-      <div id="profession-section-b-competencies" className="flex flex-col gap-3">
+      <div id="profession-section-b-competencies" className="flex flex-col gap-3 pt-5 border-t border-slate-800/80">
         {/* Header & Quick Action Buttons */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
@@ -767,9 +848,9 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {filteredCompetencies.map(comp => (
+            {filteredCompetencies.map((comp, compIdx) => (
               <CompetencyCard
-                key={comp.id}
+                key={comp.id ? `comp-card-${comp.id}-${compIdx}` : `comp-card-${compIdx}`}
                 competency={comp}
                 onUpdate={handleUpdateCompetency}
                 onPractice={handlePractice}

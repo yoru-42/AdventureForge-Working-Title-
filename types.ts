@@ -2253,6 +2253,7 @@ export interface Adventure {
   physicalChangeHistory?: PhysicalChangeHistoryEntry[];
   npcAppearanceMemory?: Record<string, NPCAppearanceObservation>;
   initialPlayer?: Character;
+  initialWorld?: WorldSetting;
   initialWorldTime?: WorldTime;
   initialStatusElements?: StatusElement[];
   initialStructuredInventory?: StructuredInventory;

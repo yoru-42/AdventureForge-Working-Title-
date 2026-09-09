@@ -16,6 +16,8 @@ import { formatDisplayLocationName } from '../utils/mapUtils';
 import { createOrganicIslandPoints } from './worldmap/worldMapData';
 import { formatPersonalityTraitsAsPrompt } from './PersonalityTraitsEditor';
 import { WorkManagementModal } from './WorkManagementModal';
+import { NavigationModal } from './NavigationModal';
+import { TradeModal } from './TradeModal';
 import { isClothingPlaceholder, isClothingItemTitle, consolidateLoreOutfits } from '../App';
 import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
@@ -223,6 +225,8 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   useEffect(() => {
     if (adventure) {
       const needsInitialPlayer = !adventure.initialPlayer;
+      const needsInitialWorld = !adventure.initialWorld;
+      const needsInitialWorldTime = !adventure.initialWorldTime;
       const needsInitialStatusElements = !adventure.initialStatusElements;
       const needsInitialStructuredInventory = !adventure.initialStructuredInventory && adventure.structuredInventory;
       const needsInitialLoreDatabase = !adventure.initialLoreDatabase;
@@ -239,11 +243,13 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         }
       }
 
-      if (needsInitialPlayer || needsInitialStatusElements || needsInitialStructuredInventory || needsInitialLoreDatabase || needsInitialNpcs || needsInitialInventory || playerMigrated) {
+      if (needsInitialPlayer || needsInitialWorld || needsInitialWorldTime || needsInitialStatusElements || needsInitialStructuredInventory || needsInitialLoreDatabase || needsInitialNpcs || needsInitialInventory || playerMigrated) {
         onUpdateAdventureRef.current({
           ...adventure,
           player: playerToUse,
           initialPlayer: adventure.initialPlayer || JSON.parse(JSON.stringify(playerToUse)),
+          initialWorld: adventure.initialWorld || JSON.parse(JSON.stringify(adventure.world)),
+          initialWorldTime: adventure.initialWorldTime || adventure.worldTime || { day: 1, hour: 8, minute: 0 },
           initialStatusElements: adventure.initialStatusElements || JSON.parse(JSON.stringify(adventure.statusElements || [])),
           initialStructuredInventory: adventure.initialStructuredInventory || (adventure.structuredInventory ? JSON.parse(JSON.stringify(adventure.structuredInventory)) : undefined),
           initialLoreDatabase: adventure.initialLoreDatabase || JSON.parse(JSON.stringify(adventure.loreDatabase || [])),
@@ -468,6 +474,8 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [showToneMenu, setShowToneMenu] = useState(false);
   const [showFavoritesMenu, setShowFavoritesMenu] = useState(false);
   const [showWorkMenu, setShowWorkMenu] = useState(false);
+  const [showNavigationModal, setShowNavigationModal] = useState(false);
+  const [showTradeModal, setShowTradeModal] = useState(false);
 
   const pendingWorkTasksCount = React.useMemo(() => {
     const holdings = adventure.world?.economyConfig?.holdings || [];
@@ -4906,12 +4914,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       const playerPowers = player.campaignPowerLevels ? Object.entries(player.campaignPowerLevels).map(([k, v]: any) => `${k} (Aktuell: ${v.value}, Potenzial: ${v.potentialMax})`).join(', ') : '';
       const playerPowerInstruction = playerPowers ? `\n      - Macht-Einstufungen: ${playerPowers}` : '';
 
-      const profileInfo = userProfile ? `
-      WICHTIGE INFO ÜBER DEN SPIELER (Wahren Kern des Helden):
-      - Reallife-Hintergrund: ${userProfile.bio}
-      - Bevorzugte Spielweise: Fokus auf seine Rolle als ${userProfile.preferredRole}.
-      Nutze diese Infos dezent, um die Geschichte auf den Spieler zuzuschneiden.` : "";
-
       const nsfwInstruction = world.isNsfw ? `
       NSFW-MODUS AKTIVIERT:
       - Diese Geschichte darf explizite, erwachsene Inhalte, Romantik und Gewalt enthalten.
@@ -5034,8 +5036,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       ${heroicInstruction}
       ${dramaInstruction}
 
-      ${profileInfo}
-
       ${formatPlayerForAIPrompt(player, getPlayerPhysicalStatusSummary(), getPlayerAbilitiesFormat(), playerPowerInstruction, getInventoryAndEquipmentSummary())}
 
       AKTUELLE WERTE: ${currentStatsStr}
@@ -5115,7 +5115,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       21. GEHEIMNISSE, VERBORGENES WISSEN & ABSICHTENISOLATION (3-STUFEN-LOGIK & KEINE HELLSEHEREI): // rule21_loc1
           // loc1_marker
           Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 ist eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden.
-          ABSICHTENISOLATION ZWISCHEN CHARAKTEREN: NPCs besitzen KEINERLEI Wissen über die geheimen Absichten, Pläne, Hintergedanken oder ungesagten Gefühle anderer Charaktere (sei es anderer NPCs oder des Spielers), solange diese nicht vor ihren Augen/Ohren im Chat explizit geäußert, gestanden oder durch offensichtliche Taten offenbart wurden. Erst wenn der Spieler das Geheimnis im Chat gesteht, oder wenn NPCs durch gesammelte Indizien im Chat eine unumstößliche, logische Schlussfolgerung im Hier und Jetzt ziehen, darf dieses Wissen enthüllt werden. Jedes Meta-Wissen-Bleeding ist strengstens verboten!
+          ABSICHTENISOLATION & ZUKÜNFTIGE PLÄNE ZWISCHEN CHARAKTEREN: Charaktere und NPCs besitzen KEINERLEI Wissen über zukünftige Absichten, Pläne, Vorhaben, geheime Ziele oder ungesagte Gedanken anderer Charaktere (sei es anderer NPCs oder des Spielers). Ein Charakter kann und darf von einer zukünftigen Absicht oder einem Plan AUSSCHLIESSLICH DANN wissen, wenn diese im Prolog oder beim Spielstart / in der Ersten Szene (oder im laufenden Chat) EXPLIZIT LAUT AUSGESPROCHEN wurde – UND AUCH NUR DANN, WENN DIESER CHARAKTER ZU DIESEM ZEITPUNKT WIRKLICH PHYSISCH ANWESEND WAR! Charaktere, die nicht persönlich anwesend waren, wissen absolut nichts von diesen Absichten und Plänen. Jedes Meta-Wissen-Bleeding, Gedankenlesen oder Hellsehen ist strengstens verboten! Erst wenn ein anwesender Charakter oder der Spieler das Vorhaben im Chat laut ausspricht oder gesteht, darf dieses Wissen bekannt werden.
       22. ABSOLUTES VERBOT DES VORZEITIGEN LORE-ENTHÜLLENS: Wenn ein Lore-Eintrag oder Fakt in der Lore-Datenbank mit '[STRENG GEHEIM:...]' markiert ist, darfst du diesen Fakt, Text oder Inhalt NIEMALS von dir aus im Chat erwähnen, andeuten, spoilern oder referenzieren! Er ist für die Spielfiguren und den Erzähler eine absolute Blackbox, bis der Spieler ihn selbst lüftet oder du ihn per [[LORE_UNLOCK: Name]] im Spielverlauf offiziell freischaltest. Halte dich penibel an dieses Verbot, um dem Spieler nicht die Spannung zu nehmen!
       23. ABSOLUTE UNANTASTBARKEIT BESTEHENDER BEZIEHUNGEN & VERHALTEN: Verändere oder überschreibe niemals Beziehungen ('relationships') oder das festgelegte Verhalten ('conduct', 'behavior') von bestehenden Charakteren. Alle vorgegebenen Beziehungs- und Verhaltensstrukturen sind fix und unveränderlich.
       24. INVENTAR- & AUSRÜSTUNGSUPDATES (SYNCHRONISATION ZUM CHAT - MANDATORY):
@@ -5161,21 +5161,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
           - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
           - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
           - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meiste Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
-      31. PERSPEKTIVISCHE WISSENSISOLATION BEI PROLOG, ERSTER SZENE & WELTBESCHREIBUNG (ÜBERRASCHUNGS- & REAKTIONS-PFLICHT):
+      31. PERSPEKTIVISCHE WISSENSISOLATION BEI PROLOG, ERSTER SZENE & WELTBESCHREIBUNG (ÜBERRASCHUNGS- & REAKTIONS-PFLICHT SOWIE ZUKÜNFTIGE ABSICHTEN & PLÄNE):
           - PROLOG & ERSTE SZENE ISOLATION FÜR NICHT-ANWESENDE CHARAKTERE: Charaktere/NPCs besitzen KEINERLEI Wissen über Geschehnisse, Vorfälle oder Verwandlungen aus der Weltenbeschreibung, dem Prolog oder der ersten Szene (Spielstart), bei denen sie selbst PHYSISCH NICHT ANWESEND waren!
+          - STRIKTE REGEL FÜR ZUKÜNFTIGE ABSICHTEN & PLÄNE: Charaktere können und dürfen von den zukünftigen Absichten, Plänen, Vorhaben oder geheimen Zielen des Spielers oder anderer Figuren NIEMALS etwas wissen, es sei denn, diese wurden im Prolog oder beim Spielstart / in der Ersten Szene EXPLIZIT LAUT GESAGT – UND AUCH NUR DANN, WENN DIESE CHARAKTERE WIRKLICH PHYSISCH ANWESEND WAREN! Nicht-anwesende Charaktere wissen absolut nichts davon und dürfen weder darauf anspielen noch danach handeln.
           - ÜBERRASCHUNG BEI NEU DAZU STOSSENDEN CHARAKTEREN: Wenn ein Charakter das erste Mal eine Szene/einen Raum betritt oder dem Spieler begegnet und der Spieler durch den Prolog, die erste Szene oder jüngste Vorfälle eine dauerhafte Verwandlung erfahren hat, ein verändertes Aussehen hat, verletzt ist, neue Gestalt besitzt oder ungewöhnliche Merkmale trägt, darf dieser dazustoßende Charakter KEINESFALLS so tun, als kenne er diesen Zustand bereits oder als sei er unbeeindruckt.
           - MANDATORISCHE REAKTION: Der dazustoßende Charakter MUSS glaubwürdig, überrascht, schockiert, erschrocken, verwirrt oder neugierig auf den vorgefundenen Zustand des Spielers reagieren (z. B. entgeistertes Anstarren, "Was ist mit dir geschehen?!", "Wer oder was bist du?!", Fragen nach der Ursache), anstatt die Veränderung stillschweigend hinzunehmen.
-          - NPCs erfahren von den Geschehnissen des Prologs oder der Verwandlung ERST DANN, wenn ihnen der Spieler oder ein Augenzeuge im Chat davon berichtet oder sie im Spielverlauf Beweise dafür finden.
-      32. ABSOLUTE NAMENS-PRIORITÄT & STRIKTES VERBOT ABWEICHENDER ODER ALTER NAMEN (VERBOT VON FANTASIENAMEN ODER VERALTETEN RESTE-NAMEN WIE 'YARA'):
+          - NPCs erfahren von den Geschehnissen des Prologs, von Plänen oder der Verwandlung ERST DANN, wenn ihnen der Spieler oder ein Augenzeuge im Chat davon berichtet oder sie im Spielverlauf Beweise dafür finden.
+      32. ABSOLUTE NAMENS-PRIORITÄT & STRIKTES VERBOT ABWEICHENDER ODER ALTER NAMEN:
           - Für die Anrede, Nennung und Referenzierung des Spielers sowie aller Charaktere/NPCs in Erzählungen, Dialogen, Gedanken und Systemanzeigen gelten AUSSCHLIESSLICH die im jeweiligen Charakterbogen definierten Felder:
             1) "Name des Charakters" (Echter bürgerlicher Name)
             2) "Rufname (Kampfanzeige)"
             3) "Spitzname / Titel / Alias"
             4) "Name der Transformation" (bei aktiver Transformation)
           - Diese vier Felder haben ABSOLUTE UND UNANFECHTBARE PRIORITÄT!
-          - Es ist der KI, dem Erzähler und allen NPCs STRENGSTENS VERBOTEN, den Spieler oder andere Figuren mit abweichenden, frei erfundenen oder aus alten Versionen/Prompts stammenden Namen (wie z. B. 'Yara' oder unbelegten Wörtern) anzusprechen, zu nennen oder zu beschreiben.
+          - Es ist der KI, dem Erzähler und allen NPCs STRENGSTENS VERBOTEN, den Spieler oder andere Figuren mit abweichenden, frei erfundenen oder aus alten Versionen stammenden Namen anzusprechen, zu nennen oder zu beschreiben.
           - Sollte in Alt-Texten, Weltbeschreibungen, Prolog-Überresten oder Lore-Einträgen ein abweichender Name auftauchen, der nicht mit den oben genannten vier Feldern übereinstimmt, MUSS die KI diesen sofort ignorieren und strikt durch den im Charakterbogen hinterlegten Namen/Rufnamen/Alias/Transformationsnamen ersetzen, um vollkommene Einheitlichkeit zu garantieren!
-          - DYNAMISCHE NAMENSGEBUNG BEI LEEREN TRANSFORMATIONSNAMEN: Sollten bei einer aktiven Verwandlungsform "Name der Transformation" oder "Rufname (Kampfanzeige)" LEER sein, gilt diese Form als UNBENANNT. In diesem Fall können der Spieler oder Charaktere/NPCs dieser Transformation im Laufe der Geschichte/Dialoge einen eigenen Namen geben!
+          - DYNAMISCHE NAMENSGEBUNG BEI LEEREN TRANSFORMATIONSNAMEN: Sollten bei einer aktiven Verwandlungsform "Name der Transformation" oder "Rufname (Kampfanzeige)" LEER sein, gilt diese Form als UNBENANNT. In diesem Fall können der Spieler oder Charaktere/NPCs dieser Transformation im Laufe der Geschichte/Dialoge situationsgerecht und passend zur Welt/Persönlichkeit einen originellen neuen Namen geben!
       33. LOGIK FÜR INHALTE VON KLEIDERSCHRÄNKEN & TRUHEN IN PRIVATEN RÄUMEN (KONTEXT- & GESCHLECHTSLOGIK DER GARDEROBE):
           - LOGIK UND HISTORIE DES RAUMBESITZERS: In privaten Räumen, Schlafzimmern, Truhen, Schränken oder Ankleiden (wie z. B. im eigenen Zimmer des Spielers oder eines NPCs) muss der vorgefundene Inhalt von Kleiderschränken und Truhen strikt der Identität, der Historie und dem ursprünglichen biologischen Geschlecht/Stand des jeweiligen Eigentümers entsprechen!
           - VERBOT UNBEGRÜNDETER KONTRAST-KLEIDUNG: War die Spielfigur oder der Raumbesitzer ein Mann (oder befindet man sich im Zimmer/Quartier eines Mannes), befinden sich in dessen Schrank oder Truhe NIEMALS unbegründet Frauenkleider, Mädchenkleider, Röcke, BHs oder Damenunterwäsche.
@@ -6629,6 +6630,10 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
     setQueuedCombatActions([]);
     setPendingCombatAction(null);
     setLoreNotifications([]);
+    setAiExtractedEnemies([]);
+    setSelectedPrepEnemyIds([]);
+    setSkillSummonCounts({});
+    setSelectedHudDetailField(null);
     
     // Restore status elements back to starting values
     const resetStatus = adventure.initialStatusElements 
@@ -6649,30 +6654,66 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       ? JSON.parse(JSON.stringify(adventure.initialInventory)) 
       : (adventure.inventory || []);
 
-    // Restore lore database (Codex) back to starting values
-    const resetLoreDatabase = adventure.initialLoreDatabase 
-      ? JSON.parse(JSON.stringify(adventure.initialLoreDatabase)) 
-      : (adventure.loreDatabase || []).filter((e: any) => !e.id?.startsWith('dyn-')).map((e: any) => ({
-          ...e,
-          isUnlocked: e.isUnlocked
-        }));
+    // Restore world back to starting values (clearing dynamic visited locations and world changes)
+    const resetWorld = adventure.initialWorld
+      ? JSON.parse(JSON.stringify(adventure.initialWorld))
+      : {
+          ...adventure.world,
+          dynamicWorldState: undefined,
+          encounterForces: undefined,
+          currentLocationId: adventure.world.startLocationId,
+          currentTerritoryId: undefined
+        };
+
+    // Restore lore database (Codex) back to starting values and reset event steps to pending
+    let resetLoreDatabase: any[] = [];
+    if (adventure.initialLoreDatabase) {
+      resetLoreDatabase = JSON.parse(JSON.stringify(adventure.initialLoreDatabase));
+    } else {
+      resetLoreDatabase = (adventure.loreDatabase || [])
+        .filter((e: any) => !e.id?.startsWith('dyn-'))
+        .map((e: any) => {
+          const clone = JSON.parse(JSON.stringify(e));
+          if (clone.details?.eventSteps) {
+            clone.details.eventSteps = clone.details.eventSteps.map((s: any) => ({
+              ...s,
+              status: 'pending'
+            }));
+          }
+          return clone;
+        });
+    }
 
     // Restore npcs back to starting values (removing dynamic npcs, reverting changes)
     const resetNpcs = adventure.initialNpcs 
       ? JSON.parse(JSON.stringify(adventure.initialNpcs)) 
       : (adventure.npcs || []).filter((n: any) => !n.id?.startsWith('dyn-'));
 
+    // Clear dynamic body changes and emotion states on player
+    resetPlayer.physicalChangeHistory = undefined;
+    resetPlayer.emotionState = undefined;
+    resetPlayer.temporaryConditions = [];
+
     onUpdateAdventure({ 
       ...adventureRef.current, 
       chatHistory: resetMsgs,
       player: resetPlayer,
+      world: resetWorld,
       npcs: resetNpcs,
       loreDatabase: resetLoreDatabase,
       inventory: resetInventory,
       statusElements: resetStatus,
       structuredInventory: resetStructuredInventory,
       combatState: undefined,
-      summaryLog: ""
+      summaryLog: "",
+      encounterForces: [],
+      dynamicWorldState: undefined,
+      emotionState: undefined,
+      physicalChangeHistory: [],
+      npcAppearanceMemory: {},
+      worldTime: adventure.initialWorldTime 
+        ? JSON.parse(JSON.stringify(adventure.initialWorldTime)) 
+        : { day: 1, hour: 8, minute: 0 }
     });
     
     setShowResetConfirm(false);
@@ -6951,12 +6992,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       const playerPowers = player.campaignPowerLevels ? Object.entries(player.campaignPowerLevels).map(([k, v]: any) => `${k} (Aktuell: ${v.value}, Potenzial: ${v.potentialMax})`).join(', ') : '';
       const playerPowerInstruction = playerPowers ? `\n      - Macht-Einstufungen: ${playerPowers}` : '';
 
-      const profileInfo = userProfile ? `
-      WICHTIGE INFO ÜBER DEN SPIELER (Wahren Kern des Helden):
-      - Reallife-Hintergrund: ${userProfile.bio}
-      - Bevorzugte Spielweise: Fokus auf seine Rolle als ${userProfile.preferredRole}.
-      Nutze diese Infos dezent, um die Geschichte auf den Spieler zuzuschneiden.` : "";
-
       const nsfwInstruction = world.isNsfw ? `
       NSFW-MODUS AKTIVIERT:
       - Diese Geschichte darf explizite, erwachsene Inhalte, Romantik und Gewalt enthalten.
@@ -7044,8 +7079,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       ${heroicInstruction}
       ${dramaInstruction}
 
-      ${profileInfo}
-
       ${formatPlayerForAIPrompt(player, getPlayerPhysicalStatusSummary(), getPlayerAbilitiesFormat(), playerPowerInstruction, getInventoryAndEquipmentSummary())}
 
       AKTUELLE WERTE: ${currentStatsStr}
@@ -7123,7 +7156,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       21. GEHEIMNISSE, VERBORGENES WISSEN & ABSICHTENISOLATION (3-STUFEN-LOGIK & KEINE HELLSEHEREI):
           // loc2_marker
           Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 is eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden.
-          ABSICHTENISOLATION ZWISCHEN CHARAKTEREN: NPCs besitzen KEINERLEI Wissen über die geheimen Absichten, Pläne, Hintergedanken oder ungesagten Gefühle anderer Charaktere (sei es anderer NPCs oder des Spielers), solange diese nicht vor ihren Augen/Ohren im Chat explizit geäußert, gestanden oder durch offensichtliche Taten offenbart wurden. Erst wenn der Spieler das Geheimnis im Chat gesteht, oder wenn NPCs durch gesammelte Indizien im Chat eine unumstößliche, logische Schlussfolgerung im Hier und Jetzt ziehen, darf dieses Wissen enthüllt werden. Jedes Meta-Wissen-Bleeding is strengstens verboten!
+          ABSICHTENISOLATION & ZUKÜNFTIGE PLÄNE ZWISCHEN CHARAKTEREN: Charaktere und NPCs besitzen KEINERLEI Wissen über zukünftige Absichten, Pläne, Vorhaben, geheime Ziele oder ungesagte Gedanken anderer Charaktere (sei es anderer NPCs oder des Spielers). Ein Charakter kann und darf von einer zukünftigen Absicht oder einem Plan AUSSCHLIESSLICH DANN wissen, wenn diese im Prolog oder beim Spielstart / in der Ersten Szene (oder im laufenden Chat) EXPLIZIT LAUT AUSGESPROCHEN wurde – UND AUCH NUR DANN, WENN DIESER CHARAKTER ZU DIESEM ZEITPUNKT WIRKLICH PHYSISCH ANWESEND WAR! Charaktere, die nicht persönlich anwesend waren, wissen absolut nichts von diesen Absichten und Plänen. Jedes Meta-Wissen-Bleeding, Gedankenlesen oder Hellsehen ist strengstens verboten! Erst wenn ein anwesender Charakter oder der Spieler das Vorhaben im Chat laut ausspricht oder gesteht, darf dieses Wissen bekannt werden.
       22. ABSOLUTES VERBOT DES VORZEITIGEN LORE-ENTHÜLLENS: Wenn ein Lore-Eintrag oder Fakt in der Lore-Datenbank mit '[STRENG GEHEIM:...]' markiert ist, darfst du diesen Fakt, Text oder Inhalt NIEMALS von dir aus im Chat erwähnen, andeuten, spoilern oder referenzieren! Er ist für die Spielfiguren und den Erzähler eine absolute Blackbox, bis der Spieler ihn selbst lüftet oder du ihn per [[LORE_UNLOCK: Name]] im Spielverlauf offiziell freischaltest. Halte dich penibel an dieses Verbot, um dem Spieler nicht die Spannung zu nehmen!
       23. ABSOLUTE UNANTASTBARKEIT BESTEHENDER BEZIEHUNGEN & VERHALTEN: Verändere oder überschreibe niemals Beziehungen ('relationships') oder das festgelegte Verhalten ('conduct', 'behavior') von bestehenden Charakteren. Alle vorgegebenen Beziehungs- und Verhaltensstrukturen sind fix und unveränderlich.
       24. INVENTAR- & AUSRÜSTUNGSUPDATES (SYNCHRONISATION ZUM CHAT - MANDATORY):
@@ -7169,21 +7202,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           - Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe.
           - Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
           - Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
-      31. PERSPEKTIVISCHE WISSENSISOLATION BEI PROLOG, ERSTER SZENE & WELTBESCHREIBUNG (ÜBERRASCHUNGS- & REAKTIONS-PFLICHT):
+      31. PERSPEKTIVISCHE WISSENSISOLATION BEI PROLOG, ERSTER SZENE & WELTBESCHREIBUNG (ÜBERRASCHUNGS- & REAKTIONS-PFLICHT SOWIE ZUKÜNFTIGE ABSICHTEN & PLÄNE):
           - PROLOG & ERSTE SZENE ISOLATION FÜR NICHT-ANWESENDE CHARAKTERE: Charaktere/NPCs besitzen KEINERLEI Wissen über Geschehnisse, Vorfälle oder Verwandlungen aus der Weltenbeschreibung, dem Prolog oder der ersten Szene (Spielstart), bei denen sie selbst PHYSISCH NICHT ANWESEND waren!
+          - STRIKTE REGEL FÜR ZUKÜNFTIGE ABSICHTEN & PLÄNE: Charaktere können und dürfen von den zukünftigen Absichten, Plänen, Vorhaben oder geheimen Zielen des Spielers oder anderer Figuren NIEMALS etwas wissen, es sei denn, diese wurden im Prolog oder beim Spielstart / in der Ersten Szene EXPLIZIT LAUT GESAGT – UND AUCH NUR DANN, WENN DIESE CHARAKTERE WIRKLICH PHYSISCH ANWESEND WAREN! Nicht-anwesende Charaktere wissen absolut nichts davon und dürfen weder darauf anspielen noch danach handeln.
           - ÜBERRASCHUNG BEI NEU DAZU STOSSENDEN CHARAKTEREN: Wenn ein Charakter das erste Mal eine Szene/einen Raum betritt oder dem Spieler begegnet und der Spieler durch den Prolog, die erste Szene oder jüngste Vorfälle eine dauerhafte Verwandlung erfahren hat, ein verändertes Aussehen hat, verletzt ist, neue Gestalt besitzt oder ungewöhnliche Merkmale trägt, darf dieser dazustoßende Charakter KEINESFALLS so tun, als kenne er diesen Zustand bereits oder als sei er unbeeindruckt.
           - MANDATORISCHE REAKTION: Der dazustoßende Charakter MUSS glaubwürdig, überrascht, schockiert, erschrocken, verwirrt oder neugierig auf den vorgefundenen Zustand des Spielers reagieren (z. B. entgeistertes Anstarren, "Was ist mit dir geschehen?!", "Wer oder was bist du?!", Fragen nach der Ursache), anstatt die Veränderung stillschweigend hinzunehmen.
-          - NPCs erfahren von den Geschehnissen des Prologs oder der Verwandlung ERST DANN, wenn ihnen der Spieler oder ein Augenzeuge im Chat davon berichtet oder sie im Spielverlauf Beweise dafür finden.
-      32. ABSOLUTE NAMENS-PRIORITÄT & STRIKTES VERBOT ABWEICHENDER ODER ALTER NAMEN (VERBOT VON FANTASIENAMEN ODER VERALTETEN RESTE-NAMEN WIE 'YARA'):
+          - NPCs erfahren von den Geschehnissen des Prologs, von Plänen oder der Verwandlung ERST DANN, wenn ihnen der Spieler oder ein Augenzeuge im Chat davon berichtet oder sie im Spielverlauf Beweise dafür finden.
+      32. ABSOLUTE NAMENS-PRIORITÄT & STRIKTES VERBOT ABWEICHENDER ODER ALTER NAMEN:
           - Für die Anrede, Nennung und Referenzierung des Spielers sowie aller Charaktere/NPCs in Erzählungen, Dialogen, Gedanken und Systemanzeigen gelten AUSSCHLIESSLICH die im jeweiligen Charakterbogen definierten Felder:
             1) "Name des Charakters" (Echter bürgerlicher Name)
             2) "Rufname (Kampfanzeige)"
             3) "Spitzname / Titel / Alias"
             4) "Name der Transformation" (bei aktiver Transformation)
           - Diese vier Felder haben ABSOLUTE UND UNANFECHTBARE PRIORITÄT!
-          - Es ist der KI, dem Erzähler und allen NPCs STRENGSTENS VERBOTEN, den Spieler oder andere Figuren mit abweichenden, frei erfundenen oder aus alten Versionen/Prompts stammenden Namen (wie z. B. 'Yara' oder unbelegten Wörtern) anzusprechen, zu nennen oder zu beschreiben.
+          - Es ist der KI, dem Erzähler und allen NPCs STRENGSTENS VERBOTEN, den Spieler oder andere Figuren mit abweichenden, frei erfundenen oder aus alten Versionen stammenden Namen anzusprechen, zu nennen oder zu beschreiben.
           - Sollte in Alt-Texten, Weltbeschreibungen, Prolog-Überresten oder Lore-Einträgen ein abweichender Name auftauchen, der nicht mit den oben genannten vier Feldern übereinstimmt, MUSS die KI diesen sofort ignorieren und strikt durch den im Charakterbogen hinterlegten Namen/Rufnamen/Alias/Transformationsnamen ersetzen, um vollkommene Einheitlichkeit zu garantieren!
-          - DYNAMISCHE NAMENSGEBUNG BEI LEEREN TRANSFORMATIONSNAMEN: Sollten bei einer aktiven Verwandlungsform "Name der Transformation" oder "Rufname (Kampfanzeige)" LEER sein, gilt diese Form als UNBENANNT. In diesem Fall können der Spieler oder Charaktere/NPCs dieser Transformation im Laufe der Geschichte/Dialoge einen eigenen Namen geben!
+          - DYNAMISCHE NAMENSGEBUNG BEI LEEREN TRANSFORMATIONSNAMEN: Sollten bei einer aktiven Verwandlungsform "Name der Transformation" oder "Rufname (Kampfanzeige)" LEER sein, gilt diese Form als UNBENANNT. In diesem Fall können der Spieler oder Charaktere/NPCs dieser Transformation im Laufe der Geschichte/Dialoge situationsgerecht und passend zur Welt/Persönlichkeit einen originellen neuen Namen geben!
       33. LOGIK FÜR INHALTE VON KLEIDERSCHRÄNKEN & TRUHEN IN PRIVATEN RÄUMEN (KONTEXT- & GESCHLECHTSLOGIK DER GARDEROBE):
           - LOGIK UND HISTORIE DES RAUMBESITZERS: In privaten Räumen, Schlafzimmern, Truhen, Schränken oder Ankleiden (wie z. B. im eigenen Zimmer des Spielers oder eines NPCs) muss der vorgefundene Inhalt von Kleiderschränken und Truhen strikt der Identität, der Historie und dem ursprünglichen biologischen Geschlecht/Stand des jeweiligen Eigentümers entsprechen!
           - VERBOT UNBEGRÜNDETER KONTRAST-KLEIDUNG: War die Spielfigur oder der Raumbesitzer ein Mann (oder befindet man sich im Zimmer/Quartier eines Mannes), befinden sich in dessen Schrank oder Truhe NIEMALS unbegründet Frauenkleider, Mädchenkleider, Röcke, BHs oder Damenunterwäsche.
@@ -8718,6 +8752,24 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               </div>
 
               <div className="w-px h-6 bg-slate-700 mx-1"></div>
+
+              <button
+                type="button"
+                onClick={() => setShowNavigationModal(true)}
+                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-teal-400 hover:bg-teal-950 hover:border-teal-500 hover:text-teal-300 transition-all flex items-center justify-center shadow-lg active:scale-95 group relative"
+                title="Navigation & Reiseziel"
+              >
+                <i className="fa-solid fa-compass group-hover:scale-110 transition-transform text-sm"></i>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowTradeModal(true)}
+                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-emerald-400 hover:bg-emerald-950 hover:border-emerald-500 hover:text-emerald-300 transition-all flex items-center justify-center shadow-lg active:scale-95 group relative"
+                title="Handel & Verträge"
+              >
+                <i className="fa-solid fa-handshake group-hover:scale-110 transition-transform text-sm"></i>
+              </button>
 
               <button
                 type="button"
@@ -11130,6 +11182,44 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         <WorkManagementModal
           isOpen={showWorkMenu}
           onClose={() => setShowWorkMenu(false)}
+          adventure={adventure}
+          onUpdateAdventure={onUpdateAdventure}
+          onSendChatMessage={(text: string) => {
+            if (isDialogueActive) {
+              handleSendDialogue(text);
+            } else {
+              handleSend(text);
+            }
+          }}
+          onSetInputText={(text: string) => {
+            setInputText(text);
+          }}
+        />
+      )}
+
+      {showNavigationModal && (
+        <NavigationModal
+          isOpen={showNavigationModal}
+          onClose={() => setShowNavigationModal(false)}
+          adventure={adventure}
+          onUpdateAdventure={onUpdateAdventure}
+          onSendChatMessage={(text: string) => {
+            if (isDialogueActive) {
+              handleSendDialogue(text);
+            } else {
+              handleSend(text);
+            }
+          }}
+          onSetInputText={(text: string) => {
+            setInputText(text);
+          }}
+        />
+      )}
+
+      {showTradeModal && (
+        <TradeModal
+          isOpen={showTradeModal}
+          onClose={() => setShowTradeModal(false)}
           adventure={adventure}
           onUpdateAdventure={onUpdateAdventure}
           onSendChatMessage={(text: string) => {

@@ -89,6 +89,19 @@ const GENDER_OPTIONS = ['Männlich', 'Weiblich', 'Divers', 'Nicht-Binär', 'Andr
 const BUILD_OPTIONS = ['Schlank', 'Sportlich', 'Muskulös', 'Kräftig', 'Zierlich', 'Drahtig', 'Kurvig', 'Stämmig', 'Hager', 'Unbekannt'];
 const CUP_SIZE_OPTIONS = ['-', 'AA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
 
+const TARGET_SECTIONS = [
+  { id: 'all', label: 'Kompletter Charakter (Alle Bereiche)' },
+  { id: 'appearance', label: 'Statur & Erscheinung' },
+  { id: 'personality', label: 'Persönlichkeit' },
+  { id: 'bio', label: 'Vergangenheit / Biografie' },
+  { id: 'situation', label: 'Aktuelle Situation' },
+  { id: 'motivation', label: 'Motivationskern & Handlungsantrieb' },
+  { id: 'secrets', label: 'Geheimnis-Stufen (Verborgenes Wissen)' },
+  { id: 'relationships', label: 'Beziehungen' },
+  { id: 'combat', label: 'Kampffähigkeiten & Techniken' },
+  { id: 'professions', label: 'Berufe & Talente' }
+];
+
 export const CharacterLoreForm: React.FC<Props> = ({
   editForm,
   setEditForm,
@@ -114,6 +127,90 @@ export const CharacterLoreForm: React.FC<Props> = ({
   const [smartFillText, setSmartFillText] = useState<string>('');
   const [isSmartFilling, setIsSmartFilling] = useState<boolean>(false);
   const [keepExistingDetails, setKeepExistingDetails] = useState<boolean>(true);
+  const [smartFillSelectedChar, setSmartFillSelectedChar] = useState<string>('new');
+  const [smartFillNewCharName, setSmartFillNewCharName] = useState<string>('');
+  const [smartFillTargetSection, setSmartFillTargetSection] = useState<string>('all');
+
+  const savedCharacters = useMemo(() => {
+    if (!lore || !Array.isArray(lore)) return [];
+    return lore.filter(item => (item.category === 'Charaktere' || item.category === 'Gegner') && item.title);
+  }, [lore]);
+
+  useEffect(() => {
+    if (isEditing) {
+      setSmartFillSelectedChar(isEditing);
+    } else if (editForm.title) {
+      setSmartFillSelectedChar('current');
+    } else {
+      setSmartFillSelectedChar('new');
+    }
+  }, [isEditing]);
+
+  const handleSelectCharacter = (val: string) => {
+    setSmartFillSelectedChar(val);
+    if (val === 'new') {
+      setIsEditing(null);
+      setEditForm({
+        category: 'Charaktere',
+        title: smartFillNewCharName || '',
+        details: {
+          appearance: {
+            gender: 'Unbekannt',
+            build: 'Schlank'
+          }
+        }
+      });
+    } else if (val === 'current') {
+      // Keep current form content as-is
+    } else if (val === 'player') {
+      const playerEntry = lore.find(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.title?.trim().toLowerCase() === playerName?.trim().toLowerCase());
+      if (playerEntry) {
+        setEditForm(JSON.parse(JSON.stringify(playerEntry)));
+        setIsEditing(playerEntry.id);
+      } else if (playerName) {
+        setIsEditing(null);
+        setEditForm({
+          category: 'Charaktere',
+          title: playerName,
+          details: {
+            role: 'Spieler / Protagonist',
+            appearance: { gender: 'Unbekannt', build: 'Schlank' }
+          }
+        });
+      }
+    } else {
+      const found = lore.find(l => l.id === val);
+      if (found) {
+        setEditForm(JSON.parse(JSON.stringify(found)));
+        setIsEditing(found.id);
+      }
+    }
+  };
+
+  const getSmartFillPlaceholder = () => {
+    switch (smartFillTargetSection) {
+      case 'appearance':
+        return 'Beschreibe Statur, Größe, Körperform, Haare, Augen, Rassemerkmale, Kleidung und das visuelle Erscheinungsbild...';
+      case 'personality':
+        return 'Beschreibe Wesenszüge, Temperament, Werte, Macken, Ängste, Vorlieben und den Charakter-Archetyp...';
+      case 'bio':
+        return 'Beschreibe Herkunft, Kindheit, wichtige Erlebnisse und die persönliche Vorgeschichte...';
+      case 'situation':
+        return 'Beschreibe den aktuellen Aufenthaltsort, die gegenwärtige Lebenslage, soziale Stellung und laufende Aufgaben...';
+      case 'motivation':
+        return 'Beschreibe den Motivationskern, das Hauptziel, innere Antriebe, Ideale, Schwüre und persönliche Werte...';
+      case 'secrets':
+        return 'Beschreibe Gerüchte (Stufe 1), Indizien (Stufe 2) und das verborgene Wissen (Stufe 3)...';
+      case 'relationships':
+        return 'Beschreibe Verbündete, Rivalen, Familie, Vorgesetzte, Vertraute und das Verhalten gegenüber anderen...';
+      case 'combat':
+        return 'Beschreibe Kräfte, Magie- oder Kampffähigkeiten, Spezialtechniken, Kraftquellen und Verwandlungsformen...';
+      case 'professions':
+        return 'Beschreibe Berufe, Handwerkskünste, Ränge, Fachwissen und alltägliche Talente...';
+      default:
+        return 'Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus.';
+    }
+  };
   
   const [isGeneratingChar, setIsGeneratingChar] = useState<boolean>(false);
   const [isGeneratingMotivationCore, setIsGeneratingMotivationCore] = useState<boolean>(false);
@@ -391,7 +488,11 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
   // AI Generation Handlers
   const handleSmartFill = async () => {
-    if (!smartFillText.trim()) return;
+    const promptText = smartFillSelectedChar === 'new' && smartFillNewCharName.trim()
+      ? (smartFillText.trim() ? `Charakter: ${smartFillNewCharName.trim()}\n\n${smartFillText.trim()}` : `Erstelle den Charakter: ${smartFillNewCharName.trim()}`)
+      : (smartFillText.trim() || `Vervollständige und verfeinere die Daten für den Charakter "${editForm.title || 'Charakter'}".`);
+
+    if (!promptText.trim()) return;
     setIsSmartFilling(true);
     try {
       const existingFactions = lore
@@ -413,7 +514,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
           relationships: l.details?.relationships || []
         }));
 
-      const existingCharForMerge = keepExistingDetails ? {
+      const existingCharForMerge = (keepExistingDetails || smartFillTargetSection !== 'all') ? {
         name: editForm.title || '',
         role: editForm.details?.role || '',
         bio: editForm.description || '',
@@ -447,20 +548,27 @@ export const CharacterLoreForm: React.FC<Props> = ({
       } as any : undefined;
 
       const data = await GeminiService.autofillCharacter(
-        smartFillText,
+        promptText,
         worldPowerSettings,
         existingCharForMerge,
         world,
         existingFactions,
-        existingCodexCharacters
+        existingCodexCharacters,
+        smartFillTargetSection
       );
 
       if (data) {
         setEditForm(prev => {
           const currentDetails = prev.details || {};
           const generatedName = (data.name?.trim()) || (data.callName?.trim()) || (data.rufName?.trim()) || '';
-          const finalTitle = keepExistingDetails && prev.title ? prev.title : (generatedName || (prev.title && prev.title.length < 50 ? prev.title : 'Neuer Charakter'));
-          const finalBio = keepExistingDetails && prev.description ? prev.description : (data.bio || '');
+          let finalTitle = prev.title || 'Neuer Charakter';
+          if (smartFillSelectedChar === 'new') {
+            finalTitle = smartFillNewCharName.trim() || generatedName || (prev.title && prev.title.length < 50 ? prev.title : 'Neuer Charakter');
+          } else if (!keepExistingDetails && generatedName && smartFillTargetSection === 'all') {
+            finalTitle = generatedName;
+          }
+
+          const finalBio = (keepExistingDetails || smartFillTargetSection !== 'all') && prev.description ? prev.description : (data.bio || '');
           const finalArchetype = data.personalityArchetype || data.archetype || (keepExistingDetails ? (currentDetails.personalityArchetype || currentDetails.archetype || '') : '');
           const rawTraits = data.personalityTraits || (keepExistingDetails ? currentDetails.personalityTraits : undefined);
           const finalTraits = finalArchetype && finalArchetype !== '-' ? applyArchetypeToTraits(rawTraits, finalArchetype) : (rawTraits || {});
@@ -477,44 +585,44 @@ export const CharacterLoreForm: React.FC<Props> = ({
                 name: abil.name || 'Fähigkeit',
                 category: cat,
                 source: abil.source || data.powerSource || '',
-              cost: abil.cost || data.powerCost || '',
-              description: abil.description || abil.skills || '',
-              techniques: abil.techniques || (abil.techniqueList ? abil.techniqueList.map((t: any) => t.name).join(', ') : ''),
-              activationCondition: abil.activationCondition || '',
-              transformName: abil.transformName || '',
-              transformRole: abil.transformRole || '',
-              transformGender: abil.transformGender || '',
-              transformCupSize: abil.transformCupSize || '',
-              transformHairColor: abil.transformHairColor || '',
-              transformEyeColor: abil.transformEyeColor || '',
-              transformHasHeterochromia: abil.transformHasHeterochromia ?? false,
-              transformEyeColorLeft: abil.transformEyeColorLeft || '',
-              transformEyeColorRight: abil.transformEyeColorRight || '',
-              transformSkinTone: abil.transformSkinTone || '',
-              transformBuild: abil.transformBuild || '',
-              transformAge: abil.transformAge || '',
-              transformRace: abil.transformRace || '',
-              transformRaceFeatures: abil.transformRaceFeatures || '',
-              transformHeight: abil.transformHeight || '',
-              transformMeasurements: abil.transformMeasurements || '',
-              transformOrigin: abil.transformOrigin || '',
-              transformFamily: abil.transformFamily || '',
-              transformFaction: abil.transformFaction || '',
-              transformOutfit: abil.transformOutfit || '',
-              transformLooks: abil.transformLooks || '',
-              transformWings: !!abil.transformWings,
-              transformHorns: !!abil.transformHorns,
-              techniqueList: (abil.techniqueList && Array.isArray(abil.techniqueList))
-                ? abil.techniqueList.map((t: any, index: number) => ({
-                    id: `${Date.now()}-${aIndex}-${index}-${Math.random().toString(36).substr(2, 3)}`,
-                    name: t.name,
-                    description: t.description || '',
-                    type: t.type || 'Angriff',
-                    subtype: t.subtype || ''
-                  }))
-                : []
-            };
-          });
+                cost: abil.cost || data.powerCost || '',
+                description: abil.description || abil.skills || '',
+                techniques: abil.techniques || (abil.techniqueList ? abil.techniqueList.map((t: any) => t.name).join(', ') : ''),
+                activationCondition: abil.activationCondition || '',
+                transformName: abil.transformName || '',
+                transformRole: abil.transformRole || '',
+                transformGender: abil.transformGender || '',
+                transformCupSize: abil.transformCupSize || '',
+                transformHairColor: abil.transformHairColor || '',
+                transformEyeColor: abil.transformEyeColor || '',
+                transformHasHeterochromia: abil.transformHasHeterochromia ?? false,
+                transformEyeColorLeft: abil.transformEyeColorLeft || '',
+                transformEyeColorRight: abil.transformEyeColorRight || '',
+                transformSkinTone: abil.transformSkinTone || '',
+                transformBuild: abil.transformBuild || '',
+                transformAge: abil.transformAge || '',
+                transformRace: abil.transformRace || '',
+                transformRaceFeatures: abil.transformRaceFeatures || '',
+                transformHeight: abil.transformHeight || '',
+                transformMeasurements: abil.transformMeasurements || '',
+                transformOrigin: abil.transformOrigin || '',
+                transformFamily: abil.transformFamily || '',
+                transformFaction: abil.transformFaction || '',
+                transformOutfit: abil.transformOutfit || '',
+                transformLooks: abil.transformLooks || '',
+                transformWings: !!abil.transformWings,
+                transformHorns: !!abil.transformHorns,
+                techniqueList: (abil.techniqueList && Array.isArray(abil.techniqueList))
+                  ? abil.techniqueList.map((t: any, index: number) => ({
+                      id: `${Date.now()}-${aIndex}-${index}-${Math.random().toString(36).substr(2, 3)}`,
+                      name: t.name,
+                      description: t.description || '',
+                      type: t.type || 'Angriff',
+                      subtype: t.subtype || ''
+                    }))
+                  : []
+              };
+            });
 
             if (keepExistingDetails && currentDetails.abilities && currentDetails.abilities.length > 0) {
               generatedAbilities = [...currentDetails.abilities, ...mappedAbilities];
@@ -531,120 +639,221 @@ export const CharacterLoreForm: React.FC<Props> = ({
           const finalRole = data.role || data.profession || currentDetails.role || currentDetails.profession || '';
           const finalProfession = data.profession || data.role || currentDetails.profession || currentDetails.role || '';
 
-          const newDetails = keepExistingDetails ? {
-            ...currentDetails,
-            callName: generatedName || currentDetails.callName || finalTitle,
-            nickname: data.nickname || currentDetails.nickname || '',
-            rufName: data.rufName || currentDetails.rufName || generatedName || '',
-            role: finalRole,
-            profession: finalProfession || finalRole,
-            professionLevel: data.professionLevel || currentDetails.professionLevel || '',
-            secondaryProfessions: data.secondaryProfessions || currentDetails.secondaryProfessions || [],
-            jobTitle: data.jobTitle || currentDetails.jobTitle || '',
-            professionDescription: data.professionDescription || currentDetails.professionDescription || '',
-            craftingSkills: data.craftingSkills || currentDetails.craftingSkills || '',
-            talents: data.talents || currentDetails.talents || '',
-            everydaySkills: data.everydaySkills || currentDetails.everydaySkills || '',
-            gender: data.appearance?.gender || currentDetails.gender || 'Unbekannt',
-            age: data.appearance?.age || currentDetails.age || '',
-            build: data.appearance?.build || currentDetails.build || '',
-            race: data.appearance?.race || currentDetails.race || 'Mensch',
-            raceFeatures: data.appearance?.raceFeatures || currentDetails.raceFeatures || 'keine',
-            hairColor: data.appearance?.hairColor || currentDetails.hairColor || '',
-            eyeColor: data.appearance?.eyeColor || currentDetails.eyeColor || '',
-            cupSize: data.appearance?.cupSize || currentDetails.cupSize || '-',
-            height: data.appearance?.height || currentDetails.height || '',
-            measurements: data.appearance?.measurements || currentDetails.measurements || '',
-            origin: data.appearance?.origin || currentDetails.origin || '',
-            family: data.appearance?.family || currentDetails.family || '',
-            faction: data.appearance?.faction || currentDetails.faction || '',
-            outfit: data.appearance?.outfit || currentDetails.outfit || '',
-            looks: data.appearance?.looks || currentDetails.looks || '',
-            personality: data.personality || currentDetails.personality || '',
-            personalityArchetype: finalArchetype,
-            archetype: finalArchetype,
-            personalityTraits: finalTraits,
-            bio: finalBio,
-            goal: data.goal || currentDetails.goal || '',
-            motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
-            currentSituation: data.currentSituation || currentDetails.currentSituation || '',
-            relationship: data.relationship || currentDetails.relationship || '',
-            conduct: data.conduct || currentDetails.conduct || '',
-            skills: data.skills || currentDetails.skills || '',
-            powerSource: data.powerSource || currentDetails.powerSource || '',
-            powerCost: data.powerCost || currentDetails.powerCost || '',
-            techniques: data.techniques || currentDetails.techniques || '',
-            abilities: generatedAbilities,
-            relationships: data.relationships || currentDetails.relationships || [],
-            campaignPowerLevels: data.campaignPowerLevels || currentDetails.campaignPowerLevels || {},
-            secretsStage1: nextSecrets1,
-            secretsStage2: nextSecrets2,
-            secretsStage3: nextSecrets3,
-            knowledge: nextKnowledge
-          } : {
-            callName: generatedName || finalTitle,
-            nickname: data.nickname || '',
-            rufName: data.rufName || data.nickname || generatedName || '',
-            role: data.role || data.profession || '',
-            profession: data.profession || data.role || '',
-            professionLevel: data.professionLevel || '',
-            secondaryProfessions: data.secondaryProfessions || [],
-            jobTitle: data.jobTitle || '',
-            professionDescription: data.professionDescription || '',
-            craftingSkills: data.craftingSkills || '',
-            talents: data.talents || '',
-            everydaySkills: data.everydaySkills || '',
-            gender: data.appearance?.gender || 'Unbekannt',
-            age: data.appearance?.age || '',
-            build: data.appearance?.build || '',
-            race: data.appearance?.race || 'Mensch',
-            raceFeatures: data.appearance?.raceFeatures || 'keine',
-            hairColor: data.appearance?.hairColor || '',
-            eyeColor: data.appearance?.eyeColor || '',
-            cupSize: data.appearance?.cupSize || '-',
-            height: data.appearance?.height || '',
-            measurements: data.appearance?.measurements || '',
-            origin: data.appearance?.origin || '',
-            family: data.appearance?.family || '',
-            faction: data.appearance?.faction || '',
-            outfit: data.appearance?.outfit || '',
-            looks: data.appearance?.looks || '',
-            personality: data.personality || '',
-            personalityArchetype: finalArchetype,
-            archetype: finalArchetype,
-            personalityTraits: finalTraits,
-            bio: finalBio,
-            goal: data.goal || '',
-            motivationCore: data.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
-            currentSituation: data.currentSituation || '',
-            relationship: data.relationship || '',
-            conduct: data.conduct || '',
-            skills: data.skills || '',
-            powerSource: data.powerSource || '',
-            powerCost: data.powerCost || '',
-            techniques: data.techniques || '',
-            abilities: generatedAbilities,
-            relationships: data.relationships || [],
-            campaignPowerLevels: data.campaignPowerLevels || {},
-            powerSources: (data.powerSource || data.powerCost)
-              ? [{ id: `${Date.now()}-ps-0`, name: data.powerSource || 'Hauptkraft', source: data.powerSource || '', cost: data.powerCost || '', powerName: data.powerSource || '' }]
-              : [],
-            inventory: data.inventory || [],
-            secretsStage1: nextSecrets1,
-            secretsStage2: nextSecrets2,
-            secretsStage3: nextSecrets3,
-            knowledge: nextKnowledge,
-            expressions: {}
-          };
+          let newDetails: any = { ...currentDetails };
+
+          if (smartFillTargetSection === 'appearance') {
+            newDetails = {
+              ...currentDetails,
+              gender: data.appearance?.gender || currentDetails.gender || 'Unbekannt',
+              age: data.appearance?.age || currentDetails.age || '',
+              build: data.appearance?.build || currentDetails.build || '',
+              race: data.appearance?.race || currentDetails.race || 'Mensch',
+              raceFeatures: data.appearance?.raceFeatures || currentDetails.raceFeatures || 'keine',
+              hairColor: data.appearance?.hairColor || currentDetails.hairColor || '',
+              eyeColor: data.appearance?.eyeColor || currentDetails.eyeColor || '',
+              cupSize: data.appearance?.cupSize || currentDetails.cupSize || '-',
+              height: data.appearance?.height || currentDetails.height || '',
+              measurements: data.appearance?.measurements || currentDetails.measurements || '',
+              outfit: data.appearance?.outfit || currentDetails.outfit || '',
+              looks: data.appearance?.looks || currentDetails.looks || '',
+              appearance: {
+                ...(currentDetails.appearance || {}),
+                ...(data.appearance || {})
+              },
+              abilities: data.abilities?.some((a: any) => a.category === 'Transformationen')
+                ? generatedAbilities
+                : (currentDetails.abilities || [])
+            };
+            setCharTab('profil');
+          } else if (smartFillTargetSection === 'personality') {
+            newDetails = {
+              ...currentDetails,
+              personality: data.personality || currentDetails.personality || '',
+              personalityArchetype: finalArchetype,
+              archetype: finalArchetype,
+              personalityTraits: finalTraits
+            };
+            setCharTab('profil');
+          } else if (smartFillTargetSection === 'bio') {
+            newDetails = {
+              ...currentDetails,
+              bio: data.bio || prev.description || currentDetails.bio || '',
+              origin: data.appearance?.origin || data.origin || currentDetails.origin || '',
+              family: data.appearance?.family || data.family || currentDetails.family || ''
+            };
+            setCharTab('profil');
+          } else if (smartFillTargetSection === 'situation') {
+            newDetails = {
+              ...currentDetails,
+              currentSituation: data.currentSituation || currentDetails.currentSituation || ''
+            };
+            setCharTab('profil');
+          } else if (smartFillTargetSection === 'motivation') {
+            newDetails = {
+              ...currentDetails,
+              goal: data.goal || currentDetails.goal || '',
+              motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined)
+            };
+            setCharTab('profil');
+          } else if (smartFillTargetSection === 'secrets') {
+            newDetails = {
+              ...currentDetails,
+              secretsStage1: nextSecrets1,
+              secretsStage2: nextSecrets2,
+              secretsStage3: nextSecrets3,
+              knowledge: nextKnowledge
+            };
+            setCharTab('profil');
+          } else if (smartFillTargetSection === 'relationships') {
+            newDetails = {
+              ...currentDetails,
+              relationship: data.relationship || currentDetails.relationship || '',
+              conduct: data.conduct || currentDetails.conduct || '',
+              relationships: data.relationships || currentDetails.relationships || []
+            };
+            setCharTab('beziehungen');
+          } else if (smartFillTargetSection === 'combat') {
+            newDetails = {
+              ...currentDetails,
+              skills: data.skills || currentDetails.skills || '',
+              powerSource: data.powerSource || currentDetails.powerSource || '',
+              powerCost: data.powerCost || currentDetails.powerCost || '',
+              techniques: data.techniques || currentDetails.techniques || '',
+              abilities: generatedAbilities,
+              campaignPowerLevels: data.campaignPowerLevels || currentDetails.campaignPowerLevels || {}
+            };
+            setCharTab('kampffaehigkeiten');
+          } else if (smartFillTargetSection === 'professions') {
+            newDetails = {
+              ...currentDetails,
+              role: finalRole,
+              profession: finalProfession || finalRole,
+              professionLevel: data.professionLevel || currentDetails.professionLevel || '',
+              secondaryProfessions: data.secondaryProfessions || currentDetails.secondaryProfessions || [],
+              jobTitle: data.jobTitle || currentDetails.jobTitle || '',
+              professionDescription: data.professionDescription || currentDetails.professionDescription || '',
+              craftingSkills: data.craftingSkills || currentDetails.craftingSkills || '',
+              talents: data.talents || currentDetails.talents || '',
+              everydaySkills: data.everydaySkills || currentDetails.everydaySkills || ''
+            };
+            setCharTab('beruf_talente');
+          } else {
+            // 'all'
+            newDetails = keepExistingDetails ? {
+              ...currentDetails,
+              callName: generatedName || currentDetails.callName || finalTitle,
+              nickname: data.nickname || currentDetails.nickname || '',
+              rufName: data.rufName || currentDetails.rufName || generatedName || '',
+              role: finalRole,
+              profession: finalProfession || finalRole,
+              professionLevel: data.professionLevel || currentDetails.professionLevel || '',
+              secondaryProfessions: data.secondaryProfessions || currentDetails.secondaryProfessions || [],
+              jobTitle: data.jobTitle || currentDetails.jobTitle || '',
+              professionDescription: data.professionDescription || currentDetails.professionDescription || '',
+              craftingSkills: data.craftingSkills || currentDetails.craftingSkills || '',
+              talents: data.talents || currentDetails.talents || '',
+              everydaySkills: data.everydaySkills || currentDetails.everydaySkills || '',
+              gender: data.appearance?.gender || currentDetails.gender || 'Unbekannt',
+              age: data.appearance?.age || currentDetails.age || '',
+              build: data.appearance?.build || currentDetails.build || '',
+              race: data.appearance?.race || currentDetails.race || 'Mensch',
+              raceFeatures: data.appearance?.raceFeatures || currentDetails.raceFeatures || 'keine',
+              hairColor: data.appearance?.hairColor || currentDetails.hairColor || '',
+              eyeColor: data.appearance?.eyeColor || currentDetails.eyeColor || '',
+              cupSize: data.appearance?.cupSize || currentDetails.cupSize || '-',
+              height: data.appearance?.height || currentDetails.height || '',
+              measurements: data.appearance?.measurements || currentDetails.measurements || '',
+              origin: data.appearance?.origin || currentDetails.origin || '',
+              family: data.appearance?.family || currentDetails.family || '',
+              faction: data.appearance?.faction || currentDetails.faction || '',
+              outfit: data.appearance?.outfit || currentDetails.outfit || '',
+              looks: data.appearance?.looks || currentDetails.looks || '',
+              personality: data.personality || currentDetails.personality || '',
+              personalityArchetype: finalArchetype,
+              archetype: finalArchetype,
+              personalityTraits: finalTraits,
+              bio: finalBio,
+              goal: data.goal || currentDetails.goal || '',
+              motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
+              currentSituation: data.currentSituation || currentDetails.currentSituation || '',
+              relationship: data.relationship || currentDetails.relationship || '',
+              conduct: data.conduct || currentDetails.conduct || '',
+              skills: data.skills || currentDetails.skills || '',
+              powerSource: data.powerSource || currentDetails.powerSource || '',
+              powerCost: data.powerCost || currentDetails.powerCost || '',
+              techniques: data.techniques || currentDetails.techniques || '',
+              abilities: generatedAbilities,
+              relationships: data.relationships || currentDetails.relationships || [],
+              campaignPowerLevels: data.campaignPowerLevels || currentDetails.campaignPowerLevels || {},
+              secretsStage1: nextSecrets1,
+              secretsStage2: nextSecrets2,
+              secretsStage3: nextSecrets3,
+              knowledge: nextKnowledge
+            } : {
+              callName: generatedName || finalTitle,
+              nickname: data.nickname || '',
+              rufName: data.rufName || data.nickname || generatedName || '',
+              role: data.role || data.profession || '',
+              profession: data.profession || data.role || '',
+              professionLevel: data.professionLevel || '',
+              secondaryProfessions: data.secondaryProfessions || [],
+              jobTitle: data.jobTitle || '',
+              professionDescription: data.professionDescription || '',
+              craftingSkills: data.craftingSkills || '',
+              talents: data.talents || '',
+              everydaySkills: data.everydaySkills || '',
+              gender: data.appearance?.gender || 'Unbekannt',
+              age: data.appearance?.age || '',
+              build: data.appearance?.build || '',
+              race: data.appearance?.race || 'Mensch',
+              raceFeatures: data.appearance?.raceFeatures || 'keine',
+              hairColor: data.appearance?.hairColor || '',
+              eyeColor: data.appearance?.eyeColor || '',
+              cupSize: data.appearance?.cupSize || '-',
+              height: data.appearance?.height || '',
+              measurements: data.appearance?.measurements || '',
+              origin: data.appearance?.origin || '',
+              family: data.appearance?.family || '',
+              faction: data.appearance?.faction || '',
+              outfit: data.appearance?.outfit || '',
+              looks: data.appearance?.looks || '',
+              personality: data.personality || '',
+              personalityArchetype: finalArchetype,
+              archetype: finalArchetype,
+              personalityTraits: finalTraits,
+              bio: finalBio,
+              goal: data.goal || '',
+              motivationCore: data.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
+              currentSituation: data.currentSituation || '',
+              relationship: data.relationship || '',
+              conduct: data.conduct || '',
+              skills: data.skills || '',
+              powerSource: data.powerSource || '',
+              powerCost: data.powerCost || '',
+              techniques: data.techniques || '',
+              abilities: generatedAbilities,
+              relationships: data.relationships || [],
+              campaignPowerLevels: data.campaignPowerLevels || {},
+              powerSources: (data.powerSource || data.powerCost)
+                ? [{ id: `${Date.now()}-ps-0`, name: data.powerSource || 'Hauptkraft', source: data.powerSource || '', cost: data.powerCost || '', powerName: data.powerSource || '' }]
+                : [],
+              inventory: data.inventory || [],
+              secretsStage1: nextSecrets1,
+              secretsStage2: nextSecrets2,
+              secretsStage3: nextSecrets3,
+              knowledge: nextKnowledge,
+              expressions: {}
+            };
+          }
 
           return {
             ...prev,
             title: finalTitle,
-            description: finalBio,
-            secretsStage1: nextSecrets1,
-            secretsStage2: nextSecrets2,
-            secretsStage3: nextSecrets3,
-            knowledge: nextKnowledge,
+            description: (smartFillTargetSection === 'all' || smartFillTargetSection === 'bio') ? (data.bio || finalBio) : (prev.description || finalBio),
+            secretsStage1: (smartFillTargetSection === 'all' || smartFillTargetSection === 'secrets') ? nextSecrets1 : (prev.secretsStage1 || nextSecrets1),
+            secretsStage2: (smartFillTargetSection === 'all' || smartFillTargetSection === 'secrets') ? nextSecrets2 : (prev.secretsStage2 || nextSecrets2),
+            secretsStage3: (smartFillTargetSection === 'all' || smartFillTargetSection === 'secrets') ? nextSecrets3 : (prev.secretsStage3 || nextSecrets3),
+            knowledge: (smartFillTargetSection === 'all' || smartFillTargetSection === 'secrets') ? nextKnowledge : (prev.knowledge || nextKnowledge),
             details: newDetails
           };
         });
@@ -968,7 +1177,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
           <button 
             type="button"
             onClick={handleSmartFill}
-            disabled={isSmartFilling || !smartFillText.trim()}
+            disabled={isSmartFilling || (!smartFillText.trim() && !smartFillNewCharName.trim() && !editForm.title?.trim())}
             className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shrink-0"
           >
             <i className={`fa-solid ${isSmartFilling ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
@@ -976,9 +1185,78 @@ export const CharacterLoreForm: React.FC<Props> = ({
           </button>
         </div>
 
+        {/* 2 Eingabefeld-Menüs im exakten Stil von Geschlecht / Statur */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
+              Charakter
+            </label>
+            <select
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-indigo-500"
+              value={smartFillSelectedChar}
+              onChange={e => handleSelectCharacter(e.target.value)}
+            >
+              <option value="new">Neuer Charakter (Freitext)</option>
+              {isEditing && editForm.title && (
+                <option value="current">Aktueller Eintrag: {editForm.title}</option>
+              )}
+              {savedCharacters.length > 0 && (
+                <optgroup label="Gespeicherte Charaktere">
+                  {savedCharacters.map(char => (
+                    <option key={char.id} value={char.id}>
+                      {char.title}{char.details?.role ? ` (${char.details.role})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {playerName && !savedCharacters.some(c => c.title?.toLowerCase() === playerName.toLowerCase()) && (
+                <option value="player">Spieler: {playerName}</option>
+              )}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
+              Zu bearbeitender Bereich
+            </label>
+            <select
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-indigo-500"
+              value={smartFillTargetSection}
+              onChange={e => setSmartFillTargetSection(e.target.value)}
+            >
+              {TARGET_SECTIONS.map(sec => (
+                <option key={sec.id} value={sec.id}>
+                  {sec.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Freitext-Eingabefeld für neuen Charakter */}
+        {smartFillSelectedChar === 'new' && (
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
+              Name / Freitext (Neuer Charakter)
+            </label>
+            <AutoExpandingTextarea
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-indigo-500"
+              placeholder="Name oder Kurzbeschreibung des neuen Charakters eingeben..."
+              value={smartFillNewCharName}
+              onChange={e => {
+                const val = e.target.value;
+                setSmartFillNewCharName(val);
+                if (!isEditing) {
+                  setEditForm(prev => ({ ...prev, title: val }));
+                }
+              }}
+            />
+          </div>
+        )}
+
         <AutoExpandingTextarea 
           className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
-          placeholder="Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus." 
+          placeholder={getSmartFillPlaceholder()} 
           value={smartFillText} 
           onChange={e => setSmartFillText(e.target.value)} 
         />

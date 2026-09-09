@@ -361,6 +361,8 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
             onCompetenciesChange={comps => {
               if (onProfessionCompetenciesChange) onProfessionCompetenciesChange(comps);
             }}
+            secondaryProfessions={secondaryProfessions}
+            onSecondaryProfessionsChange={onSecondaryProfessionsChange}
             onProficiencyScoreChange={onProfessionProficiencyScoreChange}
             onExperiencePointsChange={onProfessionExperiencePointsChange}
             onPromotionConditionsChange={onProfessionPromotionConditionsChange}

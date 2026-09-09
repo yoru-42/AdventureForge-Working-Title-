@@ -87,21 +87,21 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
     'gemini-3.8-flash',
-    'gemini-flash-latest',
     'gemini-3.1-flash-lite',
-    'gemini-3.1-pro-preview'
+    'gemini-2.5-flash',
+    'gemini-flash-latest'
   ];
   
-  // Map legacy, deprecated, or alias model requests to gemini-3.8-flash for optimal stability
-  const preferFlash38 = !requestedModel || 
-    requestedModel.includes('2.5') ||
+  // Map legacy, deprecated, or alias model requests to stable modern models
+  let targetModel = requestedModel;
+  if (!requestedModel || 
     requestedModel.includes('2.0') ||
     requestedModel.includes('1.5') ||
     requestedModel === 'gemini-pro' ||
-    requestedModel === 'gemini-flash-latest' || 
-    requestedModel === 'gemini-3.8-flash';
-
-  const targetModel = preferFlash38 ? 'gemini-3.8-flash' : requestedModel;
+    requestedModel === 'gemini-flash-latest'
+  ) {
+    targetModel = 'gemini-3.8-flash';
+  }
   
   // Build deduplicated ordered candidate models list
   const modelsToTry = Array.from(new Set([targetModel, ...defaultModels]));
@@ -110,49 +110,46 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
 
   let lastError: any = null;
   
-  // Phase 1: Try candidate models in order with instant retry for 503/high demand
+  // Phase 1: Try candidate models in order. If a model encounters high demand (503) or rate limit (429),
+  // immediately switch to the next candidate model (e.g. gemini-3.1-flash-lite) for instant zero-latency recovery.
   for (const currentModel of modelsToTry) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`[Gemini Server] Generating content with model: ${currentModel} (attempt ${attempt})`);
-        const response = await getAiClient().models.generateContent({
-          model: currentModel,
-          contents: sanitizedContents,
-          config: {
-            ...config,
-            safetySettings: isNsfw ? getSafetySettings() : undefined
-          }
-        });
-        console.log(`[Gemini Server] Success with model: ${currentModel}`);
-        return response;
-      } catch (e: any) {
-        lastError = e;
-        const rawMsg = e?.message || (e ? String(e) : '');
-        const isQuotaOrRateLimit = rawMsg.includes('429') || 
-                                  rawMsg.toLowerCase().includes('quota') || 
-                                  rawMsg.toLowerCase().includes('rate limit') ||
-                                  rawMsg.includes('RESOURCE_EXHAUSTED');
-        const isTransientServerError = rawMsg.includes('503') ||
-                                       rawMsg.includes('500') ||
-                                       rawMsg.includes('502') ||
-                                       rawMsg.includes('504') ||
-                                       rawMsg.toLowerCase().includes('high demand') ||
-                                       rawMsg.toLowerCase().includes('temporarily unavailable') ||
-                                       rawMsg.toLowerCase().includes('overloaded');
-
-        if (isQuotaOrRateLimit) {
-          console.log(`[Gemini Server] Note: ${currentModel} reached rate/quota limit. Checking next model...`);
-          await delay(200);
-          break; // move to next candidate model
-        } else if (isTransientServerError && attempt === 1) {
-          console.log(`[Gemini Server] Note: ${currentModel} transient 503/high demand. Retrying model in 400ms...`);
-          await delay(400);
-          // attempt 2 will run for same model
-        } else {
-          console.log(`[Gemini Server] Note: ${currentModel} unavailable (${rawMsg.slice(0, 100)}). Checking next model...`);
-          await delay(300);
-          break; // move to next candidate model
+    try {
+      console.log(`[Gemini Server] Generating content with model: ${currentModel}`);
+      const response = await getAiClient().models.generateContent({
+        model: currentModel,
+        contents: sanitizedContents,
+        config: {
+          ...config,
+          safetySettings: isNsfw ? getSafetySettings() : undefined
         }
+      });
+      console.log(`[Gemini Server] Success with model: ${currentModel}`);
+      return response;
+    } catch (e: any) {
+      lastError = e;
+      const rawMsg = e?.message || (e ? String(e) : '');
+      const isQuotaOrRateLimit = rawMsg.includes('429') || 
+                                rawMsg.toLowerCase().includes('quota') || 
+                                rawMsg.toLowerCase().includes('rate limit') ||
+                                rawMsg.includes('RESOURCE_EXHAUSTED');
+      const isTransientServerError = rawMsg.includes('503') ||
+                                     rawMsg.includes('500') ||
+                                     rawMsg.includes('502') ||
+                                     rawMsg.includes('504') ||
+                                     rawMsg.toLowerCase().includes('high demand') ||
+                                     rawMsg.toLowerCase().includes('temporarily unavailable') ||
+                                     rawMsg.toLowerCase().includes('overloaded') ||
+                                     rawMsg.includes('UNAVAILABLE');
+
+      if (isQuotaOrRateLimit) {
+        console.log(`[Gemini Server] Note: ${currentModel} reached rate/quota limit. Switching to alternative candidate...`);
+        await delay(150);
+      } else if (isTransientServerError) {
+        console.log(`[Gemini Server] Note: ${currentModel} temporarily in high demand (503). Switching immediately to alternative candidate...`);
+        await delay(150);
+      } else {
+        console.log(`[Gemini Server] Note: ${currentModel} not ready. Switching to alternative candidate...`);
+        await delay(150);
       }
     }
   }
@@ -163,7 +160,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
     const isRateLimit = errStr.includes('429') || errStr.toLowerCase().includes('quota') || errStr.toLowerCase().includes('rate limit') || errStr.includes('RESOURCE_EXHAUSTED');
     const retryMatch = errStr.match(/retry in ([\d\.]+)s/i);
     const waitSeconds = isRateLimit
-      ? (retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 8) : (cooldownAttempt * 2 + 1))
+      ? (retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 6) : (cooldownAttempt * 2))
       : (cooldownAttempt * 1.5);
 
     console.log(`[Gemini Server] Phase 2 recovery attempt ${cooldownAttempt}/2 (waiting ${waitSeconds}s)...`);
@@ -447,19 +444,13 @@ async function startServer() {
             break;
           }
         } catch (e: any) {
-          console.log(`[Gemini Server] Image generation failed with model ${modelName}:`, e?.message || e);
+          console.log(`[Gemini Server] Note: image generation with ${modelName} unavailable, checking fallback...`);
           lastError = e;
         }
       }
 
       if (!imageUrl) {
-        let errStr = lastError?.message || String(lastError || 'Bildgenerierung derzeit nicht verfügbar');
-        try {
-          const parsed = JSON.parse(errStr);
-          if (parsed.error?.message) errStr = parsed.error.message;
-        } catch (_) {}
-        
-        console.log(`[Gemini Server] All Imagen models failed due to: ${errStr}. Providing stylized fallback placeholder.`);
+        console.log(`[Gemini Server] Standard image models unavailable. Providing stylized vector fallback.`);
         
         // Generate gorgeous fallback vector graphic
         const fallbackUrl = generateStylishFallbackSvg(prompt);

@@ -202,6 +202,8 @@ export class StorageService {
     return adventures.map(adv => {
       const clone = { ...adv };
       delete clone.initialPlayer;
+      delete clone.initialWorld;
+      delete clone.initialWorldTime;
       delete clone.initialNpcs;
       delete clone.initialLoreDatabase;
       delete clone.initialStructuredInventory;

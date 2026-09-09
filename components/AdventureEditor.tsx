@@ -3078,11 +3078,13 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       statusElements,
       combatState: customCombatState,
       initialPlayer: JSON.parse(JSON.stringify(finalPlayer)),
+      initialWorld: JSON.parse(JSON.stringify(finalWorld)),
+      initialWorldTime: { day: 1, hour: 8, minute: 0 },
       initialStatusElements: JSON.parse(JSON.stringify(statusElements)),
       initialStructuredInventory: structuredInventory ? JSON.parse(JSON.stringify(structuredInventory)) : undefined,
-      initialLoreDatabase: finalLoreDatabase,
+      initialLoreDatabase: JSON.parse(JSON.stringify(finalLoreDatabase)),
       initialNpcs: finalNpcs ? JSON.parse(JSON.stringify(finalNpcs)) : [],
-      initialInventory: initialData?.inventory ?? ['Starterpaket']
+      initialInventory: initialData?.inventory ? JSON.parse(JSON.stringify(initialData.inventory)) : ['Starterpaket']
     };
     onSave(finalAdventure);
   };
