@@ -4,16 +4,15 @@ export interface JobCategory {
   jobs: string[];
 }
 
+// IMPORTANT: This list contains professions only.
+// Nobility/social titles are intentionally NOT professions and are stored separately.
+// Duplicate profession names in different fields remain separate entries in their
+// respective fields; the UI must never merge unrelated professions into one label.
 export const JOB_CATEGORIES: JobCategory[] = [
   {
     fieldId: "adel_herrschaft",
-    category: "Adel & Herrschaft",
+    category: "Hof, Herrschaft & politische Dienste",
     jobs: [
-      "Kaiser / Kaiserin",
-      "König / Königin",
-      "Großherzog",
-      "Herzog",
-      "Fürst / Fürstin",
       "Berater",
       "Diplomat / Unterhändler",
       "Taktiker",
@@ -23,8 +22,6 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Kommandant",
       "Admiral",
       "General",
-      "Ritter",
-      "Edler / Edle",
       "Paladin / Heiliger Ritter",
       "Runenritter",
       "Drachenritter / Drachenkrieger",
@@ -304,7 +301,8 @@ export interface NobleChildGroup {
   titles: string[];
 }
 
-export const NOBLE_CHILDREN_GROUPS: NobleChildGroup[] = [
+// Separate system: these are social/nobility titles, NOT professions.
+export const NOBLE_CHILD_GROUPS: NobleChildGroup[] = [
   {
     house: "Herzogshaus",
     titles: ["Herzogstochter", "Herzogsohn", "Erbherzogstochter", "Erbherzog"]
@@ -327,21 +325,14 @@ export const NOBLE_CHILDREN_GROUPS: NobleChildGroup[] = [
   }
 ];
 
-/**
- * Finds the matching Berufsfeld fieldId for a given job title.
- */
+// Backwards-compatible export name for existing imports.
+export const NOBLE_CHILDREN_GROUPS = NOBLE_CHILD_GROUPS;
+
+/** Finds the profession field for a profession name. */
 export function getFieldIdForJob(jobName: string): string | undefined {
   if (!jobName || !jobName.trim()) return undefined;
   const lower = jobName.toLowerCase().trim();
 
-  // 1. Check Noble titles
-  for (const group of NOBLE_CHILDREN_GROUPS) {
-    if (group.titles.some(t => t.toLowerCase() === lower)) {
-      return 'adel_herrschaft';
-    }
-  }
-
-  // 2. Direct match or alias match
   for (const cat of JOB_CATEGORIES) {
     for (const j of cat.jobs) {
       const jLower = j.toLowerCase();
@@ -351,12 +342,10 @@ export function getFieldIdForJob(jobName: string): string | undefined {
     }
   }
 
-  // 3. Substring match for meaningful length strings (>= 4 characters)
   if (lower.length >= 4) {
     for (const cat of JOB_CATEGORIES) {
       for (const j of cat.jobs) {
         const jLower = j.toLowerCase();
-        // Check if the job name contains this title or vice versa
         if (lower.includes(jLower) || jLower.split(' / ').some(part => part.trim().length >= 4 && lower.includes(part.trim()))) {
           return cat.fieldId;
         }
@@ -367,9 +356,6 @@ export function getFieldIdForJob(jobName: string): string | undefined {
   return undefined;
 }
 
-/**
- * Returns the category definition for a given fieldId or name.
- */
 export function getJobCategoryByFieldId(fieldId: string): JobCategory | undefined {
   return JOB_CATEGORIES.find(c => c.fieldId === fieldId || c.category.toLowerCase() === fieldId.toLowerCase());
 }
