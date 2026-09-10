@@ -31,27 +31,24 @@ export interface ProfessionCatalogEntry {
  * Expandable and not hardcoded into UI lists.
  */
 export const PROFESSION_FIELDS: ProfessionFieldDefinition[] = [
-  { id: 'bau_handwerk', name: 'Bau & Handwerk', description: 'Holz-, Stein-, Metall- und Werkstoffbearbeitung sowie Hoch- und Tiefbau' },
-  { id: 'lebensmittel_ernaehrung', name: 'Lebensmittel & Ernährung', description: 'Herstellung, Veredelung und Zubereitung von Speisen, Backwaren und Getränken' },
-  { id: 'natur_landwirtschaft', name: 'Natur & Landwirtschaft', description: 'Feldbau, Forstwirtschaft, Jagd, Fischerei und Hege natürlicher Ressourcen' },
-  { id: 'tierhaltung', name: 'Tierhaltung', description: 'Zucht, Hütung, Ausbildung und Pflege von Nutztieren und Arbeitstieren' },
-  { id: 'wissenschaft_forschung', name: 'Wissenschaft & Forschung', description: 'Naturforschung, Mathematik, Astronomie, Gelehrsamkeit und Ingenieurwesen' },
-  { id: 'medizin_heilkunde', name: 'Medizin & Heilkunde', description: 'Wundarznei, Diagnostik, Chirurgie, Kräuterheilkunde und Krankenpflege' },
-  { id: 'handel_wirtschaft', name: 'Handel & Wirtschaft', description: 'Kaufmannswesen, Markthandel, Warentransport, Banken und Kontore' },
-  { id: 'verwaltung_recht', name: 'Verwaltung & Recht', description: 'Rechtspflege, städtische Ämter, Kanzleiwesen, Steuern und Stadtordnung' },
-  { id: 'militaer_sicherheit', name: 'Militär & Sicherheit', description: 'Stadtwache, Garnisonsdienst, Wehrwesen, Taktik und Befestigung' },
-  { id: 'seefahrt', name: 'Seefahrt', description: 'Nautik, Takelage, Schiffsführung, Küsten- und Hochseefahrt' },
-  { id: 'transport_logistik', name: 'Transport & Logistik', description: 'Fuhrmannswesen, Karawanenführung, Speicherverwaltung und Botendienste' },
-  { id: 'kunst_kultur', name: 'Kunst & Kultur', description: 'Bildende Künste, Bildhauerei, Malerei, Dichtkunst und Theater' },
-  { id: 'unterhaltung', name: 'Unterhaltung', description: 'Gaukelei, Bardenkunst, Musik, Spielmannswesen und Artistik' },
-  { id: 'religion_klerus', name: 'Religion & Klerus', description: 'Gottesdienst, Liturgie, Riten, Seelsorge und theologische Lehre' },
-  { id: 'magie_arkana', name: 'Magie & Arkane Künste', description: 'Arkanes Studium, Runenzeichnen, Spruchwirken und Ritualmagie' },
-  { id: 'alchemie', name: 'Alchemie', description: 'Destillation, Reagenzienkunde, Transmutation und Trankbrauerei' },
-  { id: 'bergbau_rohstoffe', name: 'Bergbau & Rohstoffe', description: 'Stollenbau, Erzgewinnung, Schurftechnik und Gesteinsprüfung' },
-  { id: 'schrift_bildung', name: 'Schrift & Bildung', description: 'Kalligraphie, Schriftführung, Buchbinderei, Lehramt und Urkundenlehre' },
-  { id: 'dienstleistungen', name: 'Dienstleistungen', description: 'Gastgewerbe, Herbergen, persönliche Dienste und Versorgungsaufgaben' },
-  { id: 'adel_herrschaft', name: 'Adel & Herrschaft', description: 'Regenten, Adelsgeschlechter, Hofämter und dynastische Nachkommen' },
-  { id: 'abenteuer_sondergewerbe', name: 'Abenteuer & Sondergewerbe', description: 'Erkundung, Reliktjagd, Späher und verdeckte Sondergewerbe' }
+  { id: 'adel_herrschaft', name: 'Adel & Herrschaft', description: 'Regenten, Monarchen, Adelsgeschlechter, Hofämter, Taktiker und Gefolge' },
+  { id: 'religion_klerus', name: 'Religion & Klerus', description: 'Gottesdienst, Hoher Klerus, Seelsorge, Exorzismus und Shinto-Pfade' },
+  { id: 'arkan_magie', name: 'Arkan & Magie', description: 'Arkanes Studium, Runenzeichnen, Spruchwirken, Orakel und dunkle Künste' },
+  { id: 'militaer_streitkraefte', name: 'Militär & reguläre Streitkräfte', description: 'Militärischer Dienst, Heerführung, Taktik, Belagerung und Spezialstreitkräfte' },
+  { id: 'unabhaengige_abenteurer', name: 'Unabhängige Kämpfer & Abenteurer', description: 'Freie Abenteurer, Söldner, Gelehrte, Forscher, Ärzte und Detektive' },
+  { id: 'verwaltung_wirtschaft', name: 'Verwaltung & Wirtschaft', description: 'Finanzwesen, Steuern, Handel, Kanzleiwesen und Kurierdienste' },
+  { id: 'kunst_kultur', name: 'Kunst & Kultur', description: 'Bildende Künste, Musik, Literatur, Schauspiel und Darstellendes Handwerk' },
+  { id: 'metall_waffen', name: 'Metall & Waffen', description: 'Metallverarbeitung, Schmiedekunst, Schwert- und Rüstungsbau, Mechanik' },
+  { id: 'materialverarbeitung', name: 'Materialverarbeitung', description: 'Gerberei, Kürschnerei, Seilerei, Glasmacherei, Wagner- und Holzhandwerk' },
+  { id: 'luxus_spezial', name: 'Luxus & Spezial', description: 'Goldschmiedekunst, Parfümerie, Brauwesen, Spitzenküche und Floristik' },
+  { id: 'landwirtschaft_versorgung', name: 'Landwirtschaft, Versorgung & Sammelberufe', description: 'Ackerbau, Viehzucht, Fischerei, Bergbau, Sammeln und Grundversorgung' },
+  { id: 'wandernde_erkundung', name: 'Wandernde Existenzen & Erkundung', description: 'Nomadentum, Pfadfindung, Prospektion, Wildniserkundung und Jagd' },
+  { id: 'tierfuehrung_tamer', name: 'Tierführung & Tamer', description: 'Abrichtung, Falknerei, Großtierführung und Bestienbändigung' },
+  { id: 'kriminelle_berufe', name: 'Kriminelle Berufe', description: 'Schattenwelt, Diebstahl, Schmuggel, Piraterie und Fälschung' },
+  { id: 'geheimoperationen_ueberleben', name: 'Geheimoperationen & Überleben', description: 'Spionage, verdeckte Einsätze, Flucht, Jagd und Überlebenskunst' },
+  { id: 'haushalt_dienste', name: 'Haushalt & persönliche Dienste', description: 'Persönliche Dienste, Butlerwesen, Hauswirtschaft, Kutschenführung und Hofdienst' },
+  { id: 'unterhaltung_spezial', name: 'Unterhaltung & besondere Tätigkeiten', description: 'Artistik, Tanz, Puppenspiel, Unterhaltungskunst und Sonderberufe' },
+  { id: 'private_gesellschaftsrollen', name: 'Private / gesellschaftliche Lebensrollen', description: 'Hauswirtschaft, gesellschaftlicher Stand, Ausbildung und Bildungsweg' }
 ];
 
 export const PROFESSION_COMPETENCY_CATALOG: ProfessionCatalogEntry[] = [

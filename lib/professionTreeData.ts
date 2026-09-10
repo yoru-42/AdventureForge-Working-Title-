@@ -2348,6 +2348,23 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
  */
 export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
   switch (fieldId) {
+    case 'adel_herrschaft':
+      return {
+        entryName: 'Edle Page / Hofgehilfe',
+        entryRanks: ['Page', 'Junker'],
+        entryDesc: 'Hofetikette, Ahnenkunde und Dienst am herzoglichen Hofe.',
+        core1Name: 'Ritter & Edler',
+        core1Ranks: ['Ritter', 'Edler'],
+        core2Name: 'Berater & Diplomat',
+        core2Ranks: ['Gefolgsmann', 'Unterhändler'],
+        spec1Name: 'Taktiker & Paladin',
+        spec1Ranks: ['Landvogt', 'Kommandeur'],
+        apexName: 'Fürst, Herzog & Kanzler',
+        apexRanks: ['Fürst', 'Herzog', 'Großkanzler'],
+        promotionRouteName: 'Dynastischer Erbfolgebrief & Landeskrone',
+        routeType: 'social_recognition' as const
+      };
+    case 'militaer_streitkraefte':
     case 'militaer_sicherheit':
       return {
         entryName: 'Rekrut / Wachanwärter',
@@ -2364,22 +2381,23 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
         promotionRouteName: 'Offizierspatent & Bestallung',
         routeType: 'exam' as const
       };
-    case 'seefahrt':
+    case 'unabhaengige_abenteurer':
       return {
-        entryName: 'Schiffsjunge / Leichtmatrose',
-        entryRanks: ['Schiffsjunge', 'Leichtmatrose'],
-        entryDesc: 'Erste Takelarbeiten, Decksdienst und seemännische Grundregeln.',
-        core1Name: 'Vollmatrose / Seemann',
-        core1Ranks: ['Matrose', 'Vollmatrose'],
-        core2Name: 'Bootsmann & Takler',
-        core2Ranks: ['Bootsmann', 'Quartiermeister'],
-        spec1Name: 'Steuermann & Navigator',
-        spec1Ranks: ['Steuermann', 'Erster Offizier'],
-        apexName: 'Kapitän & Flottenkommandant',
-        apexRanks: ['Kapitän', 'Kommodore', 'Admiral'],
-        promotionRouteName: 'Kapitänspatent',
-        routeType: 'exam' as const
+        entryName: 'Anfänger-Abenteurer',
+        entryRanks: ['Anfänger', 'Grünhorn'],
+        entryDesc: 'Erste Gildenaufträge, Kartenlesen und Grundlagen des Überlebens.',
+        core1Name: 'Söldner & Gladiator',
+        core1Ranks: ['Söldner', 'Arena-Kämpfer'],
+        core2Name: 'Gelehrter & Detektiv',
+        core2Ranks: ['Ermittler', 'Forscher'],
+        spec1Name: 'Drachenjäger & Kryptograph',
+        spec1Ranks: ['Veteranenjäger', 'Experte'],
+        apexName: 'Gilden-Champion & Großforscher',
+        apexRanks: ['Gildenlegende', 'Großmeister'],
+        promotionRouteName: 'S-Rang Gildenpatent & Helden-Anerkennung',
+        routeType: 'social_recognition' as const
       };
+    case 'arkan_magie':
     case 'magie_arkana':
       return {
         entryName: 'Magieschüler / Arkan-Novize',
@@ -2412,6 +2430,7 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
         promotionRouteName: 'Priesterweihe & Kirchliche Investitur',
         routeType: 'exam' as const
       };
+    case 'verwaltung_wirtschaft':
     case 'verwaltung_recht':
       return {
         entryName: 'Amtsanwärter / Schreibergehilfe',
@@ -2428,118 +2447,181 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
         promotionRouteName: 'Bestallungsdekret & Staatsexamen',
         routeType: 'exam' as const
       };
-    case 'wissenschaft_forschung':
+    case 'metall_waffen':
       return {
-        entryName: 'Student / Scholar',
-        entryRanks: ['Scholar', 'Forschungsassistent'],
-        entryDesc: 'Vorlesungen, Bibliotheksstudium und wissenschaftliche Methodenlehre.',
-        core1Name: 'Forscher & Gelehrter',
-        core1Ranks: ['Baccalaureus', 'Magister'],
-        core2Name: 'Kartograph & Archäologe',
-        core2Ranks: ['Landvermesser', 'Feldarchäologe'],
-        spec1Name: 'Astronom & Philosoph',
-        spec1Ranks: ['Doktor', 'Lehrstuhlinhaber'],
-        apexName: 'Akademie-Vorsteher & Chefbibliothekar',
-        apexRanks: ['Rektor', 'Akademievorsteher'],
-        promotionRouteName: 'Disputation & Ordinariat',
+        entryName: 'Schmiedelehrling / Metallgehilfe',
+        entryRanks: ['Lehrling', 'Anfänger'],
+        entryDesc: 'Feuerführung, Materialauswahl und Hammerführung.',
+        core1Name: 'Schmied & Waffenschmied',
+        core1Ranks: ['Geselle', 'Altgeselle'],
+        core2Name: 'Rüstungsschmied & Mechaniker',
+        core2Ranks: ['Mechanicus', 'Feinschmied'],
+        spec1Name: 'Schwertschmied & Instrumentenbauer',
+        spec1Ranks: ['Spezialschmied', 'Klingenmeister'],
+        apexName: 'Großschmiedemeister',
+        apexRanks: ['Zunftmeister', 'Großschmied'],
+        promotionRouteName: 'Großes Meisterstück der Schmiedezunft',
         routeType: 'exam' as const
       };
-    case 'abenteuer_sondergewerbe':
+    case 'materialverarbeitung':
       return {
-        entryName: 'Gassenjunge / Kleinkrimineller',
-        entryRanks: ['Späher', 'Gassenschleicher'],
-        entryDesc: 'Überleben auf den Straßen der Unterwelt und erste Fingerübungen.',
-        core1Name: 'Dieb & Schurke (Rogue)',
-        core1Ranks: ['Taschendieb', 'Fassadenkletterer'],
-        core2Name: 'Schmuggler & Fälscher',
-        core2Ranks: ['Hehler', 'Passfälscher'],
-        spec1Name: 'Auftragskiller & Phantom-Dieb',
-        spec1Ranks: ['Schattenklinge', 'Meisterdieb'],
-        apexName: 'Gildenmeister der Schatten',
-        apexRanks: ['Schattenfürst', 'Syndikus'],
-        promotionRouteName: 'Aufnahme in den inneren Schattenrat',
+        entryName: 'Werkstofflehrling',
+        entryRanks: ['Lehrling', 'Handlanger'],
+        entryDesc: 'Materialauswahl von Leder, Seil, Glas und Holz.',
+        core1Name: 'Gerber & Kürschner',
+        core1Ranks: ['Geselle', 'Fachhandwerker'],
+        core2Name: 'Glasmacher & Zimmermann',
+        core2Ranks: ['Handwerksgeselle', 'Polier'],
+        spec1Name: 'Meister-Wagner & Seilermeister',
+        spec1Ranks: ['Altgeselle', 'Meister'],
+        apexName: 'Zunftoberhaupt der Werkstoffe',
+        apexRanks: ['Zunftoberhaupt', 'Obermeister'],
+        promotionRouteName: 'Zunftbrief & Meisterprüfung',
+        routeType: 'exam' as const
+      };
+    case 'luxus_spezial':
+      return {
+        entryName: 'Luxusgewerbe-Lehrling',
+        entryRanks: ['Apprentice', 'Eleve'],
+        entryDesc: 'Feingefühl für Gerüche, Edelsteine, Braukunst und Feinkost.',
+        core1Name: 'Juwelier & Brauer',
+        core1Ranks: ['Goldschmied', 'Braumeister'],
+        core2Name: 'Koch & Florist',
+        core2Ranks: ['Chef de Partie', 'Floristmeister'],
+        spec1Name: 'Edelsteinschmied & Parfümeur',
+        spec1Ranks: ['Maître', 'Feinparfümeur'],
+        apexName: 'Großmeister des Luxusgewerbes',
+        apexRanks: ['Hofjuwelier', 'Starkoch'],
+        promotionRouteName: 'Hoflieferanten-Patent',
         routeType: 'social_recognition' as const
       };
-    case 'medizin_heilkunde':
+    case 'landwirtschaft_versorgung':
       return {
-        entryName: 'Hospitalgehilfe / Medizinstudent',
-        entryRanks: ['Famulus', 'Hospitalgehilfe'],
-        entryDesc: 'Krankenbetreuung, Verbandslehre und Hilfsdienste im Hospital.',
-        core1Name: 'Feldscher & Heiler',
-        core1Ranks: ['Wundheiler', 'Feldscher'],
-        core2Name: 'Apotheker & Kräuterkundiger',
-        core2Ranks: ['Offizinant', 'Pharmakologe'],
-        spec1Name: 'Chirurg & Seuchenarzt',
-        spec1Ranks: ['Stadtphysikus', 'Chirurgus'],
-        apexName: 'Oberster Hofphysikus',
-        apexRanks: ['Primararzt', 'Hofmedicus'],
-        promotionRouteName: 'Medizinisches Doktordiplom',
+        entryName: 'Knecht / Jungbauer',
+        entryRanks: ['Knecht', 'Jungbauer'],
+        entryDesc: 'Feldarbeit, Bodenvorbereitung und Erntehelfer.',
+        core1Name: 'Bauer & Landwirt',
+        core1Ranks: ['Hofbauer', 'Kätner'],
+        core2Name: 'Fischer & Bergmann',
+        core2Ranks: ['Fischergeselle', 'Bergknappe'],
+        spec1Name: 'Kräutersammler & Verkäufer',
+        spec1Ranks: ['Fachlandwirt', 'Hofverwalter'],
+        apexName: 'Hofbesitzer & Agrarmeister',
+        apexRanks: ['Großbauer', 'Gutsverwalter'],
+        promotionRouteName: 'Gutsbrief & Hofübernahme',
         routeType: 'exam' as const
       };
-    case 'handel_wirtschaft':
+    case 'wandernde_erkundung':
       return {
-        entryName: 'Handelsgehilfe / Kommis',
-        entryRanks: ['Laufbursche', 'Kommis'],
-        entryDesc: 'Warenkontrolle, Kundenbedienung und Warenstapelung.',
-        core1Name: 'Kaufmann & Händler',
-        core1Ranks: ['Kaufmannsgeselle', 'Kaufmann'],
-        core2Name: 'Kontorist & Buchhalter',
-        core2Ranks: ['Buchhalter', 'Prokurist'],
-        spec1Name: 'Großhändler & Reeder',
-        spec1Ranks: ['Handelsherr', 'Faktoreileiter'],
-        apexName: 'Patrizier & Gildenoberhaupt',
-        apexRanks: ['Ältermann', 'Gildenmeister'],
-        promotionRouteName: 'Kaufmannsbrief & Gildenaufnahme',
-        routeType: 'exam' as const
-      };
-    case 'kunst_kultur':
-    case 'unterhaltung':
-      return {
-        entryName: 'Eleve / Nachwuchskünstler',
-        entryRanks: ['Eleve', 'Nachwuchsakrobat'],
-        entryDesc: 'Bühnenproben, Stimmtraining und Grundschritte der Vorführungskunst.',
-        core1Name: 'Künstler & Musiker',
-        core1Ranks: ['Bühnendarsteller', 'Solist'],
-        core2Name: 'Bänkelsänger & Schausteller',
-        core2Ranks: ['Gaukler', 'Moritatensänger'],
-        spec1Name: 'Virtuose & Dramaturg',
-        spec1Ranks: ['Konzertmeister', 'Dramaturg'],
-        apexName: 'Hofkünstler & Gefeierte Diva',
-        apexRanks: ['Hofkomponist', 'Gefeierter Star'],
-        promotionRouteName: 'Hofengagement & Ehrenaufnahme',
+        entryName: 'Pfadfinder-Anwärter',
+        entryRanks: ['Wanderer', 'Späher'],
+        entryDesc: 'Kompassnutzung, Orientierung und Wildnis-Grundregeln.',
+        core1Name: 'Nomade & Entdecker',
+        core1Ranks: ['Nomadenführer', 'Erkunder'],
+        core2Name: 'Prospektor & Tracker',
+        core2Ranks: ['Schürfer', 'Spurensucher'],
+        spec1Name: 'Meister-Jäger & Trapper',
+        spec1Ranks: ['Grenzläufer', 'Hauptmann'],
+        apexName: 'Pionier der unbekannten Lande',
+        apexRanks: ['Pionier', 'Expeditionsleiter'],
+        promotionRouteName: 'Kartographisches Meisterwerk & Expeditionsbrief',
         routeType: 'social_recognition' as const
       };
-    case 'tierhaltung':
+    case 'tierfuehrung_tamer':
       return {
-        entryName: 'Stallbursche / Jungzüchter',
-        entryRanks: ['Stallbursche', 'Jungzüchter'],
-        entryDesc: 'Fütterung, Ausmisten und Gewöhnung an das Großvieh.',
-        core1Name: 'Züchter & Hirte',
-        core1Ranks: ['Herdenführer', 'Züchter'],
-        core2Name: 'Falkner & Tiertrainer',
-        core2Ranks: ['Abrichtungsgehilfe', 'Falkner'],
-        spec1Name: 'Beast Tamer & Großtierführer',
-        spec1Ranks: ['Dompteur', 'Großtierbändiger'],
-        apexName: 'Königlicher Stallmeister & Meisterdompteur',
-        apexRanks: ['Oberstallmeister', 'Großbestienmeister'],
-        promotionRouteName: 'Königliches Gestüts- und Bändigerpatent',
+        entryName: 'Stallgehilfe / Jung-Tamer',
+        entryRanks: ['Anfänger', 'Futtermeister'],
+        entryDesc: 'Tierpflege, Fütterung und erstes Vertrauensbildungstraining.',
+        core1Name: 'Tiertrainer & Falkner',
+        core1Ranks: ['Tiertrainer', 'Falkner'],
+        core2Name: 'Mahout & Beast Tamer',
+        core2Ranks: ['Beast Tamer', 'Elefantenführer'],
+        spec1Name: 'Drachenzähmer & Bug Tamer',
+        spec1Ranks: ['Drachenbändiger', 'Groß-Tamer'],
+        apexName: 'Großmeister-Dämonen-Tamer',
+        apexRanks: ['Oberster Tamer', 'Legendenbändiger'],
+        promotionRouteName: 'Meisterbändiger-Siegel',
         routeType: 'exam' as const
       };
-    case 'bergbau_rohstoffe':
+    case 'kriminelle_berufe':
       return {
-        entryName: 'Schürflehrling / Bergknappe',
-        entryRanks: ['Pucher', 'Bergknappe'],
-        entryDesc: 'Gesteinstransport, Schachtzimmerung und Grubenlampenpflege.',
-        core1Name: 'Bergmann & Hauer',
-        core1Ranks: ['Lehrhauer', 'Vollhauer'],
-        core2Name: 'Schürfer & Prospektor',
-        core2Ranks: ['Erzsucher', 'Mutungsschürfer'],
-        spec1Name: 'Steiger & Grubenbaumeister',
-        spec1Ranks: ['Untersteiger', 'Obersteiger'],
-        apexName: 'Bergvogt & Oberberghauptmann',
-        apexRanks: ['Bergmeister', 'Oberberghauptmann'],
-        promotionRouteName: 'Bergbaurecht & Ernennung zum Steiger',
+        entryName: 'Gassenjunge / Taschendieb',
+        entryRanks: ['Gassenjunge', 'Späher'],
+        entryDesc: 'Aufpassen an Straßenecken und schnelle Finger.',
+        core1Name: 'Dieb & Schurke',
+        core1Ranks: ['Taschendieb', 'Einbrecher'],
+        core2Name: 'Schmuggler & Pirat',
+        core2Ranks: ['Kapergast', 'Passfälscher'],
+        spec1Name: 'Outlaw & Phantom-Dieb',
+        spec1Ranks: ['Schattenläufer', 'Meisterdieb'],
+        apexName: 'Syndikatsfürst der Unterwelt',
+        apexRanks: ['Gildenlord', 'Schattenkönig'],
+        promotionRouteName: 'Schattenpakt & Unterwelt-Krönung',
+        routeType: 'social_recognition' as const
+      };
+    case 'geheimoperationen_ueberleben':
+      return {
+        entryName: 'Schatten-Anwärter / Rekrut',
+        entryRanks: ['Anwärter', 'Späher'],
+        entryDesc: 'Tarnung, geräuschlose Fortbewegung und Spurenbeseitigung.',
+        core1Name: 'Spion & Kopfgeldjäger',
+        core1Ranks: ['Agent', 'Kopfgeldjäger'],
+        core2Name: 'Ninja & Deserteur',
+        core2Ranks: ['Shinobi', 'Überlebender'],
+        spec1Name: 'Auftragskiller & Untotenjäger',
+        spec1Ranks: ['Assassine', 'Schattenmeister'],
+        apexName: 'Meisterspion & Schattenkommandeur',
+        apexRanks: ['Großmeister', 'Schattenleiter'],
+        promotionRouteName: 'Meisterauftrag & Geheimkodex',
         routeType: 'exam' as const
+      };
+    case 'haushalt_dienste':
+      return {
+        entryName: 'Hausgehilfe / Dienstmädchen',
+        entryRanks: ['Dienstbote', 'Junior-Maid'],
+        entryDesc: 'Reinigung, Menüabfolge und Hausordnung im Anwesen.',
+        core1Name: 'Maid & Kutscher',
+        core1Ranks: ['Maid', 'Kutscher'],
+        core2Name: 'Haushälterin & Vorkoster',
+        core2Ranks: ['Haushälterin', 'Vorkoster'],
+        spec1Name: 'Butler & Privatsekretär',
+        spec1Ranks: ['Erster Butler', 'Privatsekretär'],
+        apexName: 'Oberster Haushofmeister',
+        apexRanks: ['Haushofmeister', 'Chef-Maitre'],
+        promotionRouteName: 'Ernennung zum Obersten Haushofmeister',
+        routeType: 'social_recognition' as const
+      };
+    case 'unterhaltung_spezial':
+      return {
+        entryName: 'Bühnen-Eleve',
+        entryRanks: ['Bühnenkind', 'Eleve'],
+        entryDesc: 'Stimmtraining, Körperbeherrschung und Lampenfieberüberwindung.',
+        core1Name: 'Akrobat & Tänzer',
+        core1Ranks: ['Artist', 'Tänzer'],
+        core2Name: 'Puppenspieler & Totengräber',
+        core2Ranks: ['Puppenspieler', 'Totengräber'],
+        spec1Name: 'Kurtisane & Vogelabrichter',
+        spec1Ranks: ['Solokünstler', 'Spezialdarsteller'],
+        apexName: 'Gefeierte Diva & Magical Girl',
+        apexRanks: ['Diva', 'Sternenkünstlerin'],
+        promotionRouteName: 'Bühnenkrönung & Ehrenplatz',
+        routeType: 'social_recognition' as const
+      };
+    case 'private_gesellschaftsrollen':
+      return {
+        entryName: 'Schüler / Anwärter',
+        entryRanks: ['Schüler', 'Junior'],
+        entryDesc: 'Grundausbildung, Lernen und Erfüllung täglicher Lebensaufgaben.',
+        core1Name: 'Student & Hausfrau / Hausmann',
+        core1Ranks: ['Student', 'Hausvorstand'],
+        core2Name: 'Gesellschaftlicher Stand',
+        core2Ranks: ['Bürger', 'Standesvertreter'],
+        spec1Name: 'Akademischer Anwärter & Patron',
+        spec1Ranks: ['Absolvent', 'Familienoberhaupt'],
+        apexName: 'Patriarch / Matriarch & Ehrengast',
+        apexRanks: ['Patriarch', 'Matriarch', 'Ehrenbürger'],
+        promotionRouteName: 'Anerkennung des Lebenswerks',
+        routeType: 'social_recognition' as const
       };
     default:
       return {
