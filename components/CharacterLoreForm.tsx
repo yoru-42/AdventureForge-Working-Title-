@@ -7,7 +7,8 @@ import {
   StructuredInventory, 
   PersonalityTraits, 
   CampaignPowerParameter,
-  WorldSetting 
+  WorldSetting,
+  CharacterGoal
 } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { EyeColorEditor } from './EyeColorEditor';
@@ -17,6 +18,8 @@ import { RelationshipDetailEditor } from './RelationshipDetailEditor';
 import CharacterPowerRadar from './CharacterPowerRadar';
 import ProfessionSelect from './ProfessionSelect';
 import CompetenceProfileEditor from './CompetenceProfileEditor';
+import { CharacterMotivationPanel } from './CharacterMotivationPanel';
+import { CharacterGoalsPanel } from './CharacterGoalsPanel';
 import { GeminiService } from '../services/geminiService';
 import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArchetypesData';
 import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore } from '../lib/relationshipHelper';
@@ -96,6 +99,7 @@ const TARGET_SECTIONS = [
   { id: 'bio', label: 'Vergangenheit / Biografie' },
   { id: 'situation', label: 'Aktuelle Situation' },
   { id: 'motivation', label: 'Motivationskern & Handlungsantrieb' },
+  { id: 'goals', label: 'Ziele & Pläne' },
   { id: 'secrets', label: 'Geheimnis-Stufen (Verborgenes Wissen)' },
   { id: 'relationships', label: 'Beziehungen' },
   { id: 'combat', label: 'Kampffähigkeiten & Techniken' },
@@ -198,7 +202,9 @@ export const CharacterLoreForm: React.FC<Props> = ({
       case 'situation':
         return 'Beschreibe den aktuellen Aufenthaltsort, die gegenwärtige Lebenslage, soziale Stellung und laufende Aufgaben...';
       case 'motivation':
-        return 'Beschreibe den Motivationskern, das Hauptziel, innere Antriebe, Ideale, Schwüre und persönliche Werte...';
+        return 'Beschreibe den Motivationskern, das Hauptziel, innere Antriebe, Ideale, Schwüre, persönliche Werte und passende Handlungsziele...';
+      case 'goals':
+        return 'Beschreibe kurz-, mittel- und langfristige Ziele, konkrete Handlungsschritte (WIE), Ausweichpläne, Zielpersonen und Hindernisse...';
       case 'secrets':
         return 'Beschreibe Gerüchte (Stufe 1), Indizien (Stufe 2) und das verborgene Wissen (Stufe 3)...';
       case 'relationships':
@@ -214,6 +220,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
   
   const [isGeneratingChar, setIsGeneratingChar] = useState<boolean>(false);
   const [isGeneratingMotivationCore, setIsGeneratingMotivationCore] = useState<boolean>(false);
+  const [isGeneratingGoalsAI, setIsGeneratingGoalsAI] = useState<boolean>(false);
+  const [isRelationshipsOpen, setIsRelationshipsOpen] = useState<boolean>(true);
+  const [isMotivationOpen, setIsMotivationOpen] = useState<boolean>(true);
+  const [isGoalsOpen, setIsGoalsOpen] = useState<boolean>(true);
   const [isGeneratingPortrait, setIsGeneratingPortrait] = useState<boolean>(false);
   const [generatingExpression, setGeneratingExpression] = useState<string | null>(null);
   const [isExtractingInventory, setIsExtractingInventory] = useState<boolean>(false);
@@ -544,7 +554,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
         powerSource: editForm.details?.powerSource || '',
         powerCost: editForm.details?.powerCost || '',
         techniques: editForm.details?.techniques || '',
-        campaignPowerLevels: editForm.details?.campaignPowerLevels || {}
+        campaignPowerLevels: editForm.details?.campaignPowerLevels || {},
+        goal: editForm.details?.goal,
+        motivationCore: editForm.details?.motivationCore,
+        goals: editForm.details?.goals
       } as any : undefined;
 
       const data = await GeminiService.autofillCharacter(
@@ -689,12 +702,69 @@ export const CharacterLoreForm: React.FC<Props> = ({
             };
             setCharTab('profil');
           } else if (smartFillTargetSection === 'motivation') {
+            const genGoals = Array.isArray(data.goals) ? data.goals : [];
+            const existingGoals = currentDetails.goals || [];
+            let nextGoals = existingGoals;
+            if (genGoals.length > 0) {
+              if (keepExistingDetails) {
+                const existingIds = new Set(existingGoals.map((g: any) => g.id));
+                nextGoals = [...existingGoals];
+                for (const g of genGoals) {
+                  if (!existingIds.has(g.id)) {
+                    nextGoals.push(g);
+                  }
+                }
+              } else {
+                nextGoals = genGoals;
+              }
+            } else if (data.goal && existingGoals.length === 0) {
+              nextGoals = [{
+                id: `goal-${Date.now()}`,
+                title: data.goal,
+                description: '',
+                timeframe: 'langfristig',
+                targetType: 'self',
+                targetName: 'Selbst',
+                priority: 'hoch',
+                status: 'aktiv',
+                motivation: data.motivationCore?.whyGoal || '',
+                activePlan: data.motivationCore?.methodsAndMeans || '',
+                alternativePlans: [],
+                obstacles: data.motivationCore?.fears ? [data.motivationCore.fears] : [],
+                progress: 0,
+                createdAt: new Date().toISOString()
+              }];
+            }
             newDetails = {
               ...currentDetails,
               goal: data.goal || currentDetails.goal || '',
-              motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined)
+              motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
+              goals: nextGoals
             };
-            setCharTab('profil');
+            setCharTab('beziehungen');
+          } else if (smartFillTargetSection === 'goals') {
+            const genGoals = Array.isArray(data.goals) ? data.goals : [];
+            const existingGoals = currentDetails.goals || [];
+            let nextGoals = existingGoals;
+            if (genGoals.length > 0) {
+              if (keepExistingDetails) {
+                const existingIds = new Set(existingGoals.map((g: any) => g.id));
+                nextGoals = [...existingGoals];
+                for (const g of genGoals) {
+                  if (!existingIds.has(g.id)) {
+                    nextGoals.push(g);
+                  }
+                }
+              } else {
+                nextGoals = genGoals;
+              }
+            }
+            newDetails = {
+              ...currentDetails,
+              goals: nextGoals,
+              goal: nextGoals[0]?.title || currentDetails.goal || ''
+            };
+            setCharTab('beziehungen');
           } else if (smartFillTargetSection === 'secrets') {
             newDetails = {
               ...currentDetails,
@@ -775,6 +845,19 @@ export const CharacterLoreForm: React.FC<Props> = ({
               bio: finalBio,
               goal: data.goal || currentDetails.goal || '',
               motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
+              goals: (() => {
+                const genGoals = Array.isArray(data.goals) ? data.goals : [];
+                if (genGoals.length === 0) return currentDetails.goals || [];
+                const existing = currentDetails.goals || [];
+                const existingIds = new Set(existing.map((g: any) => g.id));
+                const merged = [...existing];
+                for (const g of genGoals) {
+                  if (!existingIds.has(g.id)) {
+                    merged.push(g);
+                  }
+                }
+                return merged;
+              })(),
               currentSituation: data.currentSituation || currentDetails.currentSituation || '',
               relationship: data.relationship || currentDetails.relationship || '',
               conduct: data.conduct || currentDetails.conduct || '',
@@ -824,6 +907,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               bio: finalBio,
               goal: data.goal || '',
               motivationCore: data.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
+              goals: Array.isArray(data.goals) && data.goals.length > 0 ? data.goals : (currentDetails.goals || []),
               currentSituation: data.currentSituation || '',
               relationship: data.relationship || '',
               conduct: data.conduct || '',
@@ -884,12 +968,34 @@ export const CharacterLoreForm: React.FC<Props> = ({
           const currentDetails = prev.details || {};
           const currentCore = currentDetails.motivationCore || {};
           const nextCore = { ...currentCore, ...generated };
+          const curGoals = currentDetails.goals || [];
+          let nextGoals = curGoals;
+          if (curGoals.length === 0 && generated.mainGoal) {
+            nextGoals = [{
+              id: `goal-${Date.now()}`,
+              title: generated.mainGoal,
+              description: '',
+              timeframe: 'langfristig',
+              targetType: 'self',
+              targetName: 'Selbst',
+              priority: 'hoch',
+              status: 'aktiv',
+              motivation: generated.whyGoal || '',
+              activePlan: generated.methodsAndMeans || '',
+              alternativePlans: [],
+              obstacles: generated.fears ? [generated.fears] : [],
+              progress: 0,
+              createdAt: new Date().toISOString()
+            }];
+          }
+
           return {
             ...prev,
             details: {
               ...currentDetails,
               goal: generated.mainGoal || currentDetails.goal || '',
-              motivationCore: nextCore
+              motivationCore: nextCore,
+              goals: nextGoals
             }
           };
         });
@@ -898,6 +1004,112 @@ export const CharacterLoreForm: React.FC<Props> = ({
       console.error("Fehler beim Generieren des Motivationskerns:", err);
     } finally {
       setIsGeneratingMotivationCore(false);
+    }
+  };
+
+  const getGoals = (): CharacterGoal[] => {
+    const currentGoals = editForm.details?.goals;
+    if (Array.isArray(currentGoals) && currentGoals.length > 0) {
+      return currentGoals;
+    }
+    // Migration fallback: if details.goal or details.motivationCore.mainGoal is present and no goals array exists
+    const legacyGoal = editForm.details?.goal || editForm.details?.motivationCore?.mainGoal;
+    if (legacyGoal && legacyGoal.trim() && currentGoals === undefined) {
+      return [
+        {
+          id: `goal-legacy-${Date.now()}`,
+          title: legacyGoal.trim(),
+          description: '',
+          timeframe: 'langfristig',
+          targetType: 'self',
+          targetName: 'Selbst',
+          priority: 'hoch',
+          status: 'aktiv',
+          motivation: editForm.details?.motivationCore?.whyGoal || '',
+          activePlan: editForm.details?.motivationCore?.methodsAndMeans || '',
+          alternativePlans: [],
+          obstacles: editForm.details?.motivationCore?.fears ? [editForm.details.motivationCore.fears] : [],
+          progress: 0,
+          createdAt: new Date().toISOString()
+        }
+      ];
+    }
+    return currentGoals || [];
+  };
+
+  const updateGoals = (updatedGoals: CharacterGoal[]) => {
+    setEditForm(prev => {
+      const curDetails = prev.details || {};
+      const activeGoal = updatedGoals.find(g => g.status === 'aktiv') || updatedGoals[0];
+      const syncedGoal = activeGoal?.title?.trim() || curDetails.goal || '';
+
+      return {
+        ...prev,
+        details: {
+          ...curDetails,
+          goals: updatedGoals,
+          goal: syncedGoal,
+          motivationCore: {
+            ...(curDetails.motivationCore || {}),
+            mainGoal: curDetails.motivationCore?.mainGoal || syncedGoal
+          }
+        }
+      };
+    });
+  };
+
+  const codexCharactersForGoals = useMemo(() => {
+    return lore
+      .filter(item => item.category === 'Charaktere' && item.title?.trim().toLowerCase() !== editForm.title?.trim().toLowerCase())
+      .map(c => ({ id: c.id, title: c.title }));
+  }, [lore, editForm.title]);
+
+  const codexFactionsForGoals = useMemo(() => {
+    return lore
+      .filter(item => item.category === 'Fraktionen')
+      .map(f => ({ id: f.id, title: f.title }));
+  }, [lore]);
+
+  const handleGenerateGoalsAI = async (userNotes?: string) => {
+    setIsGeneratingGoalsAI(true);
+    try {
+      const existingGoals = getGoals();
+      const codexCharNames = lore
+        .filter(c => c.category === 'Charaktere' && c.title?.trim().toLowerCase() !== editForm.title?.trim().toLowerCase())
+        .map(c => c.title);
+      const codexFactionNames = lore
+        .filter(c => c.category === 'Fraktionen')
+        .map(c => c.title);
+
+      const generated = await GeminiService.autofillCharacterGoals(
+        editForm.title || editForm.details?.callName || 'Charakter',
+        editForm.details?.role,
+        editForm.description || editForm.details?.bio,
+        editForm.details?.personality,
+        editForm.details?.motivationCore,
+        existingGoals,
+        getRelationships(),
+        codexCharNames,
+        codexFactionNames,
+        playerName,
+        userNotes,
+        world
+      );
+
+      if (generated && generated.length > 0) {
+        const existingIds = new Set(existingGoals.map(g => g.id));
+        const merged = [...existingGoals];
+        for (const gen of generated) {
+          if (!existingIds.has(gen.id)) {
+            merged.push(gen);
+          }
+        }
+        updateGoals(merged);
+      }
+    } catch (err) {
+      console.error('Fehler beim Generieren der Charakter-Ziele:', err);
+    } finally {
+      setIsGeneratingGoalsAI(false);
     }
   };
 
@@ -933,7 +1145,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
               personality: currentDetails.personality || data.personality || '',
               bio: currentDetails.bio || data.bio || '',
               goal: currentDetails.goal || data.goal || '',
-              motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined)
+              motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
+              goals: data.goals || currentDetails.goals || []
             }
           };
         });
@@ -1058,7 +1271,9 @@ export const CharacterLoreForm: React.FC<Props> = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xl">👤</span>
+            <span className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-sm">
+              <i className="fa-solid fa-user-gear text-xs"></i>
+            </span>
             <h3 className="text-base md:text-lg font-bold text-slate-100">
               {isEditing ? `Eintrag bearbeiten: ${editForm.title || ''}` : 'Neuer Eintrag (Charaktere)'}
             </h3>
@@ -1081,7 +1296,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
                 setIsEditing(null);
                 setEditForm({ category: 'Charaktere' });
               }}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition-all"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition-all cursor-pointer"
             >
               Neuen Eintrag erstellen
             </button>
@@ -1090,7 +1305,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
             type="button"
             onClick={handleGenerateCharacterAI}
             disabled={isGeneratingChar}
-            className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg text-xs font-bold border border-amber-500/30 flex items-center gap-1.5 transition-all"
+            className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg text-xs font-bold border border-amber-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
           >
             {isGeneratingChar ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
             <span>KI Charakter</span>
@@ -1099,7 +1314,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
             type="button"
             onClick={handleGeneratePortrait}
             disabled={isGeneratingPortrait || !editForm.title}
-            className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-xs font-bold border border-indigo-500/30 flex items-center gap-1.5 transition-all"
+            className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-xs font-bold border border-indigo-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
           >
             {isGeneratingPortrait ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-image"></i>}
             <span>KI Portrait</span>
@@ -1132,10 +1347,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
           }`}
         >
           <i className="fa-solid fa-people-arrows"></i>
-          <span>2. Beziehungen</span>
-          {getRelationships().length > 0 && (
+          <span>2. Beziehungen, Motivation &amp; Ziele</span>
+          {(getRelationships().length > 0 || getGoals().length > 0) && (
             <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${charTab === 'beziehungen' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-400'}`}>
-              {getRelationships().length}
+              {getRelationships().length + getGoals().length}
             </span>
           )}
         </button>
@@ -2211,236 +2426,27 @@ export const CharacterLoreForm: React.FC<Props> = ({
               />
             </div>
 
-            {/* Motivationskern & Handlungsantrieb */}
-            <div className="bg-slate-950/60 border border-amber-900/30 p-4 rounded-xl flex flex-col gap-3.5 mt-2">
-              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-900/20 pb-2.5">
-                <span className="text-xs font-bold text-amber-400 flex items-center gap-2">
-                  <i className="fa-solid fa-bullseye text-amber-500"></i>
-                  <span>Motivationskern & Handlungsantrieb</span>
+            {/* Hinweis auf Tab 2 (Beziehungen, Motivation & Ziele) */}
+            <div className="bg-slate-950/40 border border-slate-800/80 p-3.5 rounded-xl flex items-center justify-between gap-3 mt-2 text-xs text-slate-300">
+              <div className="flex items-center gap-2.5">
+                <span className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-xs shrink-0">
+                  <i className="fa-solid fa-bullseye text-[11px]"></i>
                 </span>
-                <button
-                  type="button"
-                  onClick={handleGenerateMotivationCore}
-                  disabled={isGeneratingMotivationCore}
-                  className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:border-amber-500/50 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  title="Motivationskern per KI ausfüllen oder verfeinern"
-                >
-                  <i className={`fa-solid fa-wand-magic-sparkles ${isGeneratingMotivationCore ? 'animate-spin' : ''}`}></i>
-                  <span>{isGeneratingMotivationCore ? 'Wird generiert...' : 'Motivationskern per KI generieren'}</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* 1. Hauptziel */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-amber-400 font-bold uppercase">
-                    Übergeordnetes Hauptziel / Bestrebungen
-                  </label>
-                  <AutoExpandingTextarea
-                    value={editForm.details?.motivationCore?.mainGoal || getAppearanceValue('goal') || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      updateAppearanceValue('goal', val);
-                      setEditForm(prev => ({
-                        ...prev,
-                        details: {
-                          ...(prev.details || {}),
-                          goal: val,
-                          motivationCore: {
-                            ...(prev.details?.motivationCore || {}),
-                            mainGoal: val
-                          }
-                        }
-                      }));
-                    }}
-                    placeholder="z. B. Frieden für das Reich, Rache an den Verrätern, Aufstieg zum Gildenmeister..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
-                  />
-                  <span className="text-[9px] text-slate-500">Synchronisiert mit dem Hauptziel des Charakters.</span>
-                </div>
-
-                {/* 2. Warum dieses Ziel / Innerer Antrieb */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-amber-400 font-bold uppercase">
-                    Innerer Antrieb / Warum dieses Ziel?
-                  </label>
-                  <AutoExpandingTextarea
-                    value={editForm.details?.motivationCore?.whyGoal || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setEditForm(prev => ({
-                        ...prev,
-                        details: {
-                          ...(prev.details || {}),
-                          motivationCore: {
-                            ...(prev.details?.motivationCore || {}),
-                            whyGoal: val
-                          }
-                        }
-                      }));
-                    }}
-                    placeholder="z. B. Suche nach Sicherheit, Schutz der Familie, unstillbarer Machthunger, Gerechtigkeitssinn..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
-                  />
-                  <span className="text-[9px] text-slate-500">Der tief sitzende emotionale oder existenzielle Grund.</span>
-                </div>
-
-                {/* 3. Aktuelle Prioritäten */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-slate-400 font-bold uppercase">
-                    Aktuelle Prioritäten
-                  </label>
-                  <AutoExpandingTextarea
-                    value={editForm.details?.motivationCore?.currentPriorities || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setEditForm(prev => ({
-                        ...prev,
-                        details: {
-                          ...(prev.details || {}),
-                          motivationCore: {
-                            ...(prev.details?.motivationCore || {}),
-                            currentPriorities: val
-                          }
-                        }
-                      }));
-                    }}
-                    placeholder="z. B. Ressourcen beschaffen, Spuren der Attentäter verfolgen, Verbündete überzeugen..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
-                  />
-                  <span className="text-[9px] text-slate-500">Was den Charakter momentan am stärksten beschäftigt.</span>
-                </div>
-
-                {/* 4. Bedürfnisse */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-slate-400 font-bold uppercase">
-                    Bedürfnisse
-                  </label>
-                  <AutoExpandingTextarea
-                    value={editForm.details?.motivationCore?.needs || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setEditForm(prev => ({
-                        ...prev,
-                        details: {
-                          ...(prev.details || {}),
-                          motivationCore: {
-                            ...(prev.details?.motivationCore || {}),
-                            needs: val
-                          }
-                        }
-                      }));
-                    }}
-                    placeholder="z. B. Nahrung, Geld, körperliche Sicherheit, soziale Anerkennung, Einfluss, Informationen..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
-                  />
-                  <span className="text-[9px] text-slate-500">Elementare und materielle Notwendigkeiten.</span>
-                </div>
-
-                {/* 5. Ängste & Vermeidung */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-red-400 font-bold uppercase">
-                    Ängste & Vermeidung
-                  </label>
-                  <AutoExpandingTextarea
-                    value={editForm.details?.motivationCore?.fears || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setEditForm(prev => ({
-                        ...prev,
-                        details: {
-                          ...(prev.details || {}),
-                          motivationCore: {
-                            ...(prev.details?.motivationCore || {}),
-                            fears: val
-                          }
-                        }
-                      }));
-                    }}
-                    placeholder="z. B. Verrat durch Vertraute, Kontrollverlust über magische Kräfte, Entehrung der Sippe..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-red-500 min-h-[60px]"
-                  />
-                  <span className="text-[9px] text-slate-500">Gefahren oder Umstände, die unbedingt vermieden werden sollen.</span>
-                </div>
-
-                {/* 6. Werte & Prinzipien */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-emerald-400 font-bold uppercase">
-                    Werte & Prinzipien
-                  </label>
-                  <AutoExpandingTextarea
-                    value={editForm.details?.motivationCore?.valuesPrinciples || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setEditForm(prev => ({
-                        ...prev,
-                        details: {
-                          ...(prev.details || {}),
-                          motivationCore: {
-                            ...(prev.details?.motivationCore || {}),
-                            valuesPrinciples: val
-                          }
-                        }
-                      }));
-                    }}
-                    placeholder="z. B. Treue zu Gefährten, Schutz der Schwachen, Pragmatismus vor Ehre..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 min-h-[60px]"
-                  />
-                  <span className="text-[9px] text-slate-500">Moralischer Kompass und Richtlinien des Handelns.</span>
-                </div>
-
-                {/* 7. Mittel & Vorgehensweise */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-sky-400 font-bold uppercase">
-                    Mittel & Vorgehensweise
-                  </label>
-                  <AutoExpandingTextarea
-                    value={editForm.details?.motivationCore?.methodsAndMeans || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setEditForm(prev => ({
-                        ...prev,
-                        details: {
-                          ...(prev.details || {}),
-                          motivationCore: {
-                            ...(prev.details?.motivationCore || {}),
-                            methodsAndMeans: val
-                          }
-                        }
-                      }));
-                    }}
-                    placeholder="z. B. Diplomatie und Verhandlung, verdeckte Täuschung, direkte Gewalt, langfristige Planung..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-sky-500 min-h-[60px]"
-                  />
-                  <span className="text-[9px] text-slate-500">Taktiken und Strategien zur Zielerreichung.</span>
-                </div>
-
-                {/* 8. Veränderbarkeit & Trigger */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-purple-400 font-bold uppercase">
-                    Veränderbarkeit & Trigger
-                  </label>
-                  <AutoExpandingTextarea
-                    value={editForm.details?.motivationCore?.changeTriggers || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      setEditForm(prev => ({
-                        ...prev,
-                        details: {
-                          ...(prev.details || {}),
-                          motivationCore: {
-                            ...(prev.details?.motivationCore || {}),
-                            changeTriggers: val
-                          }
-                        }
-                      }));
-                    }}
-                    placeholder="z. B. Verlust eines Gefährten, Enthüllung einer alten Lüge, Erreichen eines Etappenziels..."
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-purple-500 min-h-[60px]"
-                  />
-                  <span className="text-[9px] text-slate-500">Welche Ereignisse Prioritäten oder Gesinnung verändern können.</span>
+                <div>
+                  <span className="font-bold text-slate-200 block">Motivationskern, Ziele &amp; Beziehungen</span>
+                  <span className="text-[11px] text-slate-400">
+                    Werden zentral in Tab 2 verwaltet: Hauptziel, Ängste, Werte, Zeithorizonte und Pläne.
+                  </span>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setCharTab('beziehungen')}
+                className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <span>Zu Tab 2 wechseln</span>
+                <i className="fa-solid fa-arrow-right text-[10px]"></i>
+              </button>
             </div>
 
             {/* Geheimnis-Stufen (Verborgenes Wissen) */}
@@ -2483,15 +2489,15 @@ export const CharacterLoreForm: React.FC<Props> = ({
         </div>
       )}
 
-      {/* TAB 2: BEZIEHUNGEN */}
+      {/* TAB 2: BEZIEHUNGEN, MOTIVATION & ZIELE */}
       {charTab === 'beziehungen' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {activeTransformation && (
             <div className="bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-300">
               <div className="flex items-center gap-2">
-                <span>⚡</span>
+                <i className="fa-solid fa-bolt text-amber-400"></i>
                 <span>
-                  Du bearbeitest gerade die Beziehungen für die aktive Form <strong className="text-amber-400">&ldquo;{activeTransformation.transformName || activeTransformation.name}&rdquo;</strong>.
+                  Du bearbeitest gerade die Beziehungen, Motivation &amp; Ziele für die aktive Form <strong className="text-amber-400">&ldquo;{activeTransformation.transformName || activeTransformation.name}&rdquo;</strong>.
                 </span>
               </div>
               <button
@@ -2504,18 +2510,89 @@ export const CharacterLoreForm: React.FC<Props> = ({
             </div>
           )}
 
+          {/* 1. MOTIVATIONSKERN & HANDLUNGSANTRIEB */}
+          <CharacterMotivationPanel
+            motivationCore={editForm.details?.motivationCore || (editForm.details?.goal ? { mainGoal: editForm.details.goal } : undefined)}
+            mainGoalSync={editForm.details?.goal || ''}
+            onChange={(updatedCore) => {
+              setEditForm(prev => {
+                const curDetails = prev.details || {};
+                const newMainGoal = updatedCore.mainGoal !== undefined ? updatedCore.mainGoal : (curDetails.goal || '');
+                let currentGoals = curDetails.goals || [];
+                if (updatedCore.mainGoal && currentGoals.length === 0) {
+                  currentGoals = [{
+                    id: `goal-${Date.now()}`,
+                    title: updatedCore.mainGoal,
+                    description: '',
+                    timeframe: 'langfristig',
+                    targetType: 'self',
+                    targetName: 'Selbst',
+                    priority: 'hoch',
+                    status: 'aktiv',
+                    motivation: updatedCore.whyGoal || '',
+                    activePlan: updatedCore.methodsAndMeans || '',
+                    alternativePlans: [],
+                    obstacles: updatedCore.fears ? [updatedCore.fears] : [],
+                    progress: 0,
+                    createdAt: new Date().toISOString()
+                  }];
+                }
+                return {
+                  ...prev,
+                  details: {
+                    ...curDetails,
+                    goal: newMainGoal,
+                    motivationCore: updatedCore,
+                    goals: currentGoals
+                  }
+                };
+              });
+            }}
+            onGenerateAI={handleGenerateMotivationCore}
+            isGenerating={isGeneratingMotivationCore}
+            isOpen={isMotivationOpen}
+            onToggleOpen={() => setIsMotivationOpen(prev => !prev)}
+          />
+
+          {/* 2. ZIELE & PLÄNE */}
+          <CharacterGoalsPanel
+            goals={getGoals()}
+            onChange={updateGoals}
+            motivationCore={editForm.details?.motivationCore}
+            codexCharacters={codexCharactersForGoals}
+            codexFactions={codexFactionsForGoals}
+            characterName={editForm.title || editForm.details?.callName || 'Charakter'}
+            onGenerateAI={handleGenerateGoalsAI}
+            isGeneratingAI={isGeneratingGoalsAI}
+            isOpen={isGoalsOpen}
+            onToggleOpen={() => setIsGoalsOpen(prev => !prev)}
+          />
+
+          {/* 3. BEZIEHUNGEN & VERHALTEN ZU ANDEREN */}
           <div className="flex flex-col gap-3 bg-slate-900/40 p-5 border border-slate-800 rounded-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-1">
-              <div>
-                <span className="text-sm text-slate-200 font-bold uppercase tracking-wider flex items-center gap-2">
-                  <i className="fa-solid fa-people-arrows text-amber-500"></i>
-                  <span>Beziehungen &amp; Verhalten zu anderen {activeTransformation ? `(${activeTransformation.transformName || activeTransformation.name})` : ''}</span>
-                </span>
-                <span className="text-xs text-slate-400 block mt-0.5">Wer ist dieser Charakter für andere und wie verhält er sich zu ihnen?</span>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-1 flex-wrap gap-2">
+              <div 
+                className="flex items-center gap-2 cursor-pointer select-none"
+                onClick={() => setIsRelationshipsOpen(prev => !prev)}
+              >
+                <i className={`fa-solid fa-chevron-right text-xs text-slate-400 transition-transform ${isRelationshipsOpen ? 'rotate-90' : ''}`}></i>
+                <div>
+                  <span className="text-sm text-slate-200 font-bold uppercase tracking-wider flex items-center gap-2">
+                    <i className="fa-solid fa-people-arrows text-amber-500"></i>
+                    <span>Beziehungen &amp; Verhalten zu anderen {activeTransformation ? `(${activeTransformation.transformName || activeTransformation.name})` : ''}</span>
+                    {getRelationships().length > 0 && (
+                      <span className="px-1.5 py-0.5 bg-slate-800 text-amber-400 rounded-full text-[10px] font-bold">
+                        {getRelationships().length}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs text-slate-400 block mt-0.5">Wer ist dieser Charakter für andere und wie verhält er sich zu ihnen?</span>
+                </div>
               </div>
               <button 
                 type="button"
                 onClick={() => {
+                  if (!isRelationshipsOpen) setIsRelationshipsOpen(true);
                   const currentRels = getRelationships();
                   const newRel: CharacterRelationship = {
                     id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
@@ -2538,50 +2615,54 @@ export const CharacterLoreForm: React.FC<Props> = ({
               </button>
             </div>
 
-            {getRelationships().length === 0 ? (
-              <div className="text-xs text-slate-400 italic px-2 py-6 text-center bg-slate-950/40 rounded-xl border border-slate-800/60">
-                Bisher keine Beziehungen angelegt. Klicke oben auf &ldquo;+ Eintrag hinzufügen&rdquo;, um eine Beziehung zu einem NPC, Spieler oder einer Fraktion zu definieren.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {getRelationships().map((rel, idx) => {
-                  const codexCharacters = lore
-                    .filter(item => item.category === 'Charaktere' && item.title?.trim().toLowerCase() !== editForm.title?.trim().toLowerCase())
-                    .map(c => ({ id: c.id, title: c.title }));
+            {isRelationshipsOpen && (
+              <>
+                {getRelationships().length === 0 ? (
+                  <div className="text-xs text-slate-400 italic px-2 py-6 text-center bg-slate-950/40 rounded-xl border border-slate-800/60">
+                    Bisher keine Beziehungen angelegt. Klicke oben auf &ldquo;+ Eintrag hinzufügen&rdquo;, um eine Beziehung zu einem NPC, Spieler oder einer Fraktion zu definieren.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {getRelationships().map((rel, idx) => {
+                      const codexCharacters = lore
+                        .filter(item => item.category === 'Charaktere' && item.title?.trim().toLowerCase() !== editForm.title?.trim().toLowerCase())
+                        .map(c => ({ id: c.id, title: c.title }));
 
-                  return (
-                    <RelationshipDetailEditor
-                      key={rel.id || `rel-char-${idx}`}
-                      rel={rel}
-                      idx={idx}
-                      sourceCharacterName={editForm.title || 'Charakter'}
-                      codexCharacters={codexCharacters}
-                      playerName={playerName}
-                      world={world}
-                      allLoreEntries={lore}
-                      onChange={updated => {
-                        const newList = [...getRelationships()];
-                        newList[idx] = updated;
-                        updateRelationships(newList);
-                        if (editForm.title?.trim()) {
-                          const synced = syncLoreWithReciprocalRelationships(lore, editForm.title.trim(), newList);
-                          onUpdateLore(synced);
-                        }
-                      }}
-                      onDelete={() => {
-                        const rels = getRelationships();
-                        const relToDelete = rels[idx];
-                        const newList = rels.filter(r => r.id !== rel.id);
-                        updateRelationships(newList);
-                        if (editForm.title?.trim() && relToDelete?.targetCharacter) {
-                          const synced = removeCounterpartRelationshipFromLore(lore, editForm.title.trim(), relToDelete.targetCharacter);
-                          onUpdateLore(synced);
-                        }
-                      }}
-                    />
-                  );
-                })}
-              </div>
+                      return (
+                        <RelationshipDetailEditor
+                          key={rel.id || `rel-char-${idx}`}
+                          rel={rel}
+                          idx={idx}
+                          sourceCharacterName={editForm.title || 'Charakter'}
+                          codexCharacters={codexCharacters}
+                          playerName={playerName}
+                          world={world}
+                          allLoreEntries={lore}
+                          onChange={updated => {
+                            const newList = [...getRelationships()];
+                            newList[idx] = updated;
+                            updateRelationships(newList);
+                            if (editForm.title?.trim()) {
+                              const synced = syncLoreWithReciprocalRelationships(lore, editForm.title.trim(), newList);
+                              onUpdateLore(synced);
+                            }
+                          }}
+                          onDelete={() => {
+                            const rels = getRelationships();
+                            const relToDelete = rels[idx];
+                            const newList = rels.filter(r => r.id !== rel.id);
+                            updateRelationships(newList);
+                            if (editForm.title?.trim() && relToDelete?.targetCharacter) {
+                              const synced = removeCounterpartRelationshipFromLore(lore, editForm.title.trim(), relToDelete.targetCharacter);
+                              onUpdateLore(synced);
+                            }
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

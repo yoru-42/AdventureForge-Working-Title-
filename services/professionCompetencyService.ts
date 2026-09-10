@@ -458,18 +458,6 @@ export function migrateLegacyProfessionData(char: Character): Character {
   let newComps = existingComps;
   if (!Array.isArray(newComps)) {
     newComps = [];
-  } else {
-    const seenIds = new Set<string>();
-    const seenNames = new Set<string>();
-    newComps = newComps.filter(c => {
-      if (!c) return false;
-      const norm = (c.name || '').toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '');
-      if (c.id && seenIds.has(c.id)) return false;
-      if (norm && seenNames.has(norm)) return false;
-      if (c.id) seenIds.add(c.id);
-      if (norm) seenNames.add(norm);
-      return true;
-    });
   }
 
   // Initialize arrays safely without overwriting

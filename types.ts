@@ -436,6 +436,34 @@ export interface MotivationCore {
   changeTriggers?: string; // Veränderbarkeit (Welche Ereignisse können Ziele oder Prioritäten verändern?)
 }
 
+export type GoalTimeframe = 'langfristig' | 'mittelfristig' | 'kurzfristig';
+
+export type GoalTargetType = 'character' | 'faction' | 'user' | 'world' | 'self';
+
+export type GoalPriority = 'niedrig' | 'normal' | 'hoch' | 'kritisch';
+
+export type GoalStatus = 'aktiv' | 'pausiert' | 'erreicht' | 'gescheitert' | 'aufgegeben';
+
+export interface CharacterGoal {
+  id: string;
+  title: string;
+  description?: string;
+  timeframe: GoalTimeframe;
+  targetType?: GoalTargetType;
+  targetId?: string;
+  targetName?: string;
+  priority?: GoalPriority | number;
+  status?: GoalStatus;
+  motivation?: string;
+  activePlan?: string;
+  alternativePlans?: string[];
+  obstacles?: string[];
+  progress?: number;
+  linkedRelationshipId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface CharacterRelationship {
   id: string;
   targetCharacter: string;
@@ -640,6 +668,7 @@ export interface Character {
   currentSituation?: string;
   goal?: string;
   motivationCore?: MotivationCore;
+  goals?: CharacterGoal[];
   image?: string;
   expressions?: Record<string, string>;
   skills?: string;
@@ -652,6 +681,7 @@ export interface Character {
   socialTitles?: SocialTitleState[];
   offices?: OfficeState[];
   positions?: PositionState[];
+  socialStatus?: string; // Soziale / rechtliche Lebenssituation (z.B. Freibürger, Adliger, Leibeigener, Sklave, Schüler, Student, Vogelfrei)
   professionLevel?: string;
   secondaryProfessions?: SecondaryProfession[];
   jobTitle?: string;
@@ -1977,6 +2007,8 @@ export interface FactionDetails {
   philosophy?: string; // Leitmotiv / Grundphilosophie
   maxMembers?: number; // Maximale Mitgliederzahl / Gruppengröße
   members?: FactionMember[]; // Mitgliederliste für Wirtschafts- & Managementsystem
+  motivationCore?: MotivationCore;
+  goals?: CharacterGoal[];
 }
 
 export interface LoreEntry {

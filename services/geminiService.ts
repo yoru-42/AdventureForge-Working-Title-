@@ -785,6 +785,56 @@ ANWEISUNGEN:
     };
   }
 
+  private static getCharacterGoalsSchema() {
+    return {
+      type: Type.ARRAY,
+      description: "Strukturierte Ziele und Pläne des Charakters",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING, description: "Eindeutige ID des Ziels (z.B. goal-1)" },
+          title: { type: Type.STRING, description: "Klar formulierter Titel des Ziels (WAS will der Charakter erreichen?)" },
+          description: { type: Type.STRING, description: "Kontext und nähere Beschreibung des Ziels" },
+          timeframe: { 
+            type: Type.STRING, 
+            description: "Zeithorizont: 'langfristig', 'mittelfristig' oder 'kurzfristig'",
+            enum: ["langfristig", "mittelfristig", "kurzfristig"]
+          },
+          targetType: {
+            type: Type.STRING,
+            description: "Art des Zielobjekts: 'self' (persönlich), 'character' (Zielperson), 'faction' (Fraktion), 'user' (Spieler), 'world' (Welt)",
+            enum: ["self", "character", "faction", "user", "world"]
+          },
+          targetName: { type: Type.STRING, description: "Name des Zielobjekts (Person, Fraktion, 'Spieler' oder 'Selbst')" },
+          priority: { 
+            type: Type.STRING, 
+            description: "Priorität des Ziels",
+            enum: ["kritisch", "hoch", "normal", "niedrig"]
+          },
+          status: { 
+            type: Type.STRING, 
+            description: "Status des Ziels",
+            enum: ["aktiv", "pausiert", "erreicht", "gescheitert", "aufgegeben"]
+          },
+          motivation: { type: Type.STRING, description: "Warum verfolgt der Charakter dieses Ziel? (Verbindung zum Motivationskern)" },
+          activePlan: { type: Type.STRING, description: "Aktiver Plan (WIE will der Charakter das Ziel erreichen? Schrittfolge)" },
+          alternativePlans: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "Alternativpläne (Plan B, Plan C...)"
+          },
+          obstacles: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: "Hindernisse, Risiken und Konflikte"
+          },
+          progress: { type: Type.INTEGER, description: "Fortschritt von 0 bis 100" }
+        },
+        required: ["id", "title", "timeframe", "targetType", "priority", "status", "activePlan"]
+      }
+    };
+  }
+
   private static getPersonalityTraitsSchema() {
     return {
       type: Type.OBJECT,
@@ -836,6 +886,7 @@ ANWEISUNGEN:
         currentSituation: { type: Type.STRING, description: "Was macht die Person gerade, bevor sie dem Spieler begegnet? Dies MUSS sich rein auf ihre eigene Vergangenheit oder ihren eigenen aktuellen Alltag beziehen, VÖLLIG UNABHÄNGIG vom Spieler. Sie darf nichts über die aktuelle Lage des Spielers wissen oder darauf Bezug nehmen!" },
         goal: { type: Type.STRING, description: "Was will die Person erreichen?" },
         motivationCore: this.getMotivationCoreSchema(),
+        goals: this.getCharacterGoalsSchema(),
         powerSource: { type: Type.STRING, description: "Herkunft der Kraft, z.B. Teufelsfrucht, Mana, Chakra, Technologie." },
         powerCost: { type: Type.STRING, description: "Kosten oder Limitierungen der Kraft, z.B. Ausdauer, MP, Lebensenergie, Nebenwirkungen." },
         skills: { type: Type.STRING, description: "Die eigentliche Spezialfähigkeit oder Kraft detailliert beschrieben." },
@@ -4614,6 +4665,139 @@ ${JSON.stringify(existingCore, null, 2)}\n`;
     });
   }
 
+  static async autofillCharacterGoals(
+    characterName: string,
+    characterRole?: string,
+    characterBio?: string,
+    characterPersonality?: string,
+    motivationCore?: any,
+    existingGoals?: any[],
+    relationships?: any[],
+    availableCharacters?: string[],
+    availableFactions?: string[],
+    playerName?: string,
+    userNotes?: string,
+    worldContext?: any
+  ): Promise<any[]> {
+    return this.callWithRetry(async () => {
+      const ai = this.getAI();
+
+      let contextPrompt = `Erstelle oder ergänze strukturiert 2 bis 4 realistische, packende und handlungsorientierte Ziele und Pläne für den RPG-Charakter "${characterName}".
+
+WICHTIGE DIRECTIVEN:
+0. KEINE EMOJIS: Verwende unter KEINEN Umständen Emojis in den Textfeldern oder Namen!
+1. EINBINDUNG DES MOTIVATIONSKERNS: Die Ziele müssen logisch aus dem übergeordneten Hauptziel und den Bedürfnissen/Werten des Charakters hervorgehen.
+2. ZEITHORIZONTE AUSGEWOGEN MISCHEN:
+   - Mindestens 1 langfristiges Ziel (Lebensvision / Große Ambition)
+   - 1 bis 2 mittelfristige Ziele (Etappenziele)
+   - 1 kurzfristiges Ziel (unmittelbare nächste Schritte)
+3. ZIELOBJEKTE & TYPEN (targetType):
+   - 'self': Persönliche Ziele (z.B. Fähigkeiten meistern, Geld sparen, gesunden, eigene Angst überwinden).
+   - 'character': Ziel gegenüber einer konkreten Zielperson aus der Welt (z.B. Vertrauen gewinnen, Rivalen übertrumpfen, jemanden beschützen).
+   - 'faction': Ziel bezüglich einer Gilde, Fraktion oder Gruppe (z.B. beitreten, Rang aufsteigen, Einfluss schwächen).
+   - 'user': Ziel DEM SPIELER GEGENÜBER (z.B. den Spieler beobachten, das Vertrauen des Spielers prüfen, den Spieler anwerben, Abstand wahren).
+   - 'world': Übergreifendes Ziel bezüglich der Spielwelt oder eines Ortes.
+4. STRENGSTES VERBOT: NUTZERZIELE NIEMALS ERFINDEN!
+   - Ziele mit targetType 'user' sind AUSSCHLIESSLICH die Ziele des Charakters DEM SPIELER GEGENÜBER.
+   - Es dürfen NIEMALS die internen Ziele des Nutzers/Spielers selbst erfunden oder vorgegeben werden!
+5. STRUKTUR JEDES ZIELS (WAS vs. WIE):
+   - 'title': Klares Ziel (WAS will er erreichen?).
+   - 'activePlan': Nummerierte konkrete Handlungsschritte (WIE geht er vor?).
+   - 'alternativePlans': Mindestens 1-2 Ausweichpläne (Plan B, Plan C), falls der Hauptplan scheitert.
+   - 'obstacles': Konkrete Hindernisse, Risiken und Loyalitätskonflikte.
+   - 'priority': 'kritisch', 'hoch', 'normal' oder 'niedrig'.
+   - 'status': Standardmäßig 'aktiv'.
+6. BESTEHENDE ZIELE:
+   - Falls bereits Ziele existieren, behalte diese bei und ergänze oder verfeinere sie stimmig.
+
+Charakterdaten:
+- Name: ${characterName}
+- Rolle: ${characterRole || 'Unbekannt'}
+- Persönlichkeit: ${characterPersonality || 'Unbekannt'}
+- Biografie: ${characterBio || 'Unbekannt'}
+`;
+
+      if (worldContext) {
+        contextPrompt = `### WELTKONTEXT:
+- Welt: "${worldContext.title || ''}" (${worldContext.era || ''})
+- Ton: "${worldContext.tone || ''}"
+- Beschreibung: "${worldContext.description || ''}"\n\n` + contextPrompt;
+      }
+
+      if (motivationCore) {
+        contextPrompt += `\n### MOTIVATIONSKERN DES CHARAKTERS:
+- Hauptziel: "${motivationCore.mainGoal || ''}"
+- Warum: "${motivationCore.whyGoal || ''}"
+- Aktuelle Prioritäten: "${motivationCore.currentPriorities || ''}"
+- Bedürfnisse: "${motivationCore.needs || ''}"
+- Ängste: "${motivationCore.fears || ''}"
+- Werte & Prinzipien: "${motivationCore.valuesPrinciples || ''}"
+- Bevorzugte Mittel: "${motivationCore.methodsAndMeans || ''}"\n`;
+      }
+
+      if (relationships && relationships.length > 0) {
+        contextPrompt += `\n### BEZIEHUNGEN DES CHARAKTERS:
+${JSON.stringify(relationships.map(r => ({ target: r.targetCharacter, type: r.type, status: r.relationshipStatus })), null, 2)}\n`;
+      }
+
+      if (availableCharacters && availableCharacters.length > 0) {
+        contextPrompt += `\n### BEKANNTE CHARAKTERE IN DER WELT: ${availableCharacters.slice(0, 10).join(', ')}\n`;
+      }
+
+      if (availableFactions && availableFactions.length > 0) {
+        contextPrompt += `\n### BEKANNTE FRAKTIONEN: ${availableFactions.slice(0, 8).join(', ')}\n`;
+      }
+
+      if (playerName) {
+        contextPrompt += `\n### SPIELERNAME: "${playerName}" (für eventuelle Ziele vom Typ 'user')\n`;
+      }
+
+      if (existingGoals && existingGoals.length > 0) {
+        contextPrompt += `\n### BEREITS VORHANDENE ZIELE (Integriere & behalte diese bei):
+${JSON.stringify(existingGoals, null, 2)}\n`;
+      }
+
+      if (userNotes && userNotes.trim()) {
+        contextPrompt += `\n### BENUTZERWÜNSCHE FÜR DIE ZIELE:
+"${userNotes.trim()}"\n`;
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              goals: this.getCharacterGoalsSchema()
+            },
+            required: ["goals"]
+          }
+        }
+      });
+
+      const parsed = this.parseJSONSafely(response.text || '{}', { goals: [] });
+      const rawGoals = Array.isArray(parsed.goals) ? parsed.goals : [];
+      return rawGoals.map((g: any, idx: number) => ({
+        id: g.id || `goal-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        title: g.title || 'Unbenanntes Ziel',
+        description: g.description || '',
+        timeframe: ['langfristig', 'mittelfristig', 'kurzfristig'].includes(g.timeframe) ? g.timeframe : 'mittelfristig',
+        targetType: ['self', 'character', 'faction', 'user', 'world'].includes(g.targetType) ? g.targetType : 'self',
+        targetName: g.targetName || (g.targetType === 'user' ? (playerName || 'Spieler') : g.targetType === 'self' ? 'Selbst' : ''),
+        priority: ['kritisch', 'hoch', 'normal', 'niedrig'].includes(g.priority) ? g.priority : 'normal',
+        status: ['aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben'].includes(g.status) ? g.status : 'aktiv',
+        motivation: g.motivation || '',
+        activePlan: g.activePlan || '',
+        alternativePlans: Array.isArray(g.alternativePlans) ? g.alternativePlans : (g.alternativePlans ? [g.alternativePlans] : []),
+        obstacles: Array.isArray(g.obstacles) ? g.obstacles : (g.obstacles ? [g.obstacles] : []),
+        progress: typeof g.progress === 'number' ? Math.max(0, Math.min(100, g.progress)) : 0,
+        createdAt: g.createdAt || new Date().toISOString()
+      }));
+    });
+  }
+
   static async autofillLoreEntry(
     text: string, 
     category: string, 
@@ -4956,6 +5140,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
           faction: { type: Type.STRING, description: "Fraktion, Gilde oder Bündnis (z. B. 'Abenteurergilde')." },
           goal: { type: Type.STRING, description: "Lebensziel oder primäre Motivation." },
           motivationCore: this.getMotivationCoreSchema(),
+          goals: this.getCharacterGoalsSchema(),
           skills: { type: Type.STRING, description: "Fähigkeiten/Kräftebeschreibung (z. B. 'Erschaffung von Eiswaffen')." },
           powerSource: { type: Type.STRING, description: "Quelle der Macht (z. B. 'Manaschwankungen', 'Antike Runen')." },
           powerCost: { type: Type.STRING, description: "Limitierungen oder Energiekosten (z. B. 'Erhöhte Herztätigkeit', 'MP-Abzug')." },

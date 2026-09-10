@@ -23,6 +23,69 @@ export const SOCIAL_TITLE_TYPES: Record<string, string> = {
   civic: 'Bürgerlicher Titel'
 };
 
+export const PRESET_NOBILITY_TITLES: Array<{ title: string; rankOrder: number; description: string }> = [
+  { title: 'Kaiser / Kaiserin', rankOrder: 1, description: 'Höchster weltlicher Herrschertitel eines Großreiches oder Imperiums.' },
+  { title: 'König / Königin', rankOrder: 2, description: 'Souveräner Herrscher eines Königreiches.' },
+  { title: 'Großherzog / Großherzogin', rankOrder: 3, description: 'Souveräner Fürst mit königsgleichen Vorrechten über ein Großherzogtum.' },
+  { title: 'Herzog / Herzogin', rankOrder: 4, description: 'Hoher Landesherr über ein historisches Herzogtum.' },
+  { title: 'Fürst / Fürstin', rankOrder: 5, description: 'Herrscher über ein autonomes Fürstentum mit Reichsstandschaft.' },
+  { title: 'Graf / Gräfin', rankOrder: 6, description: 'Verwalter und Herrscher einer Grafschaft mit eigener Gerichtsbarkeit.' },
+  { title: 'Baron / Baronin (Freiherr / Freiin)', rankOrder: 7, description: 'Freier Adelsstand mit eigenem Grundbesitz und Lehnsherrschaft.' },
+  { title: 'Edler / Edle', rankOrder: 8, description: 'Niederer erblicher Adelsstand des Landadels.' },
+  { title: 'Junker / Edelfräulein', rankOrder: 9, description: 'Nachkomme oder junger Spross einer adligen Familie ohne eigenen Besitz.' },
+  { title: 'Kronprinz / Kronprinzessin', rankOrder: 2, description: 'Thronfolger eines Königs- oder Kaiserhauses.' },
+  { title: 'Erbprinz / Erbprinzessin', rankOrder: 5, description: 'Erblicher Nachfolger eines regierenden Fürsten- oder Herzogshauses.' }
+];
+
+export const PRESET_HONORARY_TITLES: Array<{ title: string; description: string }> = [
+  { title: 'Held / Heldin des Reiches', description: 'Besondere gesellschaftliche Auszeichnung für herausragende Taten.' },
+  { title: 'Saint / Saintess', description: 'Sakraler Ehrentitel für anerkannte Heiligsprechung oder göttliche Erwählung.' },
+  { title: 'Ehrenbürger', description: 'Bürgerliche Würdigung einer Stadt oder freien Gemeinde.' },
+  { title: 'Großkomtur', description: 'Hohe ritterliche Auszeichnung innerhalb eines Ordens.' }
+];
+
+export const PRESET_OFFICES: Array<{ name: string; institution: string; description: string }> = [
+  { name: 'Kanzler', institution: 'Staatskanzlei / Kronrat', description: 'Leiter der Regierungsgeschäfte und Siegelbewahrer.' },
+  { name: 'Verwalter', institution: 'Landesverwaltung / Gutshof', description: 'Ökonomische und organisatorische Leitung von Liegenschaften.' },
+  { name: 'Kurfürstlicher Beamter', institution: 'Kurfürstliches Amt', description: 'Behördliche Vertretung und Aktenführung des Kurfürstentums.' },
+  { name: 'Richter', institution: 'Stadt- oder Landesgericht', description: 'Ausübung der ordentlichen Gerichtsbarkeit.' },
+  { name: 'Bürgermeister', institution: 'Magistrat / Stadtrat', description: 'Gewähltes oder bestelltes Oberhaupt einer freien Stadt.' },
+  { name: 'Seneschall', institution: 'Herrscherpalast', description: 'Oberster Verwalter des Hofstaates und der Pfalzen.' },
+  { name: 'Bischof / Propst', institution: 'Diözese / Kirchenprovinz', description: 'Geistliche und weltliche Leitung einer kirchlichen Verwaltungseinheit.' },
+  { name: 'Abt / Äbtissin', institution: 'Kloster / Abtei', description: 'Vorsteher einer klösterlichen Gemeinschaft.' },
+  { name: 'Theokrat', institution: 'Religiöser Staat', description: 'Staatsoberhaupt eines religiös regierten Territoriums.' },
+  { name: 'Inquisitor', institution: 'Glaubensgericht', description: 'Untersuchungsrichter für Ketzerei und verbotene Praktiken.' },
+  { name: 'Gūji (Oberpriester)', institution: 'Schrein-Kollegium', description: 'Oberster Leiter eines Hauptschreins.' }
+];
+
+export const PRESET_POSITIONS: Array<{ title: string; category: string; description: string }> = [
+  { title: 'General', category: 'Militär', description: 'Oberbefehlshaber von Feldheeren und Armeekorps.' },
+  { title: 'Admiral', category: 'Marine', description: 'Oberbefehlshaber der Kriegs- und Hochseeflotte.' },
+  { title: 'Kommandant', category: 'Militär', description: 'Führungsoffizier einer Garnison, Festung oder Einheit.' },
+  { title: 'Taktiker / Strategieberater', category: 'Militär & Hof', description: 'Militärtheoretische Analyse und Ausarbeitung von Schlachtplänen.' },
+  { title: 'Quartiermeister', category: 'Logistik', description: 'Verantwortlich für Heeresversorgung, Ausrüstung und Quartier.' },
+  { title: 'Diplomat / Gesandter', category: 'Hof & Staat', description: 'Bevollmächtigter Unterhändler für zwischenstaatliche Verträge.' },
+  { title: 'Berater / Ratsherr', category: 'Hof & Staat', description: 'Mitglied des Konsultativrates eines Herrschers oder einer Stadt.' },
+  { title: 'Leibwächter', category: 'Schutz', description: 'Persönlicher Nahschutz für Würdenträger oder Adlige.' },
+  { title: 'Körperdouble', category: 'Geheimdienst', description: 'Täuschungsrolle zur Abwehr von Attentaten auf Schutzpersonen.' },
+  { title: 'Grenzpatrouille / Postenführer', category: 'Sicherheit', description: 'Überwachung von Grenzlinien und Reichstoren.' },
+  { title: 'Ritter (Ordensritter / Lehnsritter)', category: 'Militär & Stand', description: 'Geweihter oder belehnter berittener Kämpfer.' },
+  { title: 'Vorkoster', category: 'Hofdienst', description: 'Prüfung von Speisen und Getränken auf Gifte vor dem Fürsten.' }
+];
+
+export const PRESET_SOCIAL_STATUSES: Array<{ status: string; description: string }> = [
+  { status: 'Freibürger', description: 'Freier Stadt- oder Landbewohner mit vollen Bürgerrechten.' },
+  { status: 'Zunftbürger', description: 'Vollberechtigtes Mitglied einer anerkannten Handwerks- oder Handelsgilde.' },
+  { status: 'Adelsstand', description: 'Gebürtiges oder erhobenes Mitglied des herrschenden Standes.' },
+  { status: 'Kleriker / Geistlicher', description: 'Person im geweihten geistlichen Dienst.' },
+  { status: 'Leibeigener / Höriger', description: 'An die Scholle gebundener Bauer unter grundherrlicher Abhängigkeit.' },
+  { status: 'Sklave', description: 'Rechtlich unfreie Person ohne Bürgerrechte im Eigentum eines Besitzers.' },
+  { status: 'Schüler / Student', description: 'Person in akademischer oder schulischer Ausbildung.' },
+  { status: 'Schutzbefohlener', description: 'Unter rechtlicher Vormundschaft oder Asyl stehende Person.' },
+  { status: 'Vogelfrei / Geächtet (Outlaw)', description: 'Person außerhalb des Rechtsschutzes, zur Festnahme oder Tötung freigegeben.' },
+  { status: 'Deserteur / Flüchtiger', description: 'Vom Militär oder der Justiz steckbrieflich gesuchte Person.' }
+];
+
 export interface PositionChangeEvent {
   positionTitle: string;
   action?: 'appoint' | 'dismiss' | 'resign' | 'recognize';

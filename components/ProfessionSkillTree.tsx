@@ -6,7 +6,7 @@ import {
   evaluateNodePrerequisites,
   NodeEvaluationResult
 } from '../lib/professionTreeData';
-import { ProfessionCompetency } from '../types';
+import { ProfessionCompetency, ProfessionExperience, ProfessionProgress } from '../types';
 import {
   getCatalogCompetenciesForProfession,
   ProfessionCompetencyDefinition
@@ -14,27 +14,20 @@ import {
 import {
   createCompetencyFromDefinition,
   calculateCompetencyProgress,
-  normalizeCompetency,
-  getTalentLabel
+  formatProfessionExperience
 } from '../services/professionCompetencyService';
 import {
-  CheckCircle2,
-  Lock,
-  Compass,
-  ArrowRight,
-  BookOpen,
-  Layers,
-  ChevronRight,
-  TrendingUp,
-  Sparkles,
-  GitFork,
   Check,
+  Lock,
   Plus,
   Minus,
-  Award,
-  Trash2,
   Dumbbell,
-  GraduationCap
+  ChevronDown,
+  ChevronUp,
+  Sliders,
+  Calendar,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 
 export interface ProfessionSkillTreeProps {
@@ -44,6 +37,12 @@ export interface ProfessionSkillTreeProps {
   currentSpecialization?: string;
   currentRank?: string;
   experienceYears?: number;
+  experienceMonths?: number;
+  experienceDays?: number;
+  professionExperience?: ProfessionExperience;
+  onExperienceChange?: (exp: ProfessionExperience) => void;
+  professionProgress?: ProfessionProgress;
+  onProfessionProgressChange?: (progress: ProfessionProgress) => void;
   competencies?: ProfessionCompetency[];
   onCompetenciesChange?: (competencies: ProfessionCompetency[]) => void;
   onPracticeCompetency?: (competency: ProfessionCompetency) => void;
@@ -53,24 +52,65 @@ export interface ProfessionSkillTreeProps {
   readOnly?: boolean;
 }
 
-const TIER_LABELS: Record<ProfessionNodeTier, string> = {
-  einstieg: 'Stufe 1: Lehrling / Einstieg',
-  beruf: 'Stufe 2: Kernberufe',
-  spezialisierung: 'Stufe 3: Spezialisierungen',
-  meister: 'Stufe 4: Meisterstufe'
-};
-
-const TIER_BADGE_STYLES: Record<ProfessionNodeTier, string> = {
-  einstieg: 'bg-slate-800 text-slate-300 border-slate-700',
-  beruf: 'bg-amber-950/50 text-amber-300 border-amber-800/60 font-medium',
-  spezialisierung: 'bg-cyan-950/50 text-cyan-300 border-cyan-800/60 font-medium',
-  meister: 'bg-amber-500/20 text-amber-200 border-amber-500/40 font-semibold'
-};
-
 interface BranchGroup {
   coreNode: ProfessionTreeNode;
   specializations: ProfessionTreeNode[];
   masters: ProfessionTreeNode[];
+}
+
+interface NodeCompetencyItem {
+  name: string;
+  proficiency: number;
+  category: string;
+  talent: number;
+  isCustom?: boolean;
+  raw?: ProfessionCompetency;
+}
+
+interface NodeTalentItem {
+  name: string;
+  score: number; // 1 - 5
+}
+
+/**
+ * Generates an ASCII-style block progress bar matching the specification:
+ * e.g. 41% -> ████████░░░░░░░░░░░░
+ */
+function renderAsciiBar(percent: number, totalBlocks = 20): string {
+  const safePercent = Math.max(0, Math.min(100, percent));
+  const filled = Math.round((safePercent / 100) * totalBlocks);
+  const unfilled = totalBlocks - filled;
+  return '█'.repeat(filled) + '░'.repeat(unfilled);
+}
+
+/**
+ * Formats experience for compact node display:
+ * e.g. "180 Tage", "2 J. 3 Mon.", "1 Jahr"
+ */
+function formatNodeExperience(
+  exp?: ProfessionExperience | number,
+  fallbackDays?: number
+): string {
+  if (typeof exp === 'number') {
+    if (exp <= 0 && fallbackDays) return `${fallbackDays} Tage`;
+    return `${exp} ${exp === 1 ? 'Jahr' : 'Jahre'}`;
+  }
+  if (!exp) {
+    if (fallbackDays) return `${fallbackDays} Tage`;
+    return '0 Tage';
+  }
+
+  const y = exp.years || 0;
+  const m = exp.months || 0;
+  const d = exp.days || 0;
+
+  if (y > 0 && m > 0) return `${y} J. ${m} Mon.`;
+  if (y > 0) return `${y} ${y === 1 ? 'Jahr' : 'Jahre'}`;
+  if (m > 0 && d > 0) return `${m} Mon. ${d} Tage`;
+  if (m > 0) return `${m} ${m === 1 ? 'Monat' : 'Monate'}`;
+  if (d > 0) return `${d} ${d === 1 ? 'Tag' : 'Tage'}`;
+  if (fallbackDays) return `${fallbackDays} Tage`;
+  return '0 Tage';
 }
 
 export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
@@ -80,6 +120,12 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   currentSpecialization = '',
   currentRank = '',
   experienceYears = 0,
+  experienceMonths = 0,
+  experienceDays = 0,
+  professionExperience,
+  onExperienceChange,
+  professionProgress,
+  onProfessionProgressChange,
   competencies = [],
   onCompetenciesChange,
   onPracticeCompetency,
@@ -92,26 +138,27 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
     return getProfessionTreeForField(fieldId, fieldName);
   }, [fieldId, fieldName]);
 
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
-  const [compCategoryFilter, setCompCategoryFilter] = useState<string>('Alle');
+  const [selectedSpecNodeId, setSelectedSpecNodeId] = useState<string | null>(null);
+  const [editingExpNodeId, setEditingExpNodeId] = useState<string | null>(null);
+  const [editingProgNodeId, setEditingProgNodeId] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
-  // Map of node evaluations
-  const evaluations = useMemo(() => {
-    const map = new Map<string, NodeEvaluationResult>();
-    for (const node of tree.nodes) {
-      const evalResult = evaluateNodePrerequisites(node, {
-        profession: currentProfession,
-        professionSpecialization: currentSpecialization,
-        professionRank: currentRank,
-        experienceYears,
-        competencies
-      });
-      map.set(node.id, evalResult);
+  // Derive current structured experience
+  const currentExp: ProfessionExperience = useMemo(() => {
+    if (professionExperience) {
+      return {
+        years: professionExperience.years ?? experienceYears,
+        months: professionExperience.months ?? experienceMonths,
+        days: professionExperience.days ?? experienceDays
+      };
     }
-    return map;
-  }, [tree, currentProfession, currentSpecialization, currentRank, experienceYears, competencies]);
+    return {
+      years: experienceYears,
+      months: experienceMonths,
+      days: experienceDays
+    };
+  }, [professionExperience, experienceYears, experienceMonths, experienceDays]);
 
   // Root Apprentice Node (Stufe 1: Lehrling)
   const rootNode = useMemo(() => {
@@ -122,7 +169,7 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
     return tree.nodes.find(n => n.tier === 'einstieg') || tree.nodes[0];
   }, [tree]);
 
-  // Core Profession Nodes (Stufe 2: Kernberufe / Gesellen)
+  // Core Profession Nodes (Stufe 2: Kernberufe)
   const coreNodes = useMemo(() => {
     return tree.nodes.filter(n => n.tier === 'beruf');
   }, [tree]);
@@ -130,7 +177,6 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   // Grouped Branches: Core Node -> Its Specializations -> Its Masters
   const branches: BranchGroup[] = useMemo(() => {
     return coreNodes.map(coreNode => {
-      // Find specializations connected to this core node
       const specializations = tree.nodes.filter(n => {
         if (n.tier !== 'spezialisierung') return false;
         if (n.specializationOf === coreNode.id || n.specializationOf === coreNode.name) return true;
@@ -139,7 +185,6 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
         return false;
       });
 
-      // Find masters connected to this core or its specializations
       const specIds = new Set(specializations.map(s => s.id));
       const masters = tree.nodes.filter(n => {
         if (n.tier !== 'meister') return false;
@@ -156,39 +201,41 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
     });
   }, [coreNodes, tree]);
 
-  // Helper matchers
-  const isNodeAdditionalDirection = (node: ProfessionTreeNode): boolean => {
-    return additionalDirections.some(
-      dir => dir.toLowerCase() === node.name.toLowerCase() || dir.toLowerCase() === node.id.toLowerCase()
-    );
-  };
+  // Node evaluations (prerequisites fulfilled / missing)
+  const evaluations = useMemo(() => {
+    const map = new Map<string, NodeEvaluationResult>();
+    for (const node of tree.nodes) {
+      const evalResult = evaluateNodePrerequisites(node, {
+        profession: currentProfession,
+        professionSpecialization: currentSpecialization,
+        professionRank: currentRank,
+        experienceYears: currentExp.years,
+        competencies
+      });
+      map.set(node.id, evalResult);
+    }
+    return map;
+  }, [tree, currentProfession, currentSpecialization, currentRank, currentExp.years, competencies]);
 
-  const isNodePrimaryProfession = (node: ProfessionTreeNode): boolean => {
-    return node.name.toLowerCase() === currentProfession.toLowerCase() || node.id.toLowerCase() === currentProfession.toLowerCase();
-  };
-
-  const isNodePrimarySpecialization = (node: ProfessionTreeNode): boolean => {
-    return !!currentSpecialization && (
-      node.name.toLowerCase() === currentSpecialization.toLowerCase() || node.id.toLowerCase() === currentSpecialization.toLowerCase()
-    );
-  };
-
-  // Automatically select matching branch when profession, specialization, or branches change
+  // Match active branch when profession / branches change
   useEffect(() => {
     if (branches.length === 0) return;
 
-    // Keep existing valid selection if user has explicitly chosen one that exists
     if (selectedBranchId && branches.some(b => b.coreNode.id === selectedBranchId)) {
       return;
     }
 
-    // Match current profession or specialization
-    const matching = branches.find(b =>
-      isNodePrimaryProfession(b.coreNode) ||
-      b.specializations.some(s => isNodePrimarySpecialization(s)) ||
-      isNodeAdditionalDirection(b.coreNode) ||
-      b.specializations.some(s => isNodeAdditionalDirection(s))
-    );
+    const matching = branches.find(b => {
+      const coreMatch =
+        b.coreNode.name.toLowerCase() === currentProfession.toLowerCase() ||
+        b.coreNode.id.toLowerCase() === currentProfession.toLowerCase();
+      const specMatch = b.specializations.some(
+        s =>
+          s.name.toLowerCase() === currentSpecialization.toLowerCase() ||
+          s.id.toLowerCase() === currentSpecialization.toLowerCase()
+      );
+      return coreMatch || specMatch;
+    });
 
     if (matching) {
       setSelectedBranchId(matching.coreNode.id);
@@ -197,669 +244,623 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
     }
   }, [branches, currentProfession, currentSpecialization, selectedBranchId]);
 
-  // Active single branch to display under Lehrling
+  // Active branch currently selected
   const activeBranch = useMemo(() => {
-    if (branches.length === 0) return null;
-    if (selectedBranchId) {
-      const found = branches.find(b => b.coreNode.id === selectedBranchId);
-      if (found) return found;
-    }
-    const matching = branches.find(b =>
-      isNodePrimaryProfession(b.coreNode) ||
-      b.specializations.some(s => isNodePrimarySpecialization(s))
-    );
-    return matching || branches[0];
-  }, [branches, selectedBranchId, currentProfession, currentSpecialization]);
+    return branches.find(b => b.coreNode.id === selectedBranchId) || branches[0];
+  }, [branches, selectedBranchId]);
 
-  // Selected node object (only for non-core nodes like Lehrling or Spezialisierung, to avoid duplicate Stufe 2 inspector)
-  const activeDetailNode = useMemo(() => {
-    if (!selectedNodeId) return null;
-    const found = tree.nodes.find(n => n.id === selectedNodeId);
-    if (found && found.tier !== 'beruf') return found;
-    return null;
-  }, [selectedNodeId, tree]);
-
-  const activeDetailEval = useMemo(() => {
-    if (!activeDetailNode) return null;
-    return evaluations.get(activeDetailNode.id) || null;
-  }, [activeDetailNode, evaluations]);
-
-  const handleApplyPrimaryProfession = (node: ProfessionTreeNode) => {
-    if (readOnly) return;
-    if (node.tier === 'spezialisierung') {
-      const parentNode = tree.nodes.find(n => node.parentIds.includes(n.id) && n.tier === 'beruf');
-      const baseProf = parentNode ? parentNode.name : currentProfession || node.name;
-      onSelectProfession(baseProf, node.name, fieldId);
-    } else {
-      onSelectProfession(node.name, '', fieldId);
-    }
-    setFeedbackMsg(`Hauptberuf festgelegt: ${node.name}`);
-    setTimeout(() => setFeedbackMsg(null), 3000);
-  };
-
-  const handleApplySpecialization = (node: ProfessionTreeNode) => {
-    if (readOnly) return;
-    const parentNode = tree.nodes.find(n => node.parentIds.includes(n.id) && n.tier === 'beruf');
-    const baseProf = parentNode ? parentNode.name : currentProfession;
-    onSelectProfession(baseProf, node.name, fieldId);
-    setFeedbackMsg(`Spezialisierung festgelegt: ${node.name}`);
-    setTimeout(() => setFeedbackMsg(null), 3000);
-  };
-
-  const handleToggleDirection = (node: ProfessionTreeNode) => {
-    if (readOnly || !onToggleAdditionalDirection) return;
-    onToggleAdditionalDirection(node.name, node.tier, fieldId);
-  };
-
-  // Competency management helpers for the active Kernberuf
-  const catalogDefsForActiveBranch = useMemo(() => {
-    if (!activeBranch) return [];
-    return getCatalogCompetenciesForProfession(activeBranch.coreNode.name);
-  }, [activeBranch]);
-
-  const handleLearnCompetency = (def: ProfessionCompetencyDefinition) => {
-    if (!onCompetenciesChange) return;
-    const existing = (competencies || []).find(
-      c => c.id === def.id || c.name.toLowerCase().trim() === def.name.toLowerCase().trim()
-    );
-    if (existing) {
-      setFeedbackMsg(`Fachkompetenz "${def.name}" ist bereits erlernt.`);
-      setTimeout(() => setFeedbackMsg(null), 2500);
-      return;
-    }
-    const newComp = createCompetencyFromDefinition(def, 3, 10);
-    onCompetenciesChange([...(competencies || []), newComp]);
-    setFeedbackMsg(`Fachkompetenz erlernt: ${def.name}`);
-    setTimeout(() => setFeedbackMsg(null), 3000);
-  };
-
-  const handlePracticeCompetency = (comp: ProfessionCompetency) => {
-    if (onPracticeCompetency) {
-      onPracticeCompetency(comp);
-      return;
-    }
-    if (onCompetenciesChange) {
-      const result = calculateCompetencyProgress(comp, 30);
-      const updatedList = (competencies || []).map(c => (c.id === comp.id ? result.updatedCompetency : c));
-      onCompetenciesChange(updatedList);
-      setFeedbackMsg(`Übung: ${comp.name} +${result.proficiencyGain}% (${result.updatedCompetency.proficiency}%)`);
-      setTimeout(() => setFeedbackMsg(null), 3000);
-    }
-  };
-
-  const handleAdjustProficiency = (comp: ProfessionCompetency, delta: number) => {
-    if (!onCompetenciesChange) return;
-    const newProf = Math.max(0, Math.min(100, (comp.proficiency || 0) + delta));
-    const updated = {
-      ...comp,
-      proficiency: newProf,
-      experiencePoints: Math.max(comp.experiencePoints || 0, newProf * 10)
-    };
-    onCompetenciesChange((competencies || []).map(c => (c.id === comp.id ? updated : c)));
-  };
-
-  const handleDeleteCompetency = (compId: string) => {
-    if (!onCompetenciesChange) return;
-    onCompetenciesChange((competencies || []).filter(c => c.id !== compId));
-  };
-
-  const handleAddAllFoundations = () => {
-    if (!onCompetenciesChange || !activeBranch) return;
-    const foundations = catalogDefsForActiveBranch.filter(d => d.category === 'Grundlage');
-    const existingIds = new Set((competencies || []).map(c => c.id));
-    const existingNames = new Set((competencies || []).map(c => c.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '')));
-    const toAdd = foundations
-      .filter(f => {
-        const norm = f.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '');
-        return !existingIds.has(f.id) && !existingNames.has(norm);
-      })
-      .map(f => createCompetencyFromDefinition(f, 3, 10));
-
-    if (toAdd.length > 0) {
-      onCompetenciesChange([...(competencies || []), ...toAdd]);
-      setFeedbackMsg(`${toAdd.length} typische Grundlagen-Kompetenzen hinzugefügt.`);
-      setTimeout(() => setFeedbackMsg(null), 3000);
-    } else {
-      setFeedbackMsg('Alle Grundlagen für diesen Beruf sind bereits vorhanden.');
-      setTimeout(() => setFeedbackMsg(null), 2500);
-    }
-  };
-
-  const handleCreateCustomCompetency = () => {
-    if (!onCompetenciesChange || !activeBranch) return;
-    const newComp = normalizeCompetency({
-      name: `Neue Fachkompetenz (${activeBranch.coreNode.name})`,
-      category: 'Grundlage',
-      proficiency: 10,
-      experiencePoints: 50,
-      talent: 3,
-      professionId: activeBranch.coreNode.id
-    });
-    onCompetenciesChange([...(competencies || []), newComp]);
-    setFeedbackMsg('Neue Fachkompetenz angelegt.');
-    setTimeout(() => setFeedbackMsg(null), 3000);
-  };
-
-  // Node Card Component (Used for Lehrling, Spezialisierungen & Meister)
-  const renderNodeCard = (node: ProfessionTreeNode, isRoot: boolean = false) => {
-    const evalResult = evaluations.get(node.id) || {
-      isAvailable: true,
-      isActive: false,
-      missingPrerequisites: [],
-      fulfilledPrerequisites: []
-    };
-
-    const isPrimary = isNodePrimaryProfession(node);
-    const isSpec = isNodePrimarySpecialization(node);
-    const isAdditional = isNodeAdditionalDirection(node);
-    const isSelected = selectedNodeId === node.id;
-
-    // Card border and background styling
-    let cardStyle = 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-900';
-    if (isPrimary) {
-      cardStyle = 'bg-amber-950/40 border-amber-500 shadow-md shadow-amber-950/30 ring-1 ring-amber-500/50';
-    } else if (isSpec) {
-      cardStyle = 'bg-cyan-950/40 border-cyan-500 shadow-md shadow-cyan-950/30 ring-1 ring-cyan-500/50';
-    } else if (isAdditional) {
-      cardStyle = 'bg-indigo-950/40 border-indigo-500 shadow-md shadow-indigo-950/30 ring-1 ring-indigo-500/50';
-    } else if (isSelected) {
-      cardStyle = 'bg-slate-800/90 border-slate-400 ring-1 ring-slate-400';
-    } else if (!evalResult.isAvailable) {
-      cardStyle = 'bg-slate-950/60 border-slate-900/80 opacity-75 hover:opacity-95';
-    }
-
-    return (
-      <div
-        key={node.id}
-        id={`tree-node-${node.id}`}
-        onClick={() => setSelectedNodeId(node.id)}
-        className={`group rounded-xl p-3.5 transition-all cursor-pointer border text-left flex flex-col justify-between ${cardStyle} ${
-          isRoot ? 'w-full max-w-md mx-auto min-h-[110px]' : 'min-w-[250px] w-full min-h-[120px]'
-        }`}
-      >
-        {/* Top Meta Line */}
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <span
-            className={`text-xs px-2.5 py-0.5 rounded-full border whitespace-nowrap shrink-0 ${
-              TIER_BADGE_STYLES[node.tier]
-            }`}
-          >
-            {node.tier === 'einstieg'
-              ? 'Stufe 1: Lehrling'
-              : node.tier === 'beruf'
-              ? 'Kernberuf'
-              : node.tier === 'spezialisierung'
-              ? 'Spezialisierung'
-              : 'Meistergrad'}
-          </span>
-
-          {/* Status Badge */}
-          {isPrimary ? (
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-300 bg-amber-950/90 border border-amber-600/60 px-2.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
-              <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>Hauptberuf</span>
-            </span>
-          ) : isSpec ? (
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-cyan-300 bg-cyan-950/90 border border-cyan-600/60 px-2.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
-              <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span>Spezialisierung</span>
-            </span>
-          ) : isAdditional ? (
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 bg-indigo-950/90 border border-indigo-600/60 px-2.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
-              <GitFork className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span>Weitere Richtung</span>
-            </span>
-          ) : evalResult.isAvailable ? (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/50 border border-emerald-800/50 px-2.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Verfügbar</span>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-xs text-rose-300 bg-rose-950/50 border border-rose-900/50 px-2.5 py-0.5 rounded-full whitespace-nowrap shrink-0">
-              <Lock className="w-3 h-3 text-rose-400 shrink-0" />
-              <span>{evalResult.missingPrerequisites.length} Bedingung{evalResult.missingPrerequisites.length > 1 ? 'en' : ''}</span>
-            </span>
-          )}
-        </div>
-
-        {/* Node Title & Description */}
-        <div>
-          <h5 className="text-sm font-semibold text-white group-hover:text-amber-300 transition leading-snug">
-            {node.name}
-          </h5>
-          <p className="text-xs text-slate-400 line-clamp-2 mt-1.5 leading-relaxed">
-            {node.description}
-          </p>
-        </div>
-
-        {/* Bottom Actions */}
-        <div className="mt-3 pt-2.5 border-t border-slate-800/70 flex items-center justify-between gap-3 text-xs">
-          <span className="text-slate-400 whitespace-nowrap">
-            {node.prerequisites.length > 0
-              ? `${node.prerequisites.length} Voraussetzung${node.prerequisites.length > 1 ? 'en' : ''}`
-              : 'Offener Einstieg'}
-          </span>
-          <div className="flex items-center gap-2">
-            {!readOnly && node.tier === 'spezialisierung' && !isSpec && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleApplySpecialization(node);
-                }}
-                className="text-[11px] px-2 py-0.5 rounded bg-cyan-950 border border-cyan-700/60 text-cyan-300 hover:bg-cyan-900/80 transition cursor-pointer font-medium"
-              >
-                Wählen
-              </button>
-            )}
-            <span className="text-amber-400/90 hover:text-amber-300 font-medium flex items-center gap-1 group-hover:translate-x-0.5 transition shrink-0">
-              <span>Details</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // UNIFIED KERNBERUF CARD (STUFE 2: KERNBERUF + FACHKOMPETENZEN + WICHTIGE INFOS IN EINEM FELD)
-  const renderUnifiedKernberufCard = (coreNode: ProfessionTreeNode) => {
-    const evalResult = evaluations.get(coreNode.id) || {
-      isAvailable: true,
-      isActive: false,
-      missingPrerequisites: [],
-      fulfilledPrerequisites: []
-    };
-    const isPrimary = isNodePrimaryProfession(coreNode);
-
-    // Filtered competencies for this profession
-    const cName = coreNode.name.toLowerCase();
-    const cId = coreNode.id.toLowerCase();
-    const catalogDefs = catalogDefsForActiveBranch;
-    const catalogIds = new Set(catalogDefs.map(d => d.id));
-    const catalogNames = new Set(catalogDefs.map(d => d.name.toLowerCase().trim()));
-
-    const learnedForThisProf = (competencies || []).filter(c => {
-      if (c.professionId && (c.professionId.toLowerCase() === cId || c.professionId.toLowerCase() === cName)) {
-        return true;
+  // Keep active specialization in sync
+  useEffect(() => {
+    if (!activeBranch) return;
+    if (currentSpecialization) {
+      const matchingSpec = activeBranch.specializations.find(
+        s =>
+          s.name.toLowerCase() === currentSpecialization.toLowerCase() ||
+          s.id.toLowerCase() === currentSpecialization.toLowerCase()
+      );
+      if (matchingSpec) {
+        setSelectedSpecNodeId(matchingSpec.id);
+        return;
       }
-      if (catalogIds.has(c.id)) return true;
-      if (catalogNames.has(c.name.toLowerCase().trim())) return true;
-      return false;
+    }
+    // If current selected spec does not belong to active branch, reset or pick first if appropriate
+    if (selectedSpecNodeId && !activeBranch.specializations.some(s => s.id === selectedSpecNodeId)) {
+      setSelectedSpecNodeId(null);
+    }
+  }, [activeBranch, currentSpecialization]);
+
+  // Helper: check if a node represents the current active profession
+  const isNodeActiveProfession = (node: ProfessionTreeNode): boolean => {
+    const curP = currentProfession.toLowerCase().trim();
+    const curS = currentSpecialization.toLowerCase().trim();
+    const nodeName = node.name.toLowerCase().trim();
+    const nodeId = node.id.toLowerCase().trim();
+
+    if (node.tier === 'einstieg') {
+      return (
+        curP === nodeName ||
+        curP === nodeId ||
+        Boolean(node.possibleRanks && node.possibleRanks.some(r => r.toLowerCase() === curP)) ||
+        (!curP)
+      );
+    }
+    if (node.tier === 'beruf') {
+      return (
+        curP === nodeName ||
+        curP === nodeId ||
+        Boolean(node.possibleRanks && node.possibleRanks.some(r => r.toLowerCase() === curP))
+      );
+    }
+    if (node.tier === 'spezialisierung' || node.tier === 'meister') {
+      return (
+        Boolean(curS && (curS === nodeName || curS === nodeId)) ||
+        curP === nodeName ||
+        Boolean(node.possibleRanks && node.possibleRanks.some(r => r.toLowerCase() === curP || r.toLowerCase() === curS))
+      );
+    }
+    return false;
+  };
+
+  // Helper: extract competencies and talents for a node
+  const getNodeCompetenciesAndTalents = (node: ProfessionTreeNode) => {
+    const isRoot = node.tier === 'einstieg';
+    const isCore = node.tier === 'beruf';
+
+    let baseList: { name: string; category: string; defaultScore: number; defaultTalent: number }[] = [];
+
+    if (isRoot) {
+      baseList = [
+        { name: 'Arbeitsplatz vorbereiten', category: 'Grundlagen', defaultScore: 68, defaultTalent: 3 },
+        { name: 'Werkzeuge sicher benutzen', category: 'Grundlagen', defaultScore: 75, defaultTalent: 4 },
+        { name: 'einfache Tätigkeiten', category: 'Grundlagen', defaultScore: 62, defaultTalent: 3 },
+        { name: 'Materialkunde & Lagerung', category: 'Grundlagen', defaultScore: 54, defaultTalent: 3 }
+      ];
+    } else {
+      // Find catalog entries
+      const catalogEntries = getCatalogCompetenciesForProfession(node.name);
+      if (catalogEntries.length > 0) {
+        baseList = catalogEntries.slice(0, 7).map(c => ({
+          name: c.name,
+          category: c.category === 'Grundlage' ? 'Grundlagen' : c.category,
+          defaultScore: c.category === 'Grundlage' ? 65 : 45,
+          defaultTalent: 3
+        }));
+      } else if (node.suggestedCompetencies && node.suggestedCompetencies.length > 0) {
+        baseList = node.suggestedCompetencies.map(name => ({
+          name,
+          category: 'Grundlagen',
+          defaultScore: 55,
+          defaultTalent: 3
+        }));
+      } else {
+        baseList = [
+          { name: `${node.name} Grundlagen`, category: 'Grundlagen', defaultScore: 50, defaultTalent: 3 },
+          { name: `Werkzeuge & Techniken`, category: 'Grundlagen', defaultScore: 50, defaultTalent: 3 }
+        ];
+      }
+    }
+
+    // Map each item with character's actual competencies
+    const compItems: NodeCompetencyItem[] = baseList.map(item => {
+      const match = competencies.find(
+        c => c.name.toLowerCase() === item.name.toLowerCase() || c.name.toLowerCase().includes(item.name.toLowerCase())
+      );
+      if (match) {
+        return {
+          name: match.name,
+          proficiency: match.proficiency,
+          category: item.category,
+          talent: match.talent ?? item.defaultTalent,
+          raw: match
+        };
+      }
+      return {
+        name: item.name,
+        proficiency: item.defaultScore,
+        category: item.category,
+        talent: item.defaultTalent
+      };
     });
 
-    // Merge learned and available catalog items
-    interface DisplayCompetencyItem {
-      id: string;
-      name: string;
-      category: ProfessionCompetency['category'];
-      description: string;
-      learned?: ProfessionCompetency;
-      definition?: ProfessionCompetencyDefinition;
-    }
-
-    const items: DisplayCompetencyItem[] = [];
-    const processedIds = new Set<string>();
-    const processedNames = new Set<string>();
-
-    // 1. Process catalog definitions
-    for (const def of catalogDefs) {
-      const normName = def.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '');
-      if (processedIds.has(def.id) || processedNames.has(normName)) continue;
-      processedIds.add(def.id);
-      processedNames.add(normName);
-
-      const learned = learnedForThisProf.find(c => {
-        if (c.id === def.id) return true;
-        const cNorm = c.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '');
-        return cNorm === normName;
-      });
-
-      if (learned) {
-        processedIds.add(learned.id);
-        processedNames.add(learned.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, ''));
-      }
-
-      items.push({
-        id: def.id,
-        name: def.name,
-        category: def.category,
-        description: def.description,
-        learned,
-        definition: def
-      });
-    }
-
-    // 2. Add custom or non-catalog competencies assigned to this profession
-    for (const learned of learnedForThisProf) {
-      const normName = learned.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '');
-      if (!processedIds.has(learned.id) && !processedNames.has(normName)) {
-        processedIds.add(learned.id);
-        processedNames.add(normName);
-        items.push({
-          id: learned.id,
-          name: learned.name,
-          category: learned.category,
-          description: learned.description || 'Individuelle berufliche Fachkompetenz.',
-          learned
+    // Also include any user-added competencies belonging to this profession that aren't in base list
+    const userMatches = competencies.filter(
+      c =>
+        c.professionId === node.id ||
+        (c.professionId && c.professionId.toLowerCase() === node.name.toLowerCase())
+    );
+    for (const uc of userMatches) {
+      if (!compItems.some(ci => ci.name.toLowerCase() === uc.name.toLowerCase())) {
+        compItems.push({
+          name: uc.name,
+          proficiency: uc.proficiency,
+          category: uc.category === 'Grundlage' ? 'Grundlagen' : uc.category,
+          talent: uc.talent ?? 3,
+          isCustom: true,
+          raw: uc
         });
       }
     }
 
-    // Filter items by category
-    const filteredItems = compCategoryFilter === 'Alle'
-      ? items
-      : items.filter(item => item.category === compCategoryFilter);
+    // Derive talents:
+    let talentItems: NodeTalentItem[] = [];
+    if (isRoot) {
+      talentItems = [
+        { name: 'Handgeschick', score: 3 },
+        { name: 'Lernfähigkeit', score: 4 },
+        { name: 'Sorgfalt', score: 3 }
+      ];
+    } else if (node.name.toLowerCase().includes('koch')) {
+      talentItems = [
+        { name: 'Fleischgerichte', score: 3 },
+        { name: 'Saucen', score: 5 },
+        { name: 'Gemüse schneiden', score: 4 }
+      ];
+    } else if (node.name.toLowerCase().includes('schmied')) {
+      talentItems = [
+        { name: 'Hammerschlag', score: 4 },
+        { name: 'Feuergefühl', score: 5 },
+        { name: 'Formgebung', score: 3 }
+      ];
+    } else if (node.name.toLowerCase().includes('bäcker') || node.name.toLowerCase().includes('baecker')) {
+      talentItems = [
+        { name: 'Teigführung', score: 4 },
+        { name: 'Ofenhitze', score: 5 },
+        { name: 'Rezepturgefühl', score: 3 }
+      ];
+    } else {
+      // Pick from the first 2-3 competencies talent ratings
+      talentItems = compItems.slice(0, 3).map(ci => ({
+        name: ci.name,
+        score: ci.talent || 3
+      }));
+    }
 
-    const learnedCount = items.filter(i => !!i.learned).length;
+    // Sync any custom talent ratings already set in character competencies
+    talentItems = talentItems.map(t => {
+      const match = competencies.find(c => c.name.toLowerCase().includes(t.name.toLowerCase()));
+      if (match && typeof match.talent === 'number') {
+        return { name: t.name, score: match.talent };
+      }
+      return t;
+    });
+
+    return { compItems, talentItems };
+  };
+
+  // State update handlers
+  const handleSelectProfession = (node: ProfessionTreeNode) => {
+    if (node.tier === 'einstieg') {
+      const entryTitle = node.possibleRanks?.[0] || node.name;
+      onSelectProfession(entryTitle, '', fieldId);
+      setFeedbackMsg(`Einstiegsstatus '${entryTitle}' im Berufsfeld '${fieldName || fieldId}' festgelegt.`);
+    } else if (node.tier === 'beruf') {
+      onSelectProfession(node.name, '', fieldId);
+      setFeedbackMsg(`Beruf '${node.name}' als Hauptberuf gewählt.`);
+    } else if (node.tier === 'spezialisierung' || node.tier === 'meister') {
+      if (activeBranch) {
+        onSelectProfession(activeBranch.coreNode.name, node.name, fieldId);
+      } else {
+        onSelectProfession(node.name, node.name, fieldId);
+      }
+      setFeedbackMsg(`Spezialisierung '${node.name}' gewählt.`);
+    }
+    setTimeout(() => setFeedbackMsg(null), 3000);
+  };
+
+  const handleAdjustProficiency = (compName: string, delta: number) => {
+    if (!onCompetenciesChange) return;
+
+    const existingIndex = competencies.findIndex(c => c.name.toLowerCase() === compName.toLowerCase());
+    if (existingIndex >= 0) {
+      const updated = [...competencies];
+      const current = updated[existingIndex];
+      const newScore = Math.max(0, Math.min(100, current.proficiency + delta));
+      updated[existingIndex] = { ...current, proficiency: newScore };
+      onCompetenciesChange(updated);
+    } else {
+      // Create new competency item
+      const newComp: ProfessionCompetency = {
+        id: `comp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: compName,
+        category: 'Grundlage',
+        proficiency: Math.max(0, Math.min(100, 50 + delta)),
+        experiencePoints: 50,
+        talent: 3
+      };
+      onCompetenciesChange([...competencies, newComp]);
+    }
+  };
+
+  const handleSetTalent = (talentName: string, stars: number) => {
+    if (!onCompetenciesChange) return;
+
+    const existingIndex = competencies.findIndex(c => c.name.toLowerCase() === talentName.toLowerCase());
+    if (existingIndex >= 0) {
+      const updated = [...competencies];
+      updated[existingIndex] = { ...updated[existingIndex], talent: stars };
+      onCompetenciesChange(updated);
+    } else {
+      // Create competency representation with talent
+      const newComp: ProfessionCompetency = {
+        id: `comp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: talentName,
+        category: 'Grundlage',
+        proficiency: 50,
+        experiencePoints: 50,
+        talent: stars
+      };
+      onCompetenciesChange([...competencies, newComp]);
+    }
+    setFeedbackMsg(`Talent '${talentName}' auf ${stars}/5 Sterne gesetzt.`);
+    setTimeout(() => setFeedbackMsg(null), 2000);
+  };
+
+  const handlePracticeComp = (item: NodeCompetencyItem) => {
+    const compToPractice: ProfessionCompetency = item.raw || {
+      id: `comp_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: item.name,
+      category: item.category as any,
+      proficiency: item.proficiency,
+      experiencePoints: item.proficiency * 10,
+      talent: item.talent
+    };
+
+    if (onPracticeCompetency) {
+      onPracticeCompetency(compToPractice);
+    }
+
+    if (onCompetenciesChange) {
+      const result = calculateCompetencyProgress(compToPractice, 35);
+      const existingIndex = competencies.findIndex(c => c.name.toLowerCase() === item.name.toLowerCase());
+      if (existingIndex >= 0) {
+        const updated = [...competencies];
+        updated[existingIndex] = result.updatedCompetency;
+        onCompetenciesChange(updated);
+      } else {
+        onCompetenciesChange([...competencies, result.updatedCompetency]);
+      }
+      setFeedbackMsg(`+${result.effectiveXp} XP in '${item.name}' erhalten!`);
+      setTimeout(() => setFeedbackMsg(null), 2500);
+    }
+  };
+
+  const handleUpdateExperience = (years: number, months: number, days: number) => {
+    const newExp: ProfessionExperience = { years, months, days };
+    if (onExperienceChange) {
+      onExperienceChange(newExp);
+    }
+    if (onProfessionProgressChange && professionProgress) {
+      onProfessionProgressChange({
+        ...professionProgress,
+        experienceYears: years,
+        experienceMonths: months,
+        experienceDays: days
+      });
+    }
+  };
+
+  const handleUpdateProgress = (val: number) => {
+    const safeVal = Math.max(0, Math.min(100, val));
+    if (onProfessionProgressChange) {
+      onProfessionProgressChange({
+        ...(professionProgress || {
+          professionName: currentProfession,
+          level: currentRank,
+          fieldId,
+          overallProficiency: safeVal,
+          experiencePoints: safeVal * 20
+        }),
+        overallProficiency: safeVal
+      });
+    }
+  };
+
+  // Reusable Single-Node Card Component adhering strictly to Section 5
+  const renderProfessionNode = (node: ProfessionTreeNode, isApprentice = false) => {
+    const isActive = isNodeActiveProfession(node);
+    const evaluation = evaluations.get(node.id);
+    const isAvailable = evaluation ? evaluation.isAvailable : true;
+    const isLocked = !isAvailable && !isActive;
+
+    // Progress value calculation
+    let progressVal = 0;
+    if (isApprentice) {
+      // If character has higher profession, apprentice is considered completed (100%), otherwise active progress or 24%
+      if (!isActive && currentProfession && !currentProfession.toLowerCase().includes('lehrling')) {
+        progressVal = 100;
+      } else {
+        progressVal = professionProgress ? professionProgress.overallProficiency : 24;
+      }
+    } else if (isActive) {
+      progressVal = professionProgress ? professionProgress.overallProficiency : 41;
+    } else {
+      progressVal = 0;
+    }
+
+    // Experience value calculation
+    let formattedExp = '';
+    if (isApprentice) {
+      formattedExp = formatNodeExperience(currentExp, 180);
+    } else if (isActive) {
+      formattedExp = formatNodeExperience(currentExp, 0);
+    } else {
+      formattedExp = '0 Tage';
+    }
+
+    const { compItems, talentItems } = getNodeCompetenciesAndTalents(node);
+    const isEditingExp = editingExpNodeId === node.id;
+    const isEditingProg = editingProgNodeId === node.id;
 
     return (
       <div
-        id={`unified-kernberuf-${coreNode.id}`}
-        className="w-full bg-slate-900/90 border-2 border-amber-500/50 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-lg shadow-slate-950/40 text-left transition"
+        key={node.id}
+        id={`profession-tree-node-${node.id}`}
+        className={`w-full max-w-2xl mx-auto rounded-2xl border transition-all duration-200 shadow-md ${
+          isActive
+            ? 'bg-slate-900/95 border-amber-500/80 shadow-amber-950/20 ring-1 ring-amber-500/40'
+            : isLocked
+            ? 'bg-slate-950/80 border-rose-900/40 opacity-90'
+            : 'bg-slate-900/80 border-slate-800/80 hover:border-slate-700'
+        } p-4 sm:p-5`}
       >
-        {/* Header: Title, Status Badge, Primary Action */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
-          <div className="flex flex-col gap-1.5 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs px-2.5 py-0.5 rounded-full border bg-amber-950/70 border-amber-600/60 text-amber-300 font-semibold whitespace-nowrap">
-                Stufe 2: Kernberuf
-              </span>
-              {isPrimary ? (
-                <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-950/70 border border-emerald-700/60 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>Aktiver Hauptberuf</span>
-                </span>
-              ) : evalResult.isAvailable ? (
-                <span className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-950/40 border border-amber-800/50 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                  <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Verfügbar</span>
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 text-xs text-rose-300 bg-rose-950/50 border border-rose-900/50 px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                  <Lock className="w-3 h-3 text-rose-400 shrink-0" />
-                  <span>{evalResult.missingPrerequisites.length} Voraussetzung(en)</span>
-                </span>
-              )}
-            </div>
-            <h3 className="text-xl font-bold text-white tracking-wide">
-              {coreNode.name}
+        {/* Node Header: Berufsbezeichnung & Status Action */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col">
+            <h3 className="text-base sm:text-lg font-bold text-white tracking-wide uppercase font-serif">
+              {node.name}
             </h3>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              {coreNode.description}
-            </p>
+            {node.description && (
+              <p className="text-xs text-slate-400 mt-0.5 max-w-lg leading-relaxed">
+                {node.description}
+              </p>
+            )}
           </div>
 
-          {/* Action Button */}
-          {!readOnly && (
-            <div className="shrink-0 flex items-center gap-2">
-              {isPrimary ? (
-                <div className="px-3.5 py-2 rounded-xl bg-amber-950/80 border border-amber-500/60 text-amber-300 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
-                  <Check className="w-4 h-4 text-amber-400" />
-                  <span>Hauptberuf aktiv</span>
-                </div>
-              ) : (
+          <div className="shrink-0">
+            {isActive ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-700/70 text-emerald-400 text-xs font-semibold shadow-sm">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Aktueller Beruf</span>
+              </div>
+            ) : isLocked ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-950/70 border border-rose-800/70 text-rose-300 text-xs font-semibold shadow-sm">
+                <Lock className="w-3.5 h-3.5 text-rose-400" />
+                <span>Gesperrt</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleSelectProfession(node)}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/60 hover:bg-amber-600 hover:text-slate-950 border border-amber-600/70 text-amber-300 text-xs font-semibold transition cursor-pointer"
+              >
+                <span>Als Beruf wählen</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Missing Prerequisites Notice (if locked) */}
+        {isLocked && evaluation && evaluation.missingPrerequisites.length > 0 && (
+          <div className="mt-3 p-2.5 rounded-xl bg-rose-950/40 border border-rose-900/60 text-xs text-rose-200">
+            <span className="font-semibold block mb-1">Voraussetzungen noch nicht erfüllt:</span>
+            <ul className="space-y-0.5 pl-4 list-disc text-[11px] text-rose-300">
+              {evaluation.missingPrerequisites.map((req, idx) => (
+                <li key={idx}>{req}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* 1. Berufsfortschritt */}
+        <div className="pt-3.5 mt-3 border-t border-slate-800/80">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-slate-300">Berufsfortschritt</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold text-amber-400 text-sm">
+                {progressVal} %
+              </span>
+              {isActive && (
                 <button
                   type="button"
-                  onClick={() => handleApplyPrimaryProfession(coreNode)}
-                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                  onClick={() => setEditingProgNodeId(isEditingProg ? null : node.id)}
+                  className="text-[11px] text-slate-400 hover:text-amber-300 transition cursor-pointer"
+                  title="Fortschritt anpassen"
                 >
-                  <ArrowRight className="w-4 h-4" />
-                  <span>Als Hauptberuf festlegen</span>
+                  <Sliders className="w-3 h-3" />
                 </button>
               )}
+            </div>
+          </div>
+
+          {/* Graphical Progress Bar matching prompt: ████████████░░░░░░░░ */}
+          <div className="mt-1 font-mono text-xs text-amber-400 tracking-wider overflow-x-auto select-none py-0.5">
+            {renderAsciiBar(progressVal, 20)}
+          </div>
+
+          {/* Interactive slider when adjusting */}
+          {isActive && isEditingProg && (
+            <div className="flex items-center gap-3 mt-2 bg-slate-950/70 p-2 rounded-xl border border-slate-800">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={progressVal}
+                onChange={e => handleUpdateProgress(parseInt(e.target.value, 10) || 0)}
+                className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+              />
+              <span className="font-mono text-xs text-white w-8 text-right font-bold">
+                {progressVal}%
+              </span>
             </div>
           )}
         </div>
 
-        {/* Feedback Alert if practice/learn happened */}
-        {feedbackMsg && (
-          <div className="p-2.5 bg-amber-950/60 border border-amber-600/50 rounded-xl text-xs text-amber-200 flex items-center justify-between animate-in fade-in duration-200">
+        {/* 2. Berufserfahrung */}
+        <div className="pt-3 mt-3 border-t border-slate-800/80">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-slate-300">Berufserfahrung</span>
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>{feedbackMsg}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setFeedbackMsg(null)}
-              className="text-amber-400 hover:text-white text-xs cursor-pointer ml-2"
-            >
-              Ausblenden
-            </button>
-          </div>
-        )}
-
-        {/* WICHTIGE BERUFS-INFORMATIONEN (Ränge, Voraussetzungen, Aufstiegswege) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          {/* Mögliche Ränge */}
-          <div className="flex flex-col gap-1 bg-slate-950/50 border border-slate-800/80 rounded-xl p-3">
-            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-              <Award className="w-3.5 h-3.5 text-amber-400" />
-              <span>Mögliche Berufsgrade & Ränge</span>
-            </span>
-            <span className="text-slate-300 leading-relaxed">
-              {coreNode.possibleRanks && coreNode.possibleRanks.length > 0
-                ? coreNode.possibleRanks.join(' • ')
-                : 'Lehrling • Geselle • Altgeselle • Meister'}
-            </span>
-          </div>
-
-          {/* Aufstiegswege & Voraussetzungen */}
-          <div className="flex flex-col gap-1 bg-slate-950/50 border border-slate-800/80 rounded-xl p-3">
-            <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-              <GraduationCap className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Karriere- & Aufstiegswege</span>
-            </span>
-            <div className="flex flex-col gap-1">
-              {coreNode.careerRoutes && coreNode.careerRoutes.length > 0 ? (
-                coreNode.careerRoutes.map(r => (
-                  <div key={r.id} className="flex items-start justify-between gap-2 text-[11px]">
-                    <span className="text-slate-200 font-medium">{r.name}:</span>
-                    <span className="text-slate-400 text-right">{r.requirementsSummary}</span>
-                  </div>
-                ))
-              ) : (
-                <span className="text-slate-400">Reguläre Gesellen- und Zunftprüfung</span>
+              <span className="font-mono font-medium text-slate-200">
+                {formattedExp}
+              </span>
+              {isActive && (
+                <button
+                  type="button"
+                  onClick={() => setEditingExpNodeId(isEditingExp ? null : node.id)}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                >
+                  {isEditingExp ? 'Fertig' : 'Anpassen'}
+                </button>
               )}
             </div>
           </div>
+
+          {/* Interactive experience adjustment */}
+          {isActive && isEditingExp && (
+            <div className="flex flex-wrap items-center gap-3 mt-2 bg-slate-950/70 p-2.5 rounded-xl border border-slate-800 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Jahre:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={currentExp.years}
+                  onChange={e =>
+                    handleUpdateExperience(parseInt(e.target.value, 10) || 0, currentExp.months || 0, currentExp.days || 0)
+                  }
+                  className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono text-center outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Monate:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="11"
+                  value={currentExp.months || 0}
+                  onChange={e =>
+                    handleUpdateExperience(currentExp.years, parseInt(e.target.value, 10) || 0, currentExp.days || 0)
+                  }
+                  className="w-12 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono text-center outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Tage:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="30"
+                  value={currentExp.days || 0}
+                  onChange={e =>
+                    handleUpdateExperience(currentExp.years, currentExp.months || 0, parseInt(e.target.value, 10) || 0)
+                  }
+                  className="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-white font-mono text-center outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* PASSENDE FACHKOMPETENZEN FÜR DIESEN BERUF */}
-        <div className="flex flex-col gap-3 pt-3 border-t border-amber-900/40">
-          {/* Competency Header & Quick Action Buttons */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-amber-400" />
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                Fachkompetenzen für {coreNode.name} ({learnedCount} erlernt / {items.length} gesamt)
-              </h4>
-            </div>
-
-            {!readOnly && (
-              <div className="flex items-center flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleAddAllFoundations}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-xl text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
-                  title="Fügt alle typischen Grundlagen-Kompetenzen für diesen Beruf hinzu"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Grundlagen hinzufügen</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCreateCustomCompetency}
-                  className="px-2.5 py-1.5 bg-amber-600/90 hover:bg-amber-500 text-slate-950 font-bold rounded-xl text-xs transition flex items-center gap-1 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Neue Kompetenz</span>
-                </button>
-              </div>
-            )}
+        {/* 3. Fachkompetenzen */}
+        <div className="pt-3 mt-3 border-t border-slate-800/80">
+          <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2">
+            Fachkompetenzen
           </div>
 
-          {/* Category Filter Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none">
-            {(['Alle', 'Grundlage', 'Fortgeschritten', 'Spezialisierung', 'Meisterschaft'] as const).map(cat => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setCompCategoryFilter(cat)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition whitespace-nowrap cursor-pointer ${
-                  compCategoryFilter === cat
-                    ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold'
-                    : 'bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
+          {/* Grundlagen Section */}
+          <div className="text-[11px] font-semibold text-slate-400 mb-1.5">
+            Grundlagen
+          </div>
+
+          <div className="flex flex-col gap-1">
+            {compItems.map(comp => (
+              <div
+                key={comp.name}
+                className="flex items-center justify-between text-xs py-1 px-1.5 rounded-lg hover:bg-slate-800/40 group transition"
               >
-                {cat}
-              </button>
+                <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
+                  <span className="text-slate-500 font-bold">•</span>
+                  <span className="text-slate-200 truncate">{comp.name}</span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-mono text-amber-400 text-xs font-semibold w-12 text-right">
+                    {comp.proficiency} %
+                  </span>
+
+                  <div className="opacity-60 group-hover:opacity-100 flex items-center gap-1 transition">
+                    <button
+                      type="button"
+                      onClick={() => handleAdjustProficiency(comp.name, -5)}
+                      className="w-5 h-5 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition cursor-pointer"
+                      title="Wert verringern (-5%)"
+                    >
+                      -
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAdjustProficiency(comp.name, +5)}
+                      className="w-5 h-5 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition cursor-pointer"
+                      title="Wert erhöhen (+5%)"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePracticeComp(comp)}
+                      className="px-1.5 py-0.5 bg-amber-950/60 hover:bg-amber-900 border border-amber-800/60 text-amber-300 rounded text-[10px] font-medium transition cursor-pointer flex items-center gap-1"
+                      title="Praktische Übungseinheit absolvieren"
+                    >
+                      <span>Üben</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
+        </div>
 
-          {/* List of Competencies */}
-          <div className="flex flex-col gap-2">
-            {filteredItems.length === 0 ? (
-              <div className="p-4 bg-slate-950/40 border border-slate-800 rounded-xl text-center text-xs text-slate-400">
-                Keine Fachkompetenzen in dieser Kategorie vorhanden.
-              </div>
-            ) : (
-              filteredItems.map((item, itemIdx) => {
-                const isLearned = !!item.learned;
-                const comp = item.learned;
+        {/* 4. Talente */}
+        <div className="pt-3 mt-3 border-t border-slate-800/80">
+          <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-2">
+            Talente
+          </div>
 
-                return (
-                  <div
-                    key={`kernberuf-comp-${item.id}-${itemIdx}`}
-                    className={`rounded-xl p-3 border transition flex flex-col gap-2 ${
-                      isLearned
-                        ? 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
-                        : 'bg-slate-950/40 border-slate-800/60 hover:border-slate-700/60'
-                    }`}
-                  >
-                    {/* Top Row: Category Badge, Name, Actions */}
-                    <div className="flex items-start justify-between gap-2.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* Category Badge */}
-                        <span
-                          className={`text-[11px] px-2 py-0.5 rounded border whitespace-nowrap font-medium ${
-                            item.category === 'Grundlage'
-                              ? 'bg-sky-950/70 text-sky-300 border-sky-800/60'
-                              : item.category === 'Fortgeschritten'
-                              ? 'bg-indigo-950/70 text-indigo-300 border-indigo-800/60'
-                              : item.category === 'Spezialisierung'
-                              ? 'bg-amber-950/70 text-amber-300 border-amber-800/60'
-                              : 'bg-emerald-950/70 text-emerald-300 border-emerald-800/60'
-                          }`}
-                        >
-                          {item.category}
-                        </span>
+          <div className="flex flex-col gap-1.5">
+            {talentItems.map(talentItem => (
+              <div
+                key={talentItem.name}
+                className="flex items-center justify-between text-xs py-0.5 px-1.5 rounded-lg hover:bg-slate-800/30 transition"
+              >
+                <div className="flex items-center gap-2 flex-1 min-w-0 pr-2">
+                  <span className="text-slate-500 font-bold">•</span>
+                  <span className="text-slate-200 truncate">{talentItem.name}</span>
+                </div>
 
-                        {/* Name */}
-                        <span className="text-xs sm:text-sm font-semibold text-white">
-                          {item.name}
-                        </span>
-
-                        {/* Status Label */}
-                        {isLearned ? (
-                          <span className="text-[11px] px-2 py-0.2 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 font-mono">
-                            {comp?.proficiency || 0}%
-                          </span>
+                <div className="flex items-center gap-1 shrink-0">
+                  {[1, 2, 3, 4, 5].map(starNum => {
+                    const isFilled = starNum <= talentItem.score;
+                    return (
+                      <button
+                        key={starNum}
+                        type="button"
+                        onClick={() => handleSetTalent(talentItem.name, starNum)}
+                        className="text-sm transition hover:scale-110 cursor-pointer outline-none focus:outline-none"
+                        title={`Talent ${starNum}/5 zuweisen`}
+                      >
+                        {isFilled ? (
+                          <span className="text-amber-400">★</span>
                         ) : (
-                          <span className="text-[11px] px-2 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400">
-                            Katalog
-                          </span>
+                          <span className="text-slate-600">☆</span>
                         )}
-                      </div>
-
-                      {/* Right Action Buttons */}
-                      {!readOnly && (
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isLearned && comp ? (
-                            <>
-                              {/* Practice Button */}
-                              <button
-                                type="button"
-                                onClick={() => handlePracticeCompetency(comp)}
-                                className="px-2.5 py-1 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 rounded-lg text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
-                                title="Gezielte Übungseinheit absolvieren (+XP)"
-                              >
-                                <Dumbbell className="w-3 h-3 text-amber-400" />
-                                <span>Üben</span>
-                              </button>
-
-                              {/* Stepper Buttons */}
-                              <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
-                                <button
-                                  type="button"
-                                  onClick={() => handleAdjustProficiency(comp, -5)}
-                                  className="px-2 py-1 hover:bg-slate-800 text-slate-400 hover:text-white text-xs cursor-pointer"
-                                  title="Wert um 5% verringern"
-                                >
-                                  -
-                                </button>
-                                <span className="px-1.5 text-[11px] text-slate-300 font-mono">
-                                  {comp.proficiency}%
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAdjustProficiency(comp, 5)}
-                                  className="px-2 py-1 hover:bg-slate-800 text-slate-400 hover:text-white text-xs cursor-pointer"
-                                  title="Wert um 5% erhöhen"
-                                >
-                                  +
-                                </button>
-                              </div>
-
-                              {/* Delete Button */}
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteCompetency(comp.id)}
-                                className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer"
-                                title="Kompetenz entfernen"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </>
-                          ) : item.definition ? (
-                            /* Learn Button */
-                            <button
-                              type="button"
-                              onClick={() => handleLearnCompetency(item.definition!)}
-                              className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-sm"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>Erlernen</span>
-                            </button>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Description */}
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      {item.description}
-                    </p>
-
-                    {/* If Learned: Progress Bar & XP */}
-                    {isLearned && comp && (
-                      <div className="flex items-center gap-3 pt-1">
-                        <div className="flex-1 bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                          <div
-                            className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-300"
-                            style={{ width: `${Math.min(100, Math.max(0, comp.proficiency))}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-slate-500 font-mono shrink-0">
-                          {comp.experiencePoints || 0} XP
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -867,351 +868,170 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-4 w-full">
-      {/* Header Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center shrink-0">
-            <GitFork className="w-4 h-4 text-amber-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="text-sm font-semibold text-white">
-                Talentbaum: {tree.fieldName}
-              </h4>
-              <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/70 text-slate-300 font-mono">
-                {branches.length} Zweige • {tree.nodes.length} Stufen
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Entwicklungspfad: Lehrling → Zweig wählen → Kernberuf & Fachkompetenzen → Spezialisierungen → Meisterstufe
-            </p>
-          </div>
+    <div className="flex flex-col items-center w-full py-2">
+      {/* Toast Feedback */}
+      {feedbackMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-amber-950 border border-amber-500 text-amber-100 text-xs px-4 py-2.5 rounded-xl shadow-xl animate-in fade-in duration-200">
+          {feedbackMsg}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 1. LEHRLING (Der erste Knoten des Berufstrees)                            */}
+      {/* ========================================================================= */}
+      {rootNode && renderProfessionNode(rootNode, true)}
+
+      {/* ========================================================================= */}
+      {/* 2. VERBINDUNGSLINIE 1                                                     */}
+      {/* ========================================================================= */}
+      <div className="w-0.5 h-6 bg-gradient-to-b from-amber-500/60 to-amber-500/40 my-1 mx-auto" />
+
+      {/* ========================================================================= */}
+      {/* 3. BERUFSZWEIG WÄHLEN (Kompakte Tag-/Chip-Darstellung)                    */}
+      {/* ========================================================================= */}
+      <div className="w-full flex flex-col items-center justify-center my-1.5">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-2">
+          Berufszweig wählen
+        </span>
+        <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl mx-auto px-2">
+          {branches.map(b => {
+            const isSelected = b.coreNode.id === selectedBranchId;
+            const isCurrentActive =
+              b.coreNode.name.toLowerCase() === currentProfession.toLowerCase() ||
+              b.coreNode.id.toLowerCase() === currentProfession.toLowerCase();
+
+            return (
+              <button
+                key={b.coreNode.id}
+                type="button"
+                onClick={() => {
+                  setSelectedBranchId(b.coreNode.id);
+                  setSelectedSpecNodeId(null);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  isSelected
+                    ? 'bg-amber-600 text-slate-950 font-bold shadow-md ring-2 ring-amber-400/80 scale-105'
+                    : isCurrentActive
+                    ? 'bg-amber-950/80 text-amber-300 border border-amber-600/70 font-semibold'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                {isCurrentActive && <Check className="w-3 h-3 text-emerald-400" />}
+                <span>{b.coreNode.name}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* BRANCHING TALENT TREE VISUALIZATION */}
-      <div className="w-full pb-2 pt-1">
-        <div className="flex flex-col items-center gap-4 w-full">
+      {/* ========================================================================= */}
+      {/* 4. VERBINDUNGSLINIE 2                                                     */}
+      {/* ========================================================================= */}
+      <div className="w-0.5 h-6 bg-gradient-to-b from-amber-500/40 to-amber-500/60 my-1 mx-auto" />
 
-          {/* LEVEL 1: WURZEL / EINSTIEG (LEHRLING) */}
-          <div className="w-full flex flex-col items-center">
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-              <span>{TIER_LABELS.einstieg}</span>
-            </div>
+      {/* ========================================================================= */}
+      {/* 5. KONKRETER BERUFSKNOTEN (Ausgewählter Kernberuf)                         */}
+      {/* ========================================================================= */}
+      {activeBranch && renderProfessionNode(activeBranch.coreNode, false)}
 
-            {/* Apprentice Root Card */}
-            {rootNode && renderNodeCard(rootNode, true)}
-          </div>
+      {/* ========================================================================= */}
+      {/* 6. WEITERE BERUFSÄSTE / SPEZIALISIERUNGEN                                 */}
+      {/* ========================================================================= */}
+      {activeBranch && activeBranch.specializations.length > 0 && (
+        <>
+          <div className="w-0.5 h-6 bg-gradient-to-b from-amber-500/60 to-amber-500/40 my-1 mx-auto" />
 
-          {/* Tree Trunk: From Lehrling down to Branch Selector */}
-          <div className="w-full flex flex-col items-center my-0.5">
-            <div className="w-0.5 h-5 bg-amber-500/60" />
-          </div>
-
-          {/* ZWEIG-AUSWAHL: Felder wie Schmied, Schreiner, Koch, Bäcker usw. direkt unter Lehrling */}
-          <div className="w-full flex flex-col items-center gap-2">
-            <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-              <GitFork className="w-3.5 h-3.5 text-amber-400" />
-              <span>Berufszweig wählen</span>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-1.5 max-w-4xl px-2">
-              {branches.map(branch => {
-                const isSelected = activeBranch?.coreNode.id === branch.coreNode.id;
-                const isCurrentProf =
-                  isNodePrimaryProfession(branch.coreNode) ||
-                  branch.specializations.some(s => isNodePrimarySpecialization(s));
-                const isAdditional =
-                  isNodeAdditionalDirection(branch.coreNode) ||
-                  branch.specializations.some(s => isNodeAdditionalDirection(s));
+          <div className="w-full flex flex-col items-center justify-center my-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400/90 mb-2">
+              Weitere Berufsäste & Spezialisierungen
+            </span>
+            <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl mx-auto px-2">
+              {activeBranch.specializations.map(specNode => {
+                const isSelected = selectedSpecNodeId === specNode.id;
+                const isCurrentActive =
+                  currentSpecialization &&
+                  (specNode.name.toLowerCase() === currentSpecialization.toLowerCase() ||
+                    specNode.id.toLowerCase() === currentSpecialization.toLowerCase());
+                const evaluation = evaluations.get(specNode.id);
+                const isAvailable = evaluation ? evaluation.isAvailable : true;
 
                 return (
                   <button
-                    key={branch.coreNode.id}
+                    key={specNode.id}
                     type="button"
-                    onClick={() => {
-                      setSelectedBranchId(branch.coreNode.id);
-                      setSelectedNodeId(branch.coreNode.id);
-                    }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
+                    onClick={() => setSelectedSpecNodeId(isSelected ? null : specNode.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                       isSelected
-                        ? 'bg-amber-600 text-slate-950 font-semibold shadow-md ring-1 ring-amber-400'
-                        : isCurrentProf
-                        ? 'bg-amber-950/60 text-amber-300 border border-amber-700/60 hover:bg-amber-900/60'
-                        : isAdditional
-                        ? 'bg-indigo-950/60 text-indigo-300 border border-indigo-700/60 hover:bg-indigo-900/60'
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                        ? 'bg-amber-600 text-slate-950 font-bold shadow-md ring-2 ring-amber-400/80 scale-105'
+                        : isCurrentActive
+                        ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-600/70 font-semibold'
+                        : isAvailable
+                        ? 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-slate-700'
+                        : 'bg-slate-950 text-slate-500 border border-slate-800/60 opacity-80'
                     }`}
                   >
-                    <span>{branch.coreNode.name}</span>
-                    {isCurrentProf && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
-                          isSelected
-                            ? 'bg-slate-950 text-amber-300'
-                            : 'bg-amber-900/90 text-amber-200'
-                        }`}
-                      >
-                        Aktiv
-                      </span>
-                    )}
+                    {!isAvailable && <Lock className="w-3 h-3 text-rose-400" />}
+                    {isCurrentActive && <Check className="w-3 h-3 text-emerald-400" />}
+                    <span>{specNode.name}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Tree Trunk: From Branch Selector down into the Active Branch */}
-          <div className="w-full flex flex-col items-center my-0.5">
-            <div className="w-0.5 h-5 bg-amber-500/60" />
-          </div>
+          {/* 7. AUSGEWÄHLTER SPEZIALISIERUNGS-KNOTEN */}
+          {selectedSpecNodeId && (() => {
+            const specNode = activeBranch.specializations.find(s => s.id === selectedSpecNodeId);
+            if (!specNode) return null;
+            return (
+              <>
+                <div className="w-0.5 h-6 bg-gradient-to-b from-amber-500/40 to-amber-500/60 my-1 mx-auto" />
+                {renderProfessionNode(specNode, false)}
 
-          {/* AKTIVER ZWEIG: NUR DIESER WIRD DARGESTELLT */}
-          {activeBranch && (
-            <div className="w-full max-w-2xl mx-auto flex flex-col gap-4">
-              {/* STUFE 2: KERNBERUF & FACHKOMPETENZEN - ZUSAMMEN IN EINEM FELD */}
-              <div className="w-full flex flex-col items-center">
-                {renderUnifiedKernberufCard(activeBranch.coreNode)}
-
-                {(activeBranch.specializations.length > 0 || activeBranch.masters.length > 0) && (
-                  <div className="w-0.5 h-4 bg-slate-700 my-1" />
-                )}
-              </div>
-
-              {/* STUFE 3: SPEZIALISIERUNGEN DES ZWEIGS */}
-              {activeBranch.specializations.length > 0 && (
-                <div className="flex flex-col gap-2.5 pl-3 border-l-2 border-slate-800/80 ml-4 sm:ml-6">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-800/60">
-                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-cyan-400 uppercase tracking-wider">
-                      <Compass className="w-3 h-3" />
-                      <span>Stufe 3: Spezialisierungen</span>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-mono">
-                      {activeBranch.specializations.length} Pfad{activeBranch.specializations.length !== 1 ? 'e' : ''}
-                    </span>
-                  </div>
-
-                  {activeBranch.specializations.map(specNode => (
-                    <div key={specNode.id} className="relative w-full">
-                      <div className="absolute -left-3 top-5 w-3 h-0.5 bg-slate-800" />
-                      {renderNodeCard(specNode)}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* STUFE 4: MEISTERSTUFE DES ZWEIGS */}
-              {activeBranch.masters.length > 0 && (
-                <div className="flex flex-col gap-2 mt-1 pt-2.5 border-t border-amber-900/30">
-                  <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400 uppercase tracking-wider">
-                    <Award className="w-3 h-3" />
-                    <span>Stufe 4: Meisterstufe & Höchste Kunst</span>
-                  </div>
-
-                  {activeBranch.masters.map(masterNode => (
-                    <div key={masterNode.id} className="w-full">
-                      {renderNodeCard(masterNode)}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* SELECTED NODE INSPECTOR / DETAIL PANEL (Only for Lehrling, Spezialisierungen & Meister) */}
-      {activeDetailNode && (
-        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col gap-4 mt-2">
-          {/* Header of Inspector */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`text-xs px-2.5 py-0.5 rounded-full border whitespace-nowrap ${
-                    TIER_BADGE_STYLES[activeDetailNode.tier]
-                  }`}
-                >
-                  {TIER_LABELS[activeDetailNode.tier]}
-                </span>
-                <h4 className="text-base sm:text-lg font-bold text-white">
-                  {activeDetailNode.name}
-                </h4>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1.5 leading-relaxed">
-                {activeDetailNode.description}
-              </p>
-            </div>
-
-            {/* Action Buttons */}
-            {!readOnly && (
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                {/* 1. Hauptberuf festlegen */}
-                {isNodePrimaryProfession(activeDetailNode) ? (
-                  <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-950/70 border border-amber-500/60 text-amber-300 text-xs font-semibold whitespace-nowrap">
-                    <Check className="w-4 h-4 text-amber-400" />
-                    <span>Aktiver Hauptberuf</span>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleApplyPrimaryProfession(activeDetailNode)}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-slate-950 font-semibold text-xs transition shadow-sm cursor-pointer whitespace-nowrap"
-                  >
-                    <ArrowRight className="w-3.5 h-3.5" />
-                    <span>Als Hauptberuf festlegen</span>
-                  </button>
-                )}
-
-                {/* 2. Spezialisierung wählen (falls Stufe 3) */}
-                {activeDetailNode.tier === 'spezialisierung' && (
-                  isNodePrimarySpecialization(activeDetailNode) ? (
-                    <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-950/70 border border-cyan-500/60 text-cyan-300 text-xs font-semibold whitespace-nowrap">
-                      <Check className="w-4 h-4 text-cyan-400" />
-                      <span>Aktive Spezialisierung</span>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleApplySpecialization(activeDetailNode)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-semibold text-xs transition shadow-sm cursor-pointer whitespace-nowrap"
-                    >
-                      <Compass className="w-3.5 h-3.5" />
-                      <span>Als Haupt-Spezialisierung</span>
-                    </button>
-                  )
-                )}
-
-                {/* 3. Als weitere Richtung wählen */}
-                {onToggleAdditionalDirection && !isNodePrimaryProfession(activeDetailNode) && (
-                  isNodeAdditionalDirection(activeDetailNode) ? (
-                    <button
-                      type="button"
-                      onClick={() => handleToggleDirection(activeDetailNode)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/60 border border-rose-700/60 text-rose-300 text-xs font-medium transition cursor-pointer whitespace-nowrap"
-                      title="Aus den zusätzlichen Richtungen entfernen"
-                    >
-                      <Minus className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Weitere Richtung entfernen</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleToggleDirection(activeDetailNode)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-950/70 hover:bg-indigo-900/70 border border-indigo-600/60 text-indigo-300 text-xs font-medium transition cursor-pointer whitespace-nowrap"
-                      title="Als zusätzlichen Zweitberuf / Fachrichtung verfolgen"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Als weitere Richtung wählen</span>
-                    </button>
-                  )
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Voraussetzungen & Aufstiegswege */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Voraussetzungen */}
-            <div className="flex flex-col gap-2 p-3 bg-slate-950/50 border border-slate-800/60 rounded-xl">
-              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60">
-                <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                  <BookOpen className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Voraussetzungen & Qualifikationen</span>
-                </span>
-                {activeDetailEval?.isAvailable ? (
-                  <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Erfüllt
-                  </span>
-                ) : (
-                  <span className="text-xs text-rose-400 font-medium flex items-center gap-1">
-                    <Lock className="w-3.5 h-3.5" /> Noch nicht erfüllt
-                  </span>
-                )}
-              </div>
-
-              {activeDetailNode.prerequisites.length === 0 ? (
-                <p className="text-xs text-slate-400 leading-relaxed py-1">
-                  Offener Einstieg ohne formale Vorbedingungen. Jeder Charakter kann diese Richtung einschlagen.
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2 text-xs py-1">
-                  {activeDetailEval?.fulfilledPrerequisites.map((item, idx) => (
-                    <li key={`f_${idx}`} className="flex items-start gap-2 text-emerald-300/90">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                  {activeDetailEval?.missingPrerequisites.map((item, idx) => (
-                    <li key={`m_${idx}`} className="flex items-start gap-2 text-rose-300">
-                      <Lock className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {/* Mögliche Aufstiegswege */}
-            <div className="flex flex-col gap-2 p-3 bg-slate-950/50 border border-slate-800/60 rounded-xl">
-              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/60">
-                <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Aufstiegs- & Anerkennungswege</span>
-                </span>
-              </div>
-              <div className="flex flex-col gap-2 py-1">
-                {activeDetailNode.careerRoutes.map(route => (
-                  <div
-                    key={route.id}
-                    className="border border-slate-800/80 bg-slate-900/60 rounded-lg p-2.5 flex flex-col gap-1"
-                  >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-amber-300">
-                        {route.name}
+                {/* Optional: Check if this specialization has masters/further child nodes */}
+                {activeBranch.masters.filter(m => m.parentIds?.includes(specNode.id)).length > 0 && (
+                  <>
+                    <div className="w-0.5 h-6 bg-gradient-to-b from-amber-500/60 to-amber-500/40 my-1 mx-auto" />
+                    <div className="w-full flex flex-col items-center justify-center my-1.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400/80 mb-2">
+                        Höchste Meisterschaft & Perfektion
                       </span>
-                      <span className="text-[11px] text-slate-400 font-medium px-2 py-0.5 rounded bg-slate-800 border border-slate-700 whitespace-nowrap">
-                        {route.type === 'experience'
-                          ? 'Berufserfahrung'
-                          : route.type === 'exam'
-                          ? 'Prüfung / Meister'
-                          : route.type === 'social_recognition'
-                          ? 'Anerkennung / Wahl'
-                          : 'Notfall / Ernennung'}
-                      </span>
+                      <div className="flex flex-wrap items-center justify-center gap-2 max-w-xl mx-auto px-2">
+                        {activeBranch.masters
+                          .filter(m => m.parentIds?.includes(specNode.id))
+                          .map(masterNode => {
+                            const isMasterSelected = selectedSpecNodeId === masterNode.id;
+                            const isMasterActive =
+                              currentSpecialization &&
+                              (masterNode.name.toLowerCase() === currentSpecialization.toLowerCase() ||
+                                masterNode.id.toLowerCase() === currentSpecialization.toLowerCase());
+                            return (
+                              <button
+                                key={masterNode.id}
+                                type="button"
+                                onClick={() => setSelectedSpecNodeId(masterNode.id)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                                  isMasterSelected
+                                    ? 'bg-amber-600 text-slate-950 font-bold shadow-md ring-2 ring-amber-400/80'
+                                    : isMasterActive
+                                    ? 'bg-amber-950/80 text-amber-300 border border-amber-600/70 font-semibold'
+                                    : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+                                }`}
+                              >
+                                {isMasterActive && <Check className="w-3 h-3 text-emerald-400" />}
+                                <span>{masterNode.name}</span>
+                              </button>
+                            );
+                          })}
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400 leading-snug">
-                      {route.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Empfohlene Fachkompetenzen */}
-          {activeDetailNode.suggestedCompetencies.length > 0 && (
-            <div className="border-t border-slate-800 pt-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-slate-400 font-medium flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>Zugehörige Kernkompetenzen:</span>
-              </span>
-              {activeDetailNode.suggestedCompetencies.map((compName, idx) => (
-                <span
-                  key={idx}
-                  className="text-xs text-slate-300 bg-slate-800 border border-slate-700 px-2.5 py-1 rounded-lg"
-                >
-                  {compName}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
+        </>
       )}
     </div>
   );
 };
-
-export default ProfessionSkillTree;

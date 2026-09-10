@@ -324,14 +324,14 @@ export const CompetencyCatalogModal: React.FC<CompetencyCatalogModalProps> = ({
               Keine passenden Katalog-Einträge für diesen Filter gefunden.
             </div>
           ) : (
-            filteredCompetencies.map((item, itemIdx) => {
+            filteredCompetencies.map(item => {
               const normName = item.name.toLowerCase().trim().replace(/[^a-zäöüß0-9]/g, '');
               const isAlreadyAdded = existingNamesSet.has(normName);
               const isSelected = selectedIds.has(item.id);
 
               return (
                 <div
-                  key={`catalog-item-${item.id}-${itemIdx}`}
+                  key={item.id}
                   id={`catalog-item-${item.id}`}
                   onClick={() => !isAlreadyAdded && toggleSelect(item.id)}
                   className={`pt-2.5 pb-2.5 px-3 rounded-xl transition flex items-start justify-between gap-3 ${

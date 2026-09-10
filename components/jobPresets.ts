@@ -10,27 +10,34 @@ export const JOB_CATEGORIES: JobCategory[] = [
     category: "Bau & Handwerk",
     jobs: [
       "Schmied",
+      "Waffenschmied",
+      "Schwertschmied",
+      "Rüstungsschmied",
       "Schreiner / Tischler",
       "Schneider",
       "Schuster / Schuhmacher",
       "Töpfer",
-      "Glasbläser",
+      "Glasbläser / Glasmacher",
       "Maurer / Bauhandwerker",
       "Bogenbauer",
       "Gerber",
+      "Kürschner",
       "Weberei-Handwerker",
       "Steinmetz",
       "Zimmermann",
       "Seiler",
+      "Wagner",
       "Büchsenmacher",
       "Feinmechaniker",
       "Uhrmacher",
       "Goldschmied",
       "Juwelier",
+      "Edelsteinschmied",
       "Instrumentenbauer",
       "Optiker",
       "Graveur",
-      "Siegelstecher"
+      "Siegelstecher",
+      "Architekt (Festungsbau)"
     ]
   },
   {
@@ -38,13 +45,15 @@ export const JOB_CATEGORIES: JobCategory[] = [
     category: "Lebensmittel & Ernährung",
     jobs: [
       "Bäcker",
+      "Konditor / Feinbäcker",
       "Metzger / Fleischer",
       "Brauer / Braumeister",
       "Winzer",
       "Müller",
-      "Koch / Chefkoch",
+      "Koch / Küchenchef",
       "Käser",
-      "Obstbauer"
+      "Obstbauer",
+      "Vorkoster"
     ]
   },
   {
@@ -52,14 +61,19 @@ export const JOB_CATEGORIES: JobCategory[] = [
     category: "Natur & Landwirtschaft",
     jobs: [
       "Bauer / Landwirt",
+      "Milchbauer",
       "Jäger",
       "Förster",
       "Waldläufer",
       "Fischer",
       "Kräutersammler",
+      "Sammler / Futtersucher",
       "Holzfäller",
-      "Kundschafter",
-      "Trapper"
+      "Kundschafter / Scout",
+      "Trapper / Fallensteller",
+      "Florist",
+      "Nomade",
+      "Wanderer"
     ]
   },
   {
@@ -70,7 +84,14 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Viehzüchter",
       "Pferdezüchter",
       "Hundezüchter",
+      "Tiertrainer",
       "Falkner",
+      "Vogelabrichter",
+      "Mahout (Elefantenführer)",
+      "Beast Tamer",
+      "Bug Tamer",
+      "Drachenzähmer",
+      "Dämonen-Tamer",
       "Imker",
       "Stallmeister"
     ]
@@ -80,11 +101,15 @@ export const JOB_CATEGORIES: JobCategory[] = [
     category: "Wissenschaft & Forschung",
     jobs: [
       "Gelehrter",
+      "Forscher",
       "Kartograf",
-      "Astronom",
+      "Astronom / Astrologe",
       "Historiker",
       "Philosoph",
-      "Mathematiker"
+      "Mathematiker",
+      "Archäologe",
+      "Kryptograph",
+      "Detektiv"
     ]
   },
   {
@@ -110,6 +135,8 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Krämer",
       "Geldwechsler",
       "Kontorist",
+      "Buchhalter",
+      "Vermieter",
       "Auktionsleiter",
       "Hausierer",
       "Importeur / Exporteur",
@@ -122,6 +149,8 @@ export const JOB_CATEGORIES: JobCategory[] = [
     category: "Verwaltung & Recht",
     jobs: [
       "Schreiber",
+      "Sekretär",
+      "Verhandlungsführer",
       "Beamter",
       "Steuereintreiber",
       "Richter",
@@ -133,7 +162,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Vogt",
       "Ratsherr / Berater",
       "Seneschall",
-      "Lehntherr"
+      "Kurfürstlicher Beamter"
     ]
   },
   {
@@ -141,26 +170,38 @@ export const JOB_CATEGORIES: JobCategory[] = [
     category: "Militär & Sicherheit",
     jobs: [
       "Soldat",
-      "Kommandant",
+      "Infanterist",
+      "Spezialkämpfer",
+      "Kanonier / Artillerist",
+      "Taktiker",
+      "Quartiermeister",
+      "Belagerungsingenieur",
+      "Berserker",
+      "Rächer",
+      "Duellant",
       "Offizier",
-      "Hauptmann",
+      "Kommandant",
       "Rekrut",
       "Söldner",
-      "Infanterist",
+      "Gladiator",
+      "Riesentöter",
+      "Drachenjäger",
       "Reitersoldat / Kavallerist",
-      "Bogenschütze",
+      "Bogenschütze / Scharfschütze",
       "Armbrustschütze",
-      "Strategieberater",
       "Stadtwache",
       "Wache",
       "Leibwächter",
+      "Körperdouble",
+      "Grenzpatrouille",
       "Patrouillenführer",
       "Torkontrolleur",
       "Nachtwächter",
       "Turmwächter",
       "Gefängniswärter",
       "Türsteher",
-      "Paladin"
+      "Paladin",
+      "Ritter"
     ]
   },
   {
@@ -173,7 +214,8 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Fährmann",
       "Hafenarbeiter",
       "Navigator",
-      "Bootsmann"
+      "Bootsmann",
+      "Schiffskanonier"
     ]
   },
   {
@@ -183,6 +225,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Fuhrmann",
       "Kutschfahrer / Kutscher",
       "Bote / Eilbote",
+      "Kurier",
       "Belademeister / Logistiker",
       "Karrenlenker"
     ]
@@ -194,8 +237,10 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Maler",
       "Bildhauer",
       "Dichter",
+      "Schriftsteller / Romancier",
       "Kunsthandwerker",
-      "Buchillustrator"
+      "Buchillustrator",
+      "Puppenspieler"
     ]
   },
   {
@@ -203,12 +248,15 @@ export const JOB_CATEGORIES: JobCategory[] = [
     category: "Unterhaltung",
     jobs: [
       "Barde / Musiker",
+      "Bänkelsänger",
+      "Idol / Diva",
       "Tänzer",
       "Gaukler / Akrobat",
       "Schauspieler",
       "Hofnarr",
       "Zirkusartist",
-      "Jongleur"
+      "Jongleur",
+      "Kurtisane"
     ]
   },
   {
@@ -217,27 +265,45 @@ export const JOB_CATEGORIES: JobCategory[] = [
     jobs: [
       "Priester",
       "Kleriker",
+      "Kriegspriester",
       "Mönch / Nonne",
       "Inquisitor",
       "Tempeldiener",
       "Exorzist",
       "Orakel",
-      "Hohepriester"
+      "Hohepriester",
+      "Kannushi",
+      "Miko",
+      "Kannagi",
+      "Sohei (Kriegermönch)",
+      "Yamabushi",
+      "Onmyōji",
+      "Ajari"
     ]
   },
   {
     fieldId: "magie_arkana",
     category: "Magie & Arkane Künste",
     jobs: [
+      "Arkanist",
       "Magieforscher",
+      "Elementarist",
+      "Sigilmancer",
+      "Talismanzer",
+      "Runenmeister",
+      "Runenschmied",
+      "Magischer Kunstfertiger",
       "Verzauberer",
-      "Elementarmagier",
-      "Beschwörer",
       "Nekromant",
+      "Curseblade",
+      "Specter-Benutzer",
+      "Medium",
+      "Traumwandler",
+      "Beschwörer",
       "Illusionist",
       "Artefaktforscher",
       "Ritualmagier",
-      "Runenschmied"
+      "Magical Girl"
     ]
   },
   {
@@ -246,8 +312,9 @@ export const JOB_CATEGORIES: JobCategory[] = [
     jobs: [
       "Alchemist",
       "Trankbrauer",
-      "Giftmischer",
-      "Essenzenforscher"
+      "Giftmischer / Giftbenutzer",
+      "Essenzenforscher",
+      "Parfümeur"
     ]
   },
   {
@@ -256,7 +323,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     jobs: [
       "Bergmann / Bergarbeiter",
       "Schürfer",
-      "Erzsucher",
+      "Erzsucher / Prospektor",
       "Steinbrecher",
       "Köhler"
     ]
@@ -268,7 +335,6 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Bibliothekar",
       "Archivar",
       "Professor / Lehrmeister",
-      "Student / Schüler",
       "Kalligraph",
       "Buchbinder"
     ]
@@ -286,46 +352,23 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Dienstbote",
       "Butler",
       "Haushofmeister",
+      "Haushälterin",
+      "Hausfrau / Hausmann",
+      "Totengräber",
       "Wascherin"
     ]
   },
   {
-    fieldId: "adel_herrschaft",
-    category: "Adel & Herrschaft",
+    fieldId: "hof_staatsdienst",
+    category: "Hof- & Staatsdienst",
     jobs: [
-      "Fürst / König",
-      "Königin",
-      "Herzog / Herzogin",
-      "Graf / Gräfin",
-      "Baron / Baronin",
-      "Freiherr / Freiin",
-      "Lord / Lady",
-      "Hofdame",
-      "Kronprinz / Kronprinzessin",
-      "Erbprinz / Erbprinzessin",
-      "Prinz / Prinzessin",
-      "Herzogstochter",
-      "Herzogsohn",
-      "Erbherzogstochter",
-      "Erbherzog",
-      "Grafentochter",
-      "Grafensohn",
-      "Komtesse",
-      "Erbgräfin",
-      "Erbgraf",
-      "Baronstochter",
-      "Baronssohn",
-      "Fürstentochter",
-      "Fürstensohn",
-      "Königstochter",
-      "Königssohn",
-      "Erbtochter",
-      "Erbsohn",
-      "Edelfräulein",
-      "Junker",
-      "Lordstochter",
-      "Lordsohn",
-      "Adelsnachkomme"
+      "Hofmeister",
+      "Kastellan / Burgvogt",
+      "Zeremonienmeister",
+      "Herold",
+      "Hofdame / Kammerherr",
+      "Palastverwalter",
+      "Seneschall"
     ]
   },
   {
@@ -335,17 +378,24 @@ export const JOB_CATEGORIES: JobCategory[] = [
       "Abenteurer",
       "Schatzsucher",
       "Kopfgeldjäger",
+      "Untotenjäger",
       "Monsterjäger",
       "Ruinenerkunder",
       "Dungeon-Scout",
       "Söldner-Garde",
       "Reliktsucher",
-      "Dieb",
+      "Dieb / Rogue",
+      "Schurke",
       "Taschendieb",
       "Schmuggler",
+      "Pirat",
       "Auftragsmörder / Assassine",
+      "Ninja",
+      "Spion",
       "Hehler",
       "Fälscher",
+      "Glücksspieler",
+      "Phantom-Dieb",
       "Räuber / Bandit",
       "Schutzgeldeintreiber",
       "Einbrecher"

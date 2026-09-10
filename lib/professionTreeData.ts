@@ -411,7 +411,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         description: 'Herstellung von Hart-, Weich- und Schnittkäse, Butter und Milchprodukten.',
         prerequisites: [],
         careerRoutes: [
-          { id: 'kaese_exp', name: 'Alm- und Sennereipraxis', type: 'experience', description: 'Arbeit in Käsereien.', requirementsSummary: 'Praxis' }
+          { id: 'k_exp', name: 'Alm- und Sennereipraxis', type: 'experience', description: 'Arbeit in Käsereien.', requirementsSummary: 'Praxis' }
         ],
         suggestedCompetencies: ['Milch dicklegen', 'Bruch schneiden', 'Käselaibe pflegen'],
         possibleRanks: ['Senner', 'Käsermeister']
@@ -581,7 +581,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
           { type: 'profession', label: 'Schmied', targetId: 'schmied' }
         ],
         careerRoutes: [
-          { id: 'huf_exp', name: 'Stall- & Wanderpraxis', type: 'experience', description: 'Beschlagpraxis an Reit- und Zugtieren.', requirementsSummary: 'Praxis' }
+          { id: 'hs_exp', name: 'Stall- & Wanderpraxis', type: 'experience', description: 'Beschlagpraxis an Reit- und Zugtieren.', requirementsSummary: 'Praxis' }
         ],
         suggestedCompetencies: ['Hufeisen anpassen', 'Hufkorrektur', 'Nagelung'],
         possibleRanks: ['Hufschmied']
@@ -808,7 +808,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
           { type: 'experience_years', label: '2 Jahre Steinmetzerfahrung', minValue: 2 }
         ],
         careerRoutes: [
-          { id: 'steinbild_exp', name: 'Dombauhütte', type: 'experience', description: 'Steinschnitt an Kathedralen und Palästen.', requirementsSummary: '2 Jahre Praxis' }
+          { id: 'sm_exp', name: 'Dombauhütte', type: 'experience', description: 'Steinschnitt an Kathedralen und Palästen.', requirementsSummary: '2 Jahre Praxis' }
         ],
         suggestedCompetencies: ['Maßwerk behauen', 'Reliefschnitt', 'Steinverankerung'],
         possibleRanks: ['Steinbildhauer', 'Hüttengeselle']
@@ -844,7 +844,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
           { type: 'profession', label: 'Maurer & Steinmetz', targetId: 'maurer' }
         ],
         careerRoutes: [
-          { id: 'stuck_exp', name: 'Putz- & Stuckpraxis', type: 'experience', description: 'Gestaltung repräsentativer Hallen.', requirementsSummary: 'Praxis' }
+          { id: 'st_exp', name: 'Putz- & Stuckpraxis', type: 'experience', description: 'Gestaltung repräsentativer Hallen.', requirementsSummary: 'Praxis' }
         ],
         suggestedCompetencies: ['Kalkputz zubereiten', 'Stuckgesimse ziehen', 'Sgraffito'],
         possibleRanks: ['Stuckateur']
@@ -984,7 +984,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
           { type: 'experience_years', label: '2 Jahre Schneidererfahrung', minValue: 2 }
         ],
         careerRoutes: [
-          { id: 'waffenschneider_exp', name: 'Waffenschneiderei', type: 'experience', description: 'Arbeit für Kriegsknechte und Rittergefolge.', requirementsSummary: '2 Jahre Praxis' }
+          { id: 'hs_exp', name: 'Waffenschneiderei', type: 'experience', description: 'Arbeit für Kriegsknechte und Rittergefolge.', requirementsSummary: '2 Jahre Praxis' }
         ],
         suggestedCompetencies: ['Gambeson steppen', 'Lederdopplung', 'Waffenrockpassung'],
         possibleRanks: ['Waffenschneider']
@@ -1076,7 +1076,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         name: 'Soldat / Infanterist',
         tier: 'beruf',
         parentIds: ['militaer_root'],
-        childIds: ['offizier', 'veteran', 'gardist'],
+        childIds: ['spezialkaempfer', 'scout_militaer', 'kanonier_militaer', 'taktiker_militaer', 'offizier', 'gardist'],
         description: 'Regulärer Militärdienst in Linienformation, Belagerung und Feldschlacht.',
         prerequisites: [{ type: 'experience_years', label: '1 Dienstjahr', minValue: 1 }],
         careerRoutes: [
@@ -1085,6 +1085,70 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         ],
         suggestedCompetencies: ['Schildwall', 'Nahkampftechnik', 'Formation halten'],
         possibleRanks: ['Gefreiter', 'Korporal', 'Feldwebel']
+      },
+      {
+        id: 'spezialkaempfer',
+        fieldId: 'militaer_sicherheit',
+        name: 'Spezialkämpfer & Sturminfanterist',
+        tier: 'spezialisierung',
+        specializationOf: 'soldat',
+        parentIds: ['soldat'],
+        childIds: ['offizier'],
+        description: 'Ausgebildeter Elitesoldat für Breschensturm, Nahkampf im Graben und Spezialeinsätze.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Kampfdienst', minValue: 2 }],
+        careerRoutes: [
+          { id: 'sk_exp', name: 'Sturmfront-Bewährung', type: 'experience', description: 'Einsatz in vorderster Frontlinie.', requirementsSummary: 'Kampferfahrung' }
+        ],
+        suggestedCompetencies: ['Sturmangriff', 'Breschenkampf', 'Zweikampf', 'Zähigkeit'],
+        possibleRanks: ['Sturmsoldat', 'Eliteschütze', 'Stoßtruppführer']
+      },
+      {
+        id: 'scout_militaer',
+        fieldId: 'militaer_sicherheit',
+        name: 'Scout & Pfadfinder',
+        tier: 'spezialisierung',
+        specializationOf: 'soldat',
+        parentIds: ['soldat'],
+        childIds: ['offizier'],
+        description: 'Vorhutaufklärung, Erkundung feindlicher Truppenbewegungen und Pfadsuche im Terrain.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Militärpraxis', minValue: 1 }],
+        careerRoutes: [
+          { id: 'sc_exp', name: 'Aufklärungsdienst', type: 'experience', description: 'Späheinsatz im Niemandsland.', requirementsSummary: 'Geländeerfahrung' }
+        ],
+        suggestedCompetencies: ['Geländeaufklärung', 'Tarnung & Lautlosigkeit', 'Meldereiten', 'Geländekizzen'],
+        possibleRanks: ['Aufklärer', 'Kundschafter', 'Vorhutspäher']
+      },
+      {
+        id: 'kanonier_militaer',
+        fieldId: 'militaer_sicherheit',
+        name: 'Kanonier & Artillerist',
+        tier: 'spezialisierung',
+        specializationOf: 'soldat',
+        parentIds: ['soldat'],
+        childIds: ['offizier'],
+        description: 'Bedienung von Feldgeschützen, Katapulten, Mörsern und Ballisten im Gefecht.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Artilleriedienst', minValue: 1 }],
+        careerRoutes: [
+          { id: 'kan_exam', name: 'Büchsenmeisterprüfung', type: 'exam', description: 'Prüfung in Ballistik und Pulverhandhabung.', requirementsSummary: 'Pulverprüfung' }
+        ],
+        suggestedCompetencies: ['Pulverkunde & Munition', 'Ballistik & Ausrichten', 'Belagerungsdeckung', 'Rohrwartung'],
+        possibleRanks: ['Kanonier', 'Stückmeister', 'Feuerwerker']
+      },
+      {
+        id: 'taktiker_militaer',
+        fieldId: 'militaer_sicherheit',
+        name: 'Taktiker & Manöverplaner',
+        tier: 'spezialisierung',
+        specializationOf: 'soldat',
+        parentIds: ['soldat'],
+        childIds: ['offizier'],
+        description: 'Analyse von Schlachtfeldern, Versorgungslinien, Aufstellungen und Gegenmanövern.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Stabs- oder Kampfdienst', minValue: 2 }],
+        careerRoutes: [
+          { id: 'tak_acad', name: 'Kriegsakademie', type: 'exam', description: 'Ausbildung im strategischen Planungsstab.', requirementsSummary: 'Kriegsakademie' }
+        ],
+        suggestedCompetencies: ['Schlachttaktik', 'Kartenanalyse', 'Logistikberechnung', 'Feindaufklärung'],
+        possibleRanks: ['Stabsunteroffizier', 'Taktischer Adjutant']
       },
       {
         id: 'stadtwache',
@@ -1207,11 +1271,11 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'kommandant',
         fieldId: 'militaer_sicherheit',
-        name: 'Kommandant & Feldherr',
-        tier: 'meister',
+        name: 'Kommandant & Befehlshaber',
+        tier: 'spezialisierung',
         parentIds: ['offizier', 'wachtmeister', 'gardist', 'soeldnerfuehrer'],
-        childIds: [],
-        description: 'Oberbefehlshaber von Festungen, Heeresabteilungen oder der gesamten Stadtwache.',
+        childIds: ['general'],
+        description: 'Oberbefehlshaber von Festungen, Heeresabteilungen oder Garnisonen.',
         prerequisites: [
           { type: 'experience_years', label: '5 Jahre Führungserfahrung', minValue: 5 }
         ],
@@ -1220,7 +1284,25 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
           { id: 'kom_emergency', name: 'Anerkennung in der Not', type: 'emergency', description: 'Truppen ernennen fähigen Veteranen zum Oberbefehl.', requirementsSummary: 'Kriegsnotwendigkeit' }
         ],
         suggestedCompetencies: ['Heeresführung', 'Festungsverteidigung', 'Kriegsrat leiten', 'Großstrategie'],
-        possibleRanks: ['Garnisonskommandant', 'Festungskommandant', 'General', 'Feldmarschall']
+        possibleRanks: ['Garnisonskommandant', 'Festungskommandant', 'Oberst']
+      },
+      {
+        id: 'general',
+        fieldId: 'militaer_sicherheit',
+        name: 'General & Feldherr',
+        tier: 'meister',
+        parentIds: ['kommandant'],
+        childIds: [],
+        description: 'Höchster militärischer Rang, Oberbefehl über Feldheere, Korps und strategische Kriegsoperationen.',
+        prerequisites: [
+          { type: 'experience_years', label: '7 Jahre Diensterfahrung', minValue: 7 }
+        ],
+        careerRoutes: [
+          { id: 'gen_patent', name: 'Generalspatent des Herrschers', type: 'exam', description: 'Höchste Ernennung durch Krone oder Reichstag.', requirementsSummary: 'Königliches Patent' },
+          { id: 'gen_soc', name: 'Triumph & Ruhm', type: 'social_recognition', description: 'Ernennung zum Oberbefehlshaber nach kriegsentscheidendem Sieg.', requirementsSummary: 'Kriegsruhm' }
+        ],
+        suggestedCompetencies: ['Großstrategie', 'Kriegsratleitung', 'Schlachtfeld-Disposition', 'Diplomatisches Kriegsrecht'],
+        possibleRanks: ['Generalmajor', 'Generalleutnant', 'General der Infanterie', 'Generalfeldmarschall']
       }
     ]
   },
@@ -1259,7 +1341,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         description: 'Segel setzen, Rigg klettern, Rudergehen und Schiffsunterhalt bei Sturm und Flaute.',
         prerequisites: [{ type: 'experience_years', label: '1 Seefahrtsjahr', minValue: 1 }],
         careerRoutes: [
-          { id: 'seemann_exp', name: 'Jahre auf hoher See', type: 'experience', description: 'Fahrten über raue Meere.', requirementsSummary: '1+ Jahr Seefahrt' }
+          { id: 'sm_exp', name: 'Jahre auf hoher See', type: 'experience', description: 'Fahrten über raue Meere.', requirementsSummary: '1+ Jahr Seefahrt' }
         ],
         suggestedCompetencies: ['Takelage bedienen', 'Segel reffen', 'Rudergehen', 'Schiffszimmerei'],
         possibleRanks: ['Vollmatrose', 'Obermatrose']
@@ -1294,7 +1376,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         ],
         careerRoutes: [
           { id: 'st_exam', name: 'Steuermannspatent', type: 'exam', description: 'Nautische Navigationsprüfung.', requirementsSummary: 'Patent' },
-          { id: 'steuermann_exp', name: 'Erfahrung auf Langstrecke', type: 'experience', description: 'Praxis bei Ozeanüberquerungen.', requirementsSummary: '2 Jahre Praxis' }
+          { id: 'st_exp', name: 'Erfahrung auf Langstrecke', type: 'experience', description: 'Praxis bei Ozeanüberquerungen.', requirementsSummary: '2 Jahre Praxis' }
         ],
         suggestedCompetencies: ['Sternennavigation', 'Seekarten lesen', 'Koppelkurs berechnen'],
         possibleRanks: ['Zweiter Steuermann', 'Erster Steuermann']
@@ -1454,7 +1536,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         childIds: [],
         description: 'Auffinden und schonendes Ernten seltener Heilpflanzen, Pilze und Waldfrüchte.',
         prerequisites: [],
-        careerRoutes: [{ id: 'kraeuter_exp', name: 'Kräuterkunde in freier Natur', type: 'experience', description: 'Sammeln in Mooren und Bergen.', requirementsSummary: 'Praxis' }],
+        careerRoutes: [{ id: 'k_exp', name: 'Kräuterkunde in freier Natur', type: 'experience', description: 'Sammeln in Mooren und Bergen.', requirementsSummary: 'Praxis' }],
         suggestedCompetencies: ['Heilpflanzen erkennen', 'Schonende Ernte', 'Trocknung'],
         possibleRanks: ['Kräuterweib / Kräutermann', 'Meistersammler']
       },
@@ -1485,14 +1567,1006 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         possibleRanks: ['Oberstjägermeister', 'Landforstmeister']
       }
     ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 6. MAGIE & ARKANA
+  // ---------------------------------------------------------------------------
+  magie_arkana: {
+    fieldId: 'magie_arkana',
+    fieldName: 'Magie & Arkane Künste',
+    description: 'Arkanistik, Elementarmagie, Runenkunde, Verzauberung und okkulte Studien',
+    rootNodeId: 'magie_root',
+    nodes: [
+      {
+        id: 'magie_root',
+        fieldId: 'magie_arkana',
+        name: 'Magieschüler / Arkan-Novize',
+        tier: 'einstieg',
+        parentIds: [],
+        childIds: ['arkanist', 'elementarist', 'runenschmied_node'],
+        description: 'Studium magischer Grundlagen, Manakontrolle, Formeln und arkaner Meditation.',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'mag_init', name: 'Arkanes Initiationsritual', type: 'exam', description: 'Erweckung des inneren Manaflusses.', requirementsSummary: 'Manaprüfung' }
+        ],
+        suggestedCompetencies: ['Manakontrolle', 'Zauberformeln', 'Arkane Schriften'],
+        possibleRanks: ['Magieschüler', 'Arkan-Novize', 'Adept']
+      },
+      {
+        id: 'arkanist',
+        fieldId: 'magie_arkana',
+        name: 'Arkanist & Magiewirker',
+        tier: 'beruf',
+        parentIds: ['magie_root'],
+        childIds: ['sigilmancer', 'nekromant', 'traumwandler', 'erzmagier'],
+        description: 'Voll ausgebildeter Magier zur Lenkung arkaner Gewalten und magischer Resonanzen.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre magische Praxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'ark_exam', name: 'Magisterprüfung der Akademie', type: 'exam', description: 'Bestätigung des Magistergrades.', requirementsSummary: 'Akademieprüfung' }
+        ],
+        suggestedCompetencies: ['Arkanblitze', 'Magische Schilde', 'Telekinese', 'Spruchwebung'],
+        possibleRanks: ['Magus', 'Arkanist', 'Magister']
+      },
+      {
+        id: 'elementarist',
+        fieldId: 'magie_arkana',
+        name: 'Elementarist & Naturmagier',
+        tier: 'beruf',
+        parentIds: ['magie_root'],
+        childIds: ['curseblade', 'erzmagier'],
+        description: 'Meisterung der vier Urelemente Feuer, Wasser, Erde und Luft.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'elem_att', name: 'Elementare Einstimmung', type: 'experience', description: 'Harmonisierung an elementaren Kraftorten.', requirementsSummary: 'Elementarpakt' }
+        ],
+        suggestedCompetencies: ['Feuerlenkung', 'Erdformung', 'Wassermanipulation', 'Windböen'],
+        possibleRanks: ['Elementarmagier', 'Pyromant / Kryomant', 'Elementarherr']
+      },
+      {
+        id: 'runenschmied_node',
+        fieldId: 'magie_arkana',
+        name: 'Runenschmied & Verzauberer',
+        tier: 'beruf',
+        parentIds: ['magie_root'],
+        childIds: ['runenmeister', 'erzmagier'],
+        description: 'Bindung magischer Ströme in Metalle, Artefakte, Glyphen und Waffen.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Schmiede- oder Runenpraxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'run_exam', name: 'Prüfung der Runengilde', type: 'exam', description: 'Herstellung eines beständigen Runenartefakts.', requirementsSummary: 'Meisterrune' }
+        ],
+        suggestedCompetencies: ['Runenschnitzen', 'Verzauberung', 'Artefaktanalyse', 'Materialresonanz'],
+        possibleRanks: ['Runenschmied', 'Artefaktwirker']
+      },
+      {
+        id: 'sigilmancer',
+        fieldId: 'magie_arkana',
+        name: 'Sigilmancer & Talismanzer',
+        tier: 'spezialisierung',
+        specializationOf: 'arkanist',
+        parentIds: ['arkanist'],
+        childIds: ['erzmagier'],
+        description: 'Schaffung magischer Siegelsiegel, Schutzkreise, Amulette und flüchtiger Talismane.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre arkanes Wirken', minValue: 3 }],
+        careerRoutes: [
+          { id: 'sig_exp', name: 'Siegelstudien', type: 'experience', description: 'Entschlüsselung uralter Schutzsiegel.', requirementsSummary: 'Siegelkunde' }
+        ],
+        suggestedCompetencies: ['Siegelzeichnung', 'Talismanbindung', 'Bannkreise', 'Sofort-Glyphen'],
+        possibleRanks: ['Siegelschreiber', 'Großtalismanzer']
+      },
+      {
+        id: 'nekromant',
+        fieldId: 'magie_arkana',
+        name: 'Nekromant & Geisterbeschwörer',
+        tier: 'spezialisierung',
+        specializationOf: 'arkanist',
+        parentIds: ['arkanist'],
+        childIds: ['erzmagier'],
+        description: 'Manipulation von Lebenskraft, Kommunikation mit Seelen und Bündelung finsterer Energien.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre okkulte Praxis', minValue: 3 }],
+        careerRoutes: [
+          { id: 'nek_pakt', name: 'Pakt der Schattenlande', type: 'experience', description: 'Tiefes Verständnis des Übergangs.', requirementsSummary: 'Okkulte Riten' }
+        ],
+        suggestedCompetencies: ['Seelengeflüster', 'Knochenbelebung', 'Lebensraub', 'Geisterbann'],
+        possibleRanks: ['Nekromant', 'Schattenbeschwörer']
+      },
+      {
+        id: 'curseblade',
+        fieldId: 'magie_arkana',
+        name: 'Curseblade & Klingenflucher',
+        tier: 'spezialisierung',
+        specializationOf: 'elementarist',
+        parentIds: ['elementarist'],
+        childIds: ['erzmagier'],
+        description: 'Arkan-kriegerische Fusion: Zauberladungen und Flüche direkt über Waffenangriffe entladen.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Kampf- und Magiepraxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'cb_exp', name: 'Klingenweihe', type: 'experience', description: 'Bindung des Schwertes an den Geist.', requirementsSummary: 'Klingenschwur' }
+        ],
+        suggestedCompetencies: ['Fluchklinge', 'Kanalisierter Hieb', 'Arkanausweichschritt', 'Waffenverzauberung'],
+        possibleRanks: ['Fluchklinge', 'Runenfechter']
+      },
+      {
+        id: 'traumwandler',
+        fieldId: 'magie_arkana',
+        name: 'Traumwandler & Medium',
+        tier: 'spezialisierung',
+        specializationOf: 'arkanist',
+        parentIds: ['arkanist'],
+        childIds: ['erzmagier'],
+        description: 'Eindringen in Träume, Visionen fremder Gedankenwelten und Geisterbefragung.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre meditative Praxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'tw_exp', name: 'Luzide Durchdringung', type: 'experience', description: 'Beherrschung des Traumreiches.', requirementsSummary: 'Traumprüfung' }
+        ],
+        suggestedCompetencies: ['Traumprojektion', 'Gedankenlesen', 'Geistermedium', 'Visionsdeutung'],
+        possibleRanks: ['Träumer', 'Traumwandler', 'Seelenmedium']
+      },
+      {
+        id: 'runenmeister',
+        fieldId: 'magie_arkana',
+        name: 'Runenmeister & Meister-Artefaktbauer',
+        tier: 'spezialisierung',
+        specializationOf: 'runenschmied_node',
+        parentIds: ['runenschmied_node'],
+        childIds: ['erzmagier'],
+        description: 'Vollendete Schöpfung legendärer Runengegenstände und unzerstörbarer Schutzzauber.',
+        prerequisites: [{ type: 'experience_years', label: '4 Jahre Runenpraxis', minValue: 4 }],
+        careerRoutes: [
+          { id: 'rm_exam', name: 'Schöpfung eines Meisterartefakts', type: 'exam', description: 'Nachweis einer vollendeten Meisterrune.', requirementsSummary: 'Meisterwerk' }
+        ],
+        suggestedCompetencies: ['Uralte Runen', 'Permanente Bindung', 'Mysterienmetallurgie'],
+        possibleRanks: ['Runenmeister', 'Großmeister des Siegels']
+      },
+      {
+        id: 'erzmagier',
+        fieldId: 'magie_arkana',
+        name: 'Erzmagier & Akademieleiter',
+        tier: 'meister',
+        parentIds: ['arkanist', 'elementarist', 'runenschmied_node'],
+        childIds: [],
+        description: 'Höchster Rang magischer Erkenntnis, Leitung arkaner Kollegien und Ratgeber von Herrschern.',
+        prerequisites: [{ type: 'experience_years', label: '6 Jahre arkanes Wirken', minValue: 6 }],
+        careerRoutes: [
+          { id: 'erz_conclave', name: 'Wahl durch das Hohe Konklave', type: 'social_recognition', description: 'Ernennung zum Erzmagier.', requirementsSummary: 'Konklave-Wahl' }
+        ],
+        suggestedCompetencies: ['Großrituale', 'Raumverzerrung', 'Arkanes Staatsrecht', 'Manastromlenkung'],
+        possibleRanks: ['Erzmagier', 'Großmagister', 'Primas der Arkana']
+      }
+    ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 7. RELIGION & KLERUS
+  // ---------------------------------------------------------------------------
+  religion_klerus: {
+    fieldId: 'religion_klerus',
+    fieldName: 'Religion & Klerus',
+    description: 'Liturgie, Seelsorge, heilige Rituale, Schreinriten und religiöser Dienst',
+    rootNodeId: 'religion_root',
+    nodes: [
+      {
+        id: 'religion_root',
+        fieldId: 'religion_klerus',
+        name: 'Novize / Tempelanwärter',
+        tier: 'einstieg',
+        parentIds: [],
+        childIds: ['kleriker', 'moench', 'schreindiener'],
+        description: 'Einführung in heilige Schriften, Gebete, Tempeldienst und sakrale Reinigungsriten.',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'rel_init', name: 'Tempelaufnahme & Gelübde', type: 'exam', description: 'Ablegen des ersten Gelübdes.', requirementsSummary: 'Gelübde' }
+        ],
+        suggestedCompetencies: ['Liturgie', 'Sakraltexte', 'Gebetsordnung', 'Tempeldienst'],
+        possibleRanks: ['Postulant', 'Novize', 'Akoluth']
+      },
+      {
+        id: 'kleriker',
+        fieldId: 'religion_klerus',
+        name: 'Kleriker & Priester',
+        tier: 'beruf',
+        parentIds: ['religion_root'],
+        childIds: ['kriegspriester', 'exorzist_inquisitor', 'orakel_seher', 'hohepriester'],
+        description: 'Geweihte Amtsträger für Messen, Segnungen, Beichten und seelsorgerische Führung.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Tempeldienst', minValue: 2 }],
+        careerRoutes: [
+          { id: 'priest_ord', name: 'Priesterweihe', type: 'exam', description: 'Feierliche Weihe durch Bischof oder Abt.', requirementsSummary: 'Weihe' }
+        ],
+        suggestedCompetencies: ['Segnung', 'Seelsorge', 'Glaubenslehre', 'Heilungsgebete'],
+        possibleRanks: ['Diakon', 'Priester', 'Pfarrer']
+      },
+      {
+        id: 'moench',
+        fieldId: 'religion_klerus',
+        name: 'Mönch & Asket',
+        tier: 'beruf',
+        parentIds: ['religion_root'],
+        childIds: ['sohei', 'yamabushi', 'hohepriester'],
+        description: 'Klösterliches Leben der Kontemplation, Handarbeit, Meditation und Kräuterkunde.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Klosterpraxis', minValue: 1 }],
+        careerRoutes: [
+          { id: 'monk_vow', name: 'Ewiges Klostergelübde', type: 'experience', description: 'Vollständige Bindung an den Orden.', requirementsSummary: 'Ewige Profess' }
+        ],
+        suggestedCompetencies: ['Meditation', 'Klostergarten & Kräuter', 'Abschreiben', 'Fastendisziplin'],
+        possibleRanks: ['Ordensbruder', 'Pater', 'Klostervorsteher']
+      },
+      {
+        id: 'schreindiener',
+        fieldId: 'religion_klerus',
+        name: 'Kannushi & Miko (Schreinpriester)',
+        tier: 'beruf',
+        parentIds: ['religion_root'],
+        childIds: ['onmyoji', 'ajari', 'hohepriester'],
+        description: 'Shintoistische Riten, Schreinpflege, Sakraltänze (Kagura) und Kamisegnung.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Schreinpraxis', minValue: 1 }],
+        careerRoutes: [
+          { id: 'shinto_rit', name: 'Schrein-Einsetzung', type: 'exam', description: 'Anerkennung durch das Schrein-Kollegium.', requirementsSummary: 'Reinigungsprüfung' }
+        ],
+        suggestedCompetencies: ['Harae-Riten', 'Kagura-Sakraltanz', 'Ofuda-Herstellung', 'Naturgeisterverehrung'],
+        possibleRanks: ['Miko / Kannagi', 'Gon-Negi', 'Negi', 'Kannushi']
+      },
+      {
+        id: 'kriegspriester',
+        fieldId: 'religion_klerus',
+        name: 'Kriegspriester & Kreuzritter',
+        tier: 'spezialisierung',
+        specializationOf: 'kleriker',
+        parentIds: ['kleriker'],
+        childIds: ['hohepriester'],
+        description: 'Kampferprobter Klerus für Truppensegen, Feldschlachtbegleitung und wehrhaften Glaubensschutz.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Dienst', minValue: 2 }],
+        careerRoutes: [
+          { id: 'kp_exp', name: 'Feldzugbewährung', type: 'experience', description: 'Dienst als Divisionspriester.', requirementsSummary: 'Schlachterfahrung' }
+        ],
+        suggestedCompetencies: ['Streitkolbenkampf', 'Mutsegen', 'Krankenfeldlazarett', 'Schutzgebet'],
+        possibleRanks: ['Feldprediger', 'Kriegspriester', 'Paladin-Kaplan']
+      },
+      {
+        id: 'exorzist_inquisitor',
+        fieldId: 'religion_klerus',
+        name: 'Exorzist & Inquisitor',
+        tier: 'spezialisierung',
+        specializationOf: 'kleriker',
+        parentIds: ['kleriker'],
+        childIds: ['hohepriester'],
+        description: 'Aufdeckung von Ketzerei, Vertreibung böser Wesenheiten und Durchsetzung des Glaubensrechts.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre kirchlicher Dienst', minValue: 3 }],
+        careerRoutes: [
+          { id: 'inq_patent', name: 'Inquisitionsvollmacht', type: 'exam', description: 'Bevollmächtigung durch den Hohen Rat.', requirementsSummary: 'Inquisitionsbrief' }
+        ],
+        suggestedCompetencies: ['Dämonenbannung', 'Verhörtechnik', 'Ketzereiaufspürung', 'Weihwasser & Riten'],
+        possibleRanks: ['Exorzist', 'Inquisitor', 'Großinquisitor']
+      },
+      {
+        id: 'orakel_seher',
+        fieldId: 'religion_klerus',
+        name: 'Orakel & Sakraler Seher',
+        tier: 'spezialisierung',
+        specializationOf: 'kleriker',
+        parentIds: ['kleriker'],
+        childIds: ['hohepriester'],
+        description: 'Verkündigung göttlicher Weissagungen, Deutung heiliger Omen und spirituelle Vorsehung.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre sakrale Praxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'or_vision', name: 'Göttliche Epiphanie', type: 'experience', description: 'Empfang einer anerkannten Offenbarung.', requirementsSummary: 'Offenbarung' }
+        ],
+        suggestedCompetencies: ['Omendeutung', 'Prophezeiung', 'Trance & Vision', 'Sternenschau'],
+        possibleRanks: ['Seher', 'Tempelorakel', 'Großes Orakel']
+      },
+      {
+        id: 'sohei',
+        fieldId: 'religion_klerus',
+        name: 'Sohei (Kriegermönch)',
+        tier: 'spezialisierung',
+        specializationOf: 'moench',
+        parentIds: ['moench'],
+        childIds: ['hohepriester'],
+        description: 'Mit Naginata und Glaube bewaffneter Schutzmönch zur Verteidigung heiliger Tempelberge.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Kampf- & Meditationspraxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'sohei_exp', name: 'Tempelverteidigung', type: 'experience', description: 'Kampfeinsatz für den Tempel.', requirementsSummary: 'Verteidigungserfahrung' }
+        ],
+        suggestedCompetencies: ['Naginata-Kampf', 'Disziplinierter Geist', 'Tempelschutz'],
+        possibleRanks: ['Kriegermönch', 'Tempelwächter-Hauptmann']
+      },
+      {
+        id: 'yamabushi',
+        fieldId: 'religion_klerus',
+        name: 'Yamabushi (Bergasket)',
+        tier: 'spezialisierung',
+        specializationOf: 'moench',
+        parentIds: ['moench'],
+        childIds: ['hohepriester'],
+        description: 'Shugendo-Praktizierender mit übernatürlichen Kräften durch Askese unter Wasserfällen und Bergen.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Wildnisaskese', minValue: 2 }],
+        careerRoutes: [
+          { id: 'yama_asc', name: 'Besteigung des Heiligen Berges', type: 'experience', description: 'Prüfung in Eis und Kälte.', requirementsSummary: 'Bergweihe' }
+        ],
+        suggestedCompetencies: ['Bergüberleben', 'Muschelblasen (Horagai)', 'Geistervertreibung'],
+        possibleRanks: ['Bergasket', 'Shugensha']
+      },
+      {
+        id: 'onmyoji',
+        fieldId: 'religion_klerus',
+        name: 'Onmyōji (Kosmologe & Divinationsmeister)',
+        tier: 'spezialisierung',
+        specializationOf: 'schreindiener',
+        parentIds: ['schreindiener'],
+        childIds: ['hohepriester'],
+        description: 'Yin-Yang-Meister für Kalenderwesen, Geisterbannung mit Shikigami und Schicksalslenkung.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre esoterische Studien', minValue: 3 }],
+        careerRoutes: [
+          { id: 'onmyo_exam', name: 'Kaiserliches Onmyō-Amt', type: 'exam', description: 'Prüfung am Hofe.', requirementsSummary: 'Hofpatent' }
+        ],
+        suggestedCompetencies: ['Shikigami-Führung', 'Yin-Yang-Astrologie', 'Fluchabwendung', 'Kalenderkunst'],
+        possibleRanks: ['Onmyōji', 'Oberster Hofonmyōji']
+      },
+      {
+        id: 'ajari',
+        fieldId: 'religion_klerus',
+        name: 'Ajari (Hoher Meister)',
+        tier: 'spezialisierung',
+        specializationOf: 'schreindiener',
+        parentIds: ['schreindiener'],
+        childIds: ['hohepriester'],
+        description: 'Meister esoterischer Geheimrituale und Einweihungen nach langen Askeseprüfungen.',
+        prerequisites: [{ type: 'experience_years', label: '4 Jahre Praxis', minValue: 4 }],
+        careerRoutes: [
+          { id: 'ajari_rite', name: 'Abhisheka-Einweihung', type: 'exam', description: 'Krönungsweihe des Meisters.', requirementsSummary: 'Meisterweihe' }
+        ],
+        suggestedCompetencies: ['Esoterische Rituale', 'Mudra & Mantra', 'Reinigungsfeuer (Goma)'],
+        possibleRanks: ['Ajari', 'Dai-Ajari']
+      },
+      {
+        id: 'hohepriester',
+        fieldId: 'religion_klerus',
+        name: 'Abt & Hohepriester',
+        tier: 'meister',
+        parentIds: ['kleriker', 'moench', 'schreindiener'],
+        childIds: [],
+        description: 'Höchste religiöse Würde und geistliche Führung einer Glaubensgemeinschaft oder Abtei.',
+        prerequisites: [{ type: 'experience_years', label: '5 Jahre Priesteramt', minValue: 5 }],
+        careerRoutes: [
+          { id: 'hp_invest', name: 'Bischöfliche Investitur', type: 'social_recognition', description: 'Ernennung zum Abt oder Hohepriester.', requirementsSummary: 'Investitur' }
+        ],
+        suggestedCompetencies: ['Oberste Liturgie', 'Kirchenrecht', 'Diözesenverwaltung', 'Heiligsprechung'],
+        possibleRanks: ['Abt', 'Bischof', 'Hohepriester', 'Kardinal']
+      }
+    ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 8. VERWALTUNG & RECHT
+  // ---------------------------------------------------------------------------
+  verwaltung_recht: {
+    fieldId: 'verwaltung_recht',
+    fieldName: 'Verwaltung & Recht',
+    description: 'Schriftwesen, Steuern, Buchhaltung, Beurkundung, Justiz und Kanzleidienst',
+    rootNodeId: 'verwaltung_root',
+    nodes: [
+      {
+        id: 'verwaltung_root',
+        fieldId: 'verwaltung_recht',
+        name: 'Amtsanwärter / Schreibergehilfe',
+        tier: 'einstieg',
+        parentIds: [],
+        childIds: ['schreiber_beruf', 'steuereintreiber_beruf'],
+        description: 'Kalligraphie, Aktenablage, Kopieren von Erlassen und Urkundenpflege.',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'adm_entry', name: 'Amtsprüfung für Anwärter', type: 'exam', description: 'Eignungsprüfung im Schreiben und Rechnen.', requirementsSummary: 'Schreibprüfung' }
+        ],
+        suggestedCompetencies: ['Kopieren', 'Rechnen & Buchführung', 'Aktenordnung', 'Siegelwachs'],
+        possibleRanks: ['Kopist', 'Schreibergehilfe', 'Amtsanwärter']
+      },
+      {
+        id: 'schreiber_beruf',
+        fieldId: 'verwaltung_recht',
+        name: 'Schreiber & Buchhalter',
+        tier: 'beruf',
+        parentIds: ['verwaltung_root'],
+        childIds: ['sekretaer_amt', 'notar_amt', 'verwalter_amt', 'ratsschreiber'],
+        description: 'Erstellung offizieller Dokumente, Rechnungsführung, Kontoreinträge und Register.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Kanzleipraxis', minValue: 1 }],
+        careerRoutes: [
+          { id: 'schr_cert', name: 'Kanzleibrief', type: 'exam', description: 'Bestätigung als vollwertiger Kanzleischreiber.', requirementsSummary: 'Kanzleibrief' }
+        ],
+        suggestedCompetencies: ['Rechtsdeutsch / Kanzleistil', 'Buchhaltung', 'Urkundensiegel', 'Zensusprüfung'],
+        possibleRanks: ['Amtsschreiber', 'Buchhalter', 'Kontorführer']
+      },
+      {
+        id: 'steuereintreiber_beruf',
+        fieldId: 'verwaltung_recht',
+        name: 'Steuereintreiber & Zöllner',
+        tier: 'beruf',
+        parentIds: ['verwaltung_root'],
+        childIds: ['verwalter_amt', 'ratsschreiber'],
+        description: 'Erhebung von Zöllen, Akzisen, Wegezöllen und landesherrlichen Steuern.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxis', minValue: 1 }],
+        careerRoutes: [
+          { id: 'tax_appt', name: 'Zollpatent des Landesherrn', type: 'exam', description: 'Bestallung als Zollerheber.', requirementsSummary: 'Bestallung' }
+        ],
+        suggestedCompetencies: ['Zolltarifprüfung', 'Münzwaage', 'Steuerlisten', 'Durchsetzungskraft'],
+        possibleRanks: ['Zöllner', 'Rentmeister', 'Steuersekretär']
+      },
+      {
+        id: 'sekretaer_amt',
+        fieldId: 'verwaltung_recht',
+        name: 'Sekretär & Kanzlist',
+        tier: 'spezialisierung',
+        specializationOf: 'schreiber_beruf',
+        parentIds: ['schreiber_beruf'],
+        childIds: ['ratsschreiber'],
+        description: 'Persönliche Korrespondenz, Terminkoordination und vertrauliche Akten für Herren und Räte.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Schreiberpraxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'sek_soc', name: 'Vertrauensbestallung', type: 'social_recognition', description: 'Ernennung zum Privatsekretär.', requirementsSummary: 'Vertrauensprüfung' }
+        ],
+        suggestedCompetencies: ['Chiffrierung', 'Vertraulichkeit', 'Protokollführung', 'Diplomatenkorrespondenz'],
+        possibleRanks: ['Privatsekretär', 'Kanzlist', 'Amtsrat']
+      },
+      {
+        id: 'notar_amt',
+        fieldId: 'verwaltung_recht',
+        name: 'Notar & Verhandlungsführer',
+        tier: 'spezialisierung',
+        specializationOf: 'schreiber_beruf',
+        parentIds: ['schreiber_beruf'],
+        childIds: ['ratsschreiber'],
+        description: 'Beglaubigung von Verträgen, Testamenten, Erbschaften und zwischenparteiliche Einigungen.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre Rechtspraxis', minValue: 3 }],
+        careerRoutes: [
+          { id: 'not_exam', name: 'Staatliche Notarprüfung', type: 'exam', description: 'Reichsweite Anerkennung als Notar.', requirementsSummary: 'Rechtsexamen' }
+        ],
+        suggestedCompetencies: ['Vertragsrecht', 'Beglaubigung', 'Streitschlichtung', 'Erbrecht'],
+        possibleRanks: ['Notar', 'Syndikus', 'Rechtsbeistand']
+      },
+      {
+        id: 'verwalter_amt',
+        fieldId: 'verwaltung_recht',
+        name: 'Guts- & Liegenschaftsverwalter',
+        tier: 'spezialisierung',
+        specializationOf: 'schreiber_beruf',
+        parentIds: ['schreiber_beruf', 'steuereintreiber_beruf'],
+        childIds: ['ratsschreiber'],
+        description: 'Wirtschaftliche und personelle Verwaltung von Domänen, Stadtgütern und Mietshäusern.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre Verwaltungspraxis', minValue: 3 }],
+        careerRoutes: [
+          { id: 'verw_soc', name: 'Herrschaftliche Bestallung', type: 'social_recognition', description: 'Einsetzung als Gutsverwalter.', requirementsSummary: 'Bestallung' }
+        ],
+        suggestedCompetencies: ['Pachtrecht', 'Liegenschaftskataster', 'Personalaufsicht', 'Lagerwirtschaft'],
+        possibleRanks: ['Verwalter', 'Vogt', 'Kastellan']
+      },
+      {
+        id: 'ratsschreiber',
+        fieldId: 'verwaltung_recht',
+        name: 'Kanzler & Oberster Ratsschreiber',
+        tier: 'meister',
+        parentIds: ['schreiber_beruf', 'steuereintreiber_beruf'],
+        childIds: [],
+        description: 'Leitung der Kanzlei, Reichssiegelbewahrung und rechtliche Beratung des Stadtrats oder Fürsten.',
+        prerequisites: [{ type: 'experience_years', label: '5 Jahre höhere Kanzleiführung', minValue: 5 }],
+        careerRoutes: [
+          { id: 'kanz_elect', name: 'Wahl durch den Kronrat', type: 'social_recognition', description: 'Ernennung zum Kanzleidirektor oder Kanzler.', requirementsSummary: 'Ratsbeschluss' }
+        ],
+        suggestedCompetencies: ['Staatsrecht', 'Reichssiegel', 'Diplomatisches Protokoll', 'Verfassungslehre'],
+        possibleRanks: ['Ratsschreiber', 'Kanzleidirektor', 'Kanzler']
+      }
+    ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 9. ABENTEUER & SONDERGEWERBE
+  // ---------------------------------------------------------------------------
+  abenteuer_sondergewerbe: {
+    fieldId: 'abenteuer_sondergewerbe',
+    fieldName: 'Abenteuer & Sondergewerbe',
+    description: 'Infiltration, Kundschaft, Schmuggel, Kopfgeldjagd, Schattenoperationen und Ruinenerkundung',
+    rootNodeId: 'abenteuer_root',
+    nodes: [
+      {
+        id: 'abenteuer_root',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Gassenjunge / Kleinkrimineller',
+        tier: 'einstieg',
+        parentIds: [],
+        childIds: ['dieb_beruf', 'schurke_beruf', 'kopfgeldjaeger_beruf'],
+        description: 'Überleben auf der Straße, Taschentricks, Warnpfiffe und Kenntnis dunkler Hinterhöfe.',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'ab_init', name: 'Gassenbewährung', type: 'experience', description: 'Erster geglückter Streifzug.', requirementsSummary: 'Straßenerfahrung' }
+        ],
+        suggestedCompetencies: ['Taschendiebstahl', 'Schleichen', 'Gassenschwatz', 'Ablenkung'],
+        possibleRanks: ['Gassenläufer', 'Späher', 'Gelegenheitsdieb']
+      },
+      {
+        id: 'dieb_beruf',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Dieb & Schurke (Rogue)',
+        tier: 'beruf',
+        parentIds: ['abenteuer_root'],
+        childIds: ['phantomdieb', 'schmuggler', 'faelscher', 'schattenmeister'],
+        description: 'Schlösserknacken, lautlose Infiltration, Beutesicherung und Ausweichen.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxis im Schatten', minValue: 1 }],
+        careerRoutes: [
+          { id: 'dieb_gilde', name: 'Gildenprüfung', type: 'exam', description: 'Beweis vor der Diebesgilde.', requirementsSummary: 'Meisterdiebstahl' }
+        ],
+        suggestedCompetencies: ['Schlösser knacken', 'Fassadenklettern', 'Fallen umgehen', 'Schleichen'],
+        possibleRanks: ['Taschendieb', 'Fassadenkletterer', 'Einbrecher']
+      },
+      {
+        id: 'schurke_beruf',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Schurke & Schwindler',
+        tier: 'beruf',
+        parentIds: ['abenteuer_root'],
+        childIds: ['ninja_assassine', 'schattenmeister'],
+        description: 'Falschspiel, Täuschung, Verkleidung und Ausnutzung fremder Arglosigkeit.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Unterweltpraxis', minValue: 1 }],
+        careerRoutes: [
+          { id: 'schurk_exp', name: 'Großer Coup', type: 'experience', description: 'Erfolgreicher Betrug an einem Reichen.', requirementsSummary: 'Coup-Erfahrung' }
+        ],
+        suggestedCompetencies: ['Falschspiel', 'Lügen & Schmeicheln', 'Verkleidung', 'Giftkunde'],
+        possibleRanks: ['Schwindler', 'Falschspieler', 'Hehler']
+      },
+      {
+        id: 'kopfgeldjaeger_beruf',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Kopfgeldjäger & Fährtenaufspürer',
+        tier: 'beruf',
+        parentIds: ['abenteuer_root'],
+        childIds: ['untotenjaeger', 'schattenmeister'],
+        description: 'Aufspüren von Flüchtigen, Gesuchten und Verbrechern für Stadtprämien.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Jagdpraxis', minValue: 1 }],
+        careerRoutes: [
+          { id: 'kopfg_bounty', name: 'Erfüllter Steckbrief', type: 'experience', description: 'Erfolgreiche Auslieferung eines Geächteten.', requirementsSummary: 'Auslieferung' }
+        ],
+        suggestedCompetencies: ['Personenjagd', 'Fesseln & Festnahme', 'Hinterhalt', 'Informantennetz'],
+        possibleRanks: ['Kopfgeldjäger', 'Prämienjäger', 'Vollstrecker']
+      },
+      {
+        id: 'phantomdieb',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Phantom-Dieb & Einbrecher',
+        tier: 'spezialisierung',
+        specializationOf: 'dieb_beruf',
+        parentIds: ['dieb_beruf'],
+        childIds: ['schattenmeister'],
+        description: 'Legendärer Einbruch in bestgesicherte Schatzkammern und Paläste ohne Spur.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre Diebespraxis', minValue: 3 }],
+        careerRoutes: [
+          { id: 'pd_exp', name: 'Palasteinbruch', type: 'social_recognition', description: 'Raub eines königlichen Juwels.', requirementsSummary: 'Mythos-Tat' }
+        ],
+        suggestedCompetencies: ['Akrobatik', 'Uralte Schlösser', 'Tarnmantel', 'Fluchtwege'],
+        possibleRanks: ['Meisterdieb', 'Phantom-Dieb']
+      },
+      {
+        id: 'schmuggler',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Schmuggler & Schleuser',
+        tier: 'spezialisierung',
+        specializationOf: 'dieb_beruf',
+        parentIds: ['dieb_beruf'],
+        childIds: ['schattenmeister'],
+        description: 'Transport verbotener Güter, Geheimgänge durch Stadtwälle und Schwarzmärkte.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'schm_route', name: 'Etablierung einer Geheimroute', type: 'experience', description: 'Feste Route an den Zöllnern vorbei.', requirementsSummary: 'Routenkenntnis' }
+        ],
+        suggestedCompetencies: ['Verstecke bauen', 'Geheimrouten', 'Schmiergeldverhandlung', 'Nachtfahrt'],
+        possibleRanks: ['Schmuggler', 'Passagenmeister']
+      },
+      {
+        id: 'faelscher',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Fälscher & Dokumentenkünstler',
+        tier: 'spezialisierung',
+        specializationOf: 'dieb_beruf',
+        parentIds: ['dieb_beruf'],
+        childIds: ['schattenmeister'],
+        description: 'Täuschend echte Nachbildung von Siegeln, Pässen, Münzen und königlichen Urkunden.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'fael_exam', name: 'Ununterscheidbare Signatur', type: 'exam', description: 'Fälschung übersteht königliche Prüfung.', requirementsSummary: 'Siegelprüfung' }
+        ],
+        suggestedCompetencies: ['Siegelschnitt', 'Tintenmischung', 'Münzprägung', 'Schriftnachahmung'],
+        possibleRanks: ['Passfälscher', 'Meisterfälscher']
+      },
+      {
+        id: 'ninja_assassine',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Ninja & Auftragskiller',
+        tier: 'spezialisierung',
+        specializationOf: 'schurke_beruf',
+        parentIds: ['schurke_beruf'],
+        childIds: ['schattenmeister'],
+        description: 'Lautlose Beseitigung von Zielpersonen, Rauchpulver, Klettern und Schattenwaffen.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre Schattenpraxis', minValue: 3 }],
+        careerRoutes: [
+          { id: 'ass_contract', name: 'Erfüllung eines Hochadelskontrakts', type: 'experience', description: 'Abschluss einer heiklen Mission.', requirementsSummary: 'Schattenkontrakt' }
+        ],
+        suggestedCompetencies: ['Lautloser Stich', 'Wurfwaffen (Shuriken)', 'Rauchbomben', 'Giftapplikation'],
+        possibleRanks: ['Assassine', 'Ninja / Shinobi', 'Schattenklinge']
+      },
+      {
+        id: 'untotenjaeger',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Untotenjäger & Monstertracker',
+        tier: 'spezialisierung',
+        specializationOf: 'kopfgeldjaeger_beruf',
+        parentIds: ['kopfgeldjaeger_beruf'],
+        childIds: ['schattenmeister'],
+        description: 'Jagd auf Ghule, Vampire, Wiedergänger und Dämonenwesen mit Silber und Weihrauch.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre Monsterjagd', minValue: 3 }],
+        careerRoutes: [
+          { id: 'uj_bounty', name: 'Bannung einer Gruft', type: 'experience', description: 'Säuberung einer alten Grabkammer.', requirementsSummary: 'Gruftbefreiung' }
+        ],
+        suggestedCompetencies: ['Silberklingen', 'Vampir- & Ghulkunde', 'Weihrauchfallen', 'Zähigkeit'],
+        possibleRanks: ['Untotenjäger', 'Gruftwächter', 'Monsterjäger-Meister']
+      },
+      {
+        id: 'schattenmeister',
+        fieldId: 'abenteuer_sondergewerbe',
+        name: 'Gildenmeister der Schatten',
+        tier: 'meister',
+        parentIds: ['dieb_beruf', 'schurke_beruf', 'kopfgeldjaeger_beruf'],
+        childIds: [],
+        description: 'Führung des Unterwelt-Syndikats, Kontrolle aller Hehlerrouten und Schattenpolitik.',
+        prerequisites: [{ type: 'experience_years', label: '6 Jahre Unterweltführung', minValue: 6 }],
+        careerRoutes: [
+          { id: 'schatt_rat', name: 'Anerkennung durch das Schatten-Konklave', type: 'social_recognition', description: 'Wahl zum Gildenmeister.', requirementsSummary: 'Unterwelt-Votum' }
+        ],
+        suggestedCompetencies: ['Syndikatsführung', 'Schwarze Kassen', 'Spionagenetzwerke', 'Mordverträge'],
+        possibleRanks: ['Gildenmeister', 'Schattenfürst', 'Unterwelt-Syndikus']
+      }
+    ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 10. WISSENSCHAFT & FORSCHUNG
+  // ---------------------------------------------------------------------------
+  wissenschaft_forschung: {
+    fieldId: 'wissenschaft_forschung',
+    fieldName: 'Wissenschaft & Forschung',
+    description: 'Kartographie, Astronomie, Archäologie, Historie, Kryptographie und Naturforschung',
+    rootNodeId: 'wissenschaft_root',
+    nodes: [
+      {
+        id: 'wissenschaft_root',
+        fieldId: 'wissenschaft_forschung',
+        name: 'Student / Scholar',
+        tier: 'einstieg',
+        parentIds: [],
+        childIds: ['forscher_gelehrter', 'kartograph_beruf'],
+        description: 'Studium der Grundlagenfächer, Bibliotheksarbeit, Exzerpieren und lateinische Quellen.',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'acad_matric', name: 'Immatrikulation & Grundstudium', type: 'exam', description: 'Aufnahme in die Fakultät.', requirementsSummary: 'Immatrikulation' }
+        ],
+        suggestedCompetencies: ['Quellenstudium', 'Handschriften entziffern', 'Logik', 'Bibliotheksrecherche'],
+        possibleRanks: ['Scholar', 'Forschungsassistent', 'Student']
+      },
+      {
+        id: 'forscher_gelehrter',
+        fieldId: 'wissenschaft_forschung',
+        name: 'Forscher & Gelehrter',
+        tier: 'beruf',
+        parentIds: ['wissenschaft_root'],
+        childIds: ['archaeologe', 'kryptograph', 'astronom_astrologe', 'akademievorsteher'],
+        description: 'Eigenständige wissenschaftliche Untersuchungen, Publikationen und Disputationen.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Forschungspraxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'mag_disp', name: 'Magister-Disputation', type: 'exam', description: 'Verteidigung der wissenschaftlichen Schrift.', requirementsSummary: 'Magistergrad' }
+        ],
+        suggestedCompetencies: ['Theorienbildung', 'Empirie & Experiment', 'Wissenschaftliche Dokumentation'],
+        possibleRanks: ['Baccalaureus', 'Magister Artium', 'Dozent']
+      },
+      {
+        id: 'kartograph_beruf',
+        fieldId: 'wissenschaft_forschung',
+        name: 'Kartograph & Landvermesser',
+        tier: 'beruf',
+        parentIds: ['wissenschaft_root'],
+        childIds: ['archaeologe', 'akademievorsteher'],
+        description: 'Triangulation, Geländevermessung, Erstellung präziser Land- und Seekarten.',
+        prerequisites: [{ type: 'experience_years', label: '2 Jahre Vermessungspraxis', minValue: 2 }],
+        careerRoutes: [
+          { id: 'kart_exam', name: 'Prüfung der Geographengilde', type: 'exam', description: 'Vorlage eines vollständigen Gebietsatlas.', requirementsSummary: 'Atlas-Prüfung' }
+        ],
+        suggestedCompetencies: ['Triangulation', 'Kartenzeichnung', 'Kompass & Astrolabium', 'Höhenmessung'],
+        possibleRanks: ['Landvermesser', 'Kartograph', 'Kartenzeichner']
+      },
+      {
+        id: 'archaeologe',
+        fieldId: 'wissenschaft_forschung',
+        name: 'Archäologe & Antikenforscher',
+        tier: 'spezialisierung',
+        specializationOf: 'forscher_gelehrter',
+        parentIds: ['forscher_gelehrter', 'kartograph_beruf'],
+        childIds: ['akademievorsteher'],
+        description: 'Ausgrabungen in alten Tempeln und Gruften, Altersbestimmung von Relikten.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre Feldpraxis', minValue: 3 }],
+        careerRoutes: [
+          { id: 'arch_exp', name: 'Expeditionsleitung', type: 'experience', description: 'Freilegung einer versunkenen Ausgrabungsstätte.', requirementsSummary: 'Ausgrabungsfund' }
+        ],
+        suggestedCompetencies: ['Schonende Ausgrabung', 'Reliktenklassifikation', 'Architekturhistorie'],
+        possibleRanks: ['Feldarchäologe', 'Kurator antiker Funde']
+      },
+      {
+        id: 'kryptograph',
+        fieldId: 'wissenschaft_forschung',
+        name: 'Kryptograph & Sprachforscher',
+        tier: 'spezialisierung',
+        specializationOf: 'forscher_gelehrter',
+        parentIds: ['forscher_gelehrter'],
+        childIds: ['akademievorsteher'],
+        description: 'Entschlüsselung geheimer Codes, altertümlicher Schriften und diplomatischer Chiffren.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre Studienpraxis', minValue: 3 }],
+        careerRoutes: [
+          { id: 'krypt_exam', name: 'Lösung des Großen Chiffrier-Rätsels', type: 'exam', description: 'Dekodierung einer ungelösten Schrift.', requirementsSummary: 'Chiffrenprüfung' }
+        ],
+        suggestedCompetencies: ['Codeknacken', 'Sprachanalyse', 'Chiffrenerstellung', 'Alte Glyphen'],
+        possibleRanks: ['Chiffrierer', 'Oberkryptograph']
+      },
+      {
+        id: 'astronom_astrologe',
+        fieldId: 'wissenschaft_forschung',
+        name: 'Astronom & Hofastrologe',
+        tier: 'spezialisierung',
+        specializationOf: 'forscher_gelehrter',
+        parentIds: ['forscher_gelehrter'],
+        childIds: ['akademievorsteher'],
+        description: 'Himmelsbeobachtung, Planetenbahnen, Sonnenfinsternisse und astrologische Deutung am Hof.',
+        prerequisites: [{ type: 'experience_years', label: '3 Jahre Beobachtungspraxis', minValue: 3 }],
+        careerRoutes: [
+          { id: 'ast_soc', name: 'Hofastronomen-Bestallung', type: 'social_recognition', description: 'Ernennung zum Berater des Königs.', requirementsSummary: 'Hofpatent' }
+        ],
+        suggestedCompetencies: ['Teleskopbedienung', 'Sternenkarten', 'Konstellationsdeutung', 'Ephemeridenrechnung'],
+        possibleRanks: ['Astronom', 'Hofastrologe']
+      },
+      {
+        id: 'akademievorsteher',
+        fieldId: 'wissenschaft_forschung',
+        name: 'Akademie-Vorsteher & Chefbibliothekar',
+        tier: 'meister',
+        parentIds: ['forscher_gelehrter', 'kartograph_beruf'],
+        childIds: [],
+        description: 'Rektor der Hohen Akademie, Hüter des gesamten Wissens und Großgelehrter des Reiches.',
+        prerequisites: [{ type: 'experience_years', label: '6 Jahre Forschungsführung', minValue: 6 }],
+        careerRoutes: [
+          { id: 'ak_elect', name: 'Rektoratswahl der Fakultäten', type: 'social_recognition', description: 'Wahl zum Vorsteher der Hohen Universität.', requirementsSummary: 'Rektoratswahl' }
+        ],
+        suggestedCompetencies: ['Universitätsleitung', 'Forschungsförderung', 'Große Disputationen', 'Enzyklopädie'],
+        possibleRanks: ['Professor Ordinarius', 'Rektor', 'Akademie-Vorsteher']
+      }
+    ]
   }
 };
 
 /**
- * Creates a generic fallback tree for any field that does not have custom nodes configured.
+ * Maps each domain to appropriate career vocabulary so that no universal "Lehrling" or "Meister" is forced where unsuited.
+ */
+export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
+  switch (fieldId) {
+    case 'militaer_sicherheit':
+      return {
+        entryName: 'Rekrut / Wachanwärter',
+        entryRanks: ['Rekrut', 'Gemeiner'],
+        entryDesc: 'Grundausbildung an Waffen, Disziplin und militärischer Drill.',
+        core1Name: 'Soldat / Infanterist',
+        core1Ranks: ['Gefreiter', 'Korporal'],
+        core2Name: 'Stadtwache / Ordnungshüter',
+        core2Ranks: ['Torwächter', 'Rottmeister'],
+        spec1Name: 'Spezialkämpfer & Taktiker',
+        spec1Ranks: ['Unteroffizier', 'Feldwebel'],
+        apexName: 'Kommandant & General',
+        apexRanks: ['Hauptmann', 'Major', 'General'],
+        promotionRouteName: 'Offizierspatent & Bestallung',
+        routeType: 'exam' as const
+      };
+    case 'seefahrt':
+      return {
+        entryName: 'Schiffsjunge / Leichtmatrose',
+        entryRanks: ['Schiffsjunge', 'Leichtmatrose'],
+        entryDesc: 'Erste Takelarbeiten, Decksdienst und seemännische Grundregeln.',
+        core1Name: 'Vollmatrose / Seemann',
+        core1Ranks: ['Matrose', 'Vollmatrose'],
+        core2Name: 'Bootsmann & Takler',
+        core2Ranks: ['Bootsmann', 'Quartiermeister'],
+        spec1Name: 'Steuermann & Navigator',
+        spec1Ranks: ['Steuermann', 'Erster Offizier'],
+        apexName: 'Kapitän & Flottenkommandant',
+        apexRanks: ['Kapitän', 'Kommodore', 'Admiral'],
+        promotionRouteName: 'Kapitänspatent',
+        routeType: 'exam' as const
+      };
+    case 'magie_arkana':
+      return {
+        entryName: 'Magieschüler / Arkan-Novize',
+        entryRanks: ['Novize', 'Adept'],
+        entryDesc: 'Grundlagen des Manas, Meditation und erste arkanische Formeln.',
+        core1Name: 'Arkanist & Magiewirker',
+        core1Ranks: ['Arkanist', 'Magier'],
+        core2Name: 'Elementarist & Forscher',
+        core2Ranks: ['Elementarmagier', 'Thaumaturg'],
+        spec1Name: 'Runenmeister & Verzauberer',
+        spec1Ranks: ['Magister Artium', 'Großmagier'],
+        apexName: 'Erzmagier & Akademieleiter',
+        apexRanks: ['Erzmagier', 'Großmeister der Arkana'],
+        promotionRouteName: 'Magische Weihe & Zirkelaufnahme',
+        routeType: 'exam' as const
+      };
+    case 'religion_klerus':
+      return {
+        entryName: 'Novize / Tempelanwärter',
+        entryRanks: ['Postulant', 'Novize'],
+        entryDesc: 'Liturgie, Gebete und Dienst am heiligen Tempel.',
+        core1Name: 'Kleriker & Priester',
+        core1Ranks: ['Diakon', 'Priester'],
+        core2Name: 'Kriegspriester & Exorzist',
+        core2Ranks: ['Tempelwächter', 'Inquisitor'],
+        spec1Name: 'Orakel & Sakraler Seher',
+        spec1Ranks: ['Kanonikus', 'Dekan'],
+        apexName: 'Abt & Hohepriester',
+        apexRanks: ['Abt', 'Bischof', 'Hohepriester'],
+        promotionRouteName: 'Priesterweihe & Kirchliche Investitur',
+        routeType: 'exam' as const
+      };
+    case 'verwaltung_recht':
+      return {
+        entryName: 'Amtsanwärter / Schreibergehilfe',
+        entryRanks: ['Kopist', 'Amtsgehilfe'],
+        entryDesc: 'Kanzleiformulare, Aktenkopieren und Schriftgutablage.',
+        core1Name: 'Schreiber & Buchhalter',
+        core1Ranks: ['Amtsschreiber', 'Buchhalter'],
+        core2Name: 'Steuereintreiber & Zöllner',
+        core2Ranks: ['Zollerheber', 'Rentmeister'],
+        spec1Name: 'Verwalter & Notar',
+        spec1Ranks: ['Notar', 'Vogt'],
+        apexName: 'Kanzler & Ratsschreiber',
+        apexRanks: ['Kanzleidirektor', 'Kanzler'],
+        promotionRouteName: 'Bestallungsdekret & Staatsexamen',
+        routeType: 'exam' as const
+      };
+    case 'wissenschaft_forschung':
+      return {
+        entryName: 'Student / Scholar',
+        entryRanks: ['Scholar', 'Forschungsassistent'],
+        entryDesc: 'Vorlesungen, Bibliotheksstudium und wissenschaftliche Methodenlehre.',
+        core1Name: 'Forscher & Gelehrter',
+        core1Ranks: ['Baccalaureus', 'Magister'],
+        core2Name: 'Kartograph & Archäologe',
+        core2Ranks: ['Landvermesser', 'Feldarchäologe'],
+        spec1Name: 'Astronom & Philosoph',
+        spec1Ranks: ['Doktor', 'Lehrstuhlinhaber'],
+        apexName: 'Akademie-Vorsteher & Chefbibliothekar',
+        apexRanks: ['Rektor', 'Akademievorsteher'],
+        promotionRouteName: 'Disputation & Ordinariat',
+        routeType: 'exam' as const
+      };
+    case 'abenteuer_sondergewerbe':
+      return {
+        entryName: 'Gassenjunge / Kleinkrimineller',
+        entryRanks: ['Späher', 'Gassenschleicher'],
+        entryDesc: 'Überleben auf den Straßen der Unterwelt und erste Fingerübungen.',
+        core1Name: 'Dieb & Schurke (Rogue)',
+        core1Ranks: ['Taschendieb', 'Fassadenkletterer'],
+        core2Name: 'Schmuggler & Fälscher',
+        core2Ranks: ['Hehler', 'Passfälscher'],
+        spec1Name: 'Auftragskiller & Phantom-Dieb',
+        spec1Ranks: ['Schattenklinge', 'Meisterdieb'],
+        apexName: 'Gildenmeister der Schatten',
+        apexRanks: ['Schattenfürst', 'Syndikus'],
+        promotionRouteName: 'Aufnahme in den inneren Schattenrat',
+        routeType: 'social_recognition' as const
+      };
+    case 'medizin_heilkunde':
+      return {
+        entryName: 'Hospitalgehilfe / Medizinstudent',
+        entryRanks: ['Famulus', 'Hospitalgehilfe'],
+        entryDesc: 'Krankenbetreuung, Verbandslehre und Hilfsdienste im Hospital.',
+        core1Name: 'Feldscher & Heiler',
+        core1Ranks: ['Wundheiler', 'Feldscher'],
+        core2Name: 'Apotheker & Kräuterkundiger',
+        core2Ranks: ['Offizinant', 'Pharmakologe'],
+        spec1Name: 'Chirurg & Seuchenarzt',
+        spec1Ranks: ['Stadtphysikus', 'Chirurgus'],
+        apexName: 'Oberster Hofphysikus',
+        apexRanks: ['Primararzt', 'Hofmedicus'],
+        promotionRouteName: 'Medizinisches Doktordiplom',
+        routeType: 'exam' as const
+      };
+    case 'handel_wirtschaft':
+      return {
+        entryName: 'Handelsgehilfe / Kommis',
+        entryRanks: ['Laufbursche', 'Kommis'],
+        entryDesc: 'Warenkontrolle, Kundenbedienung und Warenstapelung.',
+        core1Name: 'Kaufmann & Händler',
+        core1Ranks: ['Kaufmannsgeselle', 'Kaufmann'],
+        core2Name: 'Kontorist & Buchhalter',
+        core2Ranks: ['Buchhalter', 'Prokurist'],
+        spec1Name: 'Großhändler & Reeder',
+        spec1Ranks: ['Handelsherr', 'Faktoreileiter'],
+        apexName: 'Patrizier & Gildenoberhaupt',
+        apexRanks: ['Ältermann', 'Gildenmeister'],
+        promotionRouteName: 'Kaufmannsbrief & Gildenaufnahme',
+        routeType: 'exam' as const
+      };
+    case 'kunst_kultur':
+    case 'unterhaltung':
+      return {
+        entryName: 'Eleve / Nachwuchskünstler',
+        entryRanks: ['Eleve', 'Nachwuchsakrobat'],
+        entryDesc: 'Bühnenproben, Stimmtraining und Grundschritte der Vorführungskunst.',
+        core1Name: 'Künstler & Musiker',
+        core1Ranks: ['Bühnendarsteller', 'Solist'],
+        core2Name: 'Bänkelsänger & Schausteller',
+        core2Ranks: ['Gaukler', 'Moritatensänger'],
+        spec1Name: 'Virtuose & Dramaturg',
+        spec1Ranks: ['Konzertmeister', 'Dramaturg'],
+        apexName: 'Hofkünstler & Gefeierte Diva',
+        apexRanks: ['Hofkomponist', 'Gefeierter Star'],
+        promotionRouteName: 'Hofengagement & Ehrenaufnahme',
+        routeType: 'social_recognition' as const
+      };
+    case 'tierhaltung':
+      return {
+        entryName: 'Stallbursche / Jungzüchter',
+        entryRanks: ['Stallbursche', 'Jungzüchter'],
+        entryDesc: 'Fütterung, Ausmisten und Gewöhnung an das Großvieh.',
+        core1Name: 'Züchter & Hirte',
+        core1Ranks: ['Herdenführer', 'Züchter'],
+        core2Name: 'Falkner & Tiertrainer',
+        core2Ranks: ['Abrichtungsgehilfe', 'Falkner'],
+        spec1Name: 'Beast Tamer & Großtierführer',
+        spec1Ranks: ['Dompteur', 'Großtierbändiger'],
+        apexName: 'Königlicher Stallmeister & Meisterdompteur',
+        apexRanks: ['Oberstallmeister', 'Großbestienmeister'],
+        promotionRouteName: 'Königliches Gestüts- und Bändigerpatent',
+        routeType: 'exam' as const
+      };
+    case 'bergbau_rohstoffe':
+      return {
+        entryName: 'Schürflehrling / Bergknappe',
+        entryRanks: ['Pucher', 'Bergknappe'],
+        entryDesc: 'Gesteinstransport, Schachtzimmerung und Grubenlampenpflege.',
+        core1Name: 'Bergmann & Hauer',
+        core1Ranks: ['Lehrhauer', 'Vollhauer'],
+        core2Name: 'Schürfer & Prospektor',
+        core2Ranks: ['Erzsucher', 'Mutungsschürfer'],
+        spec1Name: 'Steiger & Grubenbaumeister',
+        spec1Ranks: ['Untersteiger', 'Obersteiger'],
+        apexName: 'Bergvogt & Oberberghauptmann',
+        apexRanks: ['Bergmeister', 'Oberberghauptmann'],
+        promotionRouteName: 'Bergbaurecht & Ernennung zum Steiger',
+        routeType: 'exam' as const
+      };
+    default:
+      return {
+        entryName: `Lehrling (${fieldName})`,
+        entryRanks: ['Lehrling', 'Anfänger'],
+        entryDesc: `Grundausbildung und Einstieg in das Berufsfeld ${fieldName}.`,
+        core1Name: `Facharbeiter (${fieldName})`,
+        core1Ranks: ['Geselle', 'Fachkraft'],
+        core2Name: `Praktiker / Gehilfe (${fieldName})`,
+        core2Ranks: ['Gehilfe', 'Altgeselle'],
+        spec1Name: `Spezialist (${fieldName})`,
+        spec1Ranks: ['Fachspezialist', 'Vorarbeiter'],
+        apexName: `Meister & Leiter (${fieldName})`,
+        apexRanks: ['Meister', 'Zunftmeister', 'Oberleiter'],
+        promotionRouteName: 'Meisterprüfung / Zunftabschluss',
+        routeType: 'exam' as const
+      };
+  }
+}
+
+/**
+ * Creates a generic fallback tree for any field using domain-appropriate vocabulary.
  */
 export function generateGenericTreeForField(fieldId: string, fieldName: string): ProfessionTreeField {
   const rootId = `${fieldId}_root`;
+  const vocab = getDomainCareerVocabulary(fieldId, fieldName);
+
   return {
     fieldId,
     fieldName,
@@ -1502,83 +2576,82 @@ export function generateGenericTreeForField(fieldId: string, fieldName: string):
       {
         id: rootId,
         fieldId,
-        name: `Lehrling (${fieldName})`,
+        name: vocab.entryName,
         tier: 'einstieg',
         parentIds: [],
         childIds: [`${fieldId}_core_1`, `${fieldId}_core_2`],
-        description: `Grundausbildung und Einstieg in das Berufsfeld ${fieldName}.`,
+        description: vocab.entryDesc,
         prerequisites: [],
         careerRoutes: [
-          { id: 'gen_start', name: 'Grundlehre', type: 'experience', description: 'Beginn der Tätigkeit.', requirementsSummary: 'Offener Einstieg' }
+          { id: 'gen_start', name: 'Grundausbildung & Dienstantritt', type: 'experience', description: 'Beginn der praktischen Tätigkeit.', requirementsSummary: 'Offener Einstieg' }
         ],
-        suggestedCompetencies: [`Grundlagen von ${fieldName}`, 'Fachkunde', 'Materialvorbereitung'],
-        possibleRanks: ['Lehrling', 'Anfänger']
+        suggestedCompetencies: [`Grundlagen von ${fieldName}`, 'Fachkunde', 'Praxisdisziplin'],
+        possibleRanks: vocab.entryRanks
       },
       {
         id: `${fieldId}_core_1`,
         fieldId,
-        name: `Facharbeiter (${fieldName})`,
+        name: vocab.core1Name,
         tier: 'beruf',
         parentIds: [rootId],
         childIds: [`${fieldId}_spec_1`, `${fieldId}_master`],
         description: `Selbstständige Ausführung aller zentralen Aufgaben im Bereich ${fieldName}.`,
         prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
         careerRoutes: [
-          { id: 'gen_geselle', name: 'Gesellenprüfung', type: 'exam', description: 'Abschlussprüfung.', requirementsSummary: '1 Jahr Praxis' }
+          { id: 'gen_exam1', name: 'Fachprüfung & Befähigung', type: 'exam', description: 'Nachweis selbstständiger Arbeitsfähigkeit.', requirementsSummary: '1 Jahr Praxis' }
         ],
         suggestedCompetencies: ['Hauptaufgaben', 'Praxisfertigkeit', 'Qualitätskontrolle'],
-        possibleRanks: ['Geselle', 'Fachkraft']
+        possibleRanks: vocab.core1Ranks
       },
       {
         id: `${fieldId}_core_2`,
         fieldId,
-        name: `Praktiker / Gehilfe (${fieldName})`,
+        name: vocab.core2Name,
         tier: 'beruf',
         parentIds: [rootId],
         childIds: [`${fieldId}_spec_1`],
-        description: `Erfahrene Hilfskraft mit breitem Wissen in ${fieldName}.`,
+        description: `Praktischer Tätigkeitszweig mit breitem Praxiswissen in ${fieldName}.`,
         prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxis', minValue: 1 }],
         careerRoutes: [
-          { id: 'gen_exp', name: 'Praxisweg', type: 'experience', description: 'Tägliche Arbeit.', requirementsSummary: 'Praxis' }
+          { id: 'gen_exp2', name: 'Praxisweg im Einsatz', type: 'experience', description: 'Tägliche praktische Arbeit.', requirementsSummary: 'Praxisbewährung' }
         ],
         suggestedCompetencies: ['Assistenztätigkeit', 'Arbeitsorganisation'],
-        possibleRanks: ['Gehilfe', 'Altgeselle']
+        possibleRanks: vocab.core2Ranks
       },
       {
         id: `${fieldId}_spec_1`,
         fieldId,
-        name: `Spezialist (${fieldName})`,
+        name: vocab.spec1Name,
         tier: 'spezialisierung',
         parentIds: [`${fieldId}_core_1`, `${fieldId}_core_2`],
         childIds: [`${fieldId}_master`],
-        description: `Vertiefte Spezialisierung auf anspruchsvolle Sonderaufgaben.`,
+        description: `Vertiefte Spezialisierung auf anspruchsvolle Sonderaufgaben und besondere Verfahren.`,
         prerequisites: [
           { type: 'experience_years', label: '2 Jahre Fachpraxis', minValue: 2 }
         ],
         careerRoutes: [
-          { id: 'gen_spec', name: 'Fachvertiefung', type: 'experience', description: 'Spezialisierung im Betrieb.', requirementsSummary: '2 Jahre Praxis' }
+          { id: 'gen_spec', name: 'Fachvertiefung', type: 'experience', description: 'Spezialisierung im Einsatz.', requirementsSummary: '2 Jahre Praxis' }
         ],
-        suggestedCompetencies: ['Spezialtechnik', 'Schwierige Aufträge'],
-        possibleRanks: ['Fachspezialist', 'Sonderbeauftragter']
+        suggestedCompetencies: ['Spezialtechnik', 'Schwierige Aufträge', 'Methodenvertiefung'],
+        possibleRanks: vocab.spec1Ranks
       },
       {
         id: `${fieldId}_master`,
         fieldId,
-        name: `Meister & Leiter (${fieldName})`,
+        name: vocab.apexName,
         tier: 'meister',
         parentIds: [`${fieldId}_spec_1`, `${fieldId}_core_1`],
         childIds: [],
-        description: `Höchste Meisterschaft, Leitung von Betrieben und Ausbildungsbefugnis.`,
+        description: `Höchste Stufe fachlicher und leitender Reife im Bereich ${fieldName}.`,
         prerequisites: [
           { type: 'experience_years', label: '4 Jahre Erfahrung', minValue: 4 },
-          { type: 'rank', label: 'Meistergrad oder Ernennung' }
+          { type: 'rank', label: 'Höhere Befähigung oder Ernennung' }
         ],
         careerRoutes: [
-          { id: 'gen_m_exam', name: 'Meisterprüfung', type: 'exam', description: 'Anerkennung durch die Zunft.', requirementsSummary: 'Meisterstück' },
-          { id: 'gen_m_soc', name: 'Ernennung / Auszeichnung', type: 'social_recognition', description: 'Ernennung durch Vorgesetzte oder Rat.', requirementsSummary: 'Besondere Verdienste' }
+          { id: 'gen_m_route', name: vocab.promotionRouteName, type: vocab.routeType, description: 'Anerkennung durch Kollegium, Orden oder Landesherrn.', requirementsSummary: 'Meisterschaft' }
         ],
-        suggestedCompetencies: ['Betriebsleitung', 'Meisterwerke', 'Lehrlingsausbildung'],
-        possibleRanks: ['Meister', 'Zunftmeister', 'Oberleiter']
+        suggestedCompetencies: ['Gesamtleitung', 'Ausbildungsbefugnis', 'Meisterwerke & Strategie'],
+        possibleRanks: vocab.apexRanks
       }
     ]
   };
