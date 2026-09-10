@@ -69,7 +69,7 @@ STRENGSTE REGELN FÜR DIE BIOGRAFIE & CHARAKTERERSTELLUNG:
 export const CHARACTER_BIO_7_QUESTIONS_PROMPT = CHARACTER_BIO_8_QUESTIONS_PROMPT;
 
 export class GeminiService {
-  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 2, initialDelay = 1500): Promise<Response> {
+  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 3, initialDelay = 1500): Promise<Response> {
     let attempt = 0;
     let delay = initialDelay;
     while (true) {
@@ -77,9 +77,18 @@ export class GeminiService {
         attempt++;
         const res = await fetch(url, options);
         if (!res.ok && (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) && attempt <= maxRetries) {
-          console.warn(`[Gemini Client Fetch] HTTP ${res.status}, retrying attempt ${attempt}/${maxRetries} in ${delay}ms...`);
-          await new Promise(r => setTimeout(r, delay));
-          delay *= 2;
+          let waitMs = delay;
+          try {
+            const clone = res.clone();
+            const text = await clone.text();
+            const match = text.match(/warte ca\.\s*([\d\.]+)\s*Sekunden/i) || text.match(/retry in ([\d\.]+)s/i);
+            if (match) {
+              waitMs = Math.min(Math.ceil(parseFloat(match[1]) * 1000) + 250, 6000);
+            }
+          } catch (_) {}
+          console.warn(`[Gemini Client Fetch] HTTP ${res.status}, retrying attempt ${attempt}/${maxRetries} in ${waitMs}ms...`);
+          await new Promise(r => setTimeout(r, waitMs));
+          delay *= 1.5;
           continue;
         }
         return res;
@@ -237,7 +246,7 @@ export class GeminiService {
     ];
   }
 
-  private static async callWithRetry<T>(fn: () => Promise<T>, retries = 1, delay = 1000): Promise<T> {
+  private static async callWithRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1500): Promise<T> {
     try {
       return await fn();
     } catch (error: any) {
@@ -261,9 +270,13 @@ export class GeminiService {
                                 lowerMsg.includes('502') ||
                                 lowerMsg.includes('503') ||
                                 lowerMsg.includes('504') ||
+                                lowerMsg.includes('quota') ||
+                                lowerMsg.includes('rate limit') ||
+                                lowerMsg.includes('resource_exhausted') ||
                                 lowerMsg.includes('high demand') ||
                                 lowerMsg.includes('temporarily unavailable') ||
                                 lowerMsg.includes('spikes in demand') ||
+                                lowerMsg.includes('anfragen-limit') ||
                                 error?.status === 'RESOURCE_EXHAUSTED' || 
                                 error?.status === 'UNAVAILABLE' ||
                                 (error?.status && String(error.status).includes('429')) ||
@@ -326,7 +339,7 @@ export class GeminiService {
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contents,
         config: {
           systemInstruction: finalSystemInstruction,
@@ -502,7 +515,7 @@ WICHTIG (SPIELER-AUTONOMIE & KRAFTAUSBRUCHS-VERBOT):
 WICHTIG: Antworte NUR mit dem generierten Prologtext. Keinen JSON-Wrapper, kein "Hier ist dein Prolog", kein Markdown außer normalem Text mit Absätzen.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
       });
 
@@ -620,7 +633,7 @@ ANWEISUNGEN:
   Charaktere und NPCs besitzen KEINERLEI Vorwissen über die zukünftigen Absichten, Pläne, geheimen Vorhaben oder Zielsetzungen des Spielers oder anderer Figuren! Ein Charakter kann und darf von einer zukünftigen Absicht oder einem Plan AUSSCHLIESSLICH DANN wissen, wenn diese im Prolog oder beim Spielstart / in der Ersten Szene EXPLIZIT laut ausgesprochen wurde UND der betreffende Charakter zu diesem Zeitpunkt WIRKLICH PHYSISCH ANWESEND war. Charaktere, die nicht persönlich anwesend waren, wissen absolut nichts davon!`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: "Startszene generieren",
         config: {
           systemInstruction,
@@ -802,10 +815,10 @@ ANWEISUNGEN:
           },
           targetType: {
             type: Type.STRING,
-            description: "Art des Zielobjekts: 'self' (persönlich), 'character' (Zielperson), 'faction' (Fraktion), 'user' (Spieler), 'world' (Welt)",
-            enum: ["self", "character", "faction", "user", "world"]
+            description: "Art des Zielobjekts: 'self' (persönlich), 'character' (Zielperson), 'faction' (Fraktion), 'world' (Welt)",
+            enum: ["self", "character", "faction", "world"]
           },
-          targetName: { type: Type.STRING, description: "Name des Zielobjekts (Person, Fraktion, 'Spieler' oder 'Selbst')" },
+          targetName: { type: Type.STRING, description: "Name des Zielobjekts (Person, Fraktion oder 'Selbst')" },
           priority: { 
             type: Type.STRING, 
             description: "Priorität des Ziels",
@@ -828,7 +841,10 @@ ANWEISUNGEN:
             items: { type: Type.STRING },
             description: "Hindernisse, Risiken und Konflikte"
           },
-          progress: { type: Type.INTEGER, description: "Fortschritt von 0 bis 100" }
+          progress: { type: Type.INTEGER, description: "Fortschritt von 0 bis 100" },
+          parentGoalId: { type: Type.STRING, description: "ID des übergeordneten Hauptziels" },
+          mainGoalTitle: { type: Type.STRING, description: "Titel des Hauptziels, zu dem dieses Etappenziel gehört" },
+          isMainGoal: { type: Type.BOOLEAN, description: "Gibt an, ob dies das Hauptziel selbst ist" }
         },
         required: ["id", "title", "timeframe", "targetType", "priority", "status", "activePlan"]
       }
@@ -1302,7 +1318,7 @@ ANWEISUNGEN:
          - Beschreibe in 'currentSituation', wie der Charakter heute mit dieser Verwandlung lebt und wie sie sein aktuelles Leben bestimmt.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1395,7 +1411,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema(world.campaignPowerSettings);
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1468,7 +1484,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema(world.campaignPowerSettings);
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1593,7 +1609,7 @@ ANWEISUNGEN:
 
       const charSchema = this.getCharacterSchema();
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -1794,7 +1810,7 @@ ANWEISUNGEN:
       Die Generierung muss inhaltlich hochqualitativ, spielmechanisch schlüssig und perfekt auf das Genre (Fantasy, Sci-Fi, Cyberpunk, Slice of Life, etc.) abgestimmt sein!`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -1965,7 +1981,7 @@ Generiere basierend darauf ein detailliertes Geografie- und Weltschöpfungs-Mode
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -2605,7 +2621,7 @@ ${customInstruction ? `--- ZUSÄTZLICHE NUTZERANWEISUNG ---\n${customInstruction
 Gib deine Antwort als Valides JSON zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -3324,7 +3340,7 @@ Jedes Terrain-Objekt in der Liste MUSS folgenden Aufbau haben:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3461,7 +3477,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3590,7 +3606,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3686,7 +3702,7 @@ Gib eine JSON-Struktur zurück mit einer Liste von Unterregionen, jede mit:
 Erstelle für jedes dieser 3-4 Unterregionen spannenden Content, der perfekt zur Lore passt und die Welt tiefgründiger macht.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3804,7 +3820,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -3917,7 +3933,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -4023,7 +4039,7 @@ Für jeden Marker:
 Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: contextPrompt,
         config: {
           responseMimeType: "application/json",
@@ -4268,7 +4284,7 @@ Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend 
       contextPrompt += `\n\nText: "${text}"\n`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4580,13 +4596,13 @@ ${locationInstruction}`;
 ${JSON.stringify(cleanedExisting, null, 2)}`;
       }
 
-      if (userPrompt && userPrompt.trim()) {
+      if (typeof userPrompt === 'string' && userPrompt.trim()) {
         contextPrompt += `\n\n### SPEZIELLE NUTZER-ANWEISUNG / NOTIZEN FÜR DIESE BEZIEHUNG:
 "${userPrompt.trim()}"`;
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4647,13 +4663,13 @@ Charakterdaten:
 ${JSON.stringify(existingCore, null, 2)}\n`;
       }
 
-      if (userNotes && userNotes.trim()) {
+      if (typeof userNotes === 'string' && userNotes.trim()) {
         contextPrompt += `\n### SPEZIELLE NUTZER-WÜNSCHE FÜR DEN MOTIVATIONSKERN:
 "${userNotes.trim()}"\n`;
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4695,19 +4711,15 @@ WICHTIGE DIRECTIVEN:
    - 'self': Persönliche Ziele (z.B. Fähigkeiten meistern, Geld sparen, gesunden, eigene Angst überwinden).
    - 'character': Ziel gegenüber einer konkreten Zielperson aus der Welt (z.B. Vertrauen gewinnen, Rivalen übertrumpfen, jemanden beschützen).
    - 'faction': Ziel bezüglich einer Gilde, Fraktion oder Gruppe (z.B. beitreten, Rang aufsteigen, Einfluss schwächen).
-   - 'user': Ziel DEM SPIELER GEGENÜBER (z.B. den Spieler beobachten, das Vertrauen des Spielers prüfen, den Spieler anwerben, Abstand wahren).
    - 'world': Übergreifendes Ziel bezüglich der Spielwelt oder eines Ortes.
-4. STRENGSTES VERBOT: NUTZERZIELE NIEMALS ERFINDEN!
-   - Ziele mit targetType 'user' sind AUSSCHLIESSLICH die Ziele des Charakters DEM SPIELER GEGENÜBER.
-   - Es dürfen NIEMALS die internen Ziele des Nutzers/Spielers selbst erfunden oder vorgegeben werden!
-5. STRUKTUR JEDES ZIELS (WAS vs. WIE):
+4. STRUKTUR JEDES ZIELS (WAS vs. WIE):
    - 'title': Klares Ziel (WAS will er erreichen?).
    - 'activePlan': Nummerierte konkrete Handlungsschritte (WIE geht er vor?).
    - 'alternativePlans': Mindestens 1-2 Ausweichpläne (Plan B, Plan C), falls der Hauptplan scheitert.
    - 'obstacles': Konkrete Hindernisse, Risiken und Loyalitätskonflikte.
    - 'priority': 'kritisch', 'hoch', 'normal' oder 'niedrig'.
    - 'status': Standardmäßig 'aktiv'.
-6. BESTEHENDE ZIELE:
+5. BESTEHENDE ZIELE:
    - Falls bereits Ziele existieren, behalte diese bei und ergänze oder verfeinere sie stimmig.
 
 Charakterdaten:
@@ -4757,13 +4769,13 @@ ${JSON.stringify(relationships.map(r => ({ target: r.targetCharacter, type: r.ty
 ${JSON.stringify(existingGoals, null, 2)}\n`;
       }
 
-      if (userNotes && userNotes.trim()) {
+      if (typeof userNotes === 'string' && userNotes.trim()) {
         contextPrompt += `\n### BENUTZERWÜNSCHE FÜR DIE ZIELE:
 "${userNotes.trim()}"\n`;
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -4784,8 +4796,8 @@ ${JSON.stringify(existingGoals, null, 2)}\n`;
         title: g.title || 'Unbenanntes Ziel',
         description: g.description || '',
         timeframe: ['langfristig', 'mittelfristig', 'kurzfristig'].includes(g.timeframe) ? g.timeframe : 'mittelfristig',
-        targetType: ['self', 'character', 'faction', 'user', 'world'].includes(g.targetType) ? g.targetType : 'self',
-        targetName: g.targetName || (g.targetType === 'user' ? (playerName || 'Spieler') : g.targetType === 'self' ? 'Selbst' : ''),
+        targetType: ['self', 'character', 'faction', 'world'].includes(g.targetType) ? g.targetType : 'self',
+        targetName: g.targetName || (g.targetType === 'self' ? 'Selbst' : ''),
         priority: ['kritisch', 'hoch', 'normal', 'niedrig'].includes(g.priority) ? g.priority : 'normal',
         status: ['aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben'].includes(g.status) ? g.status : 'aktiv',
         motivation: g.motivation || '',
@@ -4793,7 +4805,132 @@ ${JSON.stringify(existingGoals, null, 2)}\n`;
         alternativePlans: Array.isArray(g.alternativePlans) ? g.alternativePlans : (g.alternativePlans ? [g.alternativePlans] : []),
         obstacles: Array.isArray(g.obstacles) ? g.obstacles : (g.obstacles ? [g.obstacles] : []),
         progress: typeof g.progress === 'number' ? Math.max(0, Math.min(100, g.progress)) : 0,
+        parentGoalId: g.parentGoalId || undefined,
+        mainGoalTitle: g.mainGoalTitle || undefined,
+        isMainGoal: !!g.isMainGoal,
         createdAt: g.createdAt || new Date().toISOString()
+      }));
+    });
+  }
+
+  static async generateGoalsForMainGoal(params: {
+    mainGoal: string;
+    targetType?: 'self' | 'character' | 'faction' | 'world';
+    targetName?: string;
+    targetId?: string;
+    characterName: string;
+    characterRole?: string;
+    characterBio?: string;
+    characterPersonality?: string;
+    motivationCore?: any;
+    relationships?: any[];
+    availableCharacters?: string[];
+    availableFactions?: string[];
+    playerName?: string;
+    worldContext?: any;
+  }): Promise<any[]> {
+    return this.callWithRetry(async () => {
+      const ai = this.getAI();
+
+      let targetTypeDesc = 'Persönliches Ziel';
+      if (params.targetType === 'character') targetTypeDesc = `Ziel gegenüber Charakter: ${params.targetName || 'Person'}`;
+      if (params.targetType === 'faction') targetTypeDesc = `Ziel gegenüber Fraktion: ${params.targetName || 'Fraktion'}`;
+      if (params.targetType === 'world') targetTypeDesc = 'Ziel bezüglich der Welt';
+
+      let contextPrompt = `Der Benutzer hat für den RPG-Charakter "${params.characterName}" ein übergeordnetes HAUPTZIEL festgelegt:
+
+### HAUPTZIEL:
+"${params.mainGoal.trim()}"
+- Bereich: ${targetTypeDesc}
+
+### AUFGABE:
+Erstelle exakt DREI aufeinander aufbauende, zusammenhängende Etappenziele (1x kurzfristig, 1x mittelfristig, 1x langfristig), die Schritt für Schritt beschreiben und planen, wie der Charakter dieses vorgegebene Hauptziel in der Spielwelt erreichen kann.
+
+WICHTIGE VORGABEN FÜR DIE DREI ETAPPEN:
+1. KURZFRISTIGES ZIEL (timeframe: 'kurzfristig'):
+   - Unmittelbare Vorbereitung, Informationsbeschaffung, Kontaktaufnahme oder erste konkrete Schritte.
+   - Was muss der Charakter JETZT sofort tun, um die Weichen für das Hauptziel zu stellen?
+   - Formuliere einen konkreten 'activePlan' mit nummerierten Schritten.
+
+2. MITTELFRISTIGES ZIEL (timeframe: 'mittelfristig'):
+   - Der entscheidende Zwischenmeilenstein oder Durchbruch (z.B. Prüfung bestehen, Bündnis schließen, Zwischenposition sichern, Hindernis überwinden).
+   - Was ist die wichtigste Etappe auf dem Weg zum Hauptziel?
+   - Formuliere einen konkreten 'activePlan' mit nummerierten Schritten.
+
+3. LANGFRISTIGES ZIEL (timeframe: 'langfristig'):
+   - Die finale Umsetzung, Meisterung, Vollendung und dauerhafte Etablierung des Hauptziels.
+   - Wie wird das Hauptziel letztlich vollständig erreicht und abgesichert?
+   - Formuliere einen konkreten 'activePlan' mit nummerierten Schritten.
+
+STRENGE REGELN:
+- KEINE EMOJIS: Verwende keinerlei Emojis in Titeln, Plänen oder Texten!
+- Alle drei Ziele müssen in 'mainGoalTitle' exakt den Text "${params.mainGoal.trim()}" tragen.
+- Alle drei Ziele behalten den targetType ('${params.targetType || 'self'}') und targetName ('${params.targetName || (params.targetType === 'self' ? 'Selbst' : '')}').
+- Jedes Ziel erhält 'title', 'activePlan' (nummeriert), 'motivation', 'obstacles' (1-2 realistische Hindernisse) und 'alternativePlans' (1 Ausweichplan).
+- Status standardmäßig 'aktiv'.
+
+Charakter-Hintergrund:
+- Name: ${params.characterName}
+- Rolle: ${params.characterRole || 'Unbekannt'}
+- Persönlichkeit: ${params.characterPersonality || 'Unbekannt'}
+- Biografie: ${params.characterBio || 'Unbekannt'}
+`;
+
+      if (params.worldContext) {
+        contextPrompt = `### WELTKONTEXT:
+- Welt: "${params.worldContext.title || ''}" (${params.worldContext.era || ''})
+- Ton: "${params.worldContext.tone || ''}"
+- Beschreibung: "${params.worldContext.description || ''}"\n\n` + contextPrompt;
+      }
+
+      if (params.motivationCore) {
+        contextPrompt += `\n### MOTIVATIONSKERN DES CHARAKTERS:
+- Innerer Antrieb: "${params.motivationCore.whyGoal || ''}"
+- Werte: "${params.motivationCore.valuesPrinciples || ''}"
+- Bevorzugte Mittel: "${params.motivationCore.methodsAndMeans || ''}"\n`;
+      }
+
+      if (params.relationships && params.relationships.length > 0) {
+        contextPrompt += `\n### BEZIEHUNGEN DES CHARAKTERS:
+${JSON.stringify(params.relationships.map(r => ({ target: r.targetCharacter, type: r.type, status: r.relationshipStatus })), null, 2)}\n`;
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              goals: this.getCharacterGoalsSchema()
+            },
+            required: ["goals"]
+          }
+        }
+      });
+
+      const parsed = this.parseJSONSafely(response.text || '{}', { goals: [] });
+      const rawGoals = Array.isArray(parsed.goals) ? parsed.goals : [];
+      return rawGoals.map((g: any, idx: number) => ({
+        id: g.id || `goal-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+        title: g.title || 'Unbenanntes Ziel',
+        description: g.description || '',
+        timeframe: ['langfristig', 'mittelfristig', 'kurzfristig'].includes(g.timeframe) 
+          ? g.timeframe 
+          : (idx === 0 ? 'kurzfristig' : idx === 1 ? 'mittelfristig' : 'langfristig'),
+        targetType: params.targetType || (['self', 'character', 'faction', 'world'].includes(g.targetType) ? g.targetType : 'self'),
+        targetName: params.targetName || g.targetName || (params.targetType === 'self' ? 'Selbst' : ''),
+        targetId: params.targetId || g.targetId || undefined,
+        priority: ['kritisch', 'hoch', 'normal', 'niedrig'].includes(g.priority) ? g.priority : 'normal',
+        status: ['aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben'].includes(g.status) ? g.status : 'aktiv',
+        motivation: g.motivation || '',
+        activePlan: g.activePlan || '',
+        alternativePlans: Array.isArray(g.alternativePlans) ? g.alternativePlans : (g.alternativePlans ? [g.alternativePlans] : []),
+        obstacles: Array.isArray(g.obstacles) ? g.obstacles : (g.obstacles ? [g.obstacles] : []),
+        progress: typeof g.progress === 'number' ? Math.max(0, Math.min(100, g.progress)) : 0,
+        mainGoalTitle: params.mainGoal.trim(),
+        createdAt: new Date().toISOString()
       }));
     });
   }
@@ -5486,7 +5623,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5681,7 +5818,7 @@ Du MUSST ein valides JSON-Objekt zurückgeben mit genau einem Feld "entries", we
 Antworte AUSSCHLIESSLICH mit diesem validen JSON-Objekt. Keine Einleitung, kein Outro, kein Markdown wie \`\`\`json.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5861,7 +5998,7 @@ ${entriesToUse.slice(0, 35).map((l: any) => `- [${l.category || 'Codex'}] ${l.ti
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -5949,7 +6086,7 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -6031,7 +6168,7 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
       });
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -6217,7 +6354,7 @@ Gib das Ergebnis streng im geforderten JSON-Format zurück, bestehend aus einer 
       };
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -6257,7 +6394,7 @@ ${recentMessages.map(m => `${m.role === 'user' ? 'Spieler' : 'DM'}: ${m.text}`).
 Schreibe die aktualisierte Chronik als zusammenhängenden, packenden Text auf Deutsch. Halte sie kurz (maximal 150-200 Wörter). Konzentriere dich nur auf wichtige Enthüllungen, getroffene Entscheidungen, bereiste Orte oder dramatische Wendungen. Nenne niemals geheime Rollen oder Tarnungen, bevor sie nicht im Text absolut zweifelsfigurlich und zweifelsfrei enthüllt wurden! Antworte NUR mit dem reinen Text der Chronik (kein Intro, kein Outro, keine Einleitung wie "Hier ist die Chronik...").`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             safetySettings: isNsfw ? this.getSafetySettings() : undefined
@@ -6355,7 +6492,7 @@ Gib das Ergebnis als ein valides JSON-Array von Objekten aus. Jedes Objekt muss 
 WICHTIG: Antworte AUSSCHLIESSLICH mit dem validen JSON-Array. Keine Einleitung, kein Outro, kein Markdown wie \`\`\`json oder \`\`\`. Wenn keine neuen Elemente gefunden werden, antworte mit einem leeren Array: []`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           config: {
             responseMimeType: "application/json",
@@ -6465,7 +6602,7 @@ Gib das Ergebnis als valides JSON-Objekt zurück mit genau dieser Struktur:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -6688,7 +6825,7 @@ Gib ausschließlich valides JSON mit folgenden vier Listen zurück:
 GIB NUR DAS REINE JSON-OBJEKT ZURÜCK, KEINE TEXTERKLÄRUNGEN DRUMHERUM!`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -6963,7 +7100,7 @@ Generiere ein detailliertes JSON Array von Objekten mit folgenden Feldern:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7149,7 +7286,7 @@ WICHTIG:
 - Gib ein valides JSON-Objekt zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7201,7 +7338,7 @@ Gib ein JSON-Objekt mit folgenden Feldern zurück:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7241,7 +7378,7 @@ Gib ein JSON Array mit Objekten zurück:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7307,7 +7444,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7370,7 +7507,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7428,7 +7565,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7498,7 +7635,7 @@ REGELN:
 `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'
@@ -7542,7 +7679,7 @@ Anweisung: ${instruction}
 Gib ein JSON-Objekt mit passenden Namenslisten für verschiedene Elementtypen zurück.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -7810,7 +7947,7 @@ NUTZER-AUFTRAG:
 
       // 1. Initial Plan Generation
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: `${systemPrompt}\n\n${promptContext}`,
         config: {
           responseMimeType: 'application/json',
@@ -7866,7 +8003,7 @@ NUTZER-AUFTRAG:
 
         try {
           const correctionResponse = await ai.models.generateContent({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-2.5-flash',
             contents: `${systemPrompt}\n\n${promptContext}\n\n${correctionPrompt}`,
             config: {
               responseMimeType: 'application/json',
@@ -7950,7 +8087,7 @@ REGELN FÜR DIE TEILZONEN:
 5. Beschreibe prägnant Gefahrenstufe, Besonderheiten (Strömungen, Seemonster, Windstille) und Atmosphäre.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -8118,7 +8255,7 @@ ${keepExistingDetails && Object.keys(existingDetails).length > 0 ? `### BESTEHEN
    - Verwende neutrale, präzise und stimmungsvolle Beschreibungen. Keine Platzhalter. Keine Emojis in den Inhalten.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -8306,7 +8443,7 @@ STRENGE REGELN:
 Antworte ausschließlich mit einem validen JSON-Objekt.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json'

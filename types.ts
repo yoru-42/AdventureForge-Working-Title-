@@ -438,7 +438,7 @@ export interface MotivationCore {
 
 export type GoalTimeframe = 'langfristig' | 'mittelfristig' | 'kurzfristig';
 
-export type GoalTargetType = 'character' | 'faction' | 'user' | 'world' | 'self';
+export type GoalTargetType = 'character' | 'faction' | 'world' | 'self';
 
 export type GoalPriority = 'niedrig' | 'normal' | 'hoch' | 'kritisch';
 
@@ -460,6 +460,9 @@ export interface CharacterGoal {
   obstacles?: string[];
   progress?: number;
   linkedRelationshipId?: string;
+  parentGoalId?: string;
+  mainGoalTitle?: string;
+  isMainGoal?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

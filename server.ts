@@ -86,21 +86,24 @@ function sanitizeContents(contents: any): any {
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
-    'gemini-3.8-flash',
-    'gemini-3.1-flash-lite',
     'gemini-2.5-flash',
-    'gemini-flash-latest'
+    'gemini-2.0-flash',
+    'gemini-2.5-pro',
+    'gemini-1.5-flash'
   ];
   
-  // Map legacy, deprecated, or alias model requests to stable modern models
-  let targetModel = requestedModel;
-  if (!requestedModel || 
-    requestedModel.includes('2.0') ||
-    requestedModel.includes('1.5') ||
-    requestedModel === 'gemini-pro' ||
-    requestedModel === 'gemini-flash-latest'
-  ) {
-    targetModel = 'gemini-3.8-flash';
+  // Map legacy, non-existent, or alias model requests to verified stable models
+  let targetModel = 'gemini-2.5-flash';
+  if (requestedModel) {
+    if (requestedModel === 'gemini-2.5-pro' || requestedModel.includes('pro')) {
+      targetModel = 'gemini-2.5-pro';
+    } else if (requestedModel.includes('2.0')) {
+      targetModel = 'gemini-2.0-flash';
+    } else if (requestedModel.includes('1.5')) {
+      targetModel = 'gemini-1.5-flash';
+    } else {
+      targetModel = 'gemini-2.5-flash';
+    }
   }
   
   // Build deduplicated ordered candidate models list
@@ -111,7 +114,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   let lastError: any = null;
   
   // Phase 1: Try candidate models in order. If a model encounters high demand (503) or rate limit (429),
-  // immediately switch to the next candidate model (e.g. gemini-3.1-flash-lite) for instant zero-latency recovery.
+  // immediately switch to the next candidate model for instant recovery.
   for (const currentModel of modelsToTry) {
     try {
       console.log(`[Gemini Server] Generating content with model: ${currentModel}`);
@@ -128,6 +131,38 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
     } catch (e: any) {
       lastError = e;
       const rawMsg = e?.message || (e ? String(e) : '');
+      const isSchemaError = !!config?.responseSchema && (
+        rawMsg.toLowerCase().includes('schema') ||
+        rawMsg.toLowerCase().includes('too many states') ||
+        rawMsg.toLowerCase().includes('invalid_argument') ||
+        rawMsg.toLowerCase().includes('constraint') ||
+        rawMsg.toLowerCase().includes('produce a constraint')
+      );
+
+      // Instant recovery for schema DFA state constraint limits
+      if (isSchemaError) {
+        console.log(`[Gemini Server] Schema constraint limit encountered on ${currentModel}. Retrying without strict responseSchema...`);
+        try {
+          const simplifiedConfig = {
+            ...config,
+            responseSchema: undefined,
+            responseMimeType: 'application/json'
+          };
+          const fallbackRes = await getAiClient().models.generateContent({
+            model: currentModel,
+            contents: sanitizedContents,
+            config: {
+              ...simplifiedConfig,
+              safetySettings: isNsfw ? getSafetySettings() : undefined
+            }
+          });
+          console.log(`[Gemini Server] Success with JSON fallback on model: ${currentModel}`);
+          return fallbackRes;
+        } catch (schemaErr: any) {
+          lastError = schemaErr;
+        }
+      }
+
       const isQuotaOrRateLimit = rawMsg.includes('429') || 
                                 rawMsg.toLowerCase().includes('quota') || 
                                 rawMsg.toLowerCase().includes('rate limit') ||
@@ -143,27 +178,27 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
 
       if (isQuotaOrRateLimit) {
         console.log(`[Gemini Server] Note: ${currentModel} reached rate/quota limit. Switching to alternative candidate...`);
-        await delay(150);
+        await delay(250);
       } else if (isTransientServerError) {
         console.log(`[Gemini Server] Note: ${currentModel} temporarily in high demand (503). Switching immediately to alternative candidate...`);
-        await delay(150);
+        await delay(250);
       } else {
-        console.log(`[Gemini Server] Note: ${currentModel} not ready. Switching to alternative candidate...`);
-        await delay(150);
+        console.log(`[Gemini Server] Note: ${currentModel} error (${rawMsg.slice(0, 100)}). Switching to alternative candidate...`);
+        await delay(250);
       }
     }
   }
 
   // Phase 2: If all candidates failed on Phase 1, wait cooldown window and auto-retry across candidates
-  for (let cooldownAttempt = 1; cooldownAttempt <= 2; cooldownAttempt++) {
+  for (let cooldownAttempt = 1; cooldownAttempt <= 3; cooldownAttempt++) {
     const errStr = lastError?.message || String(lastError || '');
     const isRateLimit = errStr.includes('429') || errStr.toLowerCase().includes('quota') || errStr.toLowerCase().includes('rate limit') || errStr.includes('RESOURCE_EXHAUSTED');
     const retryMatch = errStr.match(/retry in ([\d\.]+)s/i);
     const waitSeconds = isRateLimit
-      ? (retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 6) : (cooldownAttempt * 2))
+      ? (retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 4) : (cooldownAttempt * 1.5))
       : (cooldownAttempt * 1.5);
 
-    console.log(`[Gemini Server] Phase 2 recovery attempt ${cooldownAttempt}/2 (waiting ${waitSeconds}s)...`);
+    console.log(`[Gemini Server] Phase 2 recovery attempt ${cooldownAttempt}/3 (waiting ${waitSeconds}s)...`);
     await delay(waitSeconds * 1000);
     
     for (const retryModel of modelsToTry) {
@@ -180,6 +215,23 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
         return recoveryResponse;
       } catch (retryErr: any) {
         lastError = retryErr;
+        // Also try JSON-only fallback during Phase 2 if schema error
+        if (config?.responseSchema) {
+          try {
+            const recoveryResponse = await getAiClient().models.generateContent({
+              model: retryModel,
+              contents: sanitizedContents,
+              config: {
+                ...config,
+                responseSchema: undefined,
+                responseMimeType: 'application/json',
+                safetySettings: isNsfw ? getSafetySettings() : undefined
+              }
+            });
+            console.log(`[Gemini Server] Cooldown recovery (without strict schema) succeeded with ${retryModel}!`);
+            return recoveryResponse;
+          } catch (_) {}
+        }
       }
     }
   }

@@ -130,6 +130,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
   
   const [smartFillText, setSmartFillText] = useState<string>('');
   const [isSmartFilling, setIsSmartFilling] = useState<boolean>(false);
+  const [smartFillError, setSmartFillError] = useState<string | null>(null);
   const [keepExistingDetails, setKeepExistingDetails] = useState<boolean>(true);
   const [smartFillSelectedChar, setSmartFillSelectedChar] = useState<string>('new');
   const [smartFillNewCharName, setSmartFillNewCharName] = useState<string>('');
@@ -504,6 +505,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
     if (!promptText.trim()) return;
     setIsSmartFilling(true);
+    setSmartFillError(null);
     try {
       const existingFactions = lore
         .filter(l => l.category === 'Fraktionen')
@@ -942,8 +944,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
           };
         });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Smart Fill Error:", e);
+      const rawMsg = e?.message || String(e || '');
+      setSmartFillError(rawMsg || "Fehler beim automatischen Ausfüllen. Bitte kurz warten und erneut versuchen.");
     } finally {
       setIsSmartFilling(false);
     }
@@ -968,34 +972,13 @@ export const CharacterLoreForm: React.FC<Props> = ({
           const currentDetails = prev.details || {};
           const currentCore = currentDetails.motivationCore || {};
           const nextCore = { ...currentCore, ...generated };
-          const curGoals = currentDetails.goals || [];
-          let nextGoals = curGoals;
-          if (curGoals.length === 0 && generated.mainGoal) {
-            nextGoals = [{
-              id: `goal-${Date.now()}`,
-              title: generated.mainGoal,
-              description: '',
-              timeframe: 'langfristig',
-              targetType: 'self',
-              targetName: 'Selbst',
-              priority: 'hoch',
-              status: 'aktiv',
-              motivation: generated.whyGoal || '',
-              activePlan: generated.methodsAndMeans || '',
-              alternativePlans: [],
-              obstacles: generated.fears ? [generated.fears] : [],
-              progress: 0,
-              createdAt: new Date().toISOString()
-            }];
-          }
 
           return {
             ...prev,
             details: {
               ...currentDetails,
               goal: generated.mainGoal || currentDetails.goal || '',
-              motivationCore: nextCore,
-              goals: nextGoals
+              motivationCore: nextCore
             }
           };
         });
@@ -1009,50 +992,20 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
   const getGoals = (): CharacterGoal[] => {
     const currentGoals = editForm.details?.goals;
-    if (Array.isArray(currentGoals) && currentGoals.length > 0) {
+    if (Array.isArray(currentGoals)) {
       return currentGoals;
     }
-    // Migration fallback: if details.goal or details.motivationCore.mainGoal is present and no goals array exists
-    const legacyGoal = editForm.details?.goal || editForm.details?.motivationCore?.mainGoal;
-    if (legacyGoal && legacyGoal.trim() && currentGoals === undefined) {
-      return [
-        {
-          id: `goal-legacy-${Date.now()}`,
-          title: legacyGoal.trim(),
-          description: '',
-          timeframe: 'langfristig',
-          targetType: 'self',
-          targetName: 'Selbst',
-          priority: 'hoch',
-          status: 'aktiv',
-          motivation: editForm.details?.motivationCore?.whyGoal || '',
-          activePlan: editForm.details?.motivationCore?.methodsAndMeans || '',
-          alternativePlans: [],
-          obstacles: editForm.details?.motivationCore?.fears ? [editForm.details.motivationCore.fears] : [],
-          progress: 0,
-          createdAt: new Date().toISOString()
-        }
-      ];
-    }
-    return currentGoals || [];
+    return [];
   };
 
   const updateGoals = (updatedGoals: CharacterGoal[]) => {
     setEditForm(prev => {
       const curDetails = prev.details || {};
-      const activeGoal = updatedGoals.find(g => g.status === 'aktiv') || updatedGoals[0];
-      const syncedGoal = activeGoal?.title?.trim() || curDetails.goal || '';
-
       return {
         ...prev,
         details: {
           ...curDetails,
-          goals: updatedGoals,
-          goal: syncedGoal,
-          motivationCore: {
-            ...(curDetails.motivationCore || {}),
-            mainGoal: curDetails.motivationCore?.mainGoal || syncedGoal
-          }
+          goals: updatedGoals
         }
       };
     });
@@ -1070,9 +1023,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
       .map(f => ({ id: f.id, title: f.title }));
   }, [lore]);
 
-  const handleGenerateGoalsAI = async (userNotes?: string) => {
+  const handleGenerateGoalsAI = async (userNotes?: any) => {
     setIsGeneratingGoalsAI(true);
     try {
+      const safeNotes = typeof userNotes === 'string' ? userNotes.trim() : undefined;
       const existingGoals = getGoals();
       const codexCharNames = lore
         .filter(c => c.category === 'Charaktere' && c.title?.trim().toLowerCase() !== editForm.title?.trim().toLowerCase())
@@ -1092,7 +1046,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
         codexCharNames,
         codexFactionNames,
         playerName,
-        userNotes,
+        safeNotes,
         world
       );
 
@@ -1108,6 +1062,45 @@ export const CharacterLoreForm: React.FC<Props> = ({
       }
     } catch (err) {
       console.error('Fehler beim Generieren der Charakter-Ziele:', err);
+    } finally {
+      setIsGeneratingGoalsAI(false);
+    }
+  };
+
+  const handleGenerateGoalsForMainGoal = async (mainGoalText: string, targetType: any = 'self', targetName?: string, targetId?: string) => {
+    if (!mainGoalText.trim()) return;
+    setIsGeneratingGoalsAI(true);
+    try {
+      const existingGoals = getGoals();
+      const codexCharNames = lore
+        .filter(c => c.category === 'Charaktere' && c.title?.trim().toLowerCase() !== editForm.title?.trim().toLowerCase())
+        .map(c => c.title);
+      const codexFactionNames = lore
+        .filter(c => c.category === 'Fraktionen')
+        .map(c => c.title);
+
+      const generated = await GeminiService.generateGoalsForMainGoal({
+        mainGoal: mainGoalText.trim(),
+        targetType,
+        targetName,
+        targetId,
+        characterName: editForm.title || editForm.details?.callName || 'Charakter',
+        characterRole: editForm.details?.role,
+        characterBio: editForm.description || editForm.details?.bio,
+        characterPersonality: editForm.details?.personality,
+        motivationCore: editForm.details?.motivationCore,
+        relationships: getRelationships(),
+        availableCharacters: codexCharNames,
+        availableFactions: codexFactionNames,
+        playerName,
+        worldContext: world
+      });
+
+      if (generated && generated.length > 0) {
+        updateGoals([...existingGoals, ...generated]);
+      }
+    } catch (err) {
+      console.error('Fehler beim Generieren der Etappenziele für das Hauptziel:', err);
     } finally {
       setIsGeneratingGoalsAI(false);
     }
@@ -1475,6 +1468,22 @@ export const CharacterLoreForm: React.FC<Props> = ({
           value={smartFillText} 
           onChange={e => setSmartFillText(e.target.value)} 
         />
+
+        {smartFillError && (
+          <div className="bg-amber-950/40 border border-amber-500/40 rounded-lg p-2.5 text-xs text-amber-200 flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2">
+              <i className="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5 shrink-0"></i>
+              <span>{smartFillError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSmartFillError(null)}
+              className="text-amber-400 hover:text-amber-200 text-xs px-1"
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 px-1 select-none">
           <input 
@@ -2518,32 +2527,12 @@ export const CharacterLoreForm: React.FC<Props> = ({
               setEditForm(prev => {
                 const curDetails = prev.details || {};
                 const newMainGoal = updatedCore.mainGoal !== undefined ? updatedCore.mainGoal : (curDetails.goal || '');
-                let currentGoals = curDetails.goals || [];
-                if (updatedCore.mainGoal && currentGoals.length === 0) {
-                  currentGoals = [{
-                    id: `goal-${Date.now()}`,
-                    title: updatedCore.mainGoal,
-                    description: '',
-                    timeframe: 'langfristig',
-                    targetType: 'self',
-                    targetName: 'Selbst',
-                    priority: 'hoch',
-                    status: 'aktiv',
-                    motivation: updatedCore.whyGoal || '',
-                    activePlan: updatedCore.methodsAndMeans || '',
-                    alternativePlans: [],
-                    obstacles: updatedCore.fears ? [updatedCore.fears] : [],
-                    progress: 0,
-                    createdAt: new Date().toISOString()
-                  }];
-                }
                 return {
                   ...prev,
                   details: {
                     ...curDetails,
                     goal: newMainGoal,
-                    motivationCore: updatedCore,
-                    goals: currentGoals
+                    motivationCore: updatedCore
                   }
                 };
               });
@@ -2563,6 +2552,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
             codexFactions={codexFactionsForGoals}
             characterName={editForm.title || editForm.details?.callName || 'Charakter'}
             onGenerateAI={handleGenerateGoalsAI}
+            onGenerateMainGoalAI={handleGenerateGoalsForMainGoal}
             isGeneratingAI={isGeneratingGoalsAI}
             isOpen={isGoalsOpen}
             onToggleOpen={() => setIsGoalsOpen(prev => !prev)}
