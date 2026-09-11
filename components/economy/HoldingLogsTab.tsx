@@ -87,9 +87,9 @@ export const HoldingLogsTab: React.FC<HoldingLogsTabProps> = ({
           { id: 'staff_action', label: 'Personalaktionen' },
           { id: 'incident', label: 'Ereignisse & Vorfälle' },
           { id: 'issue_report', label: 'Mängel & Warnungen' }
-        ].map(tab => (
+        ].map((tab, tIdx) => (
           <button
-            key={tab.id}
+            key={`log-tab-${tab.id}-${tIdx}`}
             type="button"
             onClick={() => setFilter(tab.id as any)}
             className={`px-3 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
@@ -116,9 +116,9 @@ export const HoldingLogsTab: React.FC<HoldingLogsTabProps> = ({
         </div>
       ) : (
         <div className="space-y-2.5 max-h-[500px] overflow-y-auto pr-1">
-          {filteredLogs.map(log => (
+          {filteredLogs.map((log, lIdx) => (
             <div
-              key={log.id}
+              key={`log-entry-${log.id || 'log'}-${lIdx}`}
               className={`p-3 rounded-2xl border flex items-start gap-3 transition-all ${
                 log.severity === 'urgent' ? 'bg-red-950/20 border-red-500/30' :
                 log.severity === 'warning' ? 'bg-amber-950/20 border-amber-500/30' :

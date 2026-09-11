@@ -116,8 +116,8 @@ export const HoldingDecisionsTab: React.FC<HoldingDecisionsTabProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {decisions.map(dec => (
-            <div key={dec.id} className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-4">
+          {decisions.map((dec, decIdx) => (
+            <div key={`dec-${dec.id || 'dec'}-${decIdx}`} className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-4">
               <div className="flex justify-between items-start gap-2">
                 <div className="space-y-1 flex-1">
                   <div className="flex items-center gap-2">

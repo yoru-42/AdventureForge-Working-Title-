@@ -834,11 +834,11 @@ export const WorldMapInspector: React.FC<WorldMapInspectorProps> = ({
 
               {/* Biom Buttons Grid */}
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-36 overflow-y-auto pr-0.5 custom-scrollbar">
-                {filteredBiomes.map(b => {
+                {filteredBiomes.map((b, bIdx) => {
                   const isSelected = selectedTerritory.biome === b.id || selectedTerritory.type === `biome_${b.id}`;
                   return (
                     <button
-                      key={b.id}
+                      key={`biome-btn-${b.id || 'biome'}-${bIdx}`}
                       type="button"
                       onClick={() => onUpdateTerritory({ 
                         ...selectedTerritory, 
@@ -981,7 +981,7 @@ export const WorldMapInspector: React.FC<WorldMapInspectorProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 text-slate-200">
-                {innerPlaces.map((place) => {
+                {innerPlaces.map((place, pIdx) => {
                   const placeRawArea = calculateTerritoryArea(place, territories);
                   const placeAreaSqKm = Math.round(placeRawArea * scaleConfig.unitSqKm);
                   const placeFormattedArea = placeAreaSqKm > 0 ? `${new Intl.NumberFormat('de-DE').format(placeAreaSqKm)} km²` : '< 1 km²';
@@ -1001,7 +1001,7 @@ export const WorldMapInspector: React.FC<WorldMapInspectorProps> = ({
 
                   return (
                     <tr 
-                      key={place.id}
+                      key={`near-place-${place.id || 'place'}-${pIdx}`}
                       className="hover:bg-slate-900/80 transition-colors group cursor-pointer"
                       onClick={() => onSelectTerritoryById?.(place.id)}
                     >

@@ -181,8 +181,8 @@ export const HoldingTasksTab: React.FC<HoldingTasksTabProps> = ({
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredTasks.map(task => (
-                <div key={task.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+              {filteredTasks.map((task, tIdx) => (
+                <div key={`task-${task.id || 'task'}-${tIdx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
                   <div className="flex justify-between items-start gap-2">
                     <input
                       type="text"
@@ -327,8 +327,8 @@ export const HoldingTasksTab: React.FC<HoldingTasksTabProps> = ({
             </div>
           ) : (
             <div className="space-y-3">
-              {duties.map(duty => (
-                <div key={duty.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2.5">
+              {duties.map((duty, dIdx) => (
+                <div key={`duty-${duty.id || 'duty'}-${dIdx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-1">
                       <input

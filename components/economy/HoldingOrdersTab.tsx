@@ -71,8 +71,8 @@ export const HoldingOrdersTab: React.FC<HoldingOrdersTabProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {orders.map(order => (
-            <div key={order.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+          {orders.map((order, oIdx) => (
+            <div key={`order-${order.id || 'order'}-${oIdx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
               <div className="flex justify-between items-start gap-2">
                 <input
                   type="text"

@@ -120,7 +120,7 @@ export const CompetenceProficiencyWidget: React.FC<CompetenceProficiencyWidgetPr
         <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-800/60">
           <div className="flex items-center justify-between">
             <label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
-              Voraussetzungen für Aufstieg / Nächsten Ausbildungsgrad
+              Voraussetzungen für Aufstieg / Nächste Rangstufe
             </label>
             <span className="text-[10px] text-slate-500">Prüfungen & Meilensteine</span>
           </div>

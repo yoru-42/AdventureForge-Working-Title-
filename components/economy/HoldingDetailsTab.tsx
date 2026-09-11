@@ -101,13 +101,13 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
           >
             <option value="user">Spieler (Eigener Besitz)</option>
             <optgroup label="Fraktionen">
-              {loreDatabase.filter(l => l.category === 'Fraktionen').map(f => (
-                <option key={f.id} value={f.id}>{f.title}</option>
+              {loreDatabase.filter(l => l.category === 'Fraktionen').map((f, fIdx) => (
+                <option key={`frac-owner-${f.id || 'f'}-${fIdx}`} value={f.id}>{f.title}</option>
               ))}
             </optgroup>
             <optgroup label="Charaktere">
-               {loreDatabase.filter(l => l.category === 'Charaktere').map(c => (
-                <option key={c.id} value={c.id}>{c.title}</option>
+               {loreDatabase.filter(l => l.category === 'Charaktere').map((c, cIdx) => (
+                <option key={`char-owner-${c.id || 'c'}-${cIdx}`} value={c.id}>{c.title}</option>
               ))}
             </optgroup>
           </select>
@@ -128,8 +128,8 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-amber-500 font-semibold cursor-pointer"
           >
             <option value="">(Keine spezielle Kontrolle)</option>
-            {loreDatabase.filter(l => l.category === 'Fraktionen').map(f => (
-              <option key={f.id} value={f.id}>{f.title}</option>
+            {loreDatabase.filter(l => l.category === 'Fraktionen').map((f, fIdx) => (
+              <option key={`frac-ctrl-${f.id || 'f'}-${fIdx}`} value={f.id}>{f.title}</option>
             ))}
           </select>
         </div>
@@ -156,8 +156,8 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
               className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
             >
               <option value="">(Kein Gebiet zugewiesen)</option>
-              {(world.territories || []).map(t => (
-                <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+              {(world.territories || []).map((t, tIdx) => (
+                <option key={`terr-opt-${t.id || 't'}-${tIdx}`} value={t.id}>{t.name} ({t.type})</option>
               ))}
             </select>
           </div>
@@ -182,8 +182,8 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
                 className="flex-1 bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
               >
                 <option value="">(Keine Codex-Verknüpfung)</option>
-                {loreDatabase.filter(l => ['Orte', 'Fraktionen', 'Gebäude', 'Völker', 'Kultur'].includes(l.category)).map(l => (
-                  <option key={l.id} value={l.id}>{l.title} ({l.category})</option>
+                {loreDatabase.filter(l => ['Orte', 'Fraktionen', 'Gebäude', 'Völker', 'Kultur'].includes(l.category)).map((l, lIdx) => (
+                  <option key={`lore-link-${l.id || 'l'}-${lIdx}`} value={l.id}>{l.title} ({l.category})</option>
                 ))}
               </select>
               {holding.loreEntryId && (
@@ -321,11 +321,11 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
             { key: 'useOrdersModule', label: 'Aufträge & Weisungen' },
             { key: 'useDecisionsModule', label: 'Entscheidungen' },
             { key: 'useLogsModule', label: 'Hintergrund-Log' }
-          ].map(mod => {
+          ].map((mod, mIdx) => {
             const isChecked = holding[mod.key as keyof EconomyHolding] !== false;
             return (
               <label
-                key={mod.key}
+                key={`mod-opt-${mod.key}-${mIdx}`}
                 className={`p-2.5 rounded-xl border text-[11px] font-semibold flex items-center gap-2 cursor-pointer transition-all ${
                   isChecked ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-slate-900 border-slate-800 text-slate-500'
                 }`}

@@ -69,7 +69,7 @@ STRENGSTE REGELN FÜR DIE BIOGRAFIE & CHARAKTERERSTELLUNG:
 export const CHARACTER_BIO_7_QUESTIONS_PROMPT = CHARACTER_BIO_8_QUESTIONS_PROMPT;
 
 export class GeminiService {
-  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 3, initialDelay = 1500): Promise<Response> {
+  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 5, initialDelay = 1500): Promise<Response> {
     let attempt = 0;
     let delay = initialDelay;
     while (true) {
@@ -83,7 +83,7 @@ export class GeminiService {
             const text = await clone.text();
             const match = text.match(/warte ca\.\s*([\d\.]+)\s*Sekunden/i) || text.match(/retry in ([\d\.]+)s/i);
             if (match) {
-              waitMs = Math.min(Math.ceil(parseFloat(match[1]) * 1000) + 250, 6000);
+              waitMs = Math.min(Math.ceil(parseFloat(match[1]) * 1000) + 1000, 35000);
             }
           } catch (_) {}
           console.warn(`[Gemini Client Fetch] HTTP ${res.status}, retrying attempt ${attempt}/${maxRetries} in ${waitMs}ms...`);
@@ -339,7 +339,7 @@ export class GeminiService {
       }
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.5-pro',
         contents: contents,
         config: {
           systemInstruction: finalSystemInstruction,
@@ -907,14 +907,14 @@ ANWEISUNGEN:
         powerCost: { type: Type.STRING, description: "Kosten oder Limitierungen der Kraft, z.B. Ausdauer, MP, Lebensenergie, Nebenwirkungen." },
         skills: { type: Type.STRING, description: "Die eigentliche Spezialfähigkeit oder Kraft detailliert beschrieben." },
         profession: { type: Type.STRING, description: "Hauptberuf oder Spezialisierung des Charakters." },
-        professionLevel: { type: Type.STRING, description: "Berufslevel oder Ausbildungsgrad (z.B. Lehrling, Geselle, Experte, Meister, Großmeister, Autodidakt)." },
+        professionLevel: { type: Type.STRING, description: "Berufslevel oder Rang (z.B. Lehrling, Geselle, Experte, Meister, Großmeister, Autodidakt)." },
         secondaryProfessions: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
               profession: { type: Type.STRING, description: "Nebenberuf oder Zweitausbildung." },
-              professionLevel: { type: Type.STRING, description: "Ausbildungsgrad im Nebenberuf (z.B. Geselle, Autodidakt, Anfänger)." },
+              professionLevel: { type: Type.STRING, description: "Rang im Nebenberuf (z.B. Geselle, Autodidakt, Anfänger)." },
               jobTitle: { type: Type.STRING, description: "Position, Titel oder Rang im Nebenberuf." },
               description: { type: Type.STRING, description: "Aufgaben und Fähigkeiten im Nebenberuf." }
             }
@@ -8400,6 +8400,7 @@ ${keepExistingDetails && Object.keys(existingDetails).length > 0 ? `### BESTEHEN
     description: string;
     type: string;
     subtype: string;
+    mode?: string;
     tier: string;
     targetType: string;
     effects: string[];
@@ -8408,6 +8409,9 @@ ${keepExistingDetails && Object.keys(existingDetails).length > 0 ? `### BESTEHEN
     cost: string;
     range?: string;
     duration?: string;
+    summonCount?: number;
+    summonCostValue?: number;
+    summonCostFormula?: string;
   }> {
     return this.callWithRetry(async () => {
       const ai = this.getAI();
@@ -8435,10 +8439,12 @@ STRENGE REGELN:
 4. Description: Präzise Beschreibung (30-60 Wörter) von Ablauf, visueller Wirkung und mechanischem Nutzen.
 5. Typ: Wähle das passendste aus: 'Angriff', 'Verteidigung', 'Transformation', 'Support', 'Heilung', 'Zustandseffekt', 'Spezial', 'Beschwörung'.
 6. Subtyp: Konkreter Subtyp (z.B. 'Barriere / Gebietskontrolle', 'Projektil / Fernkampf', 'Nahkampf-Klinge', 'Schild', 'Flächenangriff', 'Verstärkung').
-7. Tier: 'Tier 1' (Standard / Grundtechnik), 'Tier 2' (Fortgeschritten), 'Tier 3' (Meisterhaft), 'Tier 4' (Ultimativ).
-8. targetType: Geeignetes Ziel (z.B. 'Selbst / Verbündete / Feinde', 'Einzelziel (Gegner)', 'Fläche (Gegner)', 'Selbst', 'Verbündete').
-9. effects: Array von 2-4 prägnanten Anwendungsmöglichkeiten / Effekten (z.B. ["Schutz", "Einsperren", "Gebietskontrolle"]).
-10. costResourceName & costValue: Passende Ressourcenbezeichnung (z.B. 'Mana', 'Ausdauer', 'Energie') und Kosten (z.B. 10 für Tier 1, 25 für Tier 2, 50 für Tier 3, 100 für Tier 4).
+7. Modus ('mode'): Eines aus: 'Normal', 'Verstärkt', 'Dauerhaft', 'Aufgeladen', 'Schnellzauber', 'Konter', 'Bereich', 'Fernkampf', 'Nahkampf', 'Kanalisiert'.
+8. Tier: 'Tier 1' (Standard / Grundtechnik), 'Tier 2' (Fortgeschritten), 'Tier 3' (Meisterhaft), 'Tier 4' (Ultimativ).
+9. targetType: Geeignetes Ziel (z.B. 'Selbst / Verbündete / Feinde', 'Einzelziel (Gegner)', 'Fläche (Gegner)', 'Selbst', 'Verbündete').
+10. effects: Array von 2-4 prägnanten Anwendungsmöglichkeiten / Effekten (z.B. ["Schutz", "Einsperren", "Gebietskontrolle"]).
+11. costResourceName & costValue: Passende Ressourcenbezeichnung (z.B. 'Mana', 'Ausdauer', 'Energie') und Kosten (z.B. 10 für Tier 1, 25 für Tier 2, 50 für Tier 3, 100 für Tier 4).
+12. Beschwörung: Falls Typ 'Beschwörung' ist, setze summonCount (z.B. 1 bis 5) und summonCostValue (z.B. 5 oder 10 Mana pro zusätzlicher Beschwörung).
 
 Antworte ausschließlich mit einem validen JSON-Objekt.`;
 
@@ -8456,6 +8462,7 @@ Antworte ausschließlich mit einem validen JSON-Objekt.`;
         description: parsed.description || input.description,
         type: parsed.type || 'Angriff',
         subtype: parsed.subtype || 'Einzelschuss',
+        mode: parsed.mode || 'Normal',
         tier: parsed.tier || 'Tier 1',
         targetType: parsed.targetType || 'Selbst / Verbündete / Feinde',
         effects: Array.isArray(parsed.effects) ? parsed.effects : (parsed.applications || ['Schaden', 'Effekt']),
@@ -8463,7 +8470,10 @@ Antworte ausschließlich mit einem validen JSON-Objekt.`;
         costValue: typeof parsed.costValue === 'number' ? parsed.costValue : 15,
         cost: parsed.cost || `${parsed.costValue || 15} ${parsed.costResourceName || 'Mana'}`,
         range: parsed.range || 'Nahkampf / Mittlere Distanz',
-        duration: parsed.duration || 'Sofort'
+        duration: parsed.duration || 'Sofort',
+        summonCount: typeof parsed.summonCount === 'number' ? parsed.summonCount : (parsed.type === 'Beschwörung' ? 1 : undefined),
+        summonCostValue: typeof parsed.summonCostValue === 'number' ? parsed.summonCostValue : (parsed.type === 'Beschwörung' ? 5 : undefined),
+        summonCostFormula: parsed.summonCostFormula || (parsed.type === 'Beschwörung' ? 'absolut' : undefined)
       };
     });
   }

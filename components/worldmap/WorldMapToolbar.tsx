@@ -620,29 +620,29 @@ export const WorldMapToolbar: React.FC<WorldMapToolbarProps> = ({
                 title="Wähle die Art und Größe des Ortes (Weiler, Dorf, Kleinstadt, Metropole, Burg, Festung, Tempel...)"
               >
                 <optgroup label="Dörfer & Siedlungen">
-                  {SETTLEMENT_PLACEMENT_OPTIONS.filter(o => o.category === 'Dörfer & Siedlungen').map(opt => (
-                    <option key={opt.value} value={opt.value}>
+                  {SETTLEMENT_PLACEMENT_OPTIONS.filter(o => o.category === 'Dörfer & Siedlungen').map((opt, oIdx) => (
+                    <option key={`opt-dorf-${opt.value}-${oIdx}`} value={opt.value}>
                       {opt.label}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Städte & Metropolen">
-                  {SETTLEMENT_PLACEMENT_OPTIONS.filter(o => o.category === 'Städte & Metropolen').map(opt => (
-                    <option key={opt.value} value={opt.value}>
+                  {SETTLEMENT_PLACEMENT_OPTIONS.filter(o => o.category === 'Städte & Metropolen').map((opt, oIdx) => (
+                    <option key={`opt-stadt-${opt.value}-${oIdx}`} value={opt.value}>
                       {opt.label}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Burgen & Festungen">
-                  {SETTLEMENT_PLACEMENT_OPTIONS.filter(o => o.category === 'Burgen & Festungen').map(opt => (
-                    <option key={opt.value} value={opt.value}>
+                  {SETTLEMENT_PLACEMENT_OPTIONS.filter(o => o.category === 'Burgen & Festungen').map((opt, oIdx) => (
+                    <option key={`opt-burg-${opt.value}-${oIdx}`} value={opt.value}>
                       {opt.label}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Besondere Orte">
-                  {SETTLEMENT_PLACEMENT_OPTIONS.filter(o => o.category === 'Besondere Orte').map(opt => (
-                    <option key={opt.value} value={opt.value}>
+                  {SETTLEMENT_PLACEMENT_OPTIONS.filter(o => o.category === 'Besondere Orte').map((opt, oIdx) => (
+                    <option key={`opt-ort-${opt.value}-${oIdx}`} value={opt.value}>
                       {opt.label}
                     </option>
                   ))}
@@ -789,14 +789,14 @@ export const WorldMapToolbar: React.FC<WorldMapToolbarProps> = ({
                     title="Wähle das zu zeichnende Element aus"
                   >
                     {currentCategory === 'outside' ? (
-                      OUTSIDE_DRAW_TYPES.map(item => (
-                        <option key={item.value} value={item.value}>
+                      OUTSIDE_DRAW_TYPES.map((item, iIdx) => (
+                        <option key={`out-type-${item.value}-${iIdx}`} value={item.value}>
                           {item.label}
                         </option>
                       ))
                     ) : (
-                      INSIDE_DRAW_TYPES.map(item => (
-                        <option key={item.value} value={item.value}>
+                      INSIDE_DRAW_TYPES.map((item, iIdx) => (
+                        <option key={`in-type-${item.value}-${iIdx}`} value={item.value}>
                           {item.label}
                         </option>
                       ))
@@ -958,8 +958,8 @@ export const WorldMapToolbar: React.FC<WorldMapToolbarProps> = ({
                       className="bg-slate-900 text-indigo-200 text-xs px-2 py-1 rounded border border-indigo-500/40 focus:outline-none w-24 sm:w-32 max-w-[130px] truncate cursor-pointer font-bold"
                       title="Wähle das Meer oder Gebiet aus, das mit deiner Zeichnung unterteilt werden soll"
                     >
-                      {candidateSubdivideZones.map(t => (
-                        <option key={t.id} value={t.id}>
+                      {candidateSubdivideZones.map((t, tIdx) => (
+                        <option key={`subdiv-opt-${t.id || 't'}-${tIdx}`} value={t.id}>
                           {t.name || t.id}
                         </option>
                       ))}
@@ -990,8 +990,8 @@ export const WorldMapToolbar: React.FC<WorldMapToolbarProps> = ({
                       className="bg-slate-900 text-sky-200 text-xs px-2 py-1 rounded border border-sky-500/40 focus:outline-none w-24 sm:w-28 max-w-[120px] truncate cursor-pointer font-bold"
                       title="Wähle die bestehende Zone aus, an die deine Zeichnung angefügt werden soll"
                     >
-                      {candidateAppendZones.map(t => (
-                        <option key={t.id} value={t.id}>
+                      {candidateAppendZones.map((t, tIdx) => (
+                        <option key={`append-opt-${t.id || 't'}-${tIdx}`} value={t.id}>
                           {t.name || t.id}
                         </option>
                       ))}

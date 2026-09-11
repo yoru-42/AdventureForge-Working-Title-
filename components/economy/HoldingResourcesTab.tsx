@@ -85,11 +85,11 @@ export const HoldingResourcesTab: React.FC<HoldingResourcesTabProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {resources.map(res => {
+          {resources.map((res, resIdx) => {
             const fillPct = Math.min(100, Math.max(0, (res.amount / (res.maxCapacity || 1)) * 100));
 
             return (
-              <div key={res.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div key={`res-${res.id || 'res'}-${resIdx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
                 <div className="flex justify-between items-start gap-2">
                   <input
                     type="text"
@@ -115,8 +115,8 @@ export const HoldingResourcesTab: React.FC<HoldingResourcesTabProps> = ({
                       onChange={e => handleUpdateResource(res.id, { category: e.target.value as EconomyResourceCategory })}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-200 outline-none cursor-pointer"
                     >
-                      {RESOURCE_CATEGORIES.map(rc => (
-                        <option key={rc.category} value={rc.category}>{rc.label}</option>
+                      {RESOURCE_CATEGORIES.map((rc, rcIdx) => (
+                        <option key={`rc-cat-${rc.category}-${rcIdx}`} value={rc.category}>{rc.label}</option>
                       ))}
                     </select>
                   </div>

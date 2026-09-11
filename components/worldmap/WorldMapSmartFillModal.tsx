@@ -1752,12 +1752,12 @@ export const WorldMapSmartFillModal: React.FC<WorldMapSmartFillModalProps> = ({
                     { id: 'desert', label: 'Wüste / Oase', icon: Sun },
                     { id: 'snow', label: 'Schnee & Eis', icon: Snowflake },
                     { id: 'swamp', label: 'Sumpfland', icon: Droplets }
-                  ].map((cat) => {
+                  ].map((cat, cIdx) => {
                     const isSelected = targetedCategory === cat.id;
                     const IconComp = cat.icon;
                     return (
                       <button
-                        key={cat.id}
+                        key={`smart-fill-cat-${cat.id}-${cIdx}`}
                         type="button"
                         onClick={() => handleSelectTargetedCategory(cat.id as TargetedZoneCategory)}
                         className={`p-2 rounded-lg text-left text-[11px] font-bold transition-all border flex items-center gap-1.5 ${

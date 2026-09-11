@@ -302,6 +302,8 @@ export interface TechniqueItem {
   description?: string; 
   type?: 'Angriff' | 'Transformation' | 'Verteidigung' | 'Support' | 'Heilung' | 'Zustandseffekt' | 'Spezial' | 'Beschwörung' | string; 
   subtype?: string;
+  mode?: 'Normal' | 'Verstärkt' | 'Dauerhaft' | 'Aufgeladen' | 'Schnellzauber' | 'Konter' | 'Bereich' | 'Fernkampf' | 'Nahkampf' | 'Kanalisiert' | string;
+  category?: 'Passive Fähigkeiten' | 'Techniken' | 'Ultimative Techniken' | 'Transformationen' | 'Talente' | string;
   baseAbilityIds?: string[]; // Liste verknüpfter Grundfähigkeiten
   baseAbilityNames?: string[]; // Anzeigenamen (z.B. ["Kryokinese", "Aerokinese"])
   powerSourceId?: string;
@@ -333,6 +335,11 @@ export interface TechniqueItem {
   metamorphosisInfluence?: number; // 0-100% (Standard 100%) - Wie stark diese Technik zur Metamorphose beiträgt
   scaling?: string;
   summonCount?: number;
+  summonCostValue?: number;
+  summonCostFormula?: string;
+  // Optionale Zusatzfelder für Transformationen / Bedingungen
+  activationCondition?: string;
+  transformName?: string;
 }
 
 export interface PowerAbility {
@@ -2263,6 +2270,29 @@ export interface StructuredInventory {
   generalItems?: string[];
 }
 
+export interface StoryEntityItem {
+  id: string;
+  category: 'Charaktere' | 'Gegner' | 'Fraktionen' | 'Orte' | 'Gegenstände' | 'Techniken' | 'Quests' | 'Berufe' | 'Gruppen' | 'Gebäude' | 'Ressourcen' | 'Waren' | 'Beziehungen' | 'Ziele' | string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  details?: Record<string, any>;
+  createdAt?: string;
+  sourceStoryMessageId?: string;
+  isNewInStory?: boolean;
+  promotedToCodex?: boolean;
+}
+
+export interface StoryInfoState {
+  currentLocationName?: string;
+  currentTerritoryName?: string;
+  activeSituation?: string;
+  activeGoals?: string[];
+  relationships?: { fromName: string; toName: string; relationType: string; description?: string }[];
+  storyEntities: StoryEntityItem[];
+  lastUpdatedTime?: string;
+}
+
 export interface Adventure {
   id: string;
   authorId: string;
@@ -2284,6 +2314,7 @@ export interface Adventure {
   combatState?: CombatState;
   encounterForces?: EncounterForce[];
   dynamicWorldState?: DynamicWorldState;
+  storyState?: StoryInfoState;
   emotionState?: UserEmotionState;
   physicalChangeHistory?: PhysicalChangeHistoryEntry[];
   npcAppearanceMemory?: Record<string, NPCAppearanceObservation>;

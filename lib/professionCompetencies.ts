@@ -39,17 +39,46 @@ export const PROFESSION_FIELDS: ProfessionFieldDefinition[] = [
   { id: 'verwaltung_wirtschaft', name: 'Verwaltung & Wirtschaft', description: 'Finanzwesen, Steuern, Handel, Kanzleiwesen und Kurierdienste' },
   { id: 'kunst_kultur', name: 'Kunst & Kultur', description: 'Bildende Künste, Musik, Literatur, Schauspiel und Darstellendes Handwerk' },
   { id: 'metall_waffen', name: 'Metall & Waffen', description: 'Metallverarbeitung, Schmiedekunst, Schwert- und Rüstungsbau, Mechanik' },
+  { id: 'bau_handwerk', name: 'Bau & Handwerk', description: 'Holzbau, Mauerwerk, Steinmetzkunst, Zimmerei und Konstruktion' },
   { id: 'materialverarbeitung', name: 'Materialverarbeitung', description: 'Gerberei, Kürschnerei, Seilerei, Glasmacherei, Wagner- und Holzhandwerk' },
+  { id: 'bergbau_rohstoffe', name: 'Bergbau & Rohstoffe', description: 'Gewinnung von Erzen, Mineralien, Kohle, Steinbrüche und Verhüttung' },
   { id: 'luxus_spezial', name: 'Luxus & Spezial', description: 'Goldschmiedekunst, Parfümerie, Brauwesen, Spitzenküche und Floristik' },
-  { id: 'landwirtschaft_versorgung', name: 'Landwirtschaft, Versorgung & Sammelberufe', description: 'Ackerbau, Viehzucht, Fischerei, Bergbau, Sammeln und Grundversorgung' },
+  { id: 'lebensmittel_ernaehrung', name: 'Lebensmittel & Ernährung', description: 'Backkunst, Brauwesen, Müllerei, Metzgerei und Vorratshaltung' },
+  { id: 'landwirtschaft_versorgung', name: 'Landwirtschaft, Versorgung & Sammelberufe', description: 'Ackerbau, Viehzucht, Fischerei, Sammeln und Grundversorgung' },
+  { id: 'seefahrt', name: 'Seefahrt & Schifffahrt', description: 'Seemannschaft, Navigation, Schiffszimmerei, Lotsen und Flussschifffahrt' },
   { id: 'wandernde_erkundung', name: 'Wandernde Existenzen & Erkundung', description: 'Nomadentum, Pfadfindung, Prospektion, Wildniserkundung und Jagd' },
   { id: 'tierfuehrung_tamer', name: 'Tierführung & Tamer', description: 'Abrichtung, Falknerei, Großtierführung und Bestienbändigung' },
+  { id: 'wissenschaft_forschung', name: 'Wissenschaft & Forschung', description: 'Alchemie, Astronomie, Naturphilosophie, Heilkunde und Gelehrsamkeit' },
   { id: 'kriminelle_berufe', name: 'Kriminelle Berufe', description: 'Schattenwelt, Diebstahl, Schmuggel, Piraterie und Fälschung' },
   { id: 'geheimoperationen_ueberleben', name: 'Geheimoperationen & Überleben', description: 'Spionage, verdeckte Einsätze, Flucht, Jagd und Überlebenskunst' },
   { id: 'haushalt_dienste', name: 'Haushalt & persönliche Dienste', description: 'Persönliche Dienste, Butlerwesen, Hauswirtschaft, Kutschenführung und Hofdienst' },
   { id: 'unterhaltung_spezial', name: 'Unterhaltung & besondere Tätigkeiten', description: 'Artistik, Tanz, Puppenspiel, Unterhaltungskunst und Sonderberufe' },
   { id: 'private_gesellschaftsrollen', name: 'Private / gesellschaftliche Lebensrollen', description: 'Hauswirtschaft, gesellschaftlicher Stand, Ausbildung und Bildungsweg' }
 ];
+
+export function getProfessionFieldDisplayName(fieldId?: string): string {
+  if (!fieldId) return '';
+  const match = PROFESSION_FIELDS.find(f => f.id === fieldId);
+  if (match) return match.name;
+  const KNOWN: Record<string, string> = {
+    bergbau_rohstoffe: 'Bergbau & Rohstoffe',
+    bau_handwerk: 'Bau & Handwerk',
+    lebensmittel_ernaehrung: 'Lebensmittel & Ernährung',
+    seefahrt: 'Seefahrt & Schifffahrt',
+    wissenschaft_forschung: 'Wissenschaft & Forschung',
+    militaer_sicherheit: 'Militär & Sicherheit',
+    magie_arkana: 'Magie & Arkane Künste',
+    verwaltung_recht: 'Verwaltung & Recht',
+    abenteuer_sondergewerbe: 'Abenteuer & Sondergewerbe',
+    natur_landwirtschaft: 'Natur & Landwirtschaft',
+    handel_wirtschaft: 'Handel & Wirtschaft',
+    schrift_bildung: 'Schrift & Bildung',
+    alchemie: 'Alchemie',
+    medizin_heilkunde: 'Medizin & Heilkunde',
+  };
+  if (KNOWN[fieldId]) return KNOWN[fieldId];
+  return fieldId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
 
 export const PROFESSION_COMPETENCY_CATALOG: ProfessionCatalogEntry[] = [
   // ---------------------------------------------------------------------------

@@ -490,13 +490,13 @@ export const StylizedLocalTownMap: React.FC<StylizedLocalTownMapProps> = ({
 
             {/* DIRECT HORIZONTAL SCROLLABLE LIST OF ALL MATCHING BUILDINGS */}
             <div className="flex items-stretch gap-2 overflow-x-auto pb-1 max-w-full">
-              {filteredBuildings.map(bld => {
+              {filteredBuildings.map((bld, bIdx) => {
                 const isSelected = selectedAddCategory === bld.category;
                 const lvl1 = bld.levels[0];
 
                 return (
                   <button
-                    key={bld.category}
+                    key={`bld-cat-${bld.category}-${bIdx}`}
                     onClick={() => setSelectedAddCategory(bld.category)}
                     className={`p-2 rounded-xl border text-left transition-all shrink-0 w-44 flex flex-col justify-between cursor-pointer group ${
                       isSelected
@@ -888,9 +888,9 @@ export const StylizedLocalTownMap: React.FC<StylizedLocalTownMapProps> = ({
           />
 
           {/* DRAW ROADS & PATHS */}
-          {roads.map(road => (
+          {roads.map((road, rIdx) => (
             <path
-              key={road.id}
+              key={`road-${road.id || 'road'}-${rIdx}`}
               d={road.points.reduce((acc, p, idx) => `${acc} ${idx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '')}
               fill="none"
               stroke={
@@ -918,13 +918,13 @@ export const StylizedLocalTownMap: React.FC<StylizedLocalTownMapProps> = ({
           )}
 
           {/* DRAW STYLIZED BUILDING MAP SYMBOLS WITH LEVEL & STATUS SUPPORT */}
-          {buildings.map(b => {
+          {buildings.map((b, bIdx) => {
             const isSelected = selectedBuildingId === b.id;
             const rot = b.rotation || 0;
 
             return (
               <g
-                key={b.id}
+                key={`town-bld-${b.id || 'bld'}-${bIdx}`}
                 transform={`translate(${b.x}, ${b.y}) rotate(${rot})`}
                 onClick={(e) => {
                   e.stopPropagation();

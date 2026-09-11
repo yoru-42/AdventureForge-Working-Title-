@@ -1,4 +1,5 @@
 import { ProfessionCompetency, ProfessionExperience, ProfessionProgress } from '../types';
+import { JOB_CATEGORIES } from '../components/jobPresets';
 
 export type ProfessionNodeTier = 'einstieg' | 'beruf' | 'spezialisierung' | 'meister';
 
@@ -142,18 +143,18 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'lebensmittel_root',
         fieldId: 'lebensmittel_ernaehrung',
-        name: 'Küchen- & Lebensmittelhilfe',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['koch', 'baecker', 'metzger', 'brauer', 'kaeser', 'mueller', 'winzer'],
-        description: 'Einstieg in lebensmittelverarbeitende Betriebe, Küchenhilfsdienste und Grundversorgung.',
+        description: 'Einstieg in den Berufszweig „Lebensmittel & Ernährung“',
         prerequisites: [],
         careerRoutes: [
           { id: 'r1', name: 'Grundausbildung / Lehrzeit', type: 'exam', description: 'Beginn einer regulären Zunftlehre.', requirementsSummary: 'Offener Einstieg' },
           { id: 'r2', name: 'Praktische Küchenhilfe', type: 'experience', description: 'Lernen durch Zuarbeit in Schankhäusern und Feldlagern.', requirementsSummary: 'Keine Vorkenntnisse' }
         ],
-        suggestedCompetencies: ['Lebensmittelhygiene', 'Zutaten vorverarbeiten', 'Feuerstelle beaufsichtigen'],
-        possibleRanks: ['Helfer', 'Küchenjunge', 'Lehrling']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       // KOCH BRANCH
       {
@@ -481,17 +482,17 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'handwerk_root',
         fieldId: 'bau_handwerk',
-        name: 'Handwerkslehrling / Handlanger',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['schmied', 'schreiner', 'zimmermann', 'maurer', 'gerber', 'schneider'],
-        description: 'Grundlegende Hilfsarbeiten auf Baustellen, in Werkstätten und an Werktischen.',
+        description: 'Einstieg in den Berufszweig „Bau & Handwerk“',
         prerequisites: [],
         careerRoutes: [
           { id: 'h_open', name: 'Einstieg in Werkstatt', type: 'experience', description: 'Lehre oder Handlangerdienst.', requirementsSummary: 'Offen' }
         ],
-        suggestedCompetencies: ['Werkzeuge pflegen', 'Materialtransport', 'Arbeitsplatzsicherheit'],
-        possibleRanks: ['Handlanger', 'Lehrling']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       // SCHMIED BRANCH
       {
@@ -515,11 +516,11 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'waffenschmied',
         fieldId: 'bau_handwerk',
-        name: 'Waffenschmied & Klingenschmied',
+        name: 'Waffenschmied',
         tier: 'spezialisierung',
         specializationOf: 'schmied',
         parentIds: ['schmied'],
-        childIds: ['damastmeister'],
+        childIds: ['schwertschmied', 'damastmeister'],
         description: 'Fertigung von Schwertern, Dolchen, Lanzen und Klingenwaffen mit exakter Härtung.',
         prerequisites: [
           { type: 'profession', label: 'Schmied', targetId: 'schmied' },
@@ -532,9 +533,28 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         possibleRanks: ['Klingenschmied', 'Waffenmeister']
       },
       {
+        id: 'schwertschmied',
+        fieldId: 'bau_handwerk',
+        name: 'Schwertschmied',
+        tier: 'meister',
+        specializationOf: 'waffenschmied',
+        parentIds: ['waffenschmied'],
+        childIds: [],
+        description: 'Meisterhafte Schwerter, Damaszenerklingen und vollendete Waffenbalancierung.',
+        prerequisites: [
+          { type: 'profession', label: 'Waffenschmied', targetId: 'waffenschmied' },
+          { type: 'experience_years', label: '3 Jahre Klingenpraxis', minValue: 3 }
+        ],
+        careerRoutes: [
+          { id: 'ss_master', name: 'Meisterschwert-Prüfung', type: 'exam', description: 'Schmieden einer fehlerfreien Meisterklinge.', requirementsSummary: 'Zunftprüfung' }
+        ],
+        suggestedCompetencies: ['Damaszenerstahl falten', 'Klingenbalancierung', 'Meisterschlag'],
+        possibleRanks: ['Schwertmeister', 'Klingengroßmeister']
+      },
+      {
         id: 'ruestungsschmied',
         fieldId: 'bau_handwerk',
-        name: 'Rüstungsschmied & Plattner',
+        name: 'Rüstungsschmied',
         tier: 'spezialisierung',
         specializationOf: 'schmied',
         parentIds: ['schmied'],
@@ -1058,17 +1078,17 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'militaer_root',
         fieldId: 'militaer_sicherheit',
-        name: 'Rekrut / Wachanwärter',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['soldat', 'stadtwache', 'soeldner', 'jaeger_militaer'],
-        description: 'Grundausbildung an Wehrwaffen, Disziplin und militärischer Drill.',
+        description: 'Einstieg in den Berufszweig „Militär & Sicherheit“',
         prerequisites: [],
         careerRoutes: [
           { id: 'm_enlist', name: 'Musterung & Dienstantritt', type: 'experience', description: 'Einschreibung in die Wehrliste.', requirementsSummary: 'Diensttauglich' }
         ],
-        suggestedCompetencies: ['Waffengrundlagen', 'Marschdisziplin', 'Wachdienst'],
-        possibleRanks: ['Rekrut', 'Gemeiner']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       {
         id: 'soldat',
@@ -1319,17 +1339,17 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'seefahrt_root',
         fieldId: 'seefahrt',
-        name: 'Schiffsjunge / Deckshelfer',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['seemann', 'lotse'],
-        description: 'Deck schrubben, Taue klarieren, Hilfsdienste auf See und im Hafen.',
+        description: 'Einstieg in den Berufszweig „Seefahrt & Schifffahrt“',
         prerequisites: [],
         careerRoutes: [
           { id: 's_muster', name: 'Heuern auf Schiff', type: 'experience', description: 'Erste Ausfahrt auf Frachter oder Kutter.', requirementsSummary: 'Heuervertrag' }
         ],
-        suggestedCompetencies: ['Seemannsknoten', 'Seefestigkeit', 'Decksdienst'],
-        possibleRanks: ['Schiffsjunge', 'Leichtmatrose']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       {
         id: 'seemann',
@@ -1448,15 +1468,15 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'natur_root',
         fieldId: 'natur_landwirtschaft',
-        name: 'Hofhelfer / Forstarbeiter',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['bauer', 'jaeger', 'foerster', 'fischer', 'kraeutersammler'],
-        description: 'Einfache Feldarbeit, Hege, Holzeinschlag und Pflege der Ländereien.',
+        description: 'Einstieg in den Berufszweig „Natur & Landwirtschaft“',
         prerequisites: [],
         careerRoutes: [{ id: 'n_start', name: 'Dienst auf Hof oder Gut', type: 'experience', description: 'Mitarbeit auf Landgütern.', requirementsSummary: 'Offen' }],
-        suggestedCompetencies: ['Bodenbearbeitung', 'Wetterbeobachtung', 'Werkzeugpflege'],
-        possibleRanks: ['Knecht', 'Helfer']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       {
         id: 'bauer',
@@ -1581,17 +1601,17 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'magie_root',
         fieldId: 'magie_arkana',
-        name: 'Magieschüler / Arkan-Novize',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['arkanist', 'elementarist', 'runenschmied_node'],
-        description: 'Studium magischer Grundlagen, Manakontrolle, Formeln und arkaner Meditation.',
+        description: 'Einstieg in den Berufszweig „Magie & Arkana“',
         prerequisites: [],
         careerRoutes: [
           { id: 'mag_init', name: 'Arkanes Initiationsritual', type: 'exam', description: 'Erweckung des inneren Manaflusses.', requirementsSummary: 'Manaprüfung' }
         ],
-        suggestedCompetencies: ['Manakontrolle', 'Zauberformeln', 'Arkane Schriften'],
-        possibleRanks: ['Magieschüler', 'Arkan-Novize', 'Adept']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       {
         id: 'arkanist',
@@ -1748,17 +1768,17 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'religion_root',
         fieldId: 'religion_klerus',
-        name: 'Novize / Tempelanwärter',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['kleriker', 'moench', 'schreindiener'],
-        description: 'Einführung in heilige Schriften, Gebete, Tempeldienst und sakrale Reinigungsriten.',
+        description: 'Einstieg in den Berufszweig „Religion & Klerus“',
         prerequisites: [],
         careerRoutes: [
           { id: 'rel_init', name: 'Tempelaufnahme & Gelübde', type: 'exam', description: 'Ablegen des ersten Gelübdes.', requirementsSummary: 'Gelübde' }
         ],
-        suggestedCompetencies: ['Liturgie', 'Sakraltexte', 'Gebetsordnung', 'Tempeldienst'],
-        possibleRanks: ['Postulant', 'Novize', 'Akoluth']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       {
         id: 'kleriker',
@@ -1947,17 +1967,17 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'verwaltung_root',
         fieldId: 'verwaltung_recht',
-        name: 'Amtsanwärter / Schreibergehilfe',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['schreiber_beruf', 'steuereintreiber_beruf'],
-        description: 'Kalligraphie, Aktenablage, Kopieren von Erlassen und Urkundenpflege.',
+        description: 'Einstieg in den Berufszweig „Verwaltung & Recht“',
         prerequisites: [],
         careerRoutes: [
           { id: 'adm_entry', name: 'Amtsprüfung für Anwärter', type: 'exam', description: 'Eignungsprüfung im Schreiben und Rechnen.', requirementsSummary: 'Schreibprüfung' }
         ],
-        suggestedCompetencies: ['Kopieren', 'Rechnen & Buchführung', 'Aktenordnung', 'Siegelwachs'],
-        possibleRanks: ['Kopist', 'Schreibergehilfe', 'Amtsanwärter']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       {
         id: 'schreiber_beruf',
@@ -2067,17 +2087,17 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'abenteuer_root',
         fieldId: 'abenteuer_sondergewerbe',
-        name: 'Gassenjunge / Kleinkrimineller',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['dieb_beruf', 'schurke_beruf', 'kopfgeldjaeger_beruf'],
-        description: 'Überleben auf der Straße, Taschentricks, Warnpfiffe und Kenntnis dunkler Hinterhöfe.',
+        description: 'Einstieg in den Berufszweig „Abenteuer & Sondergewerbe“',
         prerequisites: [],
         careerRoutes: [
           { id: 'ab_init', name: 'Gassenbewährung', type: 'experience', description: 'Erster geglückter Streifzug.', requirementsSummary: 'Straßenerfahrung' }
         ],
-        suggestedCompetencies: ['Taschendiebstahl', 'Schleichen', 'Gassenschwatz', 'Ablenkung'],
-        possibleRanks: ['Gassenläufer', 'Späher', 'Gelegenheitsdieb']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       {
         id: 'dieb_beruf',
@@ -2234,17 +2254,17 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
       {
         id: 'wissenschaft_root',
         fieldId: 'wissenschaft_forschung',
-        name: 'Student / Scholar',
+        name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
         childIds: ['forscher_gelehrter', 'kartograph_beruf'],
-        description: 'Studium der Grundlagenfächer, Bibliotheksarbeit, Exzerpieren und lateinische Quellen.',
+        description: 'Einstieg in den Berufszweig „Wissenschaft & Forschung“',
         prerequisites: [],
         careerRoutes: [
           { id: 'acad_matric', name: 'Immatrikulation & Grundstudium', type: 'exam', description: 'Aufnahme in die Fakultät.', requirementsSummary: 'Immatrikulation' }
         ],
-        suggestedCompetencies: ['Quellenstudium', 'Handschriften entziffern', 'Logik', 'Bibliotheksrecherche'],
-        possibleRanks: ['Scholar', 'Forschungsassistent', 'Student']
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
       },
       {
         id: 'forscher_gelehrter',
@@ -2340,6 +2360,409 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         possibleRanks: ['Professor Ordinarius', 'Rektor', 'Akademie-Vorsteher']
       }
     ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 11. LUXUS & SPEZIAL
+  // ---------------------------------------------------------------------------
+  luxus_spezial: {
+    fieldId: 'luxus_spezial',
+    fieldName: 'Luxus & Spezial',
+    description: 'Veredelung, Genussmittel, Braukunst, Juwelierwesen und Blumenkunst',
+    rootNodeId: 'luxus_spezial_root',
+    nodes: [
+      {
+        id: 'luxus_spezial_root',
+        fieldId: 'luxus_spezial',
+        name: 'Lehrling',
+        tier: 'einstieg',
+        parentIds: [],
+        childIds: ['luxus_spezial.juwelier', 'luxus_spezial.brauer', 'luxus_spezial.koch', 'luxus_spezial.florist'],
+        description: 'Einstieg in den Berufszweig „Luxus & Spezial“',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'ls_start', name: 'Grundausbildung & Werkstattpraxis', type: 'experience', description: 'Erste Schritte in Werkstätten und Manufakturen.', requirementsSummary: 'Offener Einstieg' }
+        ],
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
+      },
+      // 1. Juwelier
+      {
+        id: 'luxus_spezial.juwelier',
+        fieldId: 'luxus_spezial',
+        name: 'Juwelier',
+        tier: 'beruf',
+        parentIds: ['luxus_spezial_root'],
+        childIds: ['luxus_spezial.edelsteinschmied', 'luxus_spezial.parfuemeur'],
+        description: 'Bearbeitung und Fassung edler Metalle, Gemmen und feiner Geschmeide.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'j_exam', name: 'Juwelierprüfung', type: 'exam', description: 'Gesellenprüfung der Zunft.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Edelsteinkunde', 'Feinlöten', 'Schmuckfassungen', 'Polieren'],
+        possibleRanks: ['Juweliergeselle', 'Goldschmied', 'Juweliermeister']
+      },
+      {
+        id: 'luxus_spezial.edelsteinschmied',
+        fieldId: 'luxus_spezial',
+        name: 'Edelsteinschmied',
+        tier: 'spezialisierung',
+        specializationOf: 'luxus_spezial.juwelier',
+        parentIds: ['luxus_spezial.juwelier'],
+        childIds: ['luxus_spezial.hofjuwelier'],
+        description: 'Fassen und Schleifen seltenster Kristalle, Diamanten und Runensteine.',
+        prerequisites: [
+          { type: 'profession', label: 'Juwelier', targetId: 'luxus_spezial.juwelier' },
+          { type: 'experience_years', label: '2 Jahre Juwelierpraxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'es_exp', name: 'Edelstein-Schlifflehre', type: 'experience', description: 'Spezialisierung auf Diamanten und Gemmen.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Facettenschliff', 'Krappenfassung', 'Gemmologie'],
+        possibleRanks: ['Edelsteinschleifer', 'Gemmologe']
+      },
+      {
+        id: 'luxus_spezial.parfuemeur',
+        fieldId: 'luxus_spezial',
+        name: 'Parfümeur',
+        tier: 'spezialisierung',
+        specializationOf: 'luxus_spezial.juwelier',
+        parentIds: ['luxus_spezial.juwelier'],
+        childIds: [],
+        description: 'Kreation kostbarer Düfte, Essenzen, Salben und Duftwässer.',
+        prerequisites: [
+          { type: 'profession', label: 'Juwelier', targetId: 'luxus_spezial.juwelier' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'pf_exp', name: 'Duftmanufaktur-Erfahrung', type: 'experience', description: 'Lernen an Destillierkolben.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Duftnotenharmonie', 'Destillation', 'Fixierung'],
+        possibleRanks: ['Duftmischer', 'Parfümeur']
+      },
+      {
+        id: 'luxus_spezial.hofjuwelier',
+        fieldId: 'luxus_spezial',
+        name: 'Hofjuwelier',
+        tier: 'meister',
+        parentIds: ['luxus_spezial.edelsteinschmied'],
+        childIds: [],
+        description: 'Schmieden von Kronjuwelen, Zeptern und fürstlichen Insignien.',
+        prerequisites: [
+          { type: 'experience_years', label: '4 Jahre Juweliererfahrung', minValue: 4 }
+        ],
+        careerRoutes: [
+          { id: 'hj_rec', name: 'Königliches Hofpatent', type: 'social_recognition', description: 'Bestallung als Hoflieferant.', requirementsSummary: 'Anerkennung durch Landesherrn' }
+        ],
+        suggestedCompetencies: ['Kronjuwelenfassung', 'Insignienschmieden', 'Großmeisterwerk'],
+        possibleRanks: ['Hofjuwelier', 'Erbgoldschmied']
+      },
+      // 2. Brauer
+      {
+        id: 'luxus_spezial.brauer',
+        fieldId: 'luxus_spezial',
+        name: 'Brauer',
+        tier: 'beruf',
+        parentIds: ['luxus_spezial_root'],
+        childIds: ['luxus_spezial.braumeister', 'luxus_spezial.destillateur'],
+        description: 'Brauen von Bier, Ale, Met und Gärgetränken nach handwerklicher Rezeptur.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'br_exam', name: 'Braugesellenprüfung', type: 'exam', description: 'Prüfung nach dem Reinheitsgebot.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Maischen & Läutern', 'Gärungsüberwachung', 'Hopfendosierung'],
+        possibleRanks: ['Braugeselle', 'Mälzer', 'Braumeister']
+      },
+      {
+        id: 'luxus_spezial.braumeister',
+        fieldId: 'luxus_spezial',
+        name: 'Braumeister',
+        tier: 'spezialisierung',
+        specializationOf: 'luxus_spezial.brauer',
+        parentIds: ['luxus_spezial.brauer'],
+        childIds: [],
+        description: 'Rezepturentwicklung, Großsud-Führung und Veredelung edler Jahrgangsbiere.',
+        prerequisites: [
+          { type: 'profession', label: 'Brauer', targetId: 'luxus_spezial.brauer' },
+          { type: 'experience_years', label: '2 Jahre Braupraxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'bm_exam', name: 'Braumeisterbrief', type: 'exam', description: 'Zunftmeisterprüfung im Brauwesen.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Sudkessel-Leitung', 'Bierrezepturen', 'Fassreifung'],
+        possibleRanks: ['Braumeister', 'Zunftbrauer']
+      },
+      {
+        id: 'luxus_spezial.destillateur',
+        fieldId: 'luxus_spezial',
+        name: 'Destillateur',
+        tier: 'spezialisierung',
+        specializationOf: 'luxus_spezial.brauer',
+        parentIds: ['luxus_spezial.brauer'],
+        childIds: [],
+        description: 'Brennen hochprozentiger Edelbrände, Liköre und Kräuterelixiere.',
+        prerequisites: [
+          { type: 'profession', label: 'Brauer', targetId: 'luxus_spezial.brauer' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'dest_exp', name: 'Brennereipraxis', type: 'experience', description: 'Führung von Brennblasen.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Brennblasenführung', 'Vorlauf-/Nachlaufabscheidung', 'Aromaveredelung'],
+        possibleRanks: ['Brennmeister', 'Destillateur']
+      },
+      // 3. Koch
+      {
+        id: 'luxus_spezial.koch',
+        fieldId: 'luxus_spezial',
+        name: 'Koch',
+        tier: 'beruf',
+        parentIds: ['luxus_spezial_root'],
+        childIds: ['luxus_spezial.kuechenchef', 'luxus_spezial.gourmetkoch'],
+        description: 'Zubereitung erlesener Speisen, Menüs und Festmahle.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'k_exam', name: 'Kochgesellenprüfung', type: 'exam', description: 'Erfolgreicher Abschluss der Kochlehre.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Lebensmittel vorbereiten', 'Grundgerichte kochen', 'Gewürzkunde', 'Feine Küche'],
+        possibleRanks: ['Jungkoch', 'Chef de Partie', 'Küchenchef']
+      },
+      {
+        id: 'luxus_spezial.kuechenchef',
+        fieldId: 'luxus_spezial',
+        name: 'Küchenchef',
+        tier: 'spezialisierung',
+        specializationOf: 'luxus_spezial.koch',
+        parentIds: ['luxus_spezial.koch'],
+        childIds: [],
+        description: 'Leitung von Küchenbrigaden, Menükomposition und Bankettorganisation.',
+        prerequisites: [
+          { type: 'profession', label: 'Koch', targetId: 'luxus_spezial.koch' },
+          { type: 'experience_years', label: '2 Jahre Kochpraxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'kc_exp', name: 'Brigadeführung', type: 'experience', description: 'Leitung einer Gaststätte oder Schlossküche.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Brigadeführung', 'Menüdesign', 'Kalkulation & Einkauf'],
+        possibleRanks: ['Sous-Chef', 'Küchenchef']
+      },
+      {
+        id: 'luxus_spezial.gourmetkoch',
+        fieldId: 'luxus_spezial',
+        name: 'Gourmetkoch',
+        tier: 'spezialisierung',
+        specializationOf: 'luxus_spezial.koch',
+        parentIds: ['luxus_spezial.koch'],
+        childIds: [],
+        description: 'Exquisite Menüfolgen für fürstliche Festessen und diplomatische Tafeln.',
+        prerequisites: [
+          { type: 'profession', label: 'Koch', targetId: 'luxus_spezial.koch' },
+          { type: 'experience_years', label: '2 Jahre Kochpraxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'gk_rec', name: 'Hofküchenbestallung', type: 'social_recognition', description: 'Ernennung für Adelsbankette.', requirementsSummary: 'Anerkennung' }
+        ],
+        suggestedCompetencies: ['Spitzengastronomie', 'Tafelpräsentation', 'Saucenperfektion'],
+        possibleRanks: ['Gourmetkoch', 'Maître de Cuisine']
+      },
+      // 4. Florist
+      {
+        id: 'luxus_spezial.florist',
+        fieldId: 'luxus_spezial',
+        name: 'Florist',
+        tier: 'beruf',
+        parentIds: ['luxus_spezial_root'],
+        childIds: ['luxus_spezial.floristmeister', 'luxus_spezial.bluetenarrangeur'],
+        description: 'Gestaltung kunstvoller Blumenarrangements, Kränze und Zierpflanzungen.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'fl_exam', name: 'Floristenprüfung', type: 'exam', description: 'Prüfung in Blumengestaltung und Frischekonservierung.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Blütenkunde', 'Gesteckgestaltung', 'Frischekonservierung'],
+        possibleRanks: ['Floristgeselle', 'Floristmeister']
+      },
+      {
+        id: 'luxus_spezial.floristmeister',
+        fieldId: 'luxus_spezial',
+        name: 'Floristmeister',
+        tier: 'spezialisierung',
+        specializationOf: 'luxus_spezial.florist',
+        parentIds: ['luxus_spezial.florist'],
+        childIds: [],
+        description: 'Meisterliche Raum- und Festfloristik für Paläste und Kathedralen.',
+        prerequisites: [
+          { type: 'profession', label: 'Florist', targetId: 'luxus_spezial.florist' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'fm_exam', name: 'Floristmeisterbrief', type: 'exam', description: 'Meisterprüfung im Blumenhandwerk.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Großinstallationen', 'Kryptogamen & Exoten', 'Konservierungskunst'],
+        possibleRanks: ['Floristmeister', 'Ziergartengroßmeister']
+      },
+      {
+        id: 'luxus_spezial.bluetenarrangeur',
+        fieldId: 'luxus_spezial',
+        name: 'Blütenarrangeur',
+        tier: 'spezialisierung',
+        specializationOf: 'luxus_spezial.florist',
+        parentIds: ['luxus_spezial.florist'],
+        childIds: [],
+        description: 'Farb- und Duftkompositionen aus seltenen Zier- und Heilpflanzen.',
+        prerequisites: [
+          { type: 'profession', label: 'Florist', targetId: 'luxus_spezial.florist' },
+          { type: 'experience_years', label: '1 Jahr Floristenpraxis', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'ba_exp', name: 'Arrangementpraxis', type: 'experience', description: 'Kunstfertigkeit in Harmonielehre.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Ikebana & Formenlehre', 'Farbharmonie', 'Kräuterarrangements'],
+        possibleRanks: ['Arrangeur', 'Gartenkünstler']
+      }
+    ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 12. METALL & WAFFEN
+  // ---------------------------------------------------------------------------
+  metall_waffen: {
+    fieldId: 'metall_waffen',
+    fieldName: 'Metall & Waffen',
+    description: 'Schmiedekunst, Rüstungsbau, Waffenfertigung, Feinmechanik und Instrumentenbau',
+    rootNodeId: 'metall_waffen_root',
+    nodes: [
+      {
+        id: 'metall_waffen_root',
+        fieldId: 'metall_waffen',
+        name: 'Lehrling',
+        tier: 'einstieg',
+        parentIds: [],
+        childIds: ['metall_waffen.schmied', 'metall_waffen.mechaniker', 'metall_waffen.instrumentenbauer'],
+        description: 'Einstieg in den Berufszweig „Metall & Waffen“',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'mw_start', name: 'Grundausbildung & Werkstattpraxis', type: 'experience', description: 'Erste Schritte am Amboss und an der Werkbank.', requirementsSummary: 'Offener Einstieg' }
+        ],
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Auszubildender']
+      },
+      {
+        id: 'metall_waffen.schmied',
+        fieldId: 'metall_waffen',
+        name: 'Schmied',
+        tier: 'beruf',
+        parentIds: ['metall_waffen_root'],
+        childIds: ['metall_waffen.waffenschmied', 'metall_waffen.ruestungsschmied'],
+        description: 'Umformen von Eisen, Bronze und Stahl am glühenden Amboss.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'mw_s_exam', name: 'Schmiedegesellenprüfung', type: 'exam', description: 'Gesellenprüfung der Schmiedezunft.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Schmiedefeuer regulieren', 'Ambossführung', 'Härten & Anlassen'],
+        possibleRanks: ['Schmiedegeselle', 'Grobschmied', 'Schmiedemeister']
+      },
+      {
+        id: 'metall_waffen.waffenschmied',
+        fieldId: 'metall_waffen',
+        name: 'Waffenschmied',
+        tier: 'spezialisierung',
+        specializationOf: 'metall_waffen.schmied',
+        parentIds: ['metall_waffen.schmied'],
+        childIds: ['metall_waffen.schwertschmied'],
+        description: 'Fertigung von Klingenwaffen, Lanzen, Äxten und Streitkolben.',
+        prerequisites: [
+          { type: 'profession', label: 'Schmied', targetId: 'metall_waffen.schmied' },
+          { type: 'experience_years', label: '2 Jahre Schmiedeerfahrung', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'mw_ws_exp', name: 'Klingenschmiedelehre', type: 'experience', description: 'Spezialisierung auf Klingenstahl.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Klingen härten', 'Schwerter auswiegen', 'Waffenschärfen'],
+        possibleRanks: ['Klingenschmied', 'Waffenmeister']
+      },
+      {
+        id: 'metall_waffen.schwertschmied',
+        fieldId: 'metall_waffen',
+        name: 'Schwertschmied',
+        tier: 'meister',
+        specializationOf: 'metall_waffen.waffenschmied',
+        parentIds: ['metall_waffen.waffenschmied'],
+        childIds: [],
+        description: 'Meisterhafte Schwerter, Damaszenerklingen und vollendete Balancierung.',
+        prerequisites: [
+          { type: 'profession', label: 'Waffenschmied', targetId: 'metall_waffen.waffenschmied' },
+          { type: 'experience_years', label: '3 Jahre Waffenpraxis', minValue: 3 }
+        ],
+        careerRoutes: [
+          { id: 'mw_ss_master', name: 'Meisterschwert-Prüfung', type: 'exam', description: 'Schmieden einer fehlerfreien Meisterklinge.', requirementsSummary: 'Zunftprüfung' }
+        ],
+        suggestedCompetencies: ['Damaszenerstahl falten', 'Klingenbalancierung', 'Meisterschlag'],
+        possibleRanks: ['Schwertmeister', 'Klingengroßmeister']
+      },
+      {
+        id: 'metall_waffen.ruestungsschmied',
+        fieldId: 'metall_waffen',
+        name: 'Rüstungsschmied',
+        tier: 'spezialisierung',
+        specializationOf: 'metall_waffen.schmied',
+        parentIds: ['metall_waffen.schmied'],
+        childIds: [],
+        description: 'Treiben maßgeschneiderter Plattenharnische, Helme, Schilde und Schutzpanzer.',
+        prerequisites: [
+          { type: 'profession', label: 'Schmied', targetId: 'metall_waffen.schmied' },
+          { type: 'experience_years', label: '2 Jahre Schmiedeerfahrung', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'mw_rs_exp', name: 'Plattnerkunst', type: 'experience', description: 'Treiben von Blechen auf Bossierklötzen.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Plattenrüstung treiben', 'Harnischpassung', 'Visierbau'],
+        possibleRanks: ['Plattner', 'Harnischmeister']
+      },
+      {
+        id: 'metall_waffen.mechaniker',
+        fieldId: 'metall_waffen',
+        name: 'Mechaniker',
+        tier: 'beruf',
+        parentIds: ['metall_waffen_root'],
+        childIds: [],
+        description: 'Konstruktion und Wartung von Zahnrädern, Winden, Uhren und Feinmechanik.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'mw_m_exam', name: 'Mechanikerprüfung', type: 'exam', description: 'Prüfung in Getriebebau und Hebelgesetzen.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Zahnradgetriebe', 'Federspannung', 'Präzisionsmontage'],
+        possibleRanks: ['Mechanikergeselle', 'Uhrmacher', 'Mechanicus']
+      },
+      {
+        id: 'metall_waffen.instrumentenbauer',
+        fieldId: 'metall_waffen',
+        name: 'Instrumentenbauer',
+        tier: 'beruf',
+        parentIds: ['metall_waffen_root'],
+        childIds: [],
+        description: 'Bau und Stimmung von Saiten-, Blas- und Schlaginstrumenten.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'mw_i_exam', name: 'Instrumentenbauerprüfung', type: 'exam', description: 'Bau eines vollwertigen Klangkörpers.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Akustik & Resonanz', 'Feinstimmung', 'Metallbiegen'],
+        possibleRanks: ['Geigenbauer', 'Lautenbauer', 'Klangmeister']
+      }
+    ]
   }
 };
 
@@ -2350,18 +2773,18 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
   switch (fieldId) {
     case 'adel_herrschaft':
       return {
-        entryName: 'Edle Page / Hofgehilfe',
-        entryRanks: ['Page', 'Junker'],
-        entryDesc: 'Hofetikette, Ahnenkunde und Dienst am herzoglichen Hofe.',
-        core1Name: 'Ritter & Edler',
-        core1Ranks: ['Ritter', 'Edler'],
-        core2Name: 'Berater & Diplomat',
-        core2Ranks: ['Gefolgsmann', 'Unterhändler'],
-        spec1Name: 'Taktiker & Paladin',
-        spec1Ranks: ['Landvogt', 'Kommandeur'],
-        apexName: 'Fürst, Herzog & Kanzler',
-        apexRanks: ['Fürst', 'Herzog', 'Großkanzler'],
-        promotionRouteName: 'Dynastischer Erbfolgebrief & Landeskrone',
+        entryName: 'Hofpage',
+        entryRanks: ['Page', 'Hofgehilfe'],
+        entryDesc: 'Hofetikette, Ahnenkunde und Dienst am Hofe.',
+        core1Name: 'Herold',
+        core1Ranks: ['Wappenkundler', 'Herold'],
+        core2Name: 'Zeremonienmeister',
+        core2Ranks: ['Hofmeister', 'Zeremonienmeister'],
+        spec1Name: 'Hofmarschall',
+        spec1Ranks: ['Truchsess', 'Hofmarschall'],
+        apexName: 'Großkanzler',
+        apexRanks: ['Kanzler', 'Großkanzler'],
+        promotionRouteName: 'Kanzleibestallung & Hofratspatent',
         routeType: 'social_recognition' as const
       };
     case 'militaer_streitkraefte':
@@ -2642,100 +3065,98 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
   }
 }
 
+const NOBLE_TITLES = new Set(['kaiser', 'könig', 'herzog', 'fürst', 'graf', 'baron', 'prinz', 'kronprinz', 'erzherzog', 'kurfürst']);
+
 /**
  * Creates a generic fallback tree for any field using domain-appropriate vocabulary.
  */
 export function generateGenericTreeForField(fieldId: string, fieldName: string): ProfessionTreeField {
   const rootId = `${fieldId}_root`;
-  const vocab = getDomainCareerVocabulary(fieldId, fieldName);
+  const cleanFieldName = fieldName || fieldId;
+
+  // Find jobs defined in JOB_CATEGORIES for this field
+  const categoryPreset = JOB_CATEGORIES.find(c => c.fieldId === fieldId);
+  const rawJobs = categoryPreset ? categoryPreset.jobs : [];
+
+  // Filter out noble titles and split multiple jobs if separated by slashes
+  const validJobs: string[] = [];
+  for (const j of rawJobs) {
+    const parts = j.split(' / ');
+    for (const part of parts) {
+      const trimmed = part.trim();
+      const lower = trimmed.toLowerCase();
+      if (!NOBLE_TITLES.has(lower) && !validJobs.includes(trimmed)) {
+        validJobs.push(trimmed);
+      }
+    }
+  }
+
+  // If no preset jobs found, provide clean default profession nodes (never combinations!)
+  if (validJobs.length === 0) {
+    validJobs.push(`Fachmann für ${cleanFieldName}`, `Spezialist für ${cleanFieldName}`);
+  }
+
+  const childNodes: ProfessionTreeNode[] = validJobs.map((jobName, index) => {
+    const slug = jobName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const nodeId = `${fieldId}.${slug}_${index}`;
+    return {
+      id: nodeId,
+      fieldId,
+      name: jobName,
+      tier: 'beruf',
+      parentIds: [rootId],
+      childIds: [],
+      description: `Fachausbildung und selbstständige Berufsausübung als ${jobName} im Bereich ${cleanFieldName}.`,
+      prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
+      careerRoutes: [
+        {
+          id: `route_${nodeId}`,
+          name: `${jobName}-Fachprüfung`,
+          type: 'exam',
+          description: `Nachweis selbstständiger Fachbefähigung als ${jobName}.`,
+          requirementsSummary: '1 Jahr Praxis'
+        }
+      ],
+      suggestedCompetencies: [`Fachkunde ${jobName}`, 'Arbeitsorganisation', 'Materialkunde', 'Qualitätskontrolle'],
+      possibleRanks: ['Geselle', 'Fachkraft', 'Meister']
+    };
+  });
+
+  const rootNode: ProfessionTreeNode = {
+    id: rootId,
+    fieldId,
+    name: 'Lehrling',
+    tier: 'einstieg',
+    parentIds: [],
+    childIds: childNodes.map(c => c.id),
+    description: `Einstieg in den Berufszweig „${cleanFieldName}“`,
+    prerequisites: [],
+    careerRoutes: [
+      {
+        id: `${fieldId}_entry_route`,
+        name: 'Grundausbildung & Dienstantritt',
+        type: 'experience',
+        description: 'Beginn der beruflichen Grundausbildung.',
+        requirementsSummary: 'Offener Einstieg'
+      }
+    ],
+    suggestedCompetencies: [
+      'Arbeitsplatz vorbereiten',
+      'Werkzeuge sicher benutzen',
+      'Materialkunde',
+      'Handgeschick',
+      'Lernfähigkeit',
+      'Sorgfalt'
+    ],
+    possibleRanks: ['Lehrling', 'Auszubildender']
+  };
 
   return {
     fieldId,
-    fieldName,
-    description: `Berufsentwicklung und Karrierepfade im Bereich ${fieldName}`,
+    fieldName: cleanFieldName,
+    description: `Berufsentwicklung und Karrierepfade im Bereich ${cleanFieldName}`,
     rootNodeId: rootId,
-    nodes: [
-      {
-        id: rootId,
-        fieldId,
-        name: vocab.entryName,
-        tier: 'einstieg',
-        parentIds: [],
-        childIds: [`${fieldId}_core_1`, `${fieldId}_core_2`],
-        description: vocab.entryDesc,
-        prerequisites: [],
-        careerRoutes: [
-          { id: 'gen_start', name: 'Grundausbildung & Dienstantritt', type: 'experience', description: 'Beginn der praktischen Tätigkeit.', requirementsSummary: 'Offener Einstieg' }
-        ],
-        suggestedCompetencies: [`Grundlagen von ${fieldName}`, 'Fachkunde', 'Praxisdisziplin'],
-        possibleRanks: vocab.entryRanks
-      },
-      {
-        id: `${fieldId}_core_1`,
-        fieldId,
-        name: vocab.core1Name,
-        tier: 'beruf',
-        parentIds: [rootId],
-        childIds: [`${fieldId}_spec_1`, `${fieldId}_master`],
-        description: `Selbstständige Ausführung aller zentralen Aufgaben im Bereich ${fieldName}.`,
-        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
-        careerRoutes: [
-          { id: 'gen_exam1', name: 'Fachprüfung & Befähigung', type: 'exam', description: 'Nachweis selbstständiger Arbeitsfähigkeit.', requirementsSummary: '1 Jahr Praxis' }
-        ],
-        suggestedCompetencies: ['Hauptaufgaben', 'Praxisfertigkeit', 'Qualitätskontrolle'],
-        possibleRanks: vocab.core1Ranks
-      },
-      {
-        id: `${fieldId}_core_2`,
-        fieldId,
-        name: vocab.core2Name,
-        tier: 'beruf',
-        parentIds: [rootId],
-        childIds: [`${fieldId}_spec_1`],
-        description: `Praktischer Tätigkeitszweig mit breitem Praxiswissen in ${fieldName}.`,
-        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxis', minValue: 1 }],
-        careerRoutes: [
-          { id: 'gen_exp2', name: 'Praxisweg im Einsatz', type: 'experience', description: 'Tägliche praktische Arbeit.', requirementsSummary: 'Praxisbewährung' }
-        ],
-        suggestedCompetencies: ['Assistenztätigkeit', 'Arbeitsorganisation'],
-        possibleRanks: vocab.core2Ranks
-      },
-      {
-        id: `${fieldId}_spec_1`,
-        fieldId,
-        name: vocab.spec1Name,
-        tier: 'spezialisierung',
-        parentIds: [`${fieldId}_core_1`, `${fieldId}_core_2`],
-        childIds: [`${fieldId}_master`],
-        description: `Vertiefte Spezialisierung auf anspruchsvolle Sonderaufgaben und besondere Verfahren.`,
-        prerequisites: [
-          { type: 'experience_years', label: '2 Jahre Fachpraxis', minValue: 2 }
-        ],
-        careerRoutes: [
-          { id: 'gen_spec', name: 'Fachvertiefung', type: 'experience', description: 'Spezialisierung im Einsatz.', requirementsSummary: '2 Jahre Praxis' }
-        ],
-        suggestedCompetencies: ['Spezialtechnik', 'Schwierige Aufträge', 'Methodenvertiefung'],
-        possibleRanks: vocab.spec1Ranks
-      },
-      {
-        id: `${fieldId}_master`,
-        fieldId,
-        name: vocab.apexName,
-        tier: 'meister',
-        parentIds: [`${fieldId}_spec_1`, `${fieldId}_core_1`],
-        childIds: [],
-        description: `Höchste Stufe fachlicher und leitender Reife im Bereich ${fieldName}.`,
-        prerequisites: [
-          { type: 'experience_years', label: '4 Jahre Erfahrung', minValue: 4 },
-          { type: 'rank', label: 'Höhere Befähigung oder Ernennung' }
-        ],
-        careerRoutes: [
-          { id: 'gen_m_route', name: vocab.promotionRouteName, type: vocab.routeType, description: 'Anerkennung durch Kollegium, Orden oder Landesherrn.', requirementsSummary: 'Meisterschaft' }
-        ],
-        suggestedCompetencies: ['Gesamtleitung', 'Ausbildungsbefugnis', 'Meisterwerke & Strategie'],
-        possibleRanks: vocab.apexRanks
-      }
-    ]
+    nodes: [rootNode, ...childNodes]
   };
 }
 

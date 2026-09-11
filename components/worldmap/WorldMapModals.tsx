@@ -224,8 +224,8 @@ export const AddTerritoryModal: React.FC<AddTerritoryModalProps> = ({
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-slate-100 font-bold focus:outline-none focus:border-amber-500"
               >
                 <option value="">Keines (Direkt auf Weltkarte)</option>
-                {parentCandidates.map(p => (
-                  <option key={p.id} value={p.id}>
+                {parentCandidates.map((p, pIdx) => (
+                  <option key={`p-candidate-${p.id || 'p'}-${pIdx}`} value={p.id}>
                     {p.name}
                   </option>
                 ))}
@@ -300,12 +300,12 @@ export const HierarchyDrawer: React.FC<HierarchyDrawerProps> = ({
 
     return (
       <div className={`space-y-1 ${depth > 0 ? 'ml-3 pl-2 border-l border-slate-800' : ''}`}>
-        {nodes.map(node => {
+        {nodes.map((node, nIdx) => {
           const isSelected = node.id === selectedTerritoryId;
           const childCount = territories.filter(c => c.parentId === node.id).length;
 
           return (
-            <div key={node.id} className="space-y-1">
+            <div key={`tree-node-${node.id || 'node'}-${nIdx}`} className="space-y-1">
               <button
                 onClick={() => onSelectTerritory(node.id, node.x, node.y)}
                 className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-all ${

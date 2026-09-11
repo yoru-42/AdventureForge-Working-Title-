@@ -520,11 +520,11 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                     1. Zielbereich auswählen
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                    {DOMAIN_OPTIONS.map(opt => {
+                    {DOMAIN_OPTIONS.map((opt, optIdx) => {
                       const isSelected = creatorDomain === opt.id;
                       return (
                         <button
-                          key={opt.id}
+                          key={`creator-domain-${opt.id}-${optIdx}`}
                           type="button"
                           onClick={() => handleDomainChange(opt.id)}
                           className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
@@ -581,8 +581,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                           className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
                         >
                           <option value="">-- Charakter aus Codex wählen --</option>
-                          {codexCharacters.map(c => (
-                            <option key={c.id} value={c.id}>
+                          {codexCharacters.map((c, cIdx) => (
+                            <option key={`char-target-${c.id || 'c'}-${cIdx}`} value={c.id}>
                               {c.title}
                             </option>
                           ))}
@@ -613,8 +613,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                           className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
                         >
                           <option value="">-- Fraktion aus Codex wählen --</option>
-                          {codexFactions.map(f => (
-                            <option key={f.id} value={f.id}>
+                          {codexFactions.map((f, fIdx) => (
+                            <option key={`faction-target-${f.id || 'f'}-${fIdx}`} value={f.id}>
                               {f.title}
                             </option>
                           ))}
@@ -824,12 +824,12 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                 </span>
               </button>
 
-              {DOMAIN_OPTIONS.map(dom => {
+              {DOMAIN_OPTIONS.map((dom, domIdx) => {
                 const count = counts[dom.id] || 0;
                 const isActive = activeFilter === dom.id;
                 return (
                   <button
-                    key={dom.id}
+                    key={`filter-dom-${dom.id}-${domIdx}`}
                     type="button"
                     onClick={() => setActiveFilter(dom.id)}
                     className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -864,7 +864,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredGoals.map(goal => {
+              {filteredGoals.map((goal, gIdx) => {
                 const isExpanded = !!expandedGoalIds[goal.id];
                 const priorityInfo = getPriorityInfo(goal.priority);
                 const statusInfo = getStatusInfo(goal.status);
@@ -873,7 +873,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
 
                 return (
                   <div
-                    key={goal.id}
+                    key={`goal-card-${goal.id || 'goal'}-${gIdx}`}
                     className="bg-slate-950/80 border border-slate-800/90 rounded-xl overflow-hidden transition-all hover:border-slate-700"
                   >
                     {/* Kopfzeile der Zielkarte */}
@@ -1059,8 +1059,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                                   className="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
                                 >
                                   <option value="">-- Charakter auswählen --</option>
-                                  {codexCharacters.map(c => (
-                                    <option key={c.id} value={c.id}>
+                                  {codexCharacters.map((c, cIdx) => (
+                                    <option key={`edit-char-target-${c.id || 'c'}-${cIdx}`} value={c.id}>
                                       {c.title}
                                     </option>
                                   ))}
@@ -1087,8 +1087,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                                   className="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
                                 >
                                   <option value="">-- Fraktion auswählen --</option>
-                                  {codexFactions.map(f => (
-                                    <option key={f.id} value={f.id}>
+                                  {codexFactions.map((f, fIdx) => (
+                                    <option key={`edit-fac-target-${f.id || 'f'}-${fIdx}`} value={f.id}>
                                       {f.title}
                                     </option>
                                   ))}
@@ -1162,8 +1162,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 outline-none focus:border-cyan-500"
                             >
                               <option value="">-- Keine direkte Beziehungsbindung --</option>
-                              {relationships.map(rel => (
-                                <option key={rel.id} value={rel.id}>
+                              {relationships.map((rel, rIdx) => (
+                                <option key={`rel-link-${rel.id || 'r'}-${rIdx}`} value={rel.id}>
                                   {rel.targetCharacter || 'Unbenannt'} ({rel.type || 'Beziehung'})
                                 </option>
                               ))}

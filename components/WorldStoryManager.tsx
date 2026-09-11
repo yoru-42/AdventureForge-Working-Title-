@@ -234,9 +234,9 @@ export const WorldStoryManager: React.FC<WorldStoryManagerProps> = ({
                   { id: 'quests', label: 'Quests', icon: 'fa-scroll' },
                   { id: 'sideQuests', label: 'Nebenquests', icon: 'fa-map-signs' },
                   { id: 'events', label: 'Aktuelle Vorfälle', icon: 'fa-bolt' }
-                ].map(tab => (
+                ].map((tab, tIdx) => (
                   <button
-                    key={tab.id}
+                    key={`story-tab-${tab.id}-${tIdx}`}
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
                       activeTab === tab.id

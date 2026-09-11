@@ -25,7 +25,9 @@ import { WorldIntegrationService } from '../services/worldIntegrationService';
 import { WorldSimulationService } from '../services/worldSimulationService';
 import { GameTurnService } from '../services/gameTurnService';
 import { applyProfessionCompetencyActivity } from '../services/professionCompetencyService';
-import { ProfessionCompetencyActivity } from '../types';
+import { ProfessionCompetencyActivity, StoryEntityItem, StoryInfoState } from '../types';
+import { StoryInfoModal } from './StoryInfoModal';
+import { Info } from 'lucide-react';
 
 
 const baseEmotions = [
@@ -476,6 +478,104 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [showWorkMenu, setShowWorkMenu] = useState(false);
   const [showNavigationModal, setShowNavigationModal] = useState(false);
   const [showTradeModal, setShowTradeModal] = useState(false);
+  const [showStoryInfoModal, setShowStoryInfoModal] = useState(false);
+
+  const pendingStoryEntitiesCount = React.useMemo(() => {
+    const entities = adventure.storyState?.storyEntities || [];
+    return entities.filter(e => !e.promotedToCodex).length;
+  }, [adventure.storyState?.storyEntities]);
+
+  const handlePromoteEntityToCodex = (entity: StoryEntityItem) => {
+    const currentLore = adventure.loreDatabase || [];
+    const exists = currentLore.some(e => e.category === entity.category && e.title.toLowerCase() === entity.title.toLowerCase());
+    
+    let newLore = [...currentLore];
+    if (!exists) {
+      newLore.push({
+        id: 'codex-' + Math.random().toString(36).substr(2, 9),
+        category: entity.category as any,
+        title: entity.title,
+        description: entity.description,
+        isUnlocked: true,
+        details: entity.details || {}
+      });
+    }
+
+    const updatedStoryEntities = (adventure.storyState?.storyEntities || []).map(e => 
+      e.id === entity.id ? { ...e, promotedToCodex: true, isNewInStory: false } : e
+    );
+
+    onUpdateAdventure({
+      ...adventure,
+      loreDatabase: newLore,
+      storyState: {
+        ...(adventure.storyState || { storyEntities: [] }),
+        storyEntities: updatedStoryEntities
+      }
+    });
+
+    addLoreNotifications([
+      {
+        id: Math.random().toString(),
+        type: 'add',
+        title: `${entity.title} in den Codex übernommen!`,
+        category: entity.category
+      }
+    ]);
+  };
+
+  const handlePromoteMultipleToCodex = (entities: StoryEntityItem[]) => {
+    if (!entities || entities.length === 0) return;
+    let newLore = [...(adventure.loreDatabase || [])];
+    const promotedIds = new Set(entities.map(e => e.id));
+
+    entities.forEach(entity => {
+      const exists = newLore.some(e => e.category === entity.category && e.title.toLowerCase() === entity.title.toLowerCase());
+      if (!exists) {
+        newLore.push({
+          id: 'codex-' + Math.random().toString(36).substr(2, 9),
+          category: entity.category as any,
+          title: entity.title,
+          description: entity.description,
+          isUnlocked: true,
+          details: entity.details || {}
+        });
+      }
+    });
+
+    const updatedStoryEntities = (adventure.storyState?.storyEntities || []).map(e => 
+      promotedIds.has(e.id) ? { ...e, promotedToCodex: true, isNewInStory: false } : e
+    );
+
+    onUpdateAdventure({
+      ...adventure,
+      loreDatabase: newLore,
+      storyState: {
+        ...(adventure.storyState || { storyEntities: [] }),
+        storyEntities: updatedStoryEntities
+      }
+    });
+
+    addLoreNotifications([
+      {
+        id: Math.random().toString(),
+        type: 'add',
+        title: `${entities.length} Eintrag/Einträge in den Codex übernommen!`,
+        category: 'Codex'
+      }
+    ]);
+  };
+
+  const handleDismissEntity = (entityId: string) => {
+    const updatedStoryEntities = (adventure.storyState?.storyEntities || []).filter(e => e.id !== entityId);
+    onUpdateAdventure({
+      ...adventure,
+      storyState: {
+        ...(adventure.storyState || { storyEntities: [] }),
+        storyEntities: updatedStoryEntities
+      }
+    });
+  };
 
   const pendingWorkTasksCount = React.useMemo(() => {
     const holdings = adventure.world?.economyConfig?.holdings || [];
@@ -3372,6 +3472,9 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
   const parseLoreAndCharUpdates = (text: string, currentAdventure: Adventure, forceHp?: number, forceMp?: number, worldOverride?: WorldSetting) => {
     let updatedLore = [...(currentAdventure.loreDatabase || [])];
     let updatedNpcs = [...(currentAdventure.npcs || [])];
+    let updatedStoryEntities: StoryEntityItem[] = [
+      ...(currentAdventure.storyState?.storyEntities || [])
+    ];
     let updatedPlayer = { 
       ...currentAdventure.player, 
       appearance: { ...currentAdventure.player.appearance }, 
@@ -3533,19 +3636,32 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
           }
         }
 
-        const newEntry = {
-          id: 'dyn-' + Math.random().toString(36).substr(2, 9),
+        const newStoryEntity: StoryEntityItem = {
+          id: 'story-ent-' + Math.random().toString(36).substr(2, 9),
           category,
           title,
           description,
-          isUnlocked: true,
-          details
+          details,
+          isNewInStory: true,
+          promotedToCodex: false,
+          createdAt: new Date().toISOString()
         };
-        updatedLore.push(newEntry as any);
+
+        const existingStoryIdx = updatedStoryEntities.findIndex(e => e.category === category && isSimilarLoreTitle(e.title, title));
+        if (existingStoryIdx === -1) {
+          updatedStoryEntities.push(newStoryEntity);
+        } else {
+          updatedStoryEntities[existingStoryIdx] = {
+            ...updatedStoryEntities[existingStoryIdx],
+            description,
+            details: { ...updatedStoryEntities[existingStoryIdx].details, ...details }
+          };
+        }
+
         notifications.push({
           id: Math.random().toString(),
           type: 'add',
-          title: category === 'Gegenstände' && details?.owner ? `${title} (Besitzer: ${details.owner})` : title,
+          title: `[Story-Info] Neu: ${title}`,
           category
         });
       } else {
@@ -4340,8 +4456,12 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
           });
           updatedCombatState = spawnRes.updatedCombatState;
 
-          // Track encounter force in world setting
-          const nextForces = [...(updatedWorld.encounterForces || []), spawnRes.updatedEncounterForce];
+          // Track encounter force in world setting with strict ID deduplication
+          const existingForcesList = updatedWorld.encounterForces || [];
+          const existingIdx = existingForcesList.findIndex(f => f.id === spawnRes.updatedEncounterForce.id);
+          const nextForces = existingIdx >= 0
+            ? existingForcesList.map((f, i) => i === existingIdx ? spawnRes.updatedEncounterForce : f)
+            : [...existingForcesList, spawnRes.updatedEncounterForce];
           const nextDynamicState = {
             ...(updatedWorld.dynamicWorldState || {}),
             encounterForces: {
@@ -4381,7 +4501,13 @@ Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, K
       updatedPlayer = { ...updatedPlayer, ...condMig.player };
     }
 
-    return { cleanedText: cleanedText.trim(), updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld };
+    const updatedStoryState: StoryInfoState = {
+      ...(currentAdventure.storyState || { storyEntities: [] }),
+      storyEntities: updatedStoryEntities,
+      lastUpdatedTime: new Date().toISOString()
+    };
+
+    return { cleanedText: cleanedText.trim(), updatedLore, updatedStoryState, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld };
   };
 
   const parseStatusUpdates = (text: string, currentStatus: StatusElement[]) => {
@@ -5202,7 +5328,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       const rawText = response.text || '';
       
       const { cleanedText: statusCleaned, newStatus } = parseStatusUpdates(rawText, adventure.statusElements || []);
-      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, forceNextHp, forceNextMp, activeWorld);
+      const { cleanedText: finalCleanedText, updatedLore, updatedStoryState, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, forceNextHp, forceNextMp, activeWorld);
 
       if (notifications.length > 0) {
         addLoreNotifications(notifications);
@@ -5273,6 +5399,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         world: updatedWorld,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
+        storyState: updatedStoryState,
         chatHistory: nextChatHistory,
         structuredInventory: syncedInv,
         combatState: updatedCombatState
@@ -5477,7 +5604,7 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       const response = await GeminiService.chat(updatedMessages, systemInstruction, activeWorld.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
       
-      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedWorld } = parseLoreAndCharUpdates(rawText, adventure, undefined, undefined, activeWorld);
+      const { cleanedText: finalCleanedText, updatedLore, updatedStoryState, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedWorld } = parseLoreAndCharUpdates(rawText, adventure, undefined, undefined, activeWorld);
 
       if (notifications.length > 0) {
         addLoreNotifications(notifications);
@@ -5502,6 +5629,7 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
         player: updatedPlayer,
         npcs: updatedNpcs,
         loreDatabase: updatedLore,
+        storyState: updatedStoryState,
         structuredInventory: updatedStructuredInventory,
         chatHistory: nextChatHistory
       });
@@ -7230,7 +7358,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       const rawText = response.text || '';
       
       const { cleanedText: statusCleaned, newStatus } = parseStatusUpdates(rawText, statusWithTime);
-      const { cleanedText: finalCleanedText, updatedLore, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, undefined, undefined, adventure.world);
+      const { cleanedText: finalCleanedText, updatedLore, updatedStoryState, updatedPlayer, updatedNpcs, notifications, updatedStructuredInventory, updatedCombatState, updatedWorld } = parseLoreAndCharUpdates(statusCleaned, adventure, undefined, undefined, adventure.world);
 
       if (notifications.length > 0) {
         addLoreNotifications(notifications);
@@ -7270,6 +7398,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         world: updatedWorld,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
+        storyState: updatedStoryState,
         chatHistory: finalMessages,
         structuredInventory: syncedInv,
         combatState: updatedCombatState
@@ -8716,7 +8845,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       ) : (
                         getFavoriteTechniques().map((tech, i) => (
                           <button
-                            key={tech.id || i}
+                            key={tech.id ? `fav-tech-${tech.id}-${i}` : `fav-tech-${i}`}
                             type="button"
                             onClick={() => {
                               const actionText = tech.category === 'Transformationen' || tech.isTransformation
@@ -8781,6 +8910,20 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 {pendingWorkTasksCount > 0 && (
                   <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-slate-950 font-bold text-[9px] flex items-center justify-center font-mono">
                     {pendingWorkTasksCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowStoryInfoModal(true)}
+                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-indigo-400 hover:bg-indigo-950 hover:border-indigo-500 hover:text-indigo-300 transition-all flex items-center justify-center shadow-lg active:scale-95 group relative"
+                title="Story-Info & Temporäre Daten"
+              >
+                <Info className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                {pendingStoryEntitiesCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-indigo-500 text-white font-bold text-[9px] flex items-center justify-center font-mono">
+                    {pendingStoryEntitiesCount}
                   </span>
                 )}
               </button>
@@ -8883,7 +9026,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         <div className="flex flex-col gap-1 mt-1 max-h-[80px] overflow-y-auto custom-scrollbar">
                           {adventure.player.powerSources.map((ps, psIdx) => ps.powerName && (
                             <button
-                              key={ps.id || psIdx}
+                              key={ps.id ? `ps-${ps.id}-${psIdx}` : `ps-${psIdx}`}
                               type="button"
                               onClick={() => {
                                 setActiveCombatPowerSourceIdx(psIdx);
@@ -9045,7 +9188,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     return (
                       <div className="space-y-2">
                         <div className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest px-1">Anwesende Gefährten</div>
-                        {activeCompanions.map(npc => {
+                        {activeCompanions.map((npc, cIdx) => {
                           const npcFaction = npc.appearance?.faction?.trim();
                           const isAllyFaction = pFaction && npcFaction && npcFaction.toLowerCase() === pFaction;
                           const isExplicitAlly = npc.role?.toLowerCase().includes('gefährte') || 
@@ -9056,7 +9199,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           const showAsAlliance = isAllyFaction || isExplicitAlly;
 
                           return (
-                            <div key={npc.id} className="bg-slate-950/40 border border-slate-850 rounded-lg p-2 flex items-center gap-2">
+                            <div key={npc.id ? `comp-npc-${npc.id}-${cIdx}` : `comp-npc-${cIdx}`} className="bg-slate-950/40 border border-slate-850 rounded-lg p-2 flex items-center gap-2">
                               {npc.image ? (
                                 <img src={npc.image} className="w-6 h-6 rounded-full object-cover border border-slate-800 shrink-0" />
                               ) : (
@@ -9274,9 +9417,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                             return (
                               <div className="space-y-1 pt-1">
                                 <div className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider px-1">Aus Szene erfassen:</div>
-                                {presentHostiles.map(hn => (
+                                {presentHostiles.map((hn, idx) => (
                                   <button
-                                    key={hn.id}
+                                    key={hn.id ? `hn-${hn.id}-${idx}` : `hn-${idx}`}
                                     type="button"
                                     onClick={() => {
                                       const hMax = getNPCMaxHp(hn);
@@ -9309,14 +9452,14 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           <div className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest px-1 flex justify-between items-center">
                             <span>Anwesende Gegner ({opponents.length})</span>
                           </div>
-                          {opponents.map(opp => {
+                          {opponents.map((opp, idx) => {
                             const oppNpc = findNpcByIdOrName(opp.id, opp.name);
                             const isCurrentTarget = selectedEnemyIds.includes(opp.id) || selectedEnemyId === opp.id;
                             const oppFaction = oppNpc?.appearance?.faction?.trim();
 
                             return (
                               <div
-                                key={opp.id}
+                                key={opp.id ? `opp-${opp.id}-${idx}` : `opp-${idx}`}
                                 onClick={() => selectOpponentAsTarget(opp.id)}
                                 className={`border rounded-lg p-2 flex items-center gap-2 cursor-pointer transition-all ${
                                   isCurrentTarget
@@ -9631,9 +9774,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                 return (
                                   <div className="space-y-1 pt-1">
                                     <div className="text-[8px] font-bold text-slate-400 uppercase tracking-wider px-0.5">Aus Szene erfassen:</div>
-                                    {presentHostiles.map(hn => (
+                                    {presentHostiles.map((hn, idx) => (
                                       <button
-                                        key={hn.id}
+                                        key={hn.id ? `hn2-${hn.id}-${idx}` : `hn2-${idx}`}
                                         type="button"
                                         onClick={() => {
                                           const hMax = getNPCMaxHp(hn);
@@ -9666,14 +9809,14 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                               <div className="text-[8.5px] font-extrabold text-slate-500 uppercase tracking-widest px-0.5 flex justify-between items-center">
                                 <span>Anwesende Gegner ({opponents.length})</span>
                               </div>
-                              {opponents.map(opp => {
+                              {opponents.map((opp, idx) => {
                                 const oppNpc = findNpcByIdOrName(opp.id, opp.name);
                                 const isCurrentTarget = selectedEnemyIds.includes(opp.id) || selectedEnemyId === opp.id;
                                 const oppFaction = oppNpc?.appearance?.faction?.trim();
 
                                 return (
                                   <div
-                                    key={opp.id}
+                                    key={opp.id ? `opp2-${opp.id}-${idx}` : `opp2-${idx}`}
                                     onClick={() => selectOpponentAsTarget(opp.id)}
                                     className={`border rounded-lg p-1.5 flex items-center gap-1.5 cursor-pointer transition-all ${
                                       isCurrentTarget
@@ -10132,7 +10275,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                               const isActive = activeCombatPowerSourceIdx === psIdx;
                               return (
                                 <button
-                                  key={ps.id || psIdx}
+                                  key={ps.id ? `comb-ps-${ps.id}-${psIdx}` : `comb-ps-${psIdx}`}
                                   type="button"
                                   onClick={() => setActiveCombatPowerSourceIdx(psIdx)}
                                   className={`px-3 py-1.5 rounded-lg text-[10.5px] font-bold transition-all flex items-center gap-1.5 shrink-0 border cursor-pointer ${
@@ -10893,11 +11036,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   </div>
                   
                   <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                    {queuedCombatActions.map((act) => {
+                    {queuedCombatActions.map((act, actIdx) => {
                       const isHeal = act.isHeal || act.actionDetail.toLowerCase().includes('heil');
                       return (
                         <div 
-                          key={act.id} 
+                          key={act.id ? `act-${act.id}-${actIdx}` : `act-${actIdx}`} 
                           className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-[10px] text-slate-200"
                         >
                           <span className="text-xs">
@@ -11231,6 +11374,23 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           }}
           onSetInputText={(text: string) => {
             setInputText(text);
+          }}
+        />
+      )}
+
+      {showStoryInfoModal && (
+        <StoryInfoModal
+          isOpen={showStoryInfoModal}
+          onClose={() => setShowStoryInfoModal(false)}
+          adventure={adventure}
+          onPromoteEntityToCodex={handlePromoteEntityToCodex}
+          onPromoteMultipleToCodex={handlePromoteMultipleToCodex}
+          onDismissEntity={handleDismissEntity}
+          onUpdateNotes={(notes) => {
+            onUpdateAdventure({
+              ...adventure,
+              summaryLog: notes
+            });
           }}
         />
       )}

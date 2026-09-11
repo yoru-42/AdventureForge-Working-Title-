@@ -22,7 +22,7 @@ interface ProfessionLevelSelectProps {
 export const ProfessionLevelSelect: React.FC<ProfessionLevelSelectProps> = ({
   value = "",
   onChange,
-  placeholder = "Berufslevel / Ausbildungsgrad wählen...",
+  placeholder = "Berufsrang wählen...",
   selectClassName = "w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal",
   inputClassName = "w-full mt-2 bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-normal"
 }) => {
@@ -60,7 +60,7 @@ export const ProfessionLevelSelect: React.FC<ProfessionLevelSelectProps> = ({
             {lvl}
           </option>
         ))}
-        <option value="__custom__">Eigener Ausbildungsgrad / Freitext...</option>
+        <option value="__custom__">Eigener Berufsrang / Freitext...</option>
       </select>
 
       {isCustomMode && (
@@ -68,7 +68,7 @@ export const ProfessionLevelSelect: React.FC<ProfessionLevelSelectProps> = ({
           type="text"
           value={safeValue}
           onChange={e => onChange(e.target.value)}
-          placeholder="Eigener Ausbildungsgrad / Freitext..."
+          placeholder="Eigener Berufsrang / Freitext..."
           className={inputClassName}
         />
       )}

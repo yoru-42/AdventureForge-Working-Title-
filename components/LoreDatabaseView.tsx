@@ -1897,7 +1897,7 @@ const LoreDatabaseView: React.FC<Props> = ({
           techniques: data.details.techniques || '',
           techniqueList: (data.details.techniqueList && Array.isArray(data.details.techniqueList))
             ? data.details.techniqueList.filter((t: any) => t && t.name).map((t: any, index: number) => ({ 
-                id: `${Date.now()}-${index}`, 
+                id: `tech-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 9)}`, 
                 name: t.name.trim(), 
                 description: t.description ? t.description.trim() : '',
                 type: t.type || 'Angriff',
@@ -1909,7 +1909,7 @@ const LoreDatabaseView: React.FC<Props> = ({
               }))
             : (data.details.techniques 
                 ? data.details.techniques.split(/[,\n;]/).map((s: string) => s.trim()).filter(Boolean).map((name: string, index: number) => ({ 
-                    id: `${Date.now()}-${index}`, 
+                    id: `tech-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 9)}`, 
                     name, 
                     description: '',
                     type: 'Angriff',
@@ -3626,7 +3626,7 @@ const LoreDatabaseView: React.FC<Props> = ({
                 </div>
 
                 <div className="grid gap-4">
-                  {proposedEntries.map((entry) => {
+                  {proposedEntries.map((entry, pIndex) => {
                     const isSelected = selectedProposedIds.has(entry.tempId);
                     
                     const handleToggleSelect = () => {
@@ -3645,7 +3645,7 @@ const LoreDatabaseView: React.FC<Props> = ({
 
                     return (
                       <div 
-                        key={entry.tempId}
+                        key={`prop-entry-${entry.tempId || 'temp'}-${pIndex}`}
                         className={`bg-slate-900 border transition-all rounded-2xl overflow-hidden p-5 flex flex-col gap-4 relative ${
                           isSelected ? 'border-indigo-500/40 bg-slate-900/95 shadow-lg shadow-indigo-950/10' : 'border-slate-800/80 opacity-70'
                         }`}
@@ -3906,15 +3906,15 @@ const LoreDatabaseView: React.FC<Props> = ({
 
                       {isStamperDropdownOpen && (
                         <div className="absolute right-0 top-full mt-1.5 w-64 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden py-1 max-h-80 overflow-y-auto">
-                          {WORLD_MAP_CLASSES.map(cls => (
-                            <div key={cls.id} className="border-b border-slate-900 last:border-0">
+                          {WORLD_MAP_CLASSES.map((cls, clsIdx) => (
+                            <div key={`cls-${cls.id || 'cls'}-${clsIdx}`} className="border-b border-slate-900 last:border-0">
                               <div className="px-3 py-1.5 bg-slate-900/60 text-[10px] font-bold text-slate-400 flex items-center gap-2">
                                 <i className={cls.icon}></i>
                                 <span>{cls.label}</span>
                               </div>
-                              {cls.items.map(item => (
+                              {cls.items.map((item, itemIdx) => (
                                 <button
-                                  key={item.name}
+                                  key={`cls-item-${cls.id}-${item.name || itemIdx}-${itemIdx}`}
                                   onClick={() => {
                                     setActivePlacingClassAsset({ name: item.name, icon: item.icon, className: cls.id });
                                     setIsStamperDropdownOpen(false);
@@ -4354,8 +4354,8 @@ const LoreDatabaseView: React.FC<Props> = ({
                       className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500 max-w-[140px] truncate"
                     >
                       <option value="all">Alle</option>
-                      {parentOptions.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                      {parentOptions.map((p, pIdx) => (
+                        <option key={`p-opt-${p.id || 'p'}-${pIdx}`} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>
@@ -4491,8 +4491,8 @@ const LoreDatabaseView: React.FC<Props> = ({
                       className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-sky-500"
                     >
                       <option value="">Keines (Oberste Ebene)</option>
-                      {(world?.territories || []).filter((t: any) => t.id !== isEditingTerritory).map((t: any) => (
-                        <option key={t.id} value={t.id}>{t.name} ({t.type})</option>
+                      {(world?.territories || []).filter((t: any) => t.id !== isEditingTerritory).map((t: any, tIdx: number) => (
+                        <option key={`t-opt-${t.id || 't'}-${tIdx}`} value={t.id}>{t.name} ({t.type})</option>
                       ))}
                     </select>
                   </div>
@@ -4528,8 +4528,8 @@ const LoreDatabaseView: React.FC<Props> = ({
                             className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-sky-500 cursor-pointer"
                           >
                             <option value="">Keine Fraktion (Neutral)</option>
-                            {uniqueFactionTitles.map(fTitle => (
-                              <option key={fTitle} value={fTitle}>{fTitle}</option>
+                            {uniqueFactionTitles.map((fTitle, fIdx) => (
+                              <option key={`fTitle-${fTitle}-${fIdx}`} value={fTitle}>{fTitle}</option>
                             ))}
                             {territoryForm.faction && !uniqueFactionTitles.includes(territoryForm.faction) && !isCustomFactionInput && (
                               <option value={territoryForm.faction}>{territoryForm.faction}</option>
@@ -4635,13 +4635,13 @@ const LoreDatabaseView: React.FC<Props> = ({
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2.5">
-                    {filteredAndSortedTerritories.map((territory: any) => {
+                    {filteredAndSortedTerritories.map((territory: any, tIdx: number) => {
                       const isSelected = isEditingTerritory === territory.id;
                       const parentTerritory = (world?.territories || []).find((t: any) => t.id === territory.parentId);
 
                       return (
                         <div
-                          key={territory.id}
+                          key={`terr-${territory.id || 't'}-${tIdx}`}
                           onClick={() => {
                             setIsEditingTerritory(territory.id);
                             setTerritoryForm(territory);
@@ -4813,20 +4813,20 @@ const LoreDatabaseView: React.FC<Props> = ({
                   className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
                 >
                   <option value="__player_knowledge__">{playerName || 'Spieler'} (Wissen des Spielers)</option>
-                  {lore.filter(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.id !== '__player_knowledge__').map(c => (
-                    <option key={c.id} value={c.id}>{c.title} ({c.category})</option>
+                  {lore.filter(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.id !== '__player_knowledge__').map((c, cIdx) => (
+                    <option key={`actor-c-${c.id || 'c'}-${cIdx}`} value={c.id}>{c.title} ({c.category})</option>
                   ))}
                 </select>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                {lore.filter(l => l.id !== selectedActorId && (l.category === 'Charaktere' || l.category === 'Gegner' || l.category === 'Fraktionen')).map(targetItem => {
+                {lore.filter(l => l.id !== selectedActorId && (l.category === 'Charaktere' || l.category === 'Gegner' || l.category === 'Fraktionen')).map((targetItem, tIdx) => {
                   const currentActor = lore.find(l => l.id === selectedActorId) || { details: { knowledgeMap: {} } };
                   const knowledgeMap = currentActor.details?.knowledgeMap || {};
                   const currentKnowledge = knowledgeMap[targetItem.title] || '';
 
                   return (
-                    <div key={targetItem.id} className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col gap-2">
+                    <div key={`target-${targetItem.id || 'target'}-${tIdx}`} className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col gap-2">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-200">{targetItem.title}</span>
                         <span className="text-[10px] text-slate-500 uppercase">{targetItem.category}</span>
@@ -4888,16 +4888,16 @@ const LoreDatabaseView: React.FC<Props> = ({
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
-                  {groupedLore.map(([factionName, items]) => (
-                    <div key={factionName} className="flex flex-col gap-2">
+                  {groupedLore.map(([factionName, items], gIdx) => (
+                    <div key={`char-faction-${factionName}-${gIdx}`} className="flex flex-col gap-2">
                       <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
                         <span>{factionName}</span>
                         <span className="text-slate-500 text-[10px]">({items.length})</span>
                       </div>
                       <div className="flex flex-col gap-2">
-                        {items.map(item => (
+                        {items.map((item, itemIdx) => (
                           <div
-                            key={item.id}
+                            key={`char-item-${item.id || 'item'}-${itemIdx}`}
                             onClick={() => handleEdit(item)}
                             className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
                               isEditing === item.id 
@@ -4973,16 +4973,16 @@ const LoreDatabaseView: React.FC<Props> = ({
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
-                  {groupedLore.map(([groupName, items]) => (
-                    <div key={groupName} className="flex flex-col gap-2">
+                  {groupedLore.map(([groupName, items], gIdx) => (
+                    <div key={`gegner-group-${groupName}-${gIdx}`} className="flex flex-col gap-2">
                       <div className="text-[11px] font-bold text-rose-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
                         <span>{groupName}</span>
                         <span className="text-slate-500 text-[10px]">({items.length})</span>
                       </div>
                       <div className="flex flex-col gap-2">
-                        {items.map(item => (
+                        {items.map((item, itemIdx) => (
                           <div
-                            key={item.id}
+                            key={`gegner-item-${item.id || 'item'}-${itemIdx}`}
                             onClick={() => handleEdit(item)}
                             className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
                               isEditing === item.id 
@@ -5057,16 +5057,16 @@ const LoreDatabaseView: React.FC<Props> = ({
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
-                  {groupedLore.map(([groupName, items]) => (
-                    <div key={groupName} className="flex flex-col gap-2">
+                  {groupedLore.map(([groupName, items], gIdx) => (
+                    <div key={`rassen-group-${groupName}-${gIdx}`} className="flex flex-col gap-2">
                       <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
                         <span>{groupName}</span>
                         <span className="text-slate-500 text-[10px]">({items.length})</span>
                       </div>
                       <div className="flex flex-col gap-2">
-                        {items.map(item => (
+                        {items.map((item, itemIdx) => (
                           <div
-                            key={item.id}
+                            key={`rassen-item-${item.id || 'item'}-${itemIdx}`}
                             onClick={() => handleEdit(item)}
                             className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
                               isEditing === item.id 
@@ -5682,7 +5682,7 @@ const LoreDatabaseView: React.FC<Props> = ({
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {factionHoldings.map((holding: any, idx: number) => {
                           return (
-                            <div key={holding.id || idx} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
+                            <div key={`f-holding-${holding.id || 'h'}-${idx}`} className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
                               <div className="flex items-center justify-between">
                                 <span className="text-xs font-bold text-slate-200">{holding.name}</span>
                                 <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-mono">
@@ -5733,7 +5733,7 @@ const LoreDatabaseView: React.FC<Props> = ({
                     ) : (
                       <div className="flex flex-col gap-3">
                         {effectiveMembers.map((member, index) => (
-                          <div key={member.id || index} className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3.5 flex flex-col gap-3 shadow-sm">
+                          <div key={`eff-member-${member.id || 'm'}-${index}`} className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3.5 flex flex-col gap-3 shadow-sm">
                             <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
                               
                               {/* Name & Codex Link */}
@@ -5777,10 +5777,10 @@ const LoreDatabaseView: React.FC<Props> = ({
                                     <option value="__player__">
                                       {effectivePlayerName} {effectivePlayerRole ? `(${effectivePlayerRole})` : '(Nutzer)'}
                                     </option>
-                                    {lore.filter(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.id !== '__player_knowledge__').map(c => {
+                                    {lore.filter(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.id !== '__player_knowledge__').map((c, cIdx) => {
                                       const r = c.details?.role || c.details?.appearance?.role || c.details?.job;
                                       return (
-                                        <option key={c.id} value={c.id}>
+                                        <option key={`char-member-opt-${c.id || 'c'}-${cIdx}`} value={c.id}>
                                           {c.title} {r ? `(${r})` : ''}
                                         </option>
                                       );
@@ -6014,7 +6014,7 @@ const LoreDatabaseView: React.FC<Props> = ({
                     <span className="text-xs font-bold text-slate-300">Ablauf der Kampagne ({(editForm.details?.eventSteps || []).length} Stationen):</span>
                     {(editForm.details?.eventSteps || []).map((step: any, idx: number) => (
                       <div
-                        key={step.id}
+                        key={`event-step-${step.id || 'step'}-${idx}`}
                         className={`bg-slate-950 border p-3 rounded-xl flex items-center justify-between gap-3 ${
                           step.status === 'happened' ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'
                         }`}
@@ -6171,16 +6171,16 @@ const LoreDatabaseView: React.FC<Props> = ({
                 </div>
               ) : (activeCategory === 'Charaktere' || activeCategory === 'Gegner') ? (
                 <div className="flex flex-col gap-4">
-                  {groupedLore.map(([factionName, items]) => (
-                    <div key={factionName} className="flex flex-col gap-2">
+                  {groupedLore.map(([factionName, items], gIdx) => (
+                    <div key={`generic-grp-${factionName}-${gIdx}`} className="flex flex-col gap-2">
                       <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
                         <span>{factionName}</span>
                         <span className="text-slate-500 text-[10px]">({items.length})</span>
                       </div>
                       <div className="flex flex-col gap-2">
-                        {items.map(item => (
+                        {items.map((item, iIdx) => (
                           <div
-                            key={item.id}
+                            key={`generic-grp-item-${item.id || 'item'}-${iIdx}`}
                             onClick={() => handleEdit(item)}
                             className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
                               isEditing === item.id 
@@ -6212,9 +6212,9 @@ const LoreDatabaseView: React.FC<Props> = ({
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {filteredLore.map(item => (
+                  {filteredLore.map((item, itemIdx) => (
                     <div
-                      key={item.id}
+                      key={`generic-lore-${item.id || 'item'}-${itemIdx}`}
                       onClick={() => handleEdit(item)}
                       className={`bg-slate-900 border px-4 py-3 rounded-xl flex items-center justify-between gap-3 transition-all cursor-pointer ${
                         isEditing === item.id 

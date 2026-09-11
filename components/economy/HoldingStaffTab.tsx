@@ -250,8 +250,8 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
         <datalist id={`holding-members-${holding.id}`}>
           {loreDatabase
             .filter(l => l.category === 'Charaktere' || l.category === 'Gegner' || l.category === 'Fraktionen')
-            .map(l => (
-              <option key={l.id} value={l.title} />
+            .map((l, lIdx) => (
+              <option key={`dl-opt-${l.id || 'l'}-${lIdx}`} value={l.title} />
             ))}
         </datalist>
 
@@ -399,7 +399,7 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {staffGroups.map((group, idx) => (
-              <div key={group.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3 relative">
+              <div key={`staff-group-${group.id || 'grp'}-${idx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3 relative">
                 <div className="flex justify-between items-center border-b border-slate-900 pb-2">
                   <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
                     Personalgruppe #{idx + 1}

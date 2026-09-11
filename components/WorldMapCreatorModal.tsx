@@ -926,11 +926,11 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {ARCHETYPES.map((arch) => {
+                {ARCHETYPES.map((arch, archIdx) => {
                   const isSelected = selectedArchetype === arch.id;
                   return (
                     <div
-                      key={arch.id}
+                      key={`arch-${arch.id}-${archIdx}`}
                       onClick={() => handleSelectArchetype(arch.id)}
                       className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative flex flex-col justify-between gap-2 ${
                         isSelected 
@@ -1026,9 +1026,9 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
                       { id: 'medium', label: '22 Inseln' },
                       { id: 'dense', label: '38 Inseln' },
                       { id: 'epic', label: '65 Inseln' },
-                    ].map((d) => (
+                    ].map((d, dIdx) => (
                       <button
-                        key={d.id}
+                        key={`island-density-${d.id}-${dIdx}`}
                         type="button"
                         onClick={() => setIslandDensity(d.id as any)}
                         className={`py-1.5 text-[9px] font-bold rounded-lg border transition-all ${
@@ -1054,9 +1054,9 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
                       { id: 'clusters', label: 'Cluster' },
                       { id: 'ring', label: 'Ring / Atoll' },
                       { id: 'scattered', label: 'Gestreut' },
-                    ].map((p) => (
+                    ].map((p, pIdx) => (
                       <button
-                        key={p.id}
+                        key={`island-pattern-${p.id}-${pIdx}`}
                         type="button"
                         onClick={() => setIslandLayoutPattern(p.id as any)}
                         className={`py-1.5 text-[9px] font-bold rounded-lg border transition-all ${
@@ -1173,9 +1173,9 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
                     className="w-full h-full object-contain"
                   >
                     {/* Oceans / Seas Backgrounds */}
-                    {previewTerritories.filter(t => t.type === 'meer').map(sea => (
+                    {previewTerritories.filter(t => t.type === 'meer').map((sea, seaIdx) => (
                       <rect
-                        key={sea.id}
+                        key={`sea-${sea.id || 'sea'}-${seaIdx}`}
                         x={sea.x - (sea.width || 400) / 2}
                         y={sea.y - (sea.height || 400) / 2}
                         width={sea.width || 400}
@@ -1190,14 +1190,14 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
                     ))}
 
                     {/* Continents */}
-                    {previewTerritories.filter(t => t.type === 'kontinent').map(cont => {
+                    {previewTerritories.filter(t => t.type === 'kontinent').map((cont, contIdx) => {
                       if (cont.shapeType === 'polygon' && cont.points && cont.points.length > 0) {
                         const scaleX = (cont.width || 300) / 2;
                         const scaleY = (cont.height || 300) / 2;
                         const pathData = cont.points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${cont.x + p.x * scaleX} ${cont.y + p.y * scaleY}`).join(' ') + ' Z';
                         return (
                           <path
-                            key={cont.id}
+                            key={`cont-${cont.id || 'cont'}-${contIdx}`}
                             d={pathData}
                             fill={cont.color || '#22c55e'}
                             fillOpacity={0.8}
@@ -1208,7 +1208,7 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
                       } else {
                         return (
                           <rect
-                            key={cont.id}
+                            key={`cont-${cont.id || 'cont'}-${contIdx}`}
                             x={cont.x - (cont.width || 300) / 2}
                             y={cont.y - (cont.height || 300) / 2}
                             width={cont.width || 300}
@@ -1224,12 +1224,12 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
                     })}
 
                     {/* Islands & Cities & POIs */}
-                    {previewTerritories.filter(t => t.type !== 'welt' && t.type !== 'meer' && t.type !== 'kontinent').map(node => {
+                    {previewTerritories.filter(t => t.type !== 'welt' && t.type !== 'meer' && t.type !== 'kontinent').map((node, nodeIdx) => {
                       const rad = node.radius || 20;
                       if (node.shapeType === 'polygon' && node.points && node.points.length > 0) {
                         const pathData = node.points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${node.x + p.x * rad} ${node.y + p.y * rad}`).join(' ') + ' Z';
                         return (
-                          <g key={node.id}>
+                          <g key={`preview-node-${node.id || 'node'}-${nodeIdx}`}>
                             <path
                               d={pathData}
                               fill={node.color || '#84cc16'}
@@ -1252,7 +1252,7 @@ export const WorldMapCreatorModal: React.FC<WorldMapCreatorModalProps> = ({
                         );
                       } else {
                         return (
-                          <g key={node.id}>
+                          <g key={`preview-node-${node.id || 'node'}-${nodeIdx}`}>
                             <circle
                               cx={node.x}
                               cy={node.y}

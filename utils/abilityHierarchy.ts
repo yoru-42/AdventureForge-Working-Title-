@@ -187,6 +187,8 @@ export function normalizeAbilityHierarchy(char: any): {
       const ps = powerSources.find(p => p.id === psId) || powerSources[0];
 
       // Ermittle oder leite Grundfähigkeit ab
+      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Talente'].includes(ability.category);
+      
       let baseAbilityId = ability.id || `ba_${aIdx + 1}`;
       let element = ability.element || 'Neutral';
       let abilityType: AbilityType = normalizeAbilityTypeId(ability.abilityType);
@@ -207,7 +209,8 @@ export function normalizeAbilityHierarchy(char: any): {
         }
       }
 
-      if (!baseAbilitiesMap.has(baseAbilityId)) {
+      // Nur als Grundfähigkeit registrieren, wenn es keine reine Unterkategorie (Passiv/Talent/Transformation) ist
+      if (!isOtherCategory && !baseAbilitiesMap.has(baseAbilityId)) {
         baseAbilitiesMap.set(baseAbilityId, {
           id: baseAbilityId,
           powerSourceId: psId,
@@ -219,6 +222,31 @@ export function normalizeAbilityHierarchy(char: any): {
           description: ability.description || '',
           techniqueIds: []
         });
+      }
+
+      // Wenn es ein Eintrag einer spezifischen Kategorie wie 'Passive Fähigkeiten', 'Transformationen', 'Talente' ist:
+      if (isOtherCategory) {
+        const existingTech = techniquesList.find(t => t.id === ability.id);
+        if (!existingTech) {
+          techniquesList.push({
+            id: ability.id || `tech_cat_${aIdx + 1}`,
+            name: ability.name || 'Unbenannte Fähigkeit',
+            description: ability.description || '',
+            category: ability.category,
+            type: ability.category === 'Transformationen' ? 'Transformation' : (ability.category === 'Passive Fähigkeiten' ? 'Support' : 'Spezial'),
+            mode: ability.mode || 'Normal',
+            tier: ability.category === 'Ultimative Techniken' ? 'Tier 4' : 'Tier 1',
+            baseAbilityIds: ability.baseAbilityIds && ability.baseAbilityIds.length > 0 ? ability.baseAbilityIds : [],
+            powerSourceId: psId,
+            powerSourceName: ps?.powerName || ps?.source,
+            element,
+            cost: ability.cost || (ability.category === 'Passive Fähigkeiten' ? 'Passiv' : '0 Mana'),
+            costResourceName: ps?.cost || 'Mana',
+            costValue: ability.costValue || 0,
+            transformName: ability.transformName,
+            activationCondition: ability.activationCondition
+          });
+        }
       }
 
       // Techniken aus dieser Ability
@@ -356,6 +384,28 @@ export function syncCharacterAbilityTree(
     };
   });
 
+  // Ergänze Einträge aus anderen Kategorien (Passive Fähigkeiten, Ultimative Techniken, Transformationen, Talente)
+  const additionalLegacyAbilities: PowerAbility[] = techniques
+    .filter(t => t.category && t.category !== 'Techniken')
+    .map(t => {
+      const ps = powerSources.find(p => p.id === t.powerSourceId) || powerSources[0];
+      return {
+        id: t.id,
+        name: t.name,
+        displayName: t.name,
+        category: t.category,
+        source: t.powerSourceName || ps?.powerName || ps?.source || 'Kraftquelle',
+        cost: t.cost || (t.category === 'Passive Fähigkeiten' ? 'Passiv' : '0 Mana'),
+        description: t.description || '',
+        techniques: t.name,
+        powerSourceId: t.powerSourceId || ps?.id,
+        element: t.element,
+        abilityType: t.abilityType as any,
+        baseAbilityIds: t.baseAbilityIds || [],
+        techniqueList: [t]
+      };
+    });
+
   const allTechNames = techniques.map(t => t.name).filter(Boolean).join(', ');
 
   return {
@@ -363,7 +413,7 @@ export function syncCharacterAbilityTree(
     powerSources,
     baseAbilities,
     techniqueList: techniques,
-    abilities: legacyAbilities,
+    abilities: [...legacyAbilities, ...additionalLegacyAbilities],
     techniques: allTechNames
   };
 }

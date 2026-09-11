@@ -3043,8 +3043,8 @@ export const WorldMapEditor: React.FC<WorldMapEditorProps> = ({
                       <option value="">(Keines - Welt-Ebene)</option>
                       {territories
                         .filter(t => t.id !== selectedId && !['ort', 'stadt', 'dorf', 'hafen', 'festung', 'gebäude'].includes(t.type))
-                        .map(t => (
-                          <option key={t.id} value={t.id}>{t.name} ({TYPE_LABELS[t.type] || t.type})</option>
+                        .map((t, tIdx) => (
+                          <option key={`terr-opt-${t.id || 't'}-${tIdx}`} value={t.id}>{t.name} ({TYPE_LABELS[t.type] || t.type})</option>
                         ))
                       }
                     </select>
@@ -3072,8 +3072,8 @@ export const WorldMapEditor: React.FC<WorldMapEditorProps> = ({
                         <option value="">(Fraktion wählen...)</option>
                         {(loreDatabase || [])
                           .filter(l => l.category === 'Fraktionen')
-                          .map(f => (
-                            <option key={f.id} value={f.id}>{f.title}</option>
+                          .map((f, fIdx) => (
+                            <option key={`fac-opt-${f.id || 'f'}-${fIdx}`} value={f.id}>{f.title}</option>
                           ))
                         }
                       </select>
@@ -3427,8 +3427,8 @@ export const WorldMapEditor: React.FC<WorldMapEditorProps> = ({
                           </label>
                         </div>
                         <div className="space-y-1">
-                          {holdings.map(h => (
-                            <div key={h.id} className="p-2 bg-slate-900/90 border border-slate-800 rounded-lg flex items-center justify-between text-xs">
+                          {holdings.map((h, hIdx) => (
+                            <div key={`h-entry-${h.id || 'h'}-${hIdx}`} className="p-2 bg-slate-900/90 border border-slate-800 rounded-lg flex items-center justify-between text-xs">
                               <div>
                                 <div className="font-bold text-slate-200">{h.name}</div>
                                 <div className="text-[9.5px] text-slate-400">
@@ -3459,8 +3459,8 @@ export const WorldMapEditor: React.FC<WorldMapEditorProps> = ({
                           </label>
                         </div>
                         <div className="space-y-1">
-                          {relatedLore.map(l => (
-                            <div key={l.id} className="p-1.5 bg-slate-900/90 border border-slate-800 rounded-lg flex items-center justify-between text-xs">
+                          {relatedLore.map((l, lIdx) => (
+                            <div key={`rel-lore-${l.id || 'l'}-${lIdx}`} className="p-1.5 bg-slate-900/90 border border-slate-800 rounded-lg flex items-center justify-between text-xs">
                               <span className="font-medium text-slate-300 truncate">{l.title}</span>
                               <span className="text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-400 rounded uppercase font-bold">{l.category}</span>
                             </div>
@@ -3689,8 +3689,8 @@ export const WorldMapEditor: React.FC<WorldMapEditorProps> = ({
                 onChange={(e) => setSmartFillTargetId(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-amber-400 outline-none focus:border-amber-500"
               >
-                {territories.map(t => (
-                  <option key={t.id} value={t.id}>
+                {territories.map((t, tIdx) => (
+                  <option key={`smart-target-${t.id || 't'}-${tIdx}`} value={t.id}>
                     {t.name} ({TYPE_LABELS[t.type] || t.type})
                   </option>
                 ))}

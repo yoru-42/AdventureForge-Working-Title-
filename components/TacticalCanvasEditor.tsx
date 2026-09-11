@@ -4815,11 +4815,11 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                 <div className="space-y-2">
                   <div className="text-[10px] font-extrabold uppercase tracking-wider text-red-400">Einträge aus deinem Kodex</div>
                   <div className="max-h-60 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    {enemyEntries.map((enemy: any) => {
+                    {enemyEntries.map((enemy: any, eIdx: number) => {
                       const isSelected = activeToken.name === enemy.title && activeToken.loreEntryId === enemy.id;
                       return (
                         <button
-                          key={`enemy-entry-${enemy.id}`}
+                          key={`enemy-entry-${enemy.id || 'e'}-${eIdx}`}
                           onClick={() => {
                             setActiveToken({
                               name: enemy.title,
@@ -4850,11 +4850,11 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
               <div className="space-y-2">
                 <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Standard-Gegner</div>
                 <div className="max-h-60 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {DEFAULT_ENEMIES.map((enemy) => {
+                  {DEFAULT_ENEMIES.map((enemy, defIdx) => {
                     const isSelected = activeToken.name === enemy.title && !activeToken.loreEntryId;
                     return (
                       <button
-                        key={enemy.id}
+                        key={`def-enemy-${enemy.id}-${defIdx}`}
                         onClick={() => {
                           setActiveToken({
                             name: enemy.title,
@@ -5947,14 +5947,14 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {displayObjects.map((obj: any) => {
+                  {displayObjects.map((obj: any, objIdx: number) => {
                     const isEditing = editingTokenId === obj.id;
                     const linkedEntry = obj.loreEntryId ? (allLocationEntries.find(l => l.id === obj.loreEntryId) || loreDatabase.find(l => l.id === obj.loreEntryId)) : undefined;
 
                     if (obj.isGroup) {
                       return (
                         <div
-                          key={obj.id}
+                          key={`placed-grp-${obj.id || 'g'}-${objIdx}`}
                           className="bg-emerald-950/20 border border-emerald-500/20 hover:border-emerald-500/40 p-3.5 rounded-xl flex flex-col justify-between gap-3 shadow-md transition-all overflow-hidden w-full min-w-0 relative group/zone"
                         >
                           {/* Decorative badge */}
@@ -6023,7 +6023,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
 
                     return (
                     <div
-                      key={obj.id}
+                      key={`placed-single-${obj.id || 'obj'}-${objIdx}`}
                       className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3.5 rounded-xl flex flex-col justify-between gap-3 shadow-md transition-all overflow-hidden w-full min-w-0"
                     >
                       {/* Name, Category, Icon & Position */}

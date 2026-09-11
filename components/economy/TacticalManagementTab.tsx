@@ -198,14 +198,14 @@ export const TacticalManagementTab: React.FC<TacticalManagementTabProps> = ({
                   Keine taktischen Verbände vorhanden. Erstelle einen Verband oder starte einen Kampf mit Gruppenstärke.
                 </div>
               ) : (
-                factionGroups.map(g => {
+                factionGroups.map((g, gIdx) => {
                   const isSelected = activeGroup?.id === g.id;
                   const formationLabel = FORMATIONS.find(f => f.id === g.formation)?.label || g.formation || 'Locker';
                   const dirLabel = DIRECTIONS.find(d => d.id === g.direction)?.label || g.direction || 'Süden';
 
                   return (
                     <div
-                      key={g.id}
+                      key={`fac-grp-${g.id || 'g'}-${gIdx}`}
                       onClick={() => setSelectedGroupId(g.id)}
                       className={`p-3 rounded-xl border transition-all cursor-pointer select-none ${
                         isSelected
@@ -283,8 +283,8 @@ export const TacticalManagementTab: React.FC<TacticalManagementTabProps> = ({
                     onChange={e => handleDirectionChange(activeGroup.id, e.target.value as TacticalDirection)}
                     className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-amber-300 font-bold outline-none focus:border-amber-500 cursor-pointer"
                   >
-                    {DIRECTIONS.map(d => (
-                      <option key={d.id} value={d.id}>{d.label}</option>
+                    {DIRECTIONS.map((d, dIdx) => (
+                      <option key={`act-dir-opt-${d.id}-${dIdx}`} value={d.id}>{d.label}</option>
                     ))}
                   </select>
                 </div>
@@ -296,11 +296,11 @@ export const TacticalManagementTab: React.FC<TacticalManagementTabProps> = ({
                   Formation wählen (12 taktische Anordnungen)
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {FORMATIONS.map(f => {
+                  {FORMATIONS.map((f, fIdx) => {
                     const isActive = activeGroup.formation === f.id;
                     return (
                       <button
-                        key={f.id}
+                        key={`form-btn-${f.id}-${fIdx}`}
                         type="button"
                         onClick={() => handleFormationChange(activeGroup.id, f.id)}
                         className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
@@ -361,13 +361,13 @@ export const TacticalManagementTab: React.FC<TacticalManagementTabProps> = ({
                   className="w-full h-44 bg-slate-950 border border-slate-800 rounded-xl p-1 gap-[1px] relative overflow-hidden"
                 >
                   {/* Visual dots for tactical entities */}
-                  {Object.values(entities).map(e => {
+                  {Object.values(entities).map((e, eIdx) => {
                     const isPartOfActive = e.groupId === activeGroup.id;
                     const left = `${(e.position.x / gridWidth) * 100}%`;
                     const top = `${(e.position.y / gridHeight) * 100}%`;
                     return (
                       <div
-                        key={e.id}
+                        key={`tac-entity-${e.id || 'e'}-${eIdx}`}
                         style={{
                           position: 'absolute',
                           left,
@@ -447,8 +447,8 @@ export const TacticalManagementTab: React.FC<TacticalManagementTabProps> = ({
                     onChange={e => setNewGroupDirection(e.target.value as TacticalDirection)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-xs text-slate-100 outline-none focus:border-amber-500"
                   >
-                    {DIRECTIONS.map(d => (
-                      <option key={d.id} value={d.id}>{d.label}</option>
+                    {DIRECTIONS.map((d, dIdx) => (
+                      <option key={`new-dir-opt-${d.id}-${dIdx}`} value={d.id}>{d.label}</option>
                     ))}
                   </select>
                 </div>
@@ -461,8 +461,8 @@ export const TacticalManagementTab: React.FC<TacticalManagementTabProps> = ({
                   onChange={e => setNewGroupFormation(e.target.value as TacticalFormation)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-100 outline-none focus:border-amber-500"
                 >
-                  {FORMATIONS.map(f => (
-                    <option key={f.id} value={f.id}>{f.label} - {f.description}</option>
+                  {FORMATIONS.map((f, fIdx) => (
+                    <option key={`new-form-opt-${f.id}-${fIdx}`} value={f.id}>{f.label} - {f.description}</option>
                   ))}
                 </select>
               </div>

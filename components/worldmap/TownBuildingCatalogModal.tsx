@@ -132,14 +132,14 @@ export const TownBuildingCatalogModal: React.FC<TownBuildingCatalogModalProps> =
 
         {/* BUILDING CARDS GRID */}
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filteredBuildings.map(bld => {
+          {filteredBuildings.map((bld, bIdx) => {
             const isCurrentlySelected = selectedCategory === bld.category;
             const lvl1 = bld.levels[0];
             const maxLvl = bld.levels[4];
 
             return (
               <div
-                key={bld.category}
+                key={`cat-bld-${bld.category}-${bIdx}`}
                 onClick={() => {
                   onSelectBuildingType(bld.category);
                   onClose();

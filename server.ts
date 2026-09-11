@@ -86,23 +86,27 @@ function sanitizeContents(contents: any): any {
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
     'gemini-2.5-pro',
-    'gemini-1.5-flash'
+    'gemini-3.1-pro-preview',
+    'gemini-2.5-flash',
+    'gemini-flash-latest'
   ];
   
   // Map legacy, non-existent, or alias model requests to verified stable models
-  let targetModel = 'gemini-2.5-flash';
+  let targetModel = 'gemini-2.5-pro';
   if (requestedModel) {
-    if (requestedModel === 'gemini-2.5-pro' || requestedModel.includes('pro')) {
+    if (requestedModel.includes('2.5-pro')) {
       targetModel = 'gemini-2.5-pro';
-    } else if (requestedModel.includes('2.0')) {
-      targetModel = 'gemini-2.0-flash';
-    } else if (requestedModel.includes('1.5')) {
-      targetModel = 'gemini-1.5-flash';
-    } else {
+    } else if (requestedModel.includes('3.1-pro') || requestedModel.includes('gemini-3.1-pro-preview')) {
+      targetModel = 'gemini-3.1-pro-preview';
+    } else if (requestedModel.includes('pro')) {
+      targetModel = 'gemini-2.5-pro';
+    } else if (requestedModel.includes('image')) {
+      targetModel = 'gemini-3.1-flash-lite-image';
+    } else if (requestedModel.includes('flash')) {
       targetModel = 'gemini-2.5-flash';
+    } else {
+      targetModel = requestedModel;
     }
   }
   
@@ -113,8 +117,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
 
   let lastError: any = null;
   
-  // Phase 1: Try candidate models in order. If a model encounters high demand (503) or rate limit (429),
-  // immediately switch to the next candidate model for instant recovery.
+  // Phase 1: Try candidate models in order.
   for (const currentModel of modelsToTry) {
     try {
       console.log(`[Gemini Server] Generating content with model: ${currentModel}`);
@@ -131,7 +134,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
     } catch (e: any) {
       lastError = e;
       const rawMsg = e?.message || (e ? String(e) : '');
-      const isSchemaError = !!config?.responseSchema && (
+      const isSchemaError = (
         rawMsg.toLowerCase().includes('schema') ||
         rawMsg.toLowerCase().includes('too many states') ||
         rawMsg.toLowerCase().includes('invalid_argument') ||
@@ -141,7 +144,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
 
       // Instant recovery for schema DFA state constraint limits
       if (isSchemaError) {
-        console.log(`[Gemini Server] Schema constraint limit encountered on ${currentModel}. Retrying without strict responseSchema...`);
+        console.log(`[Gemini Server] Schema constraint limit encountered on ${currentModel}. Retrying with responseMimeType: application/json without strict responseSchema...`);
         try {
           const simplifiedConfig = {
             ...config,
@@ -190,15 +193,15 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   }
 
   // Phase 2: If all candidates failed on Phase 1, wait cooldown window and auto-retry across candidates
-  for (let cooldownAttempt = 1; cooldownAttempt <= 3; cooldownAttempt++) {
+  for (let cooldownAttempt = 1; cooldownAttempt <= 5; cooldownAttempt++) {
     const errStr = lastError?.message || String(lastError || '');
     const isRateLimit = errStr.includes('429') || errStr.toLowerCase().includes('quota') || errStr.toLowerCase().includes('rate limit') || errStr.includes('RESOURCE_EXHAUSTED');
-    const retryMatch = errStr.match(/retry in ([\d\.]+)s/i);
+    const retryMatch = errStr.match(/retry in ([\d\.]+)s/i) || errStr.match(/warte ca\.\s*([\d\.]+)\s*Sekunden/i);
     const waitSeconds = isRateLimit
-      ? (retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 4) : (cooldownAttempt * 1.5))
-      : (cooldownAttempt * 1.5);
+      ? (retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 25) : (cooldownAttempt * 3))
+      : (cooldownAttempt * 2);
 
-    console.log(`[Gemini Server] Phase 2 recovery attempt ${cooldownAttempt}/3 (waiting ${waitSeconds}s)...`);
+    console.log(`[Gemini Server] Phase 2 recovery attempt ${cooldownAttempt}/5 (waiting ${waitSeconds}s)...`);
     await delay(waitSeconds * 1000);
     
     for (const retryModel of modelsToTry) {
