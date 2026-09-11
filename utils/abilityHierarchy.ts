@@ -116,7 +116,7 @@ export function normalizeAbilityTypeId(type?: string): AbilityType {
 
 /**
  * Extrahiert und normalisiert die 3-Ebenen-Hierarchie (Kraftquelle -> Grundfähigkeit -> Technik)
- * aus einem Charakterobjekt, wobei vollständige Rückwärtskompatibilität zu älteren Daten garantiert wird.
+ * aus einem Charakterobjekt, wobei strikte Deduplizierung und vollständige Rückwärtskompatibilität garantiert wird.
  */
 export function normalizeAbilityHierarchy(char: any): {
   powerSources: CharacterPowerSource[];
@@ -126,220 +126,264 @@ export function normalizeAbilityHierarchy(char: any): {
   if (!char) {
     return { powerSources: [], baseAbilities: [], techniques: [] };
   }
-  // 1. Kraftquellen extrahieren
-  let powerSources: CharacterPowerSource[] = [];
-  if (char.powerSources && Array.isArray(char.powerSources) && char.powerSources.length > 0) {
-    powerSources = char.powerSources.map((ps, idx) => ({
-      id: ps.id || `ps_${idx + 1}`,
-      source: ps.source || ps.powerName || 'Standard-Kraftquelle',
-      cost: ps.cost || 'Mana',
-      powerName: ps.powerName || ps.source || 'Standard-Kraftquelle',
-      powerDescription: ps.powerDescription || ''
-    }));
-  } else if (char.powerSource || char.powerName) {
-    powerSources = [{
-      id: 'ps_default',
-      source: char.powerSource || char.powerName || 'Standard-Kraftquelle',
-      cost: char.powerCost || 'Mana',
-      powerName: char.powerName || char.powerSource || 'Standard-Kraftquelle',
-      powerDescription: char.powerDescription || ''
-    }];
-  } else {
-    powerSources = [{
+
+  // 1. Kraftquellen extrahieren & deduplizieren
+  const powerSourcesMap = new Map<string, CharacterPowerSource>();
+  const rawSources: any[] = Array.isArray(char.powerSources) && char.powerSources.length > 0
+    ? char.powerSources
+    : (char.powerSource || char.powerName ? [{
+        id: 'ps_default',
+        source: char.powerSource || char.powerName,
+        powerName: char.powerName || char.powerSource,
+        cost: char.powerCost || 'Mana',
+        powerDescription: char.powerDescription || ''
+      }] : [{
+        id: 'ps_default',
+        source: 'Standard-Kraftquelle',
+        powerName: 'Standard-Kraftquelle',
+        cost: 'Mana',
+        powerDescription: ''
+      }]);
+
+  rawSources.forEach((ps, idx) => {
+    if (!ps) return;
+    const pName = (ps.powerName || ps.source || 'Standard-Kraftquelle').trim();
+    const id = ps.id || `ps_${idx + 1}`;
+    const existing = Array.from(powerSourcesMap.values()).find(
+      p => p.id === id || p.powerName.toLowerCase() === pName.toLowerCase()
+    );
+    if (!existing) {
+      powerSourcesMap.set(id, {
+        id,
+        source: ps.source || pName,
+        powerName: pName,
+        cost: ps.cost || 'Mana',
+        powerDescription: ps.powerDescription || ''
+      });
+    }
+  });
+
+  if (powerSourcesMap.size === 0) {
+    powerSourcesMap.set('ps_default', {
       id: 'ps_default',
       source: 'Standard-Kraftquelle',
-      cost: 'Mana',
       powerName: 'Standard-Kraftquelle',
+      cost: 'Mana',
       powerDescription: ''
-    }];
-  }
-
-  const defaultPowerSourceId = powerSources[0]?.id || 'ps_default';
-
-  // 2. Grundfähigkeiten & Techniken sammeln
-  const baseAbilitiesMap = new Map<string, BaseAbility>();
-  const techniquesList: TechniqueItem[] = [];
-
-  // 2a. Falls explizite baseAbilities auf dem Charakter existieren
-  if (char.baseAbilities && Array.isArray(char.baseAbilities)) {
-    char.baseAbilities.forEach(ba => {
-      if (ba && ba.id) {
-        const displayName = ba.displayName || ba.name || resolveKinesisName(ba.element, ba.abilityType);
-        baseAbilitiesMap.set(ba.id, {
-          id: ba.id,
-          powerSourceId: ba.powerSourceId || defaultPowerSourceId,
-          powerSourceName: ba.powerSourceName || powerSources.find(p => p.id === ba.powerSourceId)?.powerName,
-          name: ba.name || displayName,
-          displayName,
-          element: ba.element || 'Neutral',
-          abilityType: normalizeAbilityTypeId(ba.abilityType),
-          description: ba.description || '',
-          techniqueIds: ba.techniqueIds || []
-        });
-      }
     });
   }
 
-  // 2b. Aus char.abilities (PowerAbility[]) extrahieren
-  if (char.abilities && Array.isArray(char.abilities)) {
-    char.abilities.forEach((ability, aIdx) => {
-      const psId = ability.powerSourceId || defaultPowerSourceId;
-      const ps = powerSources.find(p => p.id === psId) || powerSources[0];
+  const powerSources = Array.from(powerSourcesMap.values());
+  const defaultPsId = powerSources[0].id;
 
-      // Ermittle oder leite Grundfähigkeit ab
-      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Talente'].includes(ability.category);
-      
-      let baseAbilityId = ability.id || `ba_${aIdx + 1}`;
-      let element = ability.element || 'Neutral';
-      let abilityType: AbilityType = normalizeAbilityTypeId(ability.abilityType);
-      let displayName = ability.displayName || ability.name || resolveKinesisName(element, abilityType);
+  // 2. Grundfähigkeiten deduplizieren
+  const baseAbilitiesList: BaseAbility[] = [];
+  const baIdAliasMap = new Map<string, string>();
 
-      // Falls die Fähigkeit nach einem Element riecht, passe Element an
-      if (!ability.element) {
-        const foundElement = ADVENTURE_FORGE_ELEMENTS.find(
-          el => el !== 'Neutral' && (
-            (ability.name || '').toLowerCase().includes(el.toLowerCase()) ||
-            (ability.description || '').toLowerCase().includes(el.toLowerCase()) ||
-            (ability.displayName || '').toLowerCase().includes(el.toLowerCase())
-          )
-        );
-        if (foundElement) {
-          element = foundElement;
-          displayName = resolveKinesisName(element, abilityType);
-        }
-      }
+  const registerBaseAbility = (candidate: Partial<BaseAbility> & { id?: string; name?: string }): string => {
+    const psId = candidate.powerSourceId && powerSourcesMap.has(candidate.powerSourceId)
+      ? candidate.powerSourceId
+      : defaultPsId;
+    const ps = powerSourcesMap.get(psId);
 
-      // Nur als Grundfähigkeit registrieren, wenn es keine reine Unterkategorie (Passiv/Talent/Transformation) ist
-      if (!isOtherCategory && !baseAbilitiesMap.has(baseAbilityId)) {
-        baseAbilitiesMap.set(baseAbilityId, {
-          id: baseAbilityId,
-          powerSourceId: psId,
-          powerSourceName: ps?.powerName || ps?.source,
-          name: ability.name || displayName,
-          displayName,
-          element,
-          abilityType,
-          description: ability.description || '',
-          techniqueIds: []
-        });
-      }
+    const element = candidate.element || 'Neutral';
+    const abilityType = normalizeAbilityTypeId(candidate.abilityType);
+    const displayName = (candidate.displayName || candidate.name || resolveKinesisName(element, abilityType)).trim();
+    const normKey = `${psId}::${displayName.toLowerCase()}`;
 
-      // Wenn es ein Eintrag einer spezifischen Kategorie wie 'Passive Fähigkeiten', 'Transformationen', 'Talente' ist:
-      if (isOtherCategory) {
-        const existingTech = techniquesList.find(t => t.id === ability.id);
-        if (!existingTech) {
-          techniquesList.push({
-            id: ability.id || `tech_cat_${aIdx + 1}`,
-            name: ability.name || 'Unbenannte Fähigkeit',
-            description: ability.description || '',
-            category: ability.category,
-            type: ability.category === 'Transformationen' ? 'Transformation' : (ability.category === 'Passive Fähigkeiten' ? 'Support' : 'Spezial'),
-            mode: ability.mode || 'Normal',
-            tier: ability.category === 'Ultimative Techniken' ? 'Tier 4' : 'Tier 1',
-            baseAbilityIds: ability.baseAbilityIds && ability.baseAbilityIds.length > 0 ? ability.baseAbilityIds : [],
-            powerSourceId: psId,
-            powerSourceName: ps?.powerName || ps?.source,
-            element,
-            cost: ability.cost || (ability.category === 'Passive Fähigkeiten' ? 'Passiv' : '0 Mana'),
-            costResourceName: ps?.cost || 'Mana',
-            costValue: ability.costValue || 0,
-            transformName: ability.transformName,
-            activationCondition: ability.activationCondition
-          });
-        }
-      }
-
-      // Techniken aus dieser Ability
-      if (ability.techniqueList && Array.isArray(ability.techniqueList)) {
-        ability.techniqueList.forEach((tech, tIdx) => {
-          if (!tech || !tech.name) return;
-          const techId = tech.id || `tech_${baseAbilityId}_${tIdx + 1}`;
-          const baseAbilityIds = tech.baseAbilityIds && tech.baseAbilityIds.length > 0 
-            ? tech.baseAbilityIds 
-            : [baseAbilityId];
-          const baseAbilityNames = tech.baseAbilityNames && tech.baseAbilityNames.length > 0
-            ? tech.baseAbilityNames
-            : [displayName];
-
-          techniquesList.push({
-            ...tech,
-            id: techId,
-            name: tech.name,
-            baseAbilityIds,
-            baseAbilityNames,
-            powerSourceId: tech.powerSourceId || psId,
-            powerSourceName: tech.powerSourceName || ps?.powerName,
-            element: tech.element || element,
-            abilityType: tech.abilityType || abilityType,
-            description: tech.description || '',
-            targetType: tech.targetType || 'Selbst / Verbündete / Feinde',
-            effects: tech.effects || (tech.applications ? tech.applications : []),
-            costResourceName: tech.costResourceName || ps?.cost || 'Mana',
-            costValue: tech.costValue !== undefined ? tech.costValue : 10,
-            cost: tech.cost || `${tech.costValue || 10} ${tech.costResourceName || ps?.cost || 'Mana'}`
-          });
-        });
-      } else if (ability.techniques && typeof ability.techniques === 'string' && ability.techniques.trim().length > 0) {
-        // Fallback: Techniken aus kommagetrenntem String
-        const techNames = ability.techniques.split(/[,\n;]/).map(s => s.trim()).filter(Boolean);
-        techNames.forEach((tName, tIdx) => {
-          const techId = `tech_${baseAbilityId}_legacy_${tIdx + 1}`;
-          techniquesList.push({
-            id: techId,
-            name: tName,
-            baseAbilityIds: [baseAbilityId],
-            baseAbilityNames: [displayName],
-            powerSourceId: psId,
-            powerSourceName: ps?.powerName,
-            element,
-            abilityType,
-            description: `Technik der ${displayName}.`,
-            targetType: 'Selbst / Verbündete / Feinde',
-            effects: [],
-            costResourceName: ps?.cost || 'Mana',
-            costValue: 10,
-            cost: `10 ${ps?.cost || 'Mana'}`
-          });
-        });
-      }
+    const existing = baseAbilitiesList.find(b => {
+      if (candidate.id && b.id === candidate.id) return true;
+      const bNormKey = `${b.powerSourceId}::${(b.displayName || b.name || '').trim().toLowerCase()}`;
+      return bNormKey === normKey;
     });
-  }
 
-  // 2c. Falls direkte char.techniqueList existiert
-  if (char.techniqueList && Array.isArray(char.techniqueList)) {
-    char.techniqueList.forEach(tech => {
-      if (!tech || !tech.name) return;
-      const existingIdx = techniquesList.findIndex(t => t.id === tech.id || t.name.toLowerCase() === tech.name.toLowerCase());
-      if (existingIdx >= 0) {
-        techniquesList[existingIdx] = { ...techniquesList[existingIdx], ...tech };
-      } else {
-        techniquesList.push(tech);
+    if (existing) {
+      if (candidate.id && candidate.id !== existing.id) {
+        baIdAliasMap.set(candidate.id, existing.id);
       }
-    });
-  }
+      return existing.id;
+    }
 
-  // Falls gar keine Grundfähigkeiten existieren, lege eine Basis an
-  if (baseAbilitiesMap.size === 0) {
-    const defaultBaId = 'ba_default_1';
-    const defElement = 'Neutral';
-    const defType: AbilityType = 'creation_manipulation';
-    baseAbilitiesMap.set(defaultBaId, {
-      id: defaultBaId,
-      powerSourceId: defaultPowerSourceId,
-      powerSourceName: powerSources[0]?.powerName,
-      name: resolveKinesisName(defElement, defType),
-      displayName: resolveKinesisName(defElement, defType),
-      element: defElement,
-      abilityType: defType,
-      description: 'Grundlegende Fähigkeiten und Techniken.',
+    const canonicalId = candidate.id || `ba_${baseAbilitiesList.length + 1}_${Date.now()}`;
+    const newBa: BaseAbility = {
+      id: canonicalId,
+      powerSourceId: psId,
+      powerSourceName: ps?.powerName || ps?.source,
+      name: candidate.name || displayName,
+      displayName,
+      element,
+      abilityType,
+      description: candidate.description || `Erschaffung und Manipulation von ${element}.`,
       techniqueIds: []
+    };
+
+    baseAbilitiesList.push(newBa);
+    if (candidate.id) {
+      baIdAliasMap.set(candidate.id, canonicalId);
+    }
+    return canonicalId;
+  };
+
+  // 2a. Aus char.baseAbilities laden
+  if (Array.isArray(char.baseAbilities)) {
+    char.baseAbilities.forEach(ba => {
+      if (ba) registerBaseAbility(ba);
     });
   }
 
-  const baseAbilities = Array.from(baseAbilitiesMap.values());
+  // 2b. Aus char.abilities laden
+  if (Array.isArray(char.abilities)) {
+    char.abilities.forEach(ability => {
+      if (!ability) return;
+      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Talente'].includes(ability.category);
+      if (!isOtherCategory) {
+        registerBaseAbility({
+          id: ability.id,
+          powerSourceId: ability.powerSourceId,
+          name: ability.name,
+          displayName: ability.displayName || ability.name,
+          element: ability.element,
+          abilityType: ability.abilityType,
+          description: ability.description
+        });
+      }
+    });
+  }
 
-  // Verknüpfe techniqueIds zurück in die Grundfähigkeiten
-  baseAbilities.forEach(ba => {
+  // Standard-Grundfähigkeit falls leer
+  if (baseAbilitiesList.length === 0) {
+    registerBaseAbility({
+      id: 'ba_default_1',
+      powerSourceId: defaultPsId,
+      element: 'Neutral',
+      abilityType: 'creation_manipulation',
+      displayName: 'Kinetik',
+      name: 'Kinetik'
+    });
+  }
+
+  // 3. Techniken sammeln und deduplizieren
+  const techniquesMap = new Map<string, TechniqueItem>();
+
+  const registerTechnique = (tech: any, sourceCategory?: string, fallbackBaId?: string) => {
+    if (!tech || (!tech.name && !tech.title)) return;
+    const techName = (tech.name || tech.title || '').trim();
+    if (!techName) return;
+
+    const category = tech.category || sourceCategory || (tech.type === 'Transformation' ? 'Transformationen' : 'Techniken');
+    const psId = tech.powerSourceId && powerSourcesMap.has(tech.powerSourceId)
+      ? tech.powerSourceId
+      : defaultPsId;
+    const ps = powerSourcesMap.get(psId);
+
+    const rawBaIds: string[] = Array.isArray(tech.baseAbilityIds) && tech.baseAbilityIds.length > 0
+      ? tech.baseAbilityIds
+      : (fallbackBaId ? [fallbackBaId] : [baseAbilitiesList.find(b => b.powerSourceId === psId)?.id || baseAbilitiesList[0].id]);
+
+    const mappedBaIds = Array.from(new Set(
+      rawBaIds.map(id => baIdAliasMap.get(id) || id)
+    )).filter(id => baseAbilitiesList.some(b => b.id === id));
+
+    const finalBaIds = mappedBaIds.length > 0
+      ? mappedBaIds
+      : [baseAbilitiesList.find(b => b.powerSourceId === psId)?.id || baseAbilitiesList[0].id];
+
+    const finalBaNames = finalBaIds.map(id => {
+      const ba = baseAbilitiesList.find(b => b.id === id);
+      return ba ? (ba.displayName || ba.name || 'Grundfähigkeit') : 'Grundfähigkeit';
+    });
+
+    const techKey = `${psId}::${category}::${techName.toLowerCase()}`;
+
+    const existing = techniquesMap.get(techKey);
+    if (existing) {
+      const mergedBaIds = Array.from(new Set([...(existing.baseAbilityIds || []), ...finalBaIds]));
+      existing.baseAbilityIds = mergedBaIds;
+      existing.baseAbilityNames = mergedBaIds.map(id => {
+        const ba = baseAbilitiesList.find(b => b.id === id);
+        return ba ? (ba.displayName || ba.name || 'Grundfähigkeit') : 'Grundfähigkeit';
+      });
+      if (!existing.description && tech.description) existing.description = tech.description;
+      if (!existing.mode && tech.mode) existing.mode = tech.mode;
+      if (tech.costValue !== undefined && existing.costValue === undefined) existing.costValue = tech.costValue;
+      if (tech.summonCount !== undefined && existing.summonCount === undefined) existing.summonCount = tech.summonCount;
+      if (tech.summonCostValue !== undefined && existing.summonCostValue === undefined) existing.summonCostValue = tech.summonCostValue;
+      return;
+    }
+
+    const techId = tech.id || `tech_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const costResource = tech.costResourceName || ps?.cost || 'Mana';
+    const costVal = tech.costValue !== undefined ? tech.costValue : (category === 'Passive Fähigkeiten' ? 0 : 10);
+    const costStr = tech.cost || (category === 'Passive Fähigkeiten' ? 'Passiv' : `${costVal} ${costResource}`);
+
+    const newTech: TechniqueItem = {
+      id: techId,
+      name: techName,
+      description: tech.description || '',
+      category,
+      type: tech.type || (category === 'Transformationen' ? 'Transformation' : (category === 'Passive Fähigkeiten' ? 'Support' : (category === 'Talente' ? 'Spezial' : 'Angriff'))),
+      subtype: tech.subtype || '',
+      mode: tech.mode || 'Normal',
+      tier: tech.tier || (category === 'Ultimative Techniken' ? 'Tier 4' : 'Tier 1'),
+      baseAbilityIds: finalBaIds,
+      baseAbilityNames: finalBaNames,
+      powerSourceId: psId,
+      powerSourceName: ps?.powerName || ps?.source,
+      element: tech.element || baseAbilitiesList.find(b => b.id === finalBaIds[0])?.element || 'Neutral',
+      abilityType: tech.abilityType || baseAbilitiesList.find(b => b.id === finalBaIds[0])?.abilityType || 'creation_manipulation',
+      targetType: tech.targetType || 'Selbst / Verbündete / Feinde',
+      effects: tech.effects || (tech.applications ? tech.applications : []),
+      costResourceName: costResource,
+      costValue: costVal,
+      costFormula: tech.costFormula || 'absolut',
+      cost: costStr,
+      range: tech.range || 'Nahkampf / Mittlere Distanz',
+      duration: tech.duration || 'Sofort',
+      summonCount: tech.summonCount,
+      summonCostValue: tech.summonCostValue,
+      summonCostFormula: tech.summonCostFormula,
+      activationCondition: tech.activationCondition,
+      transformName: tech.transformName,
+      level: tech.level || 1,
+      maxLevel: tech.maxLevel || 10,
+      xp: tech.xp || 0,
+      xpNeeded: tech.xpNeeded || 100
+    };
+
+    techniquesMap.set(techKey, newTech);
+  };
+
+  // 3a. Aus char.techniqueList
+  if (Array.isArray(char.techniqueList)) {
+    char.techniqueList.forEach(t => registerTechnique(t));
+  }
+
+  // 3b. Aus char.abilities
+  if (Array.isArray(char.abilities)) {
+    char.abilities.forEach(ability => {
+      if (!ability) return;
+      const canonicalBaId = baIdAliasMap.get(ability.id) || ability.id;
+      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Talente'].includes(ability.category);
+
+      if (isOtherCategory) {
+        registerTechnique(ability, ability.category, canonicalBaId);
+      }
+
+      if (Array.isArray(ability.techniqueList)) {
+        ability.techniqueList.forEach(t => registerTechnique(t, undefined, canonicalBaId));
+      } else if (typeof ability.techniques === 'string' && ability.techniques.trim().length > 0) {
+        const tNames = ability.techniques.split(/[,\n;]/).map((s: string) => s.trim()).filter(Boolean);
+        tNames.forEach((tName: string) => {
+          registerTechnique({ name: tName }, undefined, canonicalBaId);
+        });
+      }
+    });
+  }
+
+  const techniquesList = Array.from(techniquesMap.values());
+
+  // 4. techniqueIds in baseAbilities verknüpfen
+  baseAbilitiesList.forEach(ba => {
     ba.techniqueIds = techniquesList
       .filter(t => t.baseAbilityIds?.includes(ba.id))
       .map(t => t.id);
@@ -347,7 +391,7 @@ export function normalizeAbilityHierarchy(char: any): {
 
   return {
     powerSources,
-    baseAbilities,
+    baseAbilities: baseAbilitiesList,
     techniques: techniquesList
   };
 }

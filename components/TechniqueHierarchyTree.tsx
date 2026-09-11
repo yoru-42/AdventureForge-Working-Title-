@@ -1091,12 +1091,12 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                   </div>
 
                   {/* Kombinationstechnik / Mehrere Grundfähigkeiten */}
-                  {baseAbilities.length > 1 && (
+                  {currentBaseAbilities.length > 1 && (
                     <div className="pt-1 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5">
                       <span className="text-[9px] font-extrabold text-slate-500 uppercase mr-1">
                         Verknüpfte Grundfähigkeiten:
                       </span>
-                      {baseAbilities.map((ba, baIdx) => {
+                      {currentBaseAbilities.map((ba, baIdx) => {
                         const isLinked = entry.baseAbilityIds?.includes(ba.id);
                         return (
                           <button
