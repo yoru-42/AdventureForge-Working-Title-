@@ -83,6 +83,32 @@ function sanitizeContents(contents: any): any {
   return merged;
 }
 
+function extractResponseText(response: any): string {
+  if (!response) return '';
+  if (typeof response.text === 'string' && response.text.trim()) return response.text;
+  if (typeof response.text === 'function') {
+    try {
+      const res = response.text();
+      if (typeof res === 'string' && res.trim()) return res;
+    } catch (_) {}
+  }
+  if (response.candidates && Array.isArray(response.candidates)) {
+    for (const candidate of response.candidates) {
+      const parts = candidate?.content?.parts;
+      if (Array.isArray(parts)) {
+        const textParts = parts
+          .map((p: any) => (typeof p === 'string' ? p : p?.text || ''))
+          .filter((t: string) => t.trim().length > 0);
+        if (textParts.length > 0) {
+          return textParts.join('\n');
+        }
+      }
+    }
+  }
+  if (typeof response === 'string' && response.trim()) return response;
+  return '';
+}
+
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
@@ -127,8 +153,12 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
           safetySettings: isNsfw ? getSafetySettings() : undefined
         }
       });
-      console.log(`[Gemini Server] Success with model: ${currentModel}`);
-      return response;
+      const text = extractResponseText(response);
+      if (text.trim().length > 0) {
+        console.log(`[Gemini Server] Success with model: ${currentModel}`);
+        return { response, text };
+      }
+      console.log(`[Gemini Server] Note: ${currentModel} returned empty output. Trying alternative model...`);
     } catch (e: any) {
       lastError = e;
       const rawMsg = e?.message || (e ? String(e) : '');
@@ -157,8 +187,11 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
               safetySettings: isNsfw ? getSafetySettings() : undefined
             }
           });
-          console.log(`[Gemini Server] Success with JSON fallback on model: ${currentModel}`);
-          return fallbackRes;
+          const text = extractResponseText(fallbackRes);
+          if (text.trim().length > 0) {
+            console.log(`[Gemini Server] Success with JSON fallback on model: ${currentModel}`);
+            return { response: fallbackRes, text };
+          }
         } catch (schemaErr: any) {
           lastError = schemaErr;
         }
@@ -212,8 +245,11 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
             safetySettings: isNsfw ? getSafetySettings() : undefined
           }
         });
-        console.log(`[Gemini Server] Cooldown recovery succeeded with ${retryModel}!`);
-        return recoveryResponse;
+        const text = extractResponseText(recoveryResponse);
+        if (text.trim().length > 0) {
+          console.log(`[Gemini Server] Cooldown recovery succeeded with ${retryModel}!`);
+          return { response: recoveryResponse, text };
+        }
       } catch (retryErr: any) {
         lastError = retryErr;
         // Also try JSON-only fallback during Phase 2 if schema error
@@ -229,8 +265,11 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
                 safetySettings: isNsfw ? getSafetySettings() : undefined
               }
             });
-            console.log(`[Gemini Server] Cooldown recovery (without strict schema) succeeded with ${retryModel}!`);
-            return recoveryResponse;
+            const text = extractResponseText(recoveryResponse);
+            if (text.trim().length > 0) {
+              console.log(`[Gemini Server] Cooldown recovery (without strict schema) succeeded with ${retryModel}!`);
+              return { response: recoveryResponse, text };
+            }
           } catch (_) {}
         }
       }
@@ -256,8 +295,8 @@ async function startServer() {
     try {
       const { model, contents, isNsfw, config } = req.body;
       
-      const response = await generateWithFallback(model, contents, !!isNsfw, config);
-      res.json({ text: response.text, grounding: response.candidates?.[0]?.groundingMetadata?.groundingChunks || [] });
+      const { response, text } = await generateWithFallback(model, contents, !!isNsfw, config);
+      res.json({ text: text || '', grounding: response?.candidates?.[0]?.groundingMetadata?.groundingChunks || [] });
     } catch (e: any) {
       console.log("[Gemini Server] Warning - content generation ended:", (e?.message || String(e)).replace(/error/gi, "issue"));
       let errorMsg = e?.message || String(e || '');

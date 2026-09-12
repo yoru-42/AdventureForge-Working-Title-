@@ -189,7 +189,12 @@ export class GeminiService {
           }
           const data = await res.json();
           // We return exactly what the caller code expects: response.text and response.candidates
-          const text = typeof data.text === 'string' ? data.text : JSON.stringify(data.text);
+          let text = '';
+          if (typeof data.text === 'string') {
+            text = data.text;
+          } else if (data.text !== undefined && data.text !== null) {
+            text = typeof data.text === 'object' ? JSON.stringify(data.text) : String(data.text);
+          }
           return {
             text,
             candidates: [
@@ -6825,7 +6830,7 @@ Gib ausschließlich valides JSON mit folgenden vier Listen zurück:
 GIB NUR DAS REINE JSON-OBJEKT ZURÜCK, KEINE TEXTERKLÄRUNGEN DRUMHERUM!`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           responseMimeType: "application/json",

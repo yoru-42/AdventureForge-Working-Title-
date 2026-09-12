@@ -250,18 +250,6 @@ export function normalizeAbilityHierarchy(char: any): {
     });
   }
 
-  // Standard-Grundfähigkeit falls leer
-  if (baseAbilitiesList.length === 0) {
-    registerBaseAbility({
-      id: 'ba_default_1',
-      powerSourceId: defaultPsId,
-      element: 'Neutral',
-      abilityType: 'creation_manipulation',
-      displayName: 'Kinetik',
-      name: 'Kinetik'
-    });
-  }
-
   // 3. Techniken sammeln und deduplizieren
   const techniquesMap = new Map<string, TechniqueItem>();
 
@@ -276,9 +264,11 @@ export function normalizeAbilityHierarchy(char: any): {
       : defaultPsId;
     const ps = powerSourcesMap.get(psId);
 
+    const defaultForPs = baseAbilitiesList.find(b => b.powerSourceId === psId)?.id || baseAbilitiesList[0]?.id;
+
     const rawBaIds: string[] = Array.isArray(tech.baseAbilityIds) && tech.baseAbilityIds.length > 0
       ? tech.baseAbilityIds
-      : (fallbackBaId ? [fallbackBaId] : [baseAbilitiesList.find(b => b.powerSourceId === psId)?.id || baseAbilitiesList[0].id]);
+      : (fallbackBaId ? [fallbackBaId] : (defaultForPs ? [defaultForPs] : []));
 
     const mappedBaIds = Array.from(new Set(
       rawBaIds.map(id => baIdAliasMap.get(id) || id)
@@ -286,7 +276,7 @@ export function normalizeAbilityHierarchy(char: any): {
 
     const finalBaIds = mappedBaIds.length > 0
       ? mappedBaIds
-      : [baseAbilitiesList.find(b => b.powerSourceId === psId)?.id || baseAbilitiesList[0].id];
+      : (defaultForPs ? [defaultForPs] : []);
 
     const finalBaNames = finalBaIds.map(id => {
       const ba = baseAbilitiesList.find(b => b.id === id);

@@ -36,6 +36,22 @@ export const CATEGORY_TABS = [
 
 export type AbilityCategoryTab = typeof CATEGORY_TABS[number];
 
+export const CATEGORY_ADD_LABELS: Record<AbilityCategoryTab, string> = {
+  'Passive Fähigkeiten': 'Passive Fähigkeit hinzufügen',
+  'Techniken': 'Technik hinzufügen',
+  'Ultimative Techniken': 'Ultimative Technik hinzufügen',
+  'Transformationen': 'Transformation hinzufügen',
+  'Talente': 'Talent hinzufügen',
+};
+
+export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
+  'Passive Fähigkeiten': 'Erste passive Fähigkeit erstellen',
+  'Techniken': 'Erste Technik erstellen',
+  'Ultimative Techniken': 'Erste ultimative Technik erstellen',
+  'Transformationen': 'Erste Transformation erstellen',
+  'Talente': 'Erstes Talent erstellen',
+};
+
 const TECHNIQUE_MODES = [
   'Normal',
   'Verstärkt',
@@ -62,6 +78,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   // 1. Sichere Standard-Kraftquelle falls Liste leer
   const safePowerSources = useMemo(() => {
     if (powerSources && powerSources.length > 0) return powerSources;
+    if (readOnly) return [];
     return [{
       id: 'ps_default_main',
       source: 'Standard-Kraftquelle',
@@ -69,11 +86,11 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       cost: 'Mana',
       powerDescription: ''
     }];
-  }, [powerSources]);
+  }, [powerSources, readOnly]);
 
   // 2. Navigationszustände
   const [activePowerSourceId, setActivePowerSourceId] = useState<string>(() => {
-    return safePowerSources[0]?.id || 'ps_default_main';
+    return safePowerSources[0]?.id || '';
   });
 
   const [activeBaseAbilityId, setActiveBaseAbilityId] = useState<string>('');
@@ -89,33 +106,26 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   // 3. Gültige Kraftquelle ermitteln
   const activePowerSource = useMemo(() => {
     const found = safePowerSources.find(ps => ps.id === activePowerSourceId);
-    return found || safePowerSources[0] || {
-      id: 'ps_default_main',
-      source: 'Standard-Kraftquelle',
-      powerName: 'Standard-Kraftquelle',
-      cost: 'Mana',
-      powerDescription: ''
-    };
+    return found || safePowerSources[0] || null;
   }, [safePowerSources, activePowerSourceId]);
 
   // Wenn activePowerSourceId ungültig ist, auf erste Kraftquelle zurücksetzen
   useEffect(() => {
-    if (!safePowerSources.some(ps => ps.id === activePowerSourceId)) {
-      if (safePowerSources[0]) {
-        setActivePowerSourceId(safePowerSources[0].id);
-      }
+    if (safePowerSources.length > 0 && !safePowerSources.some(ps => ps.id === activePowerSourceId)) {
+      setActivePowerSourceId(safePowerSources[0].id);
     }
   }, [safePowerSources, activePowerSourceId]);
 
   // 4. Grundfähigkeiten für die aktuell ausgewählte Kraftquelle
   const currentBaseAbilities = useMemo(() => {
+    if (!activePowerSource) return [];
     return baseAbilities.filter(ba => {
       if (ba.powerSourceId) return ba.powerSourceId === activePowerSource.id;
       return activePowerSource.id === safePowerSources[0]?.id;
     });
-  }, [baseAbilities, activePowerSource.id, safePowerSources]);
+  }, [baseAbilities, activePowerSource, safePowerSources]);
 
-  // 5. Gültige Grundfähigkeit ermitteln und sicherstellen
+  // 5. Gültige Grundfähigkeit ermitteln und sauber halten (OHNE künstliche Erzeugung)
   useEffect(() => {
     if (currentBaseAbilities.length > 0) {
       const existsInCurrent = currentBaseAbilities.some(ba => ba.id === activeBaseAbilityId);
@@ -123,12 +133,15 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         setActiveBaseAbilityId(currentBaseAbilities[0].id);
       }
     } else {
-      setActiveBaseAbilityId('');
+      if (activeBaseAbilityId !== '') {
+        setActiveBaseAbilityId('');
+      }
     }
   }, [currentBaseAbilities, activeBaseAbilityId]);
 
   const activeBaseAbility = useMemo(() => {
-    return currentBaseAbilities.find(ba => ba.id === activeBaseAbilityId) || currentBaseAbilities[0] || null;
+    if (!activeBaseAbilityId) return null;
+    return currentBaseAbilities.find(ba => ba.id === activeBaseAbilityId) || null;
   }, [currentBaseAbilities, activeBaseAbilityId]);
 
   // 6. Helfer: Prüfen, zu welcher Kategorie ein Eintrag gehört
@@ -155,7 +168,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
     techniques.forEach(tech => {
       const belongsToBase = (tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id)) ||
-        (!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (tech.powerSourceId === activePowerSource.id);
+        (!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (activePowerSource && tech.powerSourceId === activePowerSource.id);
 
       if (belongsToBase) {
         const cat = getTechniqueCategory(tech);
@@ -164,7 +177,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     });
 
     return counts;
-  }, [techniques, activeBaseAbility, activePowerSource.id]);
+  }, [techniques, activeBaseAbility, activePowerSource]);
 
   // 8. Einträge der aktuell ausgewählten Grundfähigkeit + aktuellen Kategorie
   const activeEntries = useMemo(() => {
@@ -172,18 +185,18 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
     return techniques.filter(tech => {
       const belongsToBase = (tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id)) ||
-        (!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (tech.powerSourceId === activePowerSource.id);
+        (!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (activePowerSource && tech.powerSourceId === activePowerSource.id);
 
       if (!belongsToBase) return false;
       return getTechniqueCategory(tech) === activeCategory;
     });
-  }, [techniques, activeBaseAbility, activePowerSource.id, activeCategory]);
+  }, [techniques, activeBaseAbility, activePowerSource, activeCategory]);
 
   // -------------------------------------------------------------
-  // HANDLERS: Kraftquellen
+  // HANDLERS: Kraftquellen (OHNE automatische Grundfähigkeit!)
   // -------------------------------------------------------------
   const handleAddPowerSource = () => {
-    const newId = `ps_${Date.now()}`;
+    const newId = `ps_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     const newPs: CharacterPowerSource = {
       id: newId,
       source: 'Neue Kraftquelle',
@@ -191,26 +204,12 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       cost: 'Mana',
       powerDescription: ''
     };
-    const updatedPs = [...powerSources, newPs];
+    const updatedPs = [...safePowerSources, newPs];
 
-    // Erzeuge direkt eine Standard-Grundfähigkeit für die neue Kraftquelle
-    const newBaId = `ba_${Date.now()}`;
-    const newBa: BaseAbility = {
-      id: newBaId,
-      powerSourceId: newId,
-      powerSourceName: newPs.powerName,
-      name: 'Kryokinese',
-      displayName: 'Kryokinese',
-      element: 'Eis',
-      abilityType: 'creation_manipulation',
-      description: 'Erschaffung und Manipulation von Eis.',
-      techniqueIds: []
-    };
-    const updatedBa = [...baseAbilities, newBa];
-
-    onChange(updatedPs, updatedBa, techniques);
+    // Keine automatische Grundfähigkeit erstellen!
+    onChange(updatedPs, baseAbilities, techniques);
     setActivePowerSourceId(newId);
-    setActiveBaseAbilityId(newBaId);
+    setActiveBaseAbilityId('');
   };
 
   const handleUpdatePowerSource = (psId: string, updates: Partial<CharacterPowerSource>) => {
@@ -226,17 +225,18 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       return ps;
     });
 
-    // Namen in verknüpften Grundfähigkeiten und Techniken nachziehen
+    // Namen in verknüpften Grundfähigkeiten und Techniken synchron nachziehen
+    const newPowerName = updates.powerName || updates.source;
     const updatedBa = baseAbilities.map(ba => {
-      if (ba.powerSourceId === psId && updates.powerName) {
-        return { ...ba, powerSourceName: updates.powerName };
+      if (ba.powerSourceId === psId && newPowerName) {
+        return { ...ba, powerSourceName: newPowerName };
       }
       return ba;
     });
 
     const updatedTech = techniques.map(tech => {
-      if (tech.powerSourceId === psId && updates.powerName) {
-        return { ...tech, powerSourceName: updates.powerName };
+      if (tech.powerSourceId === psId && newPowerName) {
+        return { ...tech, powerSourceName: newPowerName };
       }
       return tech;
     });
@@ -247,9 +247,50 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   const handleDeletePowerSource = (psId: string) => {
     if (safePowerSources.length <= 1) return;
 
+    const deletedBaIds = baseAbilities.filter(ba => ba.powerSourceId === psId).map(ba => ba.id);
     const remainingPs = safePowerSources.filter(ps => ps.id !== psId);
     const remainingBa = baseAbilities.filter(ba => ba.powerSourceId !== psId);
-    const remainingTech = techniques.filter(tech => tech.powerSourceId !== psId);
+
+    // Techniken nicht pauschal löschen, sondern Kombinationstechniken erhalten & IDs/Namen synchronisieren!
+    const remainingTech: TechniqueItem[] = [];
+
+    techniques.forEach(tech => {
+      if (tech.baseAbilityIds && tech.baseAbilityIds.length > 0) {
+        const newBaseAbilityIds = tech.baseAbilityIds.filter(id => !deletedBaIds.includes(id));
+        if (newBaseAbilityIds.length > 0) {
+          // Technik besitzt noch andere gültige Grundfähigkeiten!
+          const newBaseAbilityNames = newBaseAbilityIds.map(id => {
+            const ba = remainingBa.find(b => b.id === id);
+            return ba ? (ba.displayName || ba.name) : '';
+          }).filter(Boolean);
+
+          const remappedPsId = tech.powerSourceId === psId
+            ? (remainingBa.find(b => b.id === newBaseAbilityIds[0])?.powerSourceId || remainingPs[0]?.id || '')
+            : (tech.powerSourceId || remainingPs[0]?.id || '');
+
+          const remappedPs = remainingPs.find(p => p.id === remappedPsId) || remainingPs[0];
+
+          remainingTech.push({
+            ...tech,
+            powerSourceId: remappedPs?.id,
+            powerSourceName: remappedPs?.powerName || remappedPs?.source,
+            baseAbilityIds: newBaseAbilityIds,
+            baseAbilityNames: newBaseAbilityNames
+          });
+        } else {
+          // Alle verknüpften Grundfähigkeiten gehörten zur gelöschten Kraftquelle
+          // Wenn die Technik nicht zur gelöschten Kraftquelle gehörte, behalten
+          if (tech.powerSourceId !== psId) {
+            remainingTech.push(tech);
+          }
+        }
+      } else {
+        // Technik ohne explizite baseAbilityIds: nur entfernen, wenn sie direkt an dieser Kraftquelle hing
+        if (tech.powerSourceId !== psId) {
+          remainingTech.push(tech);
+        }
+      }
+    });
 
     onChange(remainingPs, remainingBa, remainingTech);
 
@@ -258,6 +299,9 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       setActivePowerSourceId(nextPs.id);
       const nextBa = remainingBa.find(ba => ba.powerSourceId === nextPs.id);
       setActiveBaseAbilityId(nextBa ? nextBa.id : '');
+    } else {
+      setActivePowerSourceId('');
+      setActiveBaseAbilityId('');
     }
   };
 
@@ -265,7 +309,9 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   // HANDLERS: Grundfähigkeiten
   // -------------------------------------------------------------
   const handleAddBaseAbility = () => {
-    const newBaId = `ba_${Date.now()}`;
+    if (!activePowerSource) return;
+
+    const newBaId = `ba_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     const defElement = 'Neutral';
     const defType: AbilityType = 'creation_manipulation';
     const defName = resolveKinesisName(defElement, defType);
@@ -305,7 +351,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       return ba;
     });
 
-    // Namen in verknüpften Techniken aktualisieren
+    // Namen in verknüpften Techniken synchron aktualisieren
     const target = updatedBa.find(b => b.id === baId);
     let updatedTech = techniques;
     if (target) {
@@ -318,7 +364,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           return {
             ...tech,
             baseAbilityNames: newNames,
-            element: tech.baseAbilityIds[0] === baId ? target.element : tech.element
+            element: tech.baseAbilityIds[0] === baId ? target.element : tech.element,
+            abilityType: tech.baseAbilityIds[0] === baId ? target.abilityType : tech.abilityType
           };
         }
         return tech;
@@ -330,19 +377,36 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
   const handleDeleteBaseAbility = (baId: string) => {
     const remainingBa = baseAbilities.filter(ba => ba.id !== baId);
-    // Verknüpfungen in Techniken anpassen
-    const updatedTech = techniques.map(tech => {
-      if (tech.baseAbilityIds?.includes(baId)) {
+
+    // baseAbilityIds und baseAbilityNames strikt synchron halten!
+    const updatedTech: TechniqueItem[] = [];
+
+    techniques.forEach(tech => {
+      if (tech.baseAbilityIds && tech.baseAbilityIds.includes(baId)) {
         const newIds = tech.baseAbilityIds.filter(id => id !== baId);
-        return { ...tech, baseAbilityIds: newIds };
+        if (newIds.length > 0) {
+          const newNames = newIds.map(id => {
+            const ba = remainingBa.find(b => b.id === id);
+            return ba ? (ba.displayName || ba.name) : '';
+          }).filter(Boolean);
+
+          updatedTech.push({
+            ...tech,
+            baseAbilityIds: newIds,
+            baseAbilityNames: newNames
+          });
+        } else {
+          // Technik war ausschließlich dieser Grundfähigkeit zugeordnet -> entfernen
+        }
+      } else {
+        updatedTech.push(tech);
       }
-      return tech;
     });
 
     onChange(safePowerSources, remainingBa, updatedTech);
 
-    // Automatisch eine andere Grundfähigkeit auswählen
-    const nextAvailable = remainingBa.filter(ba => ba.powerSourceId === activePowerSource.id);
+    // Automatisch eine andere Grundfähigkeit der aktuellen Kraftquelle auswählen
+    const nextAvailable = remainingBa.filter(ba => activePowerSource && ba.powerSourceId === activePowerSource.id);
     if (nextAvailable.length > 0) {
       setActiveBaseAbilityId(nextAvailable[0].id);
     } else {
@@ -354,7 +418,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   // HANDLERS: Einträge der Kategorien (Techniken, Passive etc.)
   // -------------------------------------------------------------
   const handleAddEntry = () => {
-    if (!activeBaseAbility) return;
+    if (!activeBaseAbility || !activePowerSource) return;
 
     const newId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const costResource = activePowerSource.cost || 'Mana';
@@ -445,7 +509,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         // Falls Kostenwert oder Ressource angepasst wurde, formatieren
         if (updates.costValue !== undefined || updates.costResourceName !== undefined) {
           const val = updates.costValue !== undefined ? updates.costValue : (tech.costValue || 0);
-          const res = updates.costResourceName !== undefined ? updates.costResourceName : (tech.costResourceName || 'Mana');
+          const res = updates.costResourceName !== undefined ? updates.costResourceName : (tech.costResourceName || activePowerSource?.cost || 'Mana');
           if (next.category === 'Passive Fähigkeiten' && val === 0) {
             next.cost = 'Passiv';
           } else {
@@ -486,8 +550,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
     const nextNames = nextIds.map(id => {
       const ba = baseAbilities.find(b => b.id === id);
-      return ba ? (ba.displayName || ba.name) : 'Unbekannt';
-    });
+      return ba ? (ba.displayName || ba.name) : '';
+    }).filter(Boolean);
 
     handleUpdateEntry(entryId, {
       baseAbilityIds: nextIds,
@@ -530,18 +594,16 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         {/* Tag-Auswahl */}
         <div className="flex flex-wrap items-center gap-1.5">
           {safePowerSources.map((ps, psIdx) => {
-            const isActive = ps.id === activePowerSource.id;
+            const isActive = activePowerSource && ps.id === activePowerSource.id;
             return (
               <button
                 key={`ps-${ps.id || 'ps'}-${psIdx}`}
                 type="button"
                 onClick={() => {
                   setActivePowerSourceId(ps.id);
-                  // Automatisch erste Grundfähigkeit dieser Kraftquelle wählen
+                  // Automatisch erste Grundfähigkeit dieser Kraftquelle wählen (oder leer falls keine existiert)
                   const nextBa = baseAbilities.find(b => b.powerSourceId === ps.id);
-                  if (nextBa) {
-                    setActiveBaseAbilityId(nextBa.id);
-                  }
+                  setActiveBaseAbilityId(nextBa ? nextBa.id : '');
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
                   isActive
@@ -575,7 +637,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         </div>
 
         {/* Inline-Konfiguration der aktuell aktiven Kraftquelle */}
-        {!readOnly && (
+        {!readOnly && activePowerSource && (
           <div className="mt-1 pt-2 border-t border-slate-800/60 grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div className="flex flex-col gap-1">
               <label className="text-[9px] font-bold text-slate-400 uppercase">
@@ -626,7 +688,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
         <div className="flex items-center justify-between">
           <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-            Grundfähigkeit ({activePowerSource.powerName || activePowerSource.source})
+            Grundfähigkeit ({activePowerSource ? (activePowerSource.powerName || activePowerSource.source) : 'Keine Kraftquelle'})
           </span>
           <span className="text-[10px] text-slate-500 font-medium">
             {currentBaseAbilities.length} vorhanden
@@ -666,7 +728,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
             })
           )}
 
-          {!readOnly && (
+          {!readOnly && activePowerSource && (
             <button
               type="button"
               onClick={handleAddBaseAbility}
@@ -724,16 +786,14 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                     <option key={`at-${at.id}-${atIdx}`} value={at.id}>{at.label}</option>
                   ))}
                 </select>
-                {currentBaseAbilities.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
-                    className="p-1 text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 rounded-lg transition-colors h-[30px] w-[30px] flex items-center justify-center cursor-pointer shrink-0"
-                    title="Diese Grundfähigkeit löschen"
-                  >
-                    <LucideIcons.Trash2 className="w-3 h-3" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
+                  className="p-1 text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 rounded-lg transition-colors h-[30px] w-[30px] flex items-center justify-center cursor-pointer shrink-0"
+                  title="Diese Grundfähigkeit löschen"
+                >
+                  <LucideIcons.Trash2 className="w-3 h-3" />
+                </button>
               </div>
             </div>
           </div>
@@ -749,7 +809,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
             Kategorien
           </span>
           <span className="text-[10px] text-slate-500">
-            Gilt für: {activeBaseAbility?.displayName || activeBaseAbility?.name || 'Keine Grundfähigkeit'}
+            Gilt für: {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : 'Keine Grundfähigkeit'}
           </span>
         </div>
 
@@ -803,7 +863,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 onClick={() => {
                   setSmartFillModalState({
                     isOpen: true,
-                    powerSourceId: activePowerSource.id,
+                    powerSourceId: activePowerSource?.id,
                     baseAbilityId: activeBaseAbility.id
                   });
                 }}
@@ -820,7 +880,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
               >
                 <LucideIcons.Plus className="w-3.5 h-3.5" />
-                <span>{activeCategory.replace(/en$/, '')} hinzufügen</span>
+                <span>{CATEGORY_ADD_LABELS[activeCategory]}</span>
               </button>
             </div>
           )}
@@ -828,8 +888,18 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
         {/* Listenansicht der Einträge */}
         {!activeBaseAbility ? (
-          <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800">
-            Bitte wähle zuerst eine Grundfähigkeit oben aus oder erstelle eine neue.
+          <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
+            <p>Bitte wähle oben eine Grundfähigkeit aus oder erstelle eine neue.</p>
+            {!readOnly && activePowerSource && (
+              <button
+                type="button"
+                onClick={handleAddBaseAbility}
+                className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <LucideIcons.Plus className="w-3.5 h-3.5" />
+                <span>Grundfähigkeit erstellen</span>
+              </button>
+            )}
           </div>
         ) : activeEntries.length === 0 ? (
           <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
@@ -841,7 +911,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
               >
                 <LucideIcons.Plus className="w-3.5 h-3.5" />
-                <span>Ersten Eintrag erstellen</span>
+                <span>{CATEGORY_EMPTY_LABELS[activeCategory]}</span>
               </button>
             )}
           </div>
@@ -979,7 +1049,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Kosten ({entry.costResourceName || activePowerSource.cost || 'Mana'})
+                          Kosten ({entry.costResourceName || activePowerSource?.cost || 'Mana'})
                         </label>
                         <div className="flex gap-1.5 items-center">
                           <input
@@ -991,7 +1061,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                             onChange={e => handleUpdateEntry(entry.id, { costValue: parseInt(e.target.value, 10) || 0 })}
                           />
                           <span className="text-[11px] text-slate-400">
-                            {entry.costResourceName || activePowerSource.cost || 'Mana'}
+                            {entry.costResourceName || activePowerSource?.cost || 'Mana'}
                           </span>
                         </div>
                       </div>
@@ -1062,7 +1132,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
                       <div className="flex flex-col gap-1">
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Kosten pro weiterer Beschwörung ({entry.costResourceName || activePowerSource.cost || 'Mana'})
+                          Kosten pro weiterer Beschwörung ({entry.costResourceName || activePowerSource?.cost || 'Mana'})
                         </label>
                         <input
                           type="number"
@@ -1090,13 +1160,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                     />
                   </div>
 
-                  {/* Kombinationstechnik / Mehrere Grundfähigkeiten */}
-                  {currentBaseAbilities.length > 1 && (
+                  {/* Kombinationstechnik / Verknüpfte Grundfähigkeiten */}
+                  {baseAbilities.length > 1 && (
                     <div className="pt-1 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5">
                       <span className="text-[9px] font-extrabold text-slate-500 uppercase mr-1">
                         Verknüpfte Grundfähigkeiten:
                       </span>
-                      {currentBaseAbilities.map((ba, baIdx) => {
+                      {baseAbilities.map((ba, baIdx) => {
                         const isLinked = entry.baseAbilityIds?.includes(ba.id);
                         return (
                           <button
@@ -1106,7 +1176,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                             onClick={() => handleToggleLinkedBaseAbility(entry.id, ba.id)}
                             className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer border ${
                               isLinked
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
                                 : 'bg-slate-900/50 text-slate-500 border-slate-800 hover:text-slate-300'
                             }`}
                           >
@@ -1132,7 +1202,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           onClose={() => setSmartFillModalState({ isOpen: false })}
           powerSources={safePowerSources}
           baseAbilities={baseAbilities}
-          initialPowerSourceId={smartFillModalState.powerSourceId || activePowerSource.id}
+          initialPowerSourceId={smartFillModalState.powerSourceId || activePowerSource?.id}
           initialBaseAbilityId={smartFillModalState.baseAbilityId || activeBaseAbility?.id}
           characterName={characterName}
           characterRole={characterRole}
