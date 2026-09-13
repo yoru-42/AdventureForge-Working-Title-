@@ -23,18 +23,37 @@ export const SOCIAL_TITLE_TYPES: Record<string, string> = {
   civic: 'Bürgerlicher Titel'
 };
 
-export const PRESET_NOBILITY_TITLES: Array<{ title: string; rankOrder: number; description: string }> = [
-  { title: 'Kaiser / Kaiserin', rankOrder: 1, description: 'Höchster weltlicher Herrschertitel eines Großreiches oder Imperiums.' },
-  { title: 'König / Königin', rankOrder: 2, description: 'Souveräner Herrscher eines Königreiches.' },
-  { title: 'Großherzog / Großherzogin', rankOrder: 3, description: 'Souveräner Fürst mit königsgleichen Vorrechten über ein Großherzogtum.' },
-  { title: 'Herzog / Herzogin', rankOrder: 4, description: 'Hoher Landesherr über ein historisches Herzogtum.' },
-  { title: 'Fürst / Fürstin', rankOrder: 5, description: 'Herrscher über ein autonomes Fürstentum mit Reichsstandschaft.' },
-  { title: 'Graf / Gräfin', rankOrder: 6, description: 'Verwalter und Herrscher einer Grafschaft mit eigener Gerichtsbarkeit.' },
-  { title: 'Baron / Baronin (Freiherr / Freiin)', rankOrder: 7, description: 'Freier Adelsstand mit eigenem Grundbesitz und Lehnsherrschaft.' },
-  { title: 'Edler / Edle', rankOrder: 8, description: 'Niederer erblicher Adelsstand des Landadels.' },
-  { title: 'Junker / Edelfräulein', rankOrder: 9, description: 'Nachkomme oder junger Spross einer adligen Familie ohne eigenen Besitz.' },
-  { title: 'Kronprinz / Kronprinzessin', rankOrder: 2, description: 'Thronfolger eines Königs- oder Kaiserhauses.' },
-  { title: 'Erbprinz / Erbprinzessin', rankOrder: 5, description: 'Erblicher Nachfolger eines regierenden Fürsten- oder Herzogshauses.' }
+export const PRESET_NOBILITY_TITLES: Array<{ title: string; rankOrder: number; description: string; category: 'Höchster Adel' | 'Hoher Adel' | 'Mittlerer Adel' | 'Niederer Adel'; isDynastic?: boolean }> = [
+  // 1. Höchster Adel (Imperialer & königlicher Souveränitätsadel, Thronerben)
+  { title: 'Kaiser / Kaiserin', rankOrder: 1, description: 'Höchster weltlicher Herrschertitel eines Großreiches oder Imperiums.', category: 'Höchster Adel' },
+  { title: 'König / Königin', rankOrder: 2, description: 'Souveräner Herrscher eines Königreiches.', category: 'Höchster Adel' },
+  { title: 'Kronprinz / Kronprinzessin', rankOrder: 2, description: 'Direkter Thronfolger eines königlichen oder kaiserlichen Herrscherhauses.', category: 'Höchster Adel', isDynastic: true },
+  { title: 'Großherzog / Großherzogin', rankOrder: 3, description: 'Souveräner Fürst mit königsgleichen Vorrechten über ein Großherzogtum.', category: 'Höchster Adel' },
+
+  // 2. Hoher Adel (Fürstlicher Stand, regierende Landesherren, Hochdynastien)
+  { title: 'Prinz / Prinzessin', rankOrder: 3, description: 'Nachkomme eines regierenden Königs- oder Kaiserhauses.', category: 'Hoher Adel', isDynastic: true },
+  { title: 'Kurfürst / Kurfürstin', rankOrder: 4, description: 'Reichsfürst mit dem exklusiven Vorrecht zur Wahl des Königs oder Kaisers.', category: 'Hoher Adel' },
+  { title: 'Herzog / Herzogin', rankOrder: 5, description: 'Hoher Landesherr über ein historisches Herzogtum.', category: 'Hoher Adel' },
+  { title: 'Erbherzog / Erbherzogstochter', rankOrder: 5, description: 'Erblicher Nachfolger des regierenden Herzogshauses.', category: 'Hoher Adel', isDynastic: true },
+  { title: 'Fürst / Fürstin', rankOrder: 6, description: 'Herrscher über ein autonomes Fürstentum mit Reichsstandschaft.', category: 'Hoher Adel' },
+  { title: 'Erbprinz / Erbprinzessin', rankOrder: 6, description: 'Erblicher Nachfolger eines Fürstenhauses.', category: 'Hoher Adel', isDynastic: true },
+  { title: 'Landgraf / Landgräfin', rankOrder: 7, description: 'Unmittelbar dem Landesherrn oder Kaiser unterstehender Herrscher einer Landgrafschaft.', category: 'Hoher Adel' },
+  { title: 'Markgraf / Markgräfin', rankOrder: 8, description: 'Herrscher über ein kaiserliches Grenzgebiet mit erweiterter militärischer Vollmacht.', category: 'Hoher Adel' },
+  { title: 'Pfalzgraf / Pfalzgräfin', rankOrder: 9, description: 'Kaiserlicher Stellvertreter und Statthalter an einer königlichen Pfalz.', category: 'Hoher Adel' },
+
+  // 3. Mittlerer Adel (Grafenstand & freie Herren / Barone)
+  { title: 'Graf / Gräfin', rankOrder: 10, description: 'Verwalter und Landesherr einer Grafschaft mit eigener Gerichtsbarkeit.', category: 'Mittlerer Adel' },
+  { title: 'Erbgraf / Erbgräfin (Komtesse)', rankOrder: 10, description: 'Erblicher Nachfolger oder Tochter einer regierenden Grafenfamilie.', category: 'Mittlerer Adel', isDynastic: true },
+  { title: 'Burggraf / Burggräfin', rankOrder: 11, description: 'Militärischer und richterlicher Herrscher über eine reichsunmittelbare Burg.', category: 'Mittlerer Adel' },
+  { title: 'Vizegraf / Vizegräfin (Viscount)', rankOrder: 12, description: 'Stellvertreter des Grafen oder Lehnsherr einer Vizegrafschaft.', category: 'Mittlerer Adel' },
+  { title: 'Baron / Baronin (Freiherr / Freiin)', rankOrder: 13, description: 'Freier Adelsstand mit eigenem Grundbesitz und Lehnsherrschaft.', category: 'Mittlerer Adel' },
+  { title: 'Baronssohn / Baronstochter', rankOrder: 13, description: 'Nachkomme einer Freiherren- oder Baronsfamilie.', category: 'Mittlerer Adel', isDynastic: true },
+
+  // 4. Niederer Adel (Ritterstand, Dienst- & Landadel, städtisches Patriziat)
+  { title: 'Ritter (Adelsstand / Lehnsritter)', rankOrder: 14, description: 'Geweihter oder erblicher ritterlicher Stand mit Wappenrecht.', category: 'Niederer Adel' },
+  { title: 'Edler / Edle', rankOrder: 15, description: 'Niederer erblicher Adelsstand des ritterbürtigen Landadels.', category: 'Niederer Adel' },
+  { title: 'Junker / Edelfräulein', rankOrder: 16, description: 'Nachkomme oder junger Spross einer adligen Familie ohne eigenen Grundbesitz.', category: 'Niederer Adel' },
+  { title: 'Patrizier (Stadtadel)', rankOrder: 17, description: 'Mitglied des erblichen regimentsfähigen Patriziats freier Reichsstädte.', category: 'Niederer Adel' }
 ];
 
 export const PRESET_HONORARY_TITLES: Array<{ title: string; description: string }> = [

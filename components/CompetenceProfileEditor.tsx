@@ -10,12 +10,12 @@ import {
 } from '../types';
 import ProfessionSelect from './ProfessionSelect';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
-import EverydaySkillsSelect from './EverydaySkillsSelect';
+import EverydaySkillsSelect, { parseEverydaySkills } from './EverydaySkillsSelect';
 import { ProfessionCompetencySection } from './ProfessionCompetencySection';
 import { TitlesAndPositionsSection } from './TitlesAndPositionsSection';
 import { getDutiesForProfessionAndLevel } from './professionDuties';
 import { STANDARD_AUTHORITIES, AUTHORITY_DUTIES_MAP } from './economy/EconomyPresets';
-import { BookOpen, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { BookOpen, Plus, Trash2, ChevronDown, ChevronUp, Briefcase, Layers, Award, Compass } from 'lucide-react';
 
 const normalizeForCompare = (s: string) =>
   s.trim().toLowerCase().replace(/^[-*•]\s*/, '').replace(/\s+/g, ' ');
@@ -203,8 +203,13 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
 
   // Section collapse states per V4 Specification Section 1
   const [isProfessionsOpen, setIsProfessionsOpen] = useState<boolean>(true);
-  const [isSecondaryOpen, setIsSecondaryOpen] = useState<boolean>(false);
-  const [isTitlesOpen, setIsTitlesOpen] = useState<boolean>(false);
+  const [isSecondaryOpen, setIsSecondaryOpen] = useState<boolean>(true);
+  const [isTitlesOpen, setIsTitlesOpen] = useState<boolean>(true);
+
+  // 4 Category Tabs navigation: Hauptberuf, Nebenberufe, Adelige Titel, Alltagskompetenzen
+  const [activeCategoryTab, setActiveCategoryTab] = useState<'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen' | 'alle'>('hauptberuf');
+
+  const parsedEverydayCount = everydaySkills ? parseEverydaySkills(everydaySkills).length : 0;
 
   const suggestedDuties = profession && professionLevel
     ? getDutiesForProfessionAndLevel(profession, professionLevel)
@@ -255,9 +260,88 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
   return (
     <div id="competence-profile-editor" className="flex flex-col gap-6 w-full">
       {/* ========================================================================= */}
+      {/* 4 BEREICHS-TAGS: HAUPTBERUF, NEBENBERUFE, ADELIGE TITEL, ALLTAGSKOMPETENZEN */}
+      {/* ========================================================================= */}
+      <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-900/90 border border-slate-800 rounded-xl shadow-sm">
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2">
+          Kategorien:
+        </span>
+
+        {/* Tag 1: Hauptberufe */}
+        <button
+          type="button"
+          onClick={() => setActiveCategoryTab('hauptberuf')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+            activeCategoryTab === 'hauptberuf'
+              ? 'bg-amber-950/90 border-amber-500 text-amber-200 ring-1 ring-amber-500/50'
+              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-amber-500/50 hover:text-amber-200'
+          }`}
+        >
+          <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+          <span>Hauptberuf{profession ? `: ${profession}` : ''}</span>
+        </button>
+
+        {/* Tag 2: Nebenberufe */}
+        <button
+          type="button"
+          onClick={() => setActiveCategoryTab('nebenberufe')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+            activeCategoryTab === 'nebenberufe'
+              ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/50'
+              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-emerald-500/50 hover:text-emerald-200'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Nebenberufe {secondaryProfessions.length > 0 ? `(${secondaryProfessions.length})` : ''}</span>
+        </button>
+
+        {/* Tag 3: Adelige Titel */}
+        <button
+          type="button"
+          onClick={() => setActiveCategoryTab('adelstitel')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+            activeCategoryTab === 'adelstitel'
+              ? 'bg-indigo-950/90 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500/50'
+              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-indigo-500/50 hover:text-indigo-200'
+          }`}
+        >
+          <Award className="w-3.5 h-3.5 text-indigo-400" />
+          <span>Adelige Titel {socialTitles.length > 0 ? `(${socialTitles.length})` : ''}</span>
+        </button>
+
+        {/* Tag 4: Alltagskompetenzen */}
+        <button
+          type="button"
+          onClick={() => setActiveCategoryTab('alltagskompetenzen')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+            activeCategoryTab === 'alltagskompetenzen'
+              ? 'bg-sky-950/90 border-sky-500 text-sky-200 ring-1 ring-sky-500/50'
+              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-sky-500/50 hover:text-sky-200'
+          }`}
+        >
+          <Compass className="w-3.5 h-3.5 text-sky-400" />
+          <span>Alltagskompetenzen {parsedEverydayCount > 0 ? `(${parsedEverydayCount})` : ''}</span>
+        </button>
+
+        {/* Option: Alle anzeigen */}
+        <button
+          type="button"
+          onClick={() => setActiveCategoryTab('alle')}
+          className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition cursor-pointer ${
+            activeCategoryTab === 'alle'
+              ? 'bg-slate-800 border-slate-600 text-white'
+              : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <span>Alle anzeigen</span>
+        </button>
+      </div>
+
+      {/* ========================================================================= */}
       {/* 1. HAUPTBERUF - KOMPETENZPROFIL (BERUFE & TALENTBAUM)                    */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+      {(activeCategoryTab === 'hauptberuf' || activeCategoryTab === 'alle') && (
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
         <div className="border-b border-slate-800 pb-3 flex items-center justify-between gap-3">
           <button
             type="button"
@@ -322,6 +406,10 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
             onSecondaryProfessionsChange={onSecondaryProfessionsChange}
             socialTitles={socialTitles}
             onSocialTitlesChange={onSocialTitlesChange}
+            everydaySkills={everydaySkills}
+            onEverydaySkillsChange={onEverydaySkillsChange}
+            activeCategoryTab={activeCategoryTab === 'alle' ? 'hauptberuf' : activeCategoryTab}
+            onSelectCategoryTab={setActiveCategoryTab}
             onProficiencyScoreChange={onProfessionProficiencyScoreChange}
             onExperiencePointsChange={onProfessionExperiencePointsChange}
             onPromotionConditionsChange={onProfessionPromotionConditionsChange}
@@ -549,133 +637,152 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
       </div>
     )}
   </div>
+  )}
 
       {/* ========================================================================= */}
       {/* 2. NEBENBERUFE & WEITERE QUALIFIKATIONEN                                  */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
-        <div className="border-b border-slate-800 pb-3 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={() => setIsSecondaryOpen(prev => !prev)}
-            className="flex items-center gap-2.5 text-left cursor-pointer group"
-          >
-            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:border-amber-500/60 transition">
-              {isSecondaryOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </div>
-            <div>
-              <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider group-hover:text-amber-300 transition">
-                Nebenberufe ({secondaryProfessions.length})
-              </h5>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Zusätzliche Berufe, Nebentätigkeiten oder Zweitausbildungen des Charakters
-              </p>
-            </div>
-          </button>
-
-          {onSecondaryProfessionsChange && (
+      {(activeCategoryTab === 'nebenberufe' || activeCategoryTab === 'alle') && (
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between gap-3">
             <button
               type="button"
-              id="btn-add-secondary-profession"
-              onClick={handleAddSecondaryProfession}
-              className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              onClick={() => setIsSecondaryOpen(prev => !prev)}
+              className="flex items-center gap-2.5 text-left cursor-pointer group"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Nebenberuf hinzufügen</span>
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:border-emerald-500/60 transition">
+                {isSecondaryOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+              <div>
+                <h5 className="text-xs font-bold text-emerald-400 uppercase tracking-wider group-hover:text-emerald-300 transition">
+                  Nebenberufe ({secondaryProfessions.length})
+                </h5>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Zusätzliche Berufe, Nebentätigkeiten oder Zweitausbildungen des Charakters
+                </p>
+              </div>
             </button>
-          )}
-        </div>
 
-        {isSecondaryOpen && (
-          <div className="flex flex-col gap-4">
-            {secondaryProfessions.length === 0 ? (
-              <div className="p-4 text-center bg-slate-950/40 border border-slate-800/80 rounded-xl text-xs text-slate-500">
-                Keine Nebenberufe eingetragen. Klicke auf "+ Nebenberuf hinzufügen", um eine weitere Berufsqualifikation zu ergänzen.
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {secondaryProfessions.map((sec, idx) => (
-                  <div
-                    key={sec.id || idx}
-                    id={`secondary-profession-card-${idx}`}
-                    className="bg-slate-950 border border-slate-800/90 rounded-xl p-4 flex flex-col gap-3.5 relative"
-                  >
-                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
-                      <span className="text-xs font-bold text-amber-400/90 uppercase tracking-wider">
-                        Nebenberuf #{idx + 1}
-                      </span>
-                      {onSecondaryProfessionsChange && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSecondaryProfession(idx)}
-                          className="px-2 py-0.5 text-[11px] text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition flex items-center gap-1 cursor-pointer"
-                          title="Nebenberuf entfernen"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Entfernen</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Einspaltiges Layout für den Nebenberuf */}
-                    <div>
-                      <ProfessionCompetencySection
-                        sectionTitle={`Nebenberuf #${idx + 1}`}
-                        professionName={sec.profession || ''}
-                        onProfessionNameChange={(val, detectedField) => {
-                          const updates: Partial<SecondaryProfession> = { profession: val };
-                          if (detectedField) updates.professionField = detectedField;
-                          handleUpdateSecondaryProfession(idx, updates);
-                        }}
-                        professionLevel={sec.professionLevel || ''}
-                        professionField={sec.professionField || ''}
-                        onProfessionFieldChange={val => handleUpdateSecondaryProfession(idx, { professionField: val })}
-                        professionSpecialization={sec.specialization || ''}
-                        onSpecializationChange={val => handleUpdateSecondaryProfession(idx, { specialization: val })}
-                        professionRank={sec.professionLevel || ''}
-                        onProfessionRankChange={val => handleUpdateSecondaryProfession(idx, { professionLevel: val })}
-                        professionProgress={sec.professionProgress || {
-                          professionName: sec.profession || 'Nebenberuf',
-                          level: sec.professionLevel || 'Anfänger',
-                          fieldId: sec.professionField || '',
-                          specialization: sec.specialization || '',
-                          rank: sec.professionLevel || 'Anfänger',
-                          overallProficiency: sec.proficiencyScore || 0,
-                          experiencePoints: sec.experiencePoints || 0,
-                          experienceText: sec.experienceText || '',
-                          promotionConditions: sec.promotionConditions ? [sec.promotionConditions] : []
-                        }}
-                        onProfessionProgressChange={secProg => {
-                          handleUpdateSecondaryProfession(idx, {
-                            professionProgress: secProg,
-                            proficiencyScore: secProg.overallProficiency,
-                            experiencePoints: secProg.experiencePoints
-                          });
-                        }}
-                        competencies={sec.professionCompetencies || []}
-                        onCompetenciesChange={secComps => {
-                          handleUpdateSecondaryProfession(idx, {
-                            professionCompetencies: secComps
-                          });
-                        }}
-                        onProficiencyScoreChange={val => handleUpdateSecondaryProfession(idx, { proficiencyScore: val })}
-                        onExperiencePointsChange={val => handleUpdateSecondaryProfession(idx, { experiencePoints: val })}
-                        onPromotionConditionsChange={val => handleUpdateSecondaryProfession(idx, { promotionConditions: val })}
-                        promotionConditionsText={sec.promotionConditions || ''}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {onSecondaryProfessionsChange && (
+              <button
+                type="button"
+                id="btn-add-secondary-profession"
+                onClick={handleAddSecondaryProfession}
+                className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Nebenberuf hinzufügen</span>
+              </button>
             )}
           </div>
-        )}
-      </div>
+
+          {isSecondaryOpen && (
+            <div className="flex flex-col gap-4">
+              {secondaryProfessions.length === 0 ? (
+                <div className="p-6 text-center bg-slate-950/40 border border-slate-800/80 rounded-xl flex flex-col items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-950/30 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <Layers className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-slate-300">Keine Nebenberufe eingetragen</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Füge eine Nebentätigkeit, Handwerkszweig oder Zweitausbildung hinzu.</p>
+                  </div>
+                  {onSecondaryProfessionsChange && (
+                    <button
+                      type="button"
+                      onClick={handleAddSecondaryProfession}
+                      className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Ersten Nebenberuf anlegen</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {secondaryProfessions.map((sec, idx) => (
+                    <div
+                      key={sec.id || idx}
+                      id={`secondary-profession-card-${idx}`}
+                      className="bg-slate-950 border border-slate-800/90 rounded-xl p-4 flex flex-col gap-3.5 relative"
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                        <span className="text-xs font-bold text-emerald-400/90 uppercase tracking-wider">
+                          Nebenberuf #{idx + 1}
+                        </span>
+                        {onSecondaryProfessionsChange && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSecondaryProfession(idx)}
+                            className="px-2 py-0.5 text-[11px] text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition flex items-center gap-1 cursor-pointer"
+                            title="Nebenberuf entfernen"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Entfernen</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Einspaltiges Layout für den Nebenberuf */}
+                      <div>
+                        <ProfessionCompetencySection
+                          sectionTitle={`Nebenberuf #${idx + 1}`}
+                          professionName={sec.profession || ''}
+                          onProfessionNameChange={(val, detectedField) => {
+                            const updates: Partial<SecondaryProfession> = { profession: val };
+                            if (detectedField) updates.professionField = detectedField;
+                            handleUpdateSecondaryProfession(idx, updates);
+                          }}
+                          professionLevel={sec.professionLevel || ''}
+                          professionField={sec.professionField || ''}
+                          onProfessionFieldChange={val => handleUpdateSecondaryProfession(idx, { professionField: val })}
+                          professionSpecialization={sec.specialization || ''}
+                          onSpecializationChange={val => handleUpdateSecondaryProfession(idx, { specialization: val })}
+                          professionRank={sec.professionLevel || ''}
+                          onProfessionRankChange={val => handleUpdateSecondaryProfession(idx, { professionLevel: val })}
+                          professionProgress={sec.professionProgress || {
+                            professionName: sec.profession || 'Nebenberuf',
+                            level: sec.professionLevel || 'Anfänger',
+                            fieldId: sec.professionField || '',
+                            specialization: sec.specialization || '',
+                            rank: sec.professionLevel || 'Anfänger',
+                            overallProficiency: sec.proficiencyScore || 0,
+                            experiencePoints: sec.experiencePoints || 0,
+                            experienceText: sec.experienceText || '',
+                            promotionConditions: sec.promotionConditions ? [sec.promotionConditions] : []
+                          }}
+                          onProfessionProgressChange={secProg => {
+                            handleUpdateSecondaryProfession(idx, {
+                              professionProgress: secProg,
+                              proficiencyScore: secProg.overallProficiency,
+                              experiencePoints: secProg.experiencePoints
+                            });
+                          }}
+                          competencies={sec.professionCompetencies || []}
+                          onCompetenciesChange={secComps => {
+                            handleUpdateSecondaryProfession(idx, {
+                              professionCompetencies: secComps
+                            });
+                          }}
+                          onProficiencyScoreChange={val => handleUpdateSecondaryProfession(idx, { proficiencyScore: val })}
+                          onExperiencePointsChange={val => handleUpdateSecondaryProfession(idx, { experiencePoints: val })}
+                          onPromotionConditionsChange={val => handleUpdateSecondaryProfession(idx, { promotionConditions: val })}
+                          promotionConditionsText={sec.promotionConditions || ''}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 3. GESELLSCHAFTLICHE TITEL, ÄMTER & POSITIONEN (ADELSTITEL & STAND)        */}
       {/* ========================================================================= */}
-      {onSocialTitlesChange && onOfficesChange && onPositionsChange && (
+      {(activeCategoryTab === 'adelstitel' || activeCategoryTab === 'alle') && onSocialTitlesChange && onOfficesChange && onPositionsChange && (
         <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
           <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
             <button
@@ -683,11 +790,11 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
               onClick={() => setIsTitlesOpen(prev => !prev)}
               className="flex items-center gap-2.5 text-left cursor-pointer group"
             >
-              <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 group-hover:border-amber-500/60 transition">
+              <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:border-indigo-500/60 transition">
                 {isTitlesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </div>
               <div>
-                <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider group-hover:text-amber-300 transition">
+                <h5 className="text-xs font-bold text-indigo-400 uppercase tracking-wider group-hover:text-indigo-300 transition">
                   Adelstitel & Gesellschaftlicher Stand
                 </h5>
                 <p className="text-[11px] text-slate-400 mt-0.5">
@@ -711,54 +818,67 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
       )}
 
       {/* ========================================================================= */}
-      {/* 4. ERGÄNZENDE KOMPETENZEN & AUSRÜSTUNG (AutoExpandingTextareas)           */}
+      {/* 4. ALLTAGSKOMPETENZEN & ERGÄNZENDE AUSRÜSTUNG                              */}
       {/* ========================================================================= */}
-      <div className="bg-slate-900/40 border border-slate-800/80 rounded-2xl p-4 sm:p-5 flex flex-col gap-4">
-        <div className="border-b border-slate-800/80 pb-2">
-          <h5 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            Ergänzende Kompetenzen & Ausrüstung
-          </h5>
-        </div>
+      {(activeCategoryTab === 'alltagskompetenzen' || activeCategoryTab === 'alle') && (
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+          <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                <Compass className="w-4 h-4" />
+              </div>
+              <div>
+                <h5 className="text-xs font-bold text-sky-400 uppercase tracking-wider">
+                  Alltagskompetenzen & Ergänzende Fertigkeiten
+                </h5>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Praktische Alltagskompetenzen, Hobbys, Talente und Berufsausrüstung des Charakters
+                </p>
+              </div>
+            </div>
+          </div>
 
-        {/* Spezielle Talente & Wissen */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-            Spezielle Talente & Spezialwissen
-          </label>
-          <AutoExpandingTextarea
-            value={talents}
-            onChange={e => onTalentsChange(e.target.value)}
-            placeholder="Spezielle Talente, Fachwissen und kognitive Kenntnisse"
-            className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition min-h-[55px]"
-          />
-        </div>
+          {/* Alltagskompetenzen & Praktische Fertigkeiten */}
+          <div className="flex flex-col gap-2">
+            <label className="text-xs text-sky-300 font-bold uppercase tracking-wider flex items-center gap-2">
+              <Compass className="w-3.5 h-3.5 text-sky-400" />
+              <span>Alltagskompetenzen & Praktische Fertigkeiten</span>
+            </label>
+            <EverydaySkillsSelect
+              value={everydaySkills}
+              onChange={onEverydaySkillsChange}
+              placeholder="Alltagskompetenzen und praktische Fertigkeiten im Alltag"
+              className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-sky-500 transition min-h-[55px]"
+            />
+          </div>
 
-        {/* Alltagskompetenzen & Praktische Fertigkeiten */}
-        <div className="flex flex-col gap-2">
-          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-            Alltagskompetenzen & Praktische Fertigkeiten
-          </label>
-          <EverydaySkillsSelect
-            value={everydaySkills}
-            onChange={onEverydaySkillsChange}
-            placeholder="Alltagskompetenzen und praktische Fertigkeiten im Alltag"
-            className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition min-h-[55px]"
-          />
-        </div>
+          {/* Spezielle Talente & Wissen */}
+          <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-800/80">
+            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+              Spezielle Talente & Spezialwissen
+            </label>
+            <AutoExpandingTextarea
+              value={talents}
+              onChange={e => onTalentsChange(e.target.value)}
+              placeholder="Spezielle Talente, Fachwissen und kognitive Kenntnisse"
+              className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition min-h-[55px]"
+            />
+          </div>
 
-        {/* Berufswerkzeuge & Ausrüstung */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-            Berufswerkzeuge, Lizenzen & Ausrüstung
-          </label>
-          <AutoExpandingTextarea
-            value={toolsAndEquipment}
-            onChange={e => onToolsAndEquipmentChange(e.target.value)}
-            placeholder="Berufswerkzeuge, Lizenzen, Zertifikate und berufliche Ausrüstung"
-            className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition min-h-[55px]"
-          />
+          {/* Berufswerkzeuge & Ausrüstung */}
+          <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-800/80">
+            <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+              Berufswerkzeuge, Lizenzen & Ausrüstung
+            </label>
+            <AutoExpandingTextarea
+              value={toolsAndEquipment}
+              onChange={e => onToolsAndEquipmentChange(e.target.value)}
+              placeholder="Berufswerkzeuge, Lizenzen, Zertifikate und berufliche Ausrüstung"
+              className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition min-h-[55px]"
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -6,6 +6,7 @@ import { NauticalMapBackground } from './NauticalMapBackground';
 import { TacticalCanvasEditor } from './TacticalCanvasEditor';
 import { GeminiService } from '../services/geminiService';
 import { WorldMapCreatorModal } from './WorldMapCreatorModal';
+import { StorageService } from '../lib/storageService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { 
   CheckCircle2, ChevronDown, ChevronRight, Info, Layers, Map as MapIcon, 
@@ -1386,12 +1387,12 @@ export const WorldMapEditor: React.FC<WorldMapEditorProps> = ({
                 <span>🌐 Welten-Generator</span>
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   try {
-                    localStorage.setItem('onepiece_world_template', JSON.stringify(territories));
-                    alert("Weltkarte erfolgreich als One Piece Vorlage gespeichert!");
+                    await StorageService.setItem('onepiece_world_template', territories);
+                    alert("Weltkarte erfolgreich als Vorlage gespeichert!");
                   } catch (e) {
-                    alert("Fehler beim Speichern der Vorlage. Möglicherweise ist der Speicher voll.");
+                    alert("Fehler beim Speichern der Vorlage.");
                   }
                 }}
                 className="px-1.5 py-1 bg-emerald-950/40 hover:bg-emerald-900 border border-emerald-900/60 text-emerald-400 text-[8.5px] font-bold rounded-lg uppercase tracking-wider transition-all"

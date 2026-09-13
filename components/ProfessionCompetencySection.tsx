@@ -68,6 +68,10 @@ interface ProfessionCompetencySectionProps {
   onSocialTitlesChange?: (titles: SocialTitleState[]) => void;
   additionalDirections?: string[];
   onAdditionalDirectionsChange?: (directions: string[]) => void;
+  everydaySkills?: string;
+  onEverydaySkillsChange?: (skills: string) => void;
+  activeCategoryTab?: 'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen';
+  onSelectCategoryTab?: (tab: 'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen') => void;
   // Legacy sync handlers for backward compatibility
   onProficiencyScoreChange?: (score: number) => void;
   onExperiencePointsChange?: (xp: number) => void;
@@ -98,6 +102,10 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
   onSocialTitlesChange,
   additionalDirections,
   onAdditionalDirectionsChange,
+  everydaySkills = '',
+  onEverydaySkillsChange,
+  activeCategoryTab = 'hauptberuf',
+  onSelectCategoryTab,
   onProficiencyScoreChange,
   onExperiencePointsChange,
   onPromotionConditionsChange,
@@ -543,6 +551,10 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
             onSecondaryProfessionsChange={onSecondaryProfessionsChange}
             socialTitles={socialTitles}
             onSocialTitlesChange={onSocialTitlesChange}
+            everydaySkills={everydaySkills}
+            onEverydaySkillsChange={onEverydaySkillsChange}
+            activeCategoryTab={activeCategoryTab}
+            onSelectCategoryTab={onSelectCategoryTab}
             onSelectProfession={(newProf, newSpec, newField) => {
               if (newField && newField !== currentField) {
                 setLocalField(newField);

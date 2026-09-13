@@ -1,5 +1,6 @@
 import { ProfessionCompetency, ProfessionExperience, ProfessionProgress } from '../types';
 import { JOB_CATEGORIES } from '../components/jobPresets';
+import { getBranchesForField, convertProgressionToNodes } from './professionProgressionData';
 
 export type ProfessionNodeTier = 'einstieg' | 'beruf' | 'spezialisierung' | 'meister';
 
@@ -32,6 +33,11 @@ export interface ProfessionTreeNode {
   careerRoutes: ProfessionCareerRoute[];
   suggestedCompetencies: string[];
   possibleRanks: string[];
+  category?: string;
+  rankOrder?: number;
+  rankTitle?: string;
+  nextRankProfession?: string;
+  previousRankProfession?: string;
 }
 
 export interface ProfessionTreeField {
@@ -485,8 +491,8 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
-        childIds: ['schmied', 'schreiner', 'zimmermann', 'maurer', 'gerber', 'schneider'],
-        description: 'Einstieg in den Berufszweig „Bau & Handwerk“',
+        childIds: ['architekt', 'maurer', 'zimmermann', 'dachdecker', 'brunnenbauer', 'schreiner'],
+        description: 'Einstieg in den Berufszweig „Bauhandwerk & Architektur“',
         prerequisites: [],
         careerRoutes: [
           { id: 'h_open', name: 'Einstieg in Werkstatt', type: 'experience', description: 'Lehre oder Handlangerdienst.', requirementsSummary: 'Offen' }
@@ -494,135 +500,189 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
         possibleRanks: ['Lehrling', 'Auszubildender']
       },
-      // SCHMIED BRANCH
+      // ARCHITEKT & FESTUNGSBAUER BRANCH
       {
-        id: 'schmied',
+        id: 'architekt',
         fieldId: 'bau_handwerk',
-        name: 'Schmied',
+        name: 'Architekt & Festungsbauer',
         tier: 'beruf',
         parentIds: ['handwerk_root'],
-        childIds: ['waffenschmied', 'ruestungsschmied', 'werkzeugschmied', 'hufschmied'],
-        description: 'Umformen von Eisen, Bronze und Stahl am glühenden Amboss.',
+        childIds: ['festungsbaumeister', 'palastarchitekt'],
+        description: 'Entwurf, Statik und Konstruktionsleitung von Bauwerken, Mauern, Wehrtürmen und Hallen.',
         prerequisites: [
           { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
         ],
         careerRoutes: [
-          { id: 's_exam', name: 'Gesellenstück', type: 'exam', description: 'Erfolgreiche Schmiedegesellenprüfung.', requirementsSummary: 'Zunftprüfung' },
-          { id: 's_exp', name: 'Hammerschlagpraxis', type: 'experience', description: '1+ Jahr tägliches Schmieden.', requirementsSummary: '1 Jahr Praxis' }
+          { id: 'arch_exam', name: 'Architektenbestallung', type: 'exam', description: 'Risszeichnung und statische Bemessung.', requirementsSummary: '1 Jahr Baupraxis' }
         ],
-        suggestedCompetencies: ['Schmiedefeuer regulieren', 'Ambossführung', 'Härten & Anlassen'],
-        possibleRanks: ['Schmiedegeselle', 'Grobschmied', 'Schmiedemeister']
+        suggestedCompetencies: ['Bauplanung & Risszeichnung', 'Baustatik', 'Materialbedarfsrechnung'],
+        possibleRanks: ['Bauleiter', 'Architekt', 'Festungsbaumeister']
       },
       {
-        id: 'waffenschmied',
+        id: 'festungsbaumeister',
         fieldId: 'bau_handwerk',
-        name: 'Waffenschmied',
+        name: 'Festungsbaumeister',
         tier: 'spezialisierung',
-        specializationOf: 'schmied',
-        parentIds: ['schmied'],
-        childIds: ['schwertschmied', 'damastmeister'],
-        description: 'Fertigung von Schwertern, Dolchen, Lanzen und Klingenwaffen mit exakter Härtung.',
+        specializationOf: 'architekt',
+        parentIds: ['architekt'],
+        childIds: ['generalbaumeister'],
+        description: 'Bastionen, Wehrmauern, Kurtinen, Grabenwerke und ballistische Verteidigungsanlagen.',
         prerequisites: [
-          { type: 'profession', label: 'Schmied', targetId: 'schmied' },
-          { type: 'experience_years', label: '2 Jahre Schmiedeerfahrung', minValue: 2 }
+          { type: 'profession', label: 'Architekt & Festungsbauer', targetId: 'architekt' },
+          { type: 'experience_years', label: '2 Jahre Baupraxis', minValue: 2 }
         ],
         careerRoutes: [
-          { id: 'ws_exp', name: 'Klingenschmiedelehre', type: 'experience', description: 'Spezialisierung auf Klingenstahl.', requirementsSummary: '2 Jahre Praxis' }
+          { id: 'fb_exp', name: 'Wehrbaupraxis', type: 'experience', description: 'Errichtung von Wehranlagen.', requirementsSummary: '2 Jahre Praxis' }
         ],
-        suggestedCompetencies: ['Langschwerter schmieden', 'Hohlkehlen schlagen', 'Selektive Härtung'],
-        possibleRanks: ['Klingenschmied', 'Waffenmeister']
+        suggestedCompetencies: ['Bastionsentwurf', 'Schusswinkelberechnung', 'Grabensysteme'],
+        possibleRanks: ['Festungsbaumeister', 'Wehrbau-Ingenieur']
       },
       {
-        id: 'schwertschmied',
+        id: 'palastarchitekt',
         fieldId: 'bau_handwerk',
-        name: 'Schwertschmied',
+        name: 'Palast- & Sakralarchitekt',
+        tier: 'spezialisierung',
+        specializationOf: 'architekt',
+        parentIds: ['architekt'],
+        childIds: ['generalbaumeister'],
+        description: 'Monumentale Repräsentationsbauten, Paläste, Kathedralen und Kuppelkonstruktionen.',
+        prerequisites: [
+          { type: 'profession', label: 'Architekt & Festungsbauer', targetId: 'architekt' },
+          { type: 'experience_years', label: '2 Jahre Baupraxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'pa_exp', name: 'Monumentalbau', type: 'experience', description: 'Entwurf von Residenzen und Sakralbauten.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Kuppelstatik', 'Prachtarchitektur', 'Säulenordnungen'],
+        possibleRanks: ['Hofarchitekt', 'Sakralbaumeister']
+      },
+      {
+        id: 'generalbaumeister',
+        fieldId: 'bau_handwerk',
+        name: 'Generalbaumeister & Stadtplaner',
         tier: 'meister',
-        specializationOf: 'waffenschmied',
-        parentIds: ['waffenschmied'],
+        parentIds: ['festungsbaumeister', 'palastarchitekt'],
         childIds: [],
-        description: 'Meisterhafte Schwerter, Damaszenerklingen und vollendete Waffenbalancierung.',
+        description: 'Oberaufsicht über das gesamte Bauwesen einer Stadt oder Herrschaft sowie Festungsringe.',
         prerequisites: [
-          { type: 'profession', label: 'Waffenschmied', targetId: 'waffenschmied' },
-          { type: 'experience_years', label: '3 Jahre Klingenpraxis', minValue: 3 }
-        ],
-        careerRoutes: [
-          { id: 'ss_master', name: 'Meisterschwert-Prüfung', type: 'exam', description: 'Schmieden einer fehlerfreien Meisterklinge.', requirementsSummary: 'Zunftprüfung' }
-        ],
-        suggestedCompetencies: ['Damaszenerstahl falten', 'Klingenbalancierung', 'Meisterschlag'],
-        possibleRanks: ['Schwertmeister', 'Klingengroßmeister']
-      },
-      {
-        id: 'ruestungsschmied',
-        fieldId: 'bau_handwerk',
-        name: 'Rüstungsschmied',
-        tier: 'spezialisierung',
-        specializationOf: 'schmied',
-        parentIds: ['schmied'],
-        childIds: ['damastmeister'],
-        description: 'Treiben maßgeschneiderter Plattenharnische, Helme, Schilde und Schutzpanzer.',
-        prerequisites: [
-          { type: 'profession', label: 'Schmied', targetId: 'schmied' },
-          { type: 'experience_years', label: '2 Jahre Schmiedeerfahrung', minValue: 2 }
-        ],
-        careerRoutes: [
-          { id: 'rs_exp', name: 'Plattnerkunst', type: 'experience', description: 'Treiben von Blechen auf Bossierklötzen.', requirementsSummary: '2 Jahre Praxis' }
-        ],
-        suggestedCompetencies: ['Plattenrüstung treiben', 'Harnischpassung', 'Visierbau'],
-        possibleRanks: ['Plattner', 'Harnischmeister']
-      },
-      {
-        id: 'werkzeugschmied',
-        fieldId: 'bau_handwerk',
-        name: 'Werkzeug- & Feinschmied',
-        tier: 'spezialisierung',
-        specializationOf: 'schmied',
-        parentIds: ['schmied'],
-        childIds: [],
-        description: 'Äxte, Beile, Meißel, Zangen, Schlösser und Präzisionswerkzeuge.',
-        prerequisites: [
-          { type: 'profession', label: 'Schmied', targetId: 'schmied' }
-        ],
-        careerRoutes: [
-          { id: 'wzs_exp', name: 'Zeugschmiede', type: 'experience', description: 'Herstellung zäher Handwerkzeuge.', requirementsSummary: 'Praxis' }
-        ],
-        suggestedCompetencies: ['Werkzeugstähle verschweißen', 'Schlossmechanik'],
-        possibleRanks: ['Zeugschmied', 'Schlossmacher']
-      },
-      {
-        id: 'hufschmied',
-        fieldId: 'bau_handwerk',
-        name: 'Hufschmied',
-        tier: 'spezialisierung',
-        specializationOf: 'schmied',
-        parentIds: ['schmied'],
-        childIds: [],
-        description: 'Beschlag von Pferden, Maultieren und Ochsen sowie Hufpflege.',
-        prerequisites: [
-          { type: 'profession', label: 'Schmied', targetId: 'schmied' }
-        ],
-        careerRoutes: [
-          { id: 'hs_exp', name: 'Stall- & Wanderpraxis', type: 'experience', description: 'Beschlagpraxis an Reit- und Zugtieren.', requirementsSummary: 'Praxis' }
-        ],
-        suggestedCompetencies: ['Hufeisen anpassen', 'Hufkorrektur', 'Nagelung'],
-        possibleRanks: ['Hufschmied']
-      },
-      {
-        id: 'damastmeister',
-        fieldId: 'bau_handwerk',
-        name: 'Damastmeister & Meisterschmied',
-        tier: 'meister',
-        parentIds: ['waffenschmied', 'ruestungsschmied'],
-        childIds: [],
-        description: 'Feuerverschweißen mehrlagiger Damaszenerstähle und Meisterwerke von legendärer Schärfe.',
-        prerequisites: [
-          { type: 'experience_years', label: '5 Jahre Schmiedeerfahrung', minValue: 5 },
+          { type: 'experience_years', label: '5 Jahre Erfahrung', minValue: 5 },
           { type: 'rank', label: 'Meistergrad' }
         ],
         careerRoutes: [
-          { id: 'dm_exam', name: 'Meisterprüfung', type: 'exam', description: 'Schmieden einer Meisterklinge vor der Zunft.', requirementsSummary: '5 Jahre Praxis + Meisterstück' }
+          { id: 'gb_pat', name: 'Königliches Baupatent', type: 'social_recognition', description: 'Ernennung zum Generalbaumeister der Krone.', requirementsSummary: '5 Jahre Praxis + Großprojekt' }
         ],
-        suggestedCompetencies: ['Damaszenerstahl falten', 'Katana schmieden', 'Rüstungsmeisterwerk'],
-        possibleRanks: ['Zunftmeister', 'Großschmied']
+        suggestedCompetencies: ['Stadtplanung', 'Großbaustellenlogistik', 'Festungsring-Architektur'],
+        possibleRanks: ['Generalbaumeister', 'Oberhofbaumeister']
+      },
+
+      // DACHDECKER BRANCH
+      {
+        id: 'dachdecker',
+        fieldId: 'bau_handwerk',
+        name: 'Dachdecker & Schieferdecker',
+        tier: 'beruf',
+        parentIds: ['handwerk_root'],
+        childIds: ['schieferdecker', 'turmdecker'],
+        description: 'Eindeckung von Dächern mit Schiefer, Schindeln, Reet, Ziegeln und Metallabdeckungen.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'dd_exam', name: 'Dachdeckergesellenbrief', type: 'exam', description: 'Prüfung in Dacheindeckung und Sturmsicherung.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Dacheindeckung', 'Schwind- & Schieferhauen', 'Sturmsicherung', 'Schwindelfreiheit'],
+        possibleRanks: ['Dachdeckergeselle', 'Schieferdecker', 'Dachdeckermeister']
+      },
+      {
+        id: 'schieferdecker',
+        fieldId: 'bau_handwerk',
+        name: 'Schieferdecker & Blechspengler',
+        tier: 'spezialisierung',
+        specializationOf: 'dachdecker',
+        parentIds: ['dachdecker'],
+        childIds: [],
+        description: 'Feine Bogenschnitt-Schieferdeckungen, Kehlen und metallene Ableitungen.',
+        prerequisites: [
+          { type: 'profession', label: 'Dachdecker & Schieferdecker', targetId: 'dachdecker' }
+        ],
+        careerRoutes: [
+          { id: 'sd_exp', name: 'Schieferpraxis', type: 'experience', description: 'Altdeutsche Schieferdeckung.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Altdeutsche Deckung', 'Spenglerarbeit', 'Ortgang & First'],
+        possibleRanks: ['Schieferdecker', 'Spengler']
+      },
+      {
+        id: 'turmdecker',
+        fieldId: 'bau_handwerk',
+        name: 'Kupfer- & Turmdecker',
+        tier: 'spezialisierung',
+        specializationOf: 'dachdecker',
+        parentIds: ['dachdecker'],
+        childIds: [],
+        description: 'Eindeckung steiler Kirchtürme, Kuppeln und Helmdächer mit Kupfer- und Bleiplatten.',
+        prerequisites: [
+          { type: 'profession', label: 'Dachdecker & Schieferdecker', targetId: 'dachdecker' }
+        ],
+        careerRoutes: [
+          { id: 'td_exp', name: 'Turmhaubenpraxis', type: 'experience', description: 'Höhenarbeiten an Kirchtürmen und Burgen.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Kupferblechfalzung', 'Turmhaubendeckung', 'Höhensicherheit'],
+        possibleRanks: ['Turmdecker', 'Kupferdeckermeister']
+      },
+
+      // BRUNNENBAUER BRANCH
+      {
+        id: 'brunnenbauer',
+        fieldId: 'bau_handwerk',
+        name: 'Brunnen- & Brückenbauer',
+        tier: 'beruf',
+        parentIds: ['handwerk_root'],
+        childIds: ['tiefbrunnenbauer', 'wasserbaumeister'],
+        description: 'Aushub und Fassung von Tiefbrunnen, Zisternen, Pfeilerfundamenten und Brückenjochen.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'bb_exam', name: 'Brunnenbauerprüfung', type: 'exam', description: 'Prüfung in Schachtbau und Grundwassersicherung.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Schachtabstützung', 'Grundwasserprüfung', 'Pfeilergründung', 'Pumpenmechanik'],
+        possibleRanks: ['Brunnenbauergeselle', 'Brunnenmeister']
+      },
+      {
+        id: 'tiefbrunnenbauer',
+        fieldId: 'bau_handwerk',
+        name: 'Tiefbrunnen- & Schachtbauer',
+        tier: 'spezialisierung',
+        specializationOf: 'brunnenbauer',
+        parentIds: ['brunnenbauer'],
+        childIds: [],
+        description: 'Tiefste Burgbrunnen, Felsstollen und versiegelte Quellfassungen.',
+        prerequisites: [
+          { type: 'profession', label: 'Brunnen- & Brückenbauer', targetId: 'brunnenbauer' }
+        ],
+        careerRoutes: [
+          { id: 'tb_exp', name: 'Burgbrunnenpraxis', type: 'experience', description: 'Abteufen von Felsbrunnen.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Felsaushub', 'Senkbrunnenbau', 'Luftzufuhr in Tiefen'],
+        possibleRanks: ['Tiefbrunnenmeister']
+      },
+      {
+        id: 'wasserbaumeister',
+        fieldId: 'bau_handwerk',
+        name: 'Wasserbau- & Zisternenmeister',
+        tier: 'spezialisierung',
+        specializationOf: 'brunnenbauer',
+        parentIds: ['brunnenbauer'],
+        childIds: [],
+        description: 'Wasserleitungen, Aquädukte, Schleusen und städtische Frischwasserversorgung.',
+        prerequisites: [
+          { type: 'profession', label: 'Brunnen- & Brückenbauer', targetId: 'brunnenbauer' }
+        ],
+        careerRoutes: [
+          { id: 'wb_exp', name: 'Wasserbaupraxis', type: 'experience', description: 'Kanäle, Schleusen und Leitungen.', requirementsSummary: 'Praxis' }
+        ],
+        suggestedCompetencies: ['Aquäduktstatik', 'Schleusenbau', 'Wasserdruckberechnung'],
+        possibleRanks: ['Wasserbaumeister', 'Röhrenmeister']
       },
       // SCHREINER / TISCHLER BRANCH
       {
@@ -886,182 +946,6 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         ],
         suggestedCompetencies: ['Bauplanung & Risszeichnung', 'Hüttengeheimnisse', 'Gewölbestatik'],
         possibleRanks: ['Dombaumeister', 'Hüttenmeister']
-      },
-
-      // GERBER / LEDERER BRANCH
-      {
-        id: 'gerber',
-        fieldId: 'bau_handwerk',
-        name: 'Gerber & Lederer',
-        tier: 'beruf',
-        parentIds: ['handwerk_root'],
-        childIds: ['ruestleder_gerber', 'feingerber', 'saemischgerber'],
-        description: 'Pflanzliche und mineralische Gerbung von Häuten zu Rüst-, Sohl- und Bekleidungsleder.',
-        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
-        careerRoutes: [{ id: 'ger_exp', name: 'Gerberhof', type: 'experience', description: 'Praxis in Gerbbottichen und Trockenböden.', requirementsSummary: 'Praxis' }],
-        suggestedCompetencies: ['Leder gerben', 'Zurichten & Falzen', 'Rüstleder härten'],
-        possibleRanks: ['Lohgerber', 'Gerbermeister']
-      },
-      {
-        id: 'ruestleder_gerber',
-        fieldId: 'bau_handwerk',
-        name: 'Rüstleder- & Harnischgerber',
-        tier: 'spezialisierung',
-        specializationOf: 'gerber',
-        parentIds: ['gerber'],
-        childIds: ['gerbermeister'],
-        description: 'Gehärtetes Leder (Cuir Bouilli), stoßfeste Schutzkragen, Schilde und Rüstungsleder.',
-        prerequisites: [
-          { type: 'profession', label: 'Gerber & Lederer', targetId: 'gerber' },
-          { type: 'experience_years', label: '2 Jahre Gerberpraxis', minValue: 2 }
-        ],
-        careerRoutes: [
-          { id: 'rl_exp', name: 'Harnischlederpraxis', type: 'experience', description: 'Kombiniertes Wachsen und Heißhärten.', requirementsSummary: '2 Jahre Praxis' }
-        ],
-        suggestedCompetencies: ['Cuir-Bouilli-Härtung', 'Schweres Rinderleder zurichten', 'Sohlleder walzen'],
-        possibleRanks: ['Rüstlederer']
-      },
-      {
-        id: 'feingerber',
-        fieldId: 'bau_handwerk',
-        name: 'Fein- & Weißgerber',
-        tier: 'spezialisierung',
-        specializationOf: 'gerber',
-        parentIds: ['gerber'],
-        childIds: ['gerbermeister'],
-        description: 'Mineralgerbung mit Alaun für geschmeidige Handschuh-, Pergament- und Buchbinderleder.',
-        prerequisites: [
-          { type: 'profession', label: 'Gerber & Lederer', targetId: 'gerber' }
-        ],
-        careerRoutes: [
-          { id: 'fg_exp', name: 'Weißgerberei', type: 'experience', description: 'Verarbeitung von Ziegen- und Kalbhäuten.', requirementsSummary: 'Praxis' }
-        ],
-        suggestedCompetencies: ['Pergament schaben', 'Alaungerbung', 'Leder färben'],
-        possibleRanks: ['Weißgerber', 'Pergamentmacher']
-      },
-      {
-        id: 'saemischgerber',
-        fieldId: 'bau_handwerk',
-        name: 'Sämischgerber & Wildlederer',
-        tier: 'spezialisierung',
-        specializationOf: 'gerber',
-        parentIds: ['gerber'],
-        childIds: [],
-        description: 'Tran- und Fettgerbung von Hirsch-, Reh- und Gamsfellen zu samtigem, wasserabweisendem Leder.',
-        prerequisites: [
-          { type: 'profession', label: 'Gerber & Lederer', targetId: 'gerber' }
-        ],
-        careerRoutes: [
-          { id: 'sg_exp', name: 'Fettgerberei', type: 'experience', description: 'Walken mit Tran und Schabetechniken.', requirementsSummary: 'Praxis' }
-        ],
-        suggestedCompetencies: ['Fettgerbung', 'Wildfelle zurichten', 'Samtleder walken'],
-        possibleRanks: ['Sämischgerber']
-      },
-      {
-        id: 'gerbermeister',
-        fieldId: 'bau_handwerk',
-        name: 'Zunftmeister der Gerber & Lederer',
-        tier: 'meister',
-        parentIds: ['ruestleder_gerber', 'feingerber'],
-        childIds: [],
-        description: 'Oberaufsicht über Gerbereien, Gerbbrühen-Reinheit, Wasserrechte und Luxuslederfertigung.',
-        prerequisites: [
-          { type: 'experience_years', label: '5 Jahre Erfahrung', minValue: 5 },
-          { type: 'rank', label: 'Meistergrad' }
-        ],
-        careerRoutes: [
-          { id: 'gm_exam', name: 'Gerbermeisterstück', type: 'exam', description: 'Herstellung makellosen Meisterleders.', requirementsSummary: '5 Jahre Praxis + Prüfung' }
-        ],
-        suggestedCompetencies: ['Lohgrubenmanagement', 'Luxuslederzurichtung', 'Wasserrechtekontrolle'],
-        possibleRanks: ['Obermeister', 'Zunftältester']
-      },
-
-      // SCHNEIDER / GEWANDMACHER BRANCH
-      {
-        id: 'schneider',
-        fieldId: 'bau_handwerk',
-        name: 'Schneider & Gewandmacher',
-        tier: 'beruf',
-        parentIds: ['handwerk_root'],
-        childIds: ['harnischschneider', 'hofschneider', 'tuchmacher'],
-        description: 'Zuschnitt, Nähen, Passform und Veredelung von Stoff- und Lederkleidung.',
-        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
-        careerRoutes: [{ id: 'schn_exam', name: 'Schneiderzunft', type: 'exam', description: 'Zunftnachweis für Gewandmacherei.', requirementsSummary: 'Zunftbrief' }],
-        suggestedCompetencies: ['Schnittmuster erstellen', 'Handnaht', 'Gewandverzierung'],
-        possibleRanks: ['Schneidergeselle', 'Gewandmeister']
-      },
-      {
-        id: 'harnischschneider',
-        fieldId: 'bau_handwerk',
-        name: 'Harnisch- & Waffenschneider',
-        tier: 'spezialisierung',
-        specializationOf: 'schneider',
-        parentIds: ['schneider'],
-        childIds: ['gewandmeister'],
-        description: 'Mehrlagige gesteppte Gambesons, Lederwämser, Polsterhauben und Waffenröcke.',
-        prerequisites: [
-          { type: 'profession', label: 'Schneider & Gewandmacher', targetId: 'schneider' },
-          { type: 'experience_years', label: '2 Jahre Schneidererfahrung', minValue: 2 }
-        ],
-        careerRoutes: [
-          { id: 'hs_exp', name: 'Waffenschneiderei', type: 'experience', description: 'Arbeit für Kriegsknechte und Rittergefolge.', requirementsSummary: '2 Jahre Praxis' }
-        ],
-        suggestedCompetencies: ['Gambeson steppen', 'Lederdopplung', 'Waffenrockpassung'],
-        possibleRanks: ['Waffenschneider']
-      },
-      {
-        id: 'hofschneider',
-        fieldId: 'bau_handwerk',
-        name: 'Hof- & Prachtgewandmacher',
-        tier: 'spezialisierung',
-        specializationOf: 'schneider',
-        parentIds: ['schneider'],
-        childIds: ['gewandmeister'],
-        description: 'Kostbare Seidengewänder, Samtumhänge, Goldborten und edle Festkleidung.',
-        prerequisites: [
-          { type: 'profession', label: 'Schneider & Gewandmacher', targetId: 'schneider' }
-        ],
-        careerRoutes: [
-          { id: 'hfs_exp', name: 'Hofschneiderei', type: 'experience', description: 'Fertigung für Edelleute und Hofgesellschaft.', requirementsSummary: 'Praxis' }
-        ],
-        suggestedCompetencies: ['Goldstickerei', 'Seidenzuschnitt', 'Plissieren'],
-        possibleRanks: ['Hofschneider', 'Gewandschöpfer']
-      },
-      {
-        id: 'tuchmacher',
-        fieldId: 'bau_handwerk',
-        name: 'Tuchmacher & Pelzer',
-        tier: 'spezialisierung',
-        specializationOf: 'schneider',
-        parentIds: ['schneider'],
-        childIds: [],
-        description: 'Schwere Wolllodentuche, wetterfeste Reisemäntel, Futterpelze und Kappen.',
-        prerequisites: [
-          { type: 'profession', label: 'Schneider & Gewandmacher', targetId: 'schneider' }
-        ],
-        careerRoutes: [
-          { id: 'tm_exp', name: 'Tuch- & Pelzpraxis', type: 'experience', description: 'Verarbeitung von Loden und Pelzwerk.', requirementsSummary: 'Praxis' }
-        ],
-        suggestedCompetencies: ['Loden walken', 'Pelznaht', 'Wetterfeste Trachten'],
-        possibleRanks: ['Tuchmacher', 'Kürschner']
-      },
-      {
-        id: 'gewandmeister',
-        fieldId: 'bau_handwerk',
-        name: 'Zunftmeister der Gewandmacher',
-        tier: 'meister',
-        parentIds: ['harnischschneider', 'hofschneider'],
-        childIds: [],
-        description: 'Oberaufsicht über die Gewandschneiderzunft, Krönungsgewänder und Schnittmeisterwerke.',
-        prerequisites: [
-          { type: 'experience_years', label: '5 Jahre Erfahrung', minValue: 5 },
-          { type: 'rank', label: 'Meistergrad' }
-        ],
-        careerRoutes: [
-          { id: 'gwm_exam', name: 'Meistergewand', type: 'exam', description: 'Herstellung eines maßgeschneiderten Meisterornats.', requirementsSummary: '5 Jahre Praxis + Prüfung' }
-        ],
-        suggestedCompetencies: ['Meisterornat entwerfen', 'Zunftordnung', 'Heraldische Gewandkunst'],
-        possibleRanks: ['Obermeister', 'Gewandmeister']
       }
     ]
   },
@@ -2377,7 +2261,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         name: 'Lehrling',
         tier: 'einstieg',
         parentIds: [],
-        childIds: ['luxus_spezial.juwelier', 'luxus_spezial.brauer', 'luxus_spezial.koch', 'luxus_spezial.florist'],
+        childIds: ['luxus_spezial.juwelier', 'luxus_spezial.parfuemeur_beruf', 'luxus_spezial.uhrmacher', 'luxus_spezial.florist'],
         description: 'Einstieg in den Berufszweig „Luxus & Spezial“',
         prerequisites: [],
         careerRoutes: [
@@ -2393,7 +2277,7 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         name: 'Juwelier',
         tier: 'beruf',
         parentIds: ['luxus_spezial_root'],
-        childIds: ['luxus_spezial.edelsteinschmied', 'luxus_spezial.parfuemeur'],
+        childIds: ['luxus_spezial.edelsteinschmied'],
         description: 'Bearbeitung und Fassung edler Metalle, Gemmen und feiner Geschmeide.',
         prerequisites: [
           { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
@@ -2423,153 +2307,80 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         suggestedCompetencies: ['Facettenschliff', 'Krappenfassung', 'Gemmologie'],
         possibleRanks: ['Edelsteinschleifer', 'Gemmologe']
       },
+      // 2. Parfümeur & Essenzenbrenner
       {
-        id: 'luxus_spezial.parfuemeur',
+        id: 'luxus_spezial.parfuemeur_beruf',
         fieldId: 'luxus_spezial',
-        name: 'Parfümeur',
-        tier: 'spezialisierung',
-        specializationOf: 'luxus_spezial.juwelier',
-        parentIds: ['luxus_spezial.juwelier'],
-        childIds: [],
-        description: 'Kreation kostbarer Düfte, Essenzen, Salben und Duftwässer.',
-        prerequisites: [
-          { type: 'profession', label: 'Juwelier', targetId: 'luxus_spezial.juwelier' },
-          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
-        ],
-        careerRoutes: [
-          { id: 'pf_exp', name: 'Duftmanufaktur-Erfahrung', type: 'experience', description: 'Lernen an Destillierkolben.', requirementsSummary: '2 Jahre Praxis' }
-        ],
-        suggestedCompetencies: ['Duftnotenharmonie', 'Destillation', 'Fixierung'],
-        possibleRanks: ['Duftmischer', 'Parfümeur']
-      },
-      {
-        id: 'luxus_spezial.hofjuwelier',
-        fieldId: 'luxus_spezial',
-        name: 'Hofjuwelier',
-        tier: 'meister',
-        parentIds: ['luxus_spezial.edelsteinschmied'],
-        childIds: [],
-        description: 'Schmieden von Kronjuwelen, Zeptern und fürstlichen Insignien.',
-        prerequisites: [
-          { type: 'experience_years', label: '4 Jahre Juweliererfahrung', minValue: 4 }
-        ],
-        careerRoutes: [
-          { id: 'hj_rec', name: 'Königliches Hofpatent', type: 'social_recognition', description: 'Bestallung als Hoflieferant.', requirementsSummary: 'Anerkennung durch Landesherrn' }
-        ],
-        suggestedCompetencies: ['Kronjuwelenfassung', 'Insignienschmieden', 'Großmeisterwerk'],
-        possibleRanks: ['Hofjuwelier', 'Erbgoldschmied']
-      },
-      // 2. Brauer
-      {
-        id: 'luxus_spezial.brauer',
-        fieldId: 'luxus_spezial',
-        name: 'Brauer',
+        name: 'Parfümeur & Duftmischer',
         tier: 'beruf',
         parentIds: ['luxus_spezial_root'],
-        childIds: ['luxus_spezial.braumeister', 'luxus_spezial.destillateur'],
-        description: 'Brauen von Bier, Ale, Met und Gärgetränken nach handwerklicher Rezeptur.',
+        childIds: ['luxus_spezial.hofparfuemeur'],
+        description: 'Kreation kostbarer Wohlgerüche, Duftwässer, Salben und aromatischer Essenzen.',
         prerequisites: [
           { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
         ],
         careerRoutes: [
-          { id: 'br_exam', name: 'Braugesellenprüfung', type: 'exam', description: 'Prüfung nach dem Reinheitsgebot.', requirementsSummary: '1 Jahr Praxis' }
+          { id: 'pf_exam', name: 'Duftgilden-Zulassung', type: 'exam', description: 'Prüfung der Duftnoten und Destillation.', requirementsSummary: '1 Jahr Praxis' }
         ],
-        suggestedCompetencies: ['Maischen & Läutern', 'Gärungsüberwachung', 'Hopfendosierung'],
-        possibleRanks: ['Braugeselle', 'Mälzer', 'Braumeister']
+        suggestedCompetencies: ['Duftnotenharmonie', 'Destillation edler Blüten', 'Fixierung & Mazeration'],
+        possibleRanks: ['Duftmischer', 'Parfümeur', 'Essenzenmeister']
       },
       {
-        id: 'luxus_spezial.braumeister',
+        id: 'luxus_spezial.hofparfuemeur',
         fieldId: 'luxus_spezial',
-        name: 'Braumeister',
+        name: 'Hofparfümeur & Alchemistischer Duftmeister',
         tier: 'spezialisierung',
-        specializationOf: 'luxus_spezial.brauer',
-        parentIds: ['luxus_spezial.brauer'],
+        specializationOf: 'luxus_spezial.parfuemeur_beruf',
+        parentIds: ['luxus_spezial.parfuemeur_beruf'],
         childIds: [],
-        description: 'Rezepturentwicklung, Großsud-Führung und Veredelung edler Jahrgangsbiere.',
+        description: 'Exklusive Duftkreationen für Königshäuser, sakrale Weihrauchmischungen und Elixiere.',
         prerequisites: [
-          { type: 'profession', label: 'Brauer', targetId: 'luxus_spezial.brauer' },
-          { type: 'experience_years', label: '2 Jahre Braupraxis', minValue: 2 }
-        ],
-        careerRoutes: [
-          { id: 'bm_exam', name: 'Braumeisterbrief', type: 'exam', description: 'Zunftmeisterprüfung im Brauwesen.', requirementsSummary: '2 Jahre Praxis' }
-        ],
-        suggestedCompetencies: ['Sudkessel-Leitung', 'Bierrezepturen', 'Fassreifung'],
-        possibleRanks: ['Braumeister', 'Zunftbrauer']
-      },
-      {
-        id: 'luxus_spezial.destillateur',
-        fieldId: 'luxus_spezial',
-        name: 'Destillateur',
-        tier: 'spezialisierung',
-        specializationOf: 'luxus_spezial.brauer',
-        parentIds: ['luxus_spezial.brauer'],
-        childIds: [],
-        description: 'Brennen hochprozentiger Edelbrände, Liköre und Kräuterelixiere.',
-        prerequisites: [
-          { type: 'profession', label: 'Brauer', targetId: 'luxus_spezial.brauer' },
+          { type: 'profession', label: 'Parfümeur & Duftmischer', targetId: 'luxus_spezial.parfuemeur_beruf' },
           { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
         ],
         careerRoutes: [
-          { id: 'dest_exp', name: 'Brennereipraxis', type: 'experience', description: 'Führung von Brennblasen.', requirementsSummary: '2 Jahre Praxis' }
+          { id: 'hp_rec', name: 'Hoflieferantenpatent', type: 'social_recognition', description: 'Bestallung zum königlichen Hofparfümeur.', requirementsSummary: '2 Jahre Praxis' }
         ],
-        suggestedCompetencies: ['Brennblasenführung', 'Vorlauf-/Nachlaufabscheidung', 'Aromaveredelung'],
-        possibleRanks: ['Brennmeister', 'Destillateur']
+        suggestedCompetencies: ['Signaturdüfte kreieren', 'Seltene Amber- & Moschusverarbeitung', 'Salbenveredelung'],
+        possibleRanks: ['Hofparfümeur', 'Meister der Wohlgerüche']
       },
-      // 3. Koch
+
+      // 3. Uhrmacher & Feinmechaniker
       {
-        id: 'luxus_spezial.koch',
+        id: 'luxus_spezial.uhrmacher',
         fieldId: 'luxus_spezial',
-        name: 'Koch',
+        name: 'Uhrmacher & Feinmechaniker',
         tier: 'beruf',
         parentIds: ['luxus_spezial_root'],
-        childIds: ['luxus_spezial.kuechenchef', 'luxus_spezial.gourmetkoch'],
-        description: 'Zubereitung erlesener Speisen, Menüs und Festmahle.',
+        childIds: ['luxus_spezial.chronometermeister'],
+        description: 'Präzise Fertigung mechanischer Räderuhren, Astrolabien und kunstvoller Spielwerke.',
         prerequisites: [
           { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
         ],
         careerRoutes: [
-          { id: 'k_exam', name: 'Kochgesellenprüfung', type: 'exam', description: 'Erfolgreicher Abschluss der Kochlehre.', requirementsSummary: '1 Jahr Praxis' }
+          { id: 'uhr_exam', name: 'Uhrmachermeisterstück', type: 'exam', description: 'Konstruktion eines funktionierenden Hemmungswerks.', requirementsSummary: '1 Jahr Praxis' }
         ],
-        suggestedCompetencies: ['Lebensmittel vorbereiten', 'Grundgerichte kochen', 'Gewürzkunde', 'Feine Küche'],
-        possibleRanks: ['Jungkoch', 'Chef de Partie', 'Küchenchef']
+        suggestedCompetencies: ['Zahnradverzahnung', 'Hemmungsmechanik', 'Federstahljustierung', 'Präzisionsfeilen'],
+        possibleRanks: ['Uhrmachergeselle', 'Feinmechanicus', 'Uhrmachermeister']
       },
       {
-        id: 'luxus_spezial.kuechenchef',
+        id: 'luxus_spezial.chronometermeister',
         fieldId: 'luxus_spezial',
-        name: 'Küchenchef',
+        name: 'Chronometermeister & Astronomischer Mechanicus',
         tier: 'spezialisierung',
-        specializationOf: 'luxus_spezial.koch',
-        parentIds: ['luxus_spezial.koch'],
+        specializationOf: 'luxus_spezial.uhrmacher',
+        parentIds: ['luxus_spezial.uhrmacher'],
         childIds: [],
-        description: 'Leitung von Küchenbrigaden, Menükomposition und Bankettorganisation.',
+        description: 'Astronomische Kunstuhren, Glockenspiele, Planetarien und Marine-Chronometer.',
         prerequisites: [
-          { type: 'profession', label: 'Koch', targetId: 'luxus_spezial.koch' },
-          { type: 'experience_years', label: '2 Jahre Kochpraxis', minValue: 2 }
+          { type: 'profession', label: 'Uhrmacher & Feinmechaniker', targetId: 'luxus_spezial.uhrmacher' },
+          { type: 'experience_years', label: '2 Jahre Uhrmacherpraxis', minValue: 2 }
         ],
         careerRoutes: [
-          { id: 'kc_exp', name: 'Brigadeführung', type: 'experience', description: 'Leitung einer Gaststätte oder Schlossküche.', requirementsSummary: '2 Jahre Praxis' }
+          { id: 'cm_exam', name: 'Chronometerprüfung', type: 'exam', description: 'Eichung an Sternzeit und Sonnenhöchststand.', requirementsSummary: '2 Jahre Praxis' }
         ],
-        suggestedCompetencies: ['Brigadeführung', 'Menüdesign', 'Kalkulation & Einkauf'],
-        possibleRanks: ['Sous-Chef', 'Küchenchef']
-      },
-      {
-        id: 'luxus_spezial.gourmetkoch',
-        fieldId: 'luxus_spezial',
-        name: 'Gourmetkoch',
-        tier: 'spezialisierung',
-        specializationOf: 'luxus_spezial.koch',
-        parentIds: ['luxus_spezial.koch'],
-        childIds: [],
-        description: 'Exquisite Menüfolgen für fürstliche Festessen und diplomatische Tafeln.',
-        prerequisites: [
-          { type: 'profession', label: 'Koch', targetId: 'luxus_spezial.koch' },
-          { type: 'experience_years', label: '2 Jahre Kochpraxis', minValue: 2 }
-        ],
-        careerRoutes: [
-          { id: 'gk_rec', name: 'Hofküchenbestallung', type: 'social_recognition', description: 'Ernennung für Adelsbankette.', requirementsSummary: 'Anerkennung' }
-        ],
-        suggestedCompetencies: ['Spitzengastronomie', 'Tafelpräsentation', 'Saucenperfektion'],
-        possibleRanks: ['Gourmetkoch', 'Maître de Cuisine']
+        suggestedCompetencies: ['Astronomische Räderwerke', 'Temperaturkompensation', 'Automatenbau'],
+        possibleRanks: ['Chronometermeister', 'Großmechanicus']
       },
       // 4. Florist
       {
@@ -2763,6 +2574,725 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
         possibleRanks: ['Geigenbauer', 'Lautenbauer', 'Klangmeister']
       }
     ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 13. MATERIALVERARBEITUNG
+  // ---------------------------------------------------------------------------
+  materialverarbeitung: {
+    fieldId: 'materialverarbeitung',
+    fieldName: 'Materialverarbeitung',
+    description: 'Gerberei, Kürschnerei, Textilhandwerk, Glasbläserei, Töpferei und Seilerkunst',
+    rootNodeId: 'materialverarbeitung_root',
+    nodes: [
+      {
+        id: 'materialverarbeitung_root',
+        fieldId: 'materialverarbeitung',
+        name: 'Werkstofflehrling',
+        tier: 'einstieg',
+        parentIds: [],
+        childIds: ['materialverarbeitung.gerber', 'materialverarbeitung.schneider', 'materialverarbeitung.glasmacher', 'materialverarbeitung.toepfer'],
+        description: 'Einstieg in den Berufszweig „Materialverarbeitung“',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'mat_start', name: 'Grundausbildung & Materialkunde', type: 'experience', description: 'Erste Handgriffe in Gerbereien, Webereien und Hütten.', requirementsSummary: 'Offener Einstieg' }
+        ],
+        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge sicher benutzen', 'Materialkunde', 'Handgeschick', 'Lernfähigkeit', 'Sorgfalt'],
+        possibleRanks: ['Lehrling', 'Handlanger']
+      },
+      // 1. Gerber & Lederer
+      {
+        id: 'materialverarbeitung.gerber',
+        fieldId: 'materialverarbeitung',
+        name: 'Gerber & Lederer',
+        tier: 'beruf',
+        parentIds: ['materialverarbeitung_root'],
+        childIds: ['materialverarbeitung.kuerschner', 'materialverarbeitung.feingerber'],
+        description: 'Enthaaren, Beizen und Gerben von Häuten zu robustem Leder für Rüstungen und Stiefel.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
+        careerRoutes: [
+          { id: 'gerb_exam', name: 'Gerberprüfung', type: 'exam', description: 'Meisterstück in Loh- oder Weißgerbung.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Lohgerbung', 'Hautentfleischung', 'Beizverfahren', 'Lederfettung'],
+        possibleRanks: ['Gerbergeselle', 'Lohgerber', 'Gerbermeister']
+      },
+      {
+        id: 'materialverarbeitung.kuerschner',
+        fieldId: 'materialverarbeitung',
+        name: 'Kürschner & Pelzveredler',
+        tier: 'spezialisierung',
+        specializationOf: 'materialverarbeitung.gerber',
+        parentIds: ['materialverarbeitung.gerber'],
+        childIds: [],
+        description: 'Verarbeitung edler Pelze, Felle und wärmender Wintergewänder für Adel und Bürger.',
+        prerequisites: [
+          { type: 'profession', label: 'Gerber & Lederer', targetId: 'materialverarbeitung.gerber' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'kuer_exp', name: 'Pelzzunft-Anerkennung', type: 'experience', description: 'Spezialisierung auf Hermelin, Zobel und Pelzfütterung.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Pelzzuschnitt', 'Fellkonservierung', 'Muff- & Kragenanfertigung'],
+        possibleRanks: ['Kürschner', 'Pelzmeister']
+      },
+      {
+        id: 'materialverarbeitung.feingerber',
+        fieldId: 'materialverarbeitung',
+        name: 'Feingerber & Sämischgerber',
+        tier: 'spezialisierung',
+        specializationOf: 'materialverarbeitung.gerber',
+        parentIds: ['materialverarbeitung.gerber'],
+        childIds: [],
+        description: 'Veredelung feinsten Ziegen- und Lammleders für Handschuhe, Bucheinbände und Pergament.',
+        prerequisites: [
+          { type: 'profession', label: 'Gerber & Lederer', targetId: 'materialverarbeitung.gerber' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'fein_exam', name: 'Feingerberbrief', type: 'exam', description: 'Prüfung in Tran- und Alaungerbung.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Sämischgerbung', 'Pergamentherstellung', 'Lederfärbung'],
+        possibleRanks: ['Feingerber', 'Pergamenter']
+      },
+      // 2. Schneider & Gewandmacher
+      {
+        id: 'materialverarbeitung.schneider',
+        fieldId: 'materialverarbeitung',
+        name: 'Schneider & Gewandmacher',
+        tier: 'beruf',
+        parentIds: ['materialverarbeitung_root'],
+        childIds: ['materialverarbeitung.harnischschneider', 'materialverarbeitung.gewandmeister'],
+        description: 'Zuschnitt, Nähen und Veredeln von Stoffen, Wolle, Leinen und Seide zu Kleidungsstücken.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
+        careerRoutes: [
+          { id: 'schn_exam', name: 'Schneidergesellenprüfung', type: 'exam', description: 'Anfertigung eines passgenauen Maßgewands.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Schnittmuster erstellen', 'Nadel- & Nahttechniken', 'Stoffkunde', 'Maßnehmen'],
+        possibleRanks: ['Schneidergeselle', 'Gewandschneider', 'Schneidermeister']
+      },
+      {
+        id: 'materialverarbeitung.harnischschneider',
+        fieldId: 'materialverarbeitung',
+        name: 'Harnisch- & Gambesonmacher',
+        tier: 'spezialisierung',
+        specializationOf: 'materialverarbeitung.schneider',
+        parentIds: ['materialverarbeitung.schneider'],
+        childIds: [],
+        description: 'Steppen mehrlagiger Schutzgewänder (Gambesons), Waffenröcke und Lederwämser.',
+        prerequisites: [
+          { type: 'profession', label: 'Schneider & Gewandmacher', targetId: 'materialverarbeitung.schneider' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'harn_exp', name: 'Rüstungszunft-Erfahrung', type: 'experience', description: 'Zusammenarbeit mit Rüstungsschmieden.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Stepppanzerung', 'Waffenrockherstellung', 'Verstärkte Nahttechnik'],
+        possibleRanks: ['Rüstungsschneider', 'Gambesonmacher']
+      },
+      {
+        id: 'materialverarbeitung.gewandmeister',
+        fieldId: 'materialverarbeitung',
+        name: 'Gewandmeister & Hofschneider',
+        tier: 'meister',
+        parentIds: ['materialverarbeitung.schneider'],
+        childIds: [],
+        description: 'Prachtvolle Staatsgewänder, Krönungsmäntel und Seidenroben mit Goldstickerei.',
+        prerequisites: [{ type: 'experience_years', label: '4 Jahre Schneiderpraxis', minValue: 4 }],
+        careerRoutes: [
+          { id: 'hof_rec', name: 'Hofschneider-Bestallung', type: 'social_recognition', description: 'Ernennung durch den fürstlichen Hof.', requirementsSummary: '4 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Gold- & Silberstickerei', 'Brokat-Verarbeitung', 'Hofzeremoniell-Mode'],
+        possibleRanks: ['Gewandmeister', 'Hofschneider']
+      },
+      // 3. Glasmacher & Glasbläser
+      {
+        id: 'materialverarbeitung.glasmacher',
+        fieldId: 'materialverarbeitung',
+        name: 'Glasmacher & Glasbläser',
+        tier: 'beruf',
+        parentIds: ['materialverarbeitung_root'],
+        childIds: ['materialverarbeitung.buntglasmacher'],
+        description: 'Schmelzen von Quarzsand zu Hohlglas, Flaschen, Trinkbechern und Alchemiekolben.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
+        careerRoutes: [
+          { id: 'glas_exam', name: 'Glasbläserprüfung', type: 'exam', description: 'Formen dünnwandiger Glashohlkörper an der Pfeife.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Glasbläserpfeife führen', 'Schmelzofenführung', 'Glasformung', 'Kühlofenkühlung'],
+        possibleRanks: ['Glasmachergeselle', 'Hüttenmeister']
+      },
+      {
+        id: 'materialverarbeitung.buntglasmacher',
+        fieldId: 'materialverarbeitung',
+        name: 'Buntglasmacher & Kathedralenglaser',
+        tier: 'spezialisierung',
+        specializationOf: 'materialverarbeitung.glasmacher',
+        parentIds: ['materialverarbeitung.glasmacher'],
+        childIds: [],
+        description: 'Färben von Glas mit Metalloxiden und Verbleiung kunstvoller Sakralfenster.',
+        prerequisites: [
+          { type: 'profession', label: 'Glasmacher & Glasbläser', targetId: 'materialverarbeitung.glasmacher' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'bunt_exp', name: 'Kathedralfenster-Meisterwerk', type: 'experience', description: 'Schaffung eines mehrfarbigen Bleiglasfensters.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Bleirutenfassung', 'Glasmalerei & Schwarzlot', 'Metalloxid-Färbung'],
+        possibleRanks: ['Buntglaser', 'Kathedralenglasmeister']
+      },
+      // 4. Töpfer & Keramiker
+      {
+        id: 'materialverarbeitung.toepfer',
+        fieldId: 'materialverarbeitung',
+        name: 'Töpfer & Keramiker',
+        tier: 'beruf',
+        parentIds: ['materialverarbeitung_root'],
+        childIds: ['materialverarbeitung.ofensetzer'],
+        description: 'Formen von Ton auf der Drehscheibe zu Krügen, Vorratsgefäßen, Ziegeln und Schüsseln.',
+        prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
+        careerRoutes: [
+          { id: 'toepf_exam', name: 'Töpfergesellenprüfung', type: 'exam', description: 'Drehen und brennen gleichförmiger Krüge und Amphoren.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Tondrehscheibe führen', 'Glasurauftrag', 'Holzbrennofen steuern'],
+        possibleRanks: ['Töpfergeselle', 'Hafner', 'Töpfermeister']
+      },
+      {
+        id: 'materialverarbeitung.ofensetzer',
+        fieldId: 'materialverarbeitung',
+        name: 'Kachelofenbauer & Brennofensetzer',
+        tier: 'spezialisierung',
+        specializationOf: 'materialverarbeitung.toepfer',
+        parentIds: ['materialverarbeitung.toepfer'],
+        childIds: [],
+        description: 'Brandfeste Schamotte, glasierte Reliefkacheln und Setzen wärmespeichernder Öfen.',
+        prerequisites: [
+          { type: 'profession', label: 'Töpfer & Keramiker', targetId: 'materialverarbeitung.toepfer' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'ofen_exp', name: 'Ofensetzer-Meisterprüfung', type: 'exam', description: 'Konstruktion eines rauchfreien Kachelofens.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Schamotteverarbeitung', 'Zug- & Rauchrohrführung', 'Kachelglasur'],
+        possibleRanks: ['Ofensetzer', 'Hafnermeister']
+      }
+    ]
+  },
+
+  // ---------------------------------------------------------------------------
+  // 14. STAATSWESEN, DIPLOMATIE & HOFDIENST
+  // ---------------------------------------------------------------------------
+  staatsdienst_diplomatie: {
+    fieldId: 'staatsdienst_diplomatie',
+    fieldName: 'Staatswesen, Diplomatie & Hofdienst',
+    description: 'Diplomatischer Dienst, Staatskanzlei, Gesandtschaften, Rechtspflege, Hofzeremoniell und Personenschutz',
+    rootNodeId: 'staatsdienst_root',
+    nodes: [
+      {
+        id: 'staatsdienst_root',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Lehrling',
+        tier: 'einstieg',
+        category: 'Grundausbildung',
+        rankOrder: 0,
+        rankTitle: 'Einstiegsstufe',
+        parentIds: [],
+        childIds: ['unterhaendler', 'konsulent', 'vogt', 'herold', 'koerperdouble'],
+        description: 'Einstieg in den diplomatischen Dienst, das Kanzleiwesen und die Hofämter.',
+        prerequisites: [],
+        careerRoutes: [
+          { id: 'sd_r1', name: 'Grundausbildung Hofpage / Kanzleigehilfe', type: 'experience', description: 'Dienst in Kanzlei, Gesandtschaft oder Hofstaat.', requirementsSummary: 'Offener Einstieg' }
+        ],
+        suggestedCompetencies: ['Hofetikette', 'Schrift & Kanzleideutsch', 'Urkundenkunde', 'Aufmerksamkeit', 'Verschwiegenheit', 'Höflichkeit'],
+        possibleRanks: ['Hofpage', 'Kanzleigehilfe', 'Amtsanwärter']
+      },
+
+      // -----------------------------------------------------------------------
+      // KATEGORIE: Diplomatie & Gesandtschaft
+      // -----------------------------------------------------------------------
+      {
+        id: 'unterhaendler',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Unterhändler',
+        tier: 'beruf',
+        category: 'Diplomatie & Gesandtschaft',
+        rankOrder: 1,
+        rankTitle: 'Grundstufe',
+        nextRankProfession: 'Diplomat',
+        parentIds: ['staatsdienst_root'],
+        childIds: ['diplomat'],
+        description: 'Führt Erstgespräche vor Ort bei Grenzstreitigkeiten, Waffenstillständen, Verträgen und Vergleichen.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'uh_r1', name: 'Verhandlungsprüfung', type: 'exam', description: 'Prüfung in Schlichtung und Verhandlungstaktik.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Verhandlungsführung', 'Rhetorik & Überzeugung', 'Menschenkenntnis', 'Rechtliche Grundlagen'],
+        possibleRanks: ['Unterhändler-Gehilfe', 'Unterhändler', 'Erster Unterhändler']
+      },
+      {
+        id: 'diplomat',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Diplomat',
+        tier: 'beruf',
+        category: 'Diplomatie & Gesandtschaft',
+        rankOrder: 2,
+        rankTitle: 'Fachstufe',
+        previousRankProfession: 'Unterhändler',
+        nextRankProfession: 'Gesandter',
+        parentIds: ['unterhaendler'],
+        childIds: ['gesandter'],
+        description: 'Akkreditierter Repräsentant der Krone bei internationalen Beziehungen, Abkommen und Bündnissen.',
+        prerequisites: [
+          { type: 'profession', label: 'Unterhändler', targetId: 'unterhaendler' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'dip_r1', name: 'Diplomatenakkreditierung', type: 'social_recognition', description: 'Ernennung durch das Außenministerium oder den Hofrat.', requirementsSummary: 'Anerkennung durch Hof' }
+        ],
+        suggestedCompetencies: ['Diplomatisches Protokoll', 'Fremdsprachen & Dialekte', 'Staatsvertragsrecht', 'Taktische Zurückhaltung'],
+        possibleRanks: ['Legationssekretär', 'Botschaftsrat', 'Diplomat']
+      },
+      {
+        id: 'gesandter',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Gesandter',
+        tier: 'beruf',
+        category: 'Diplomatie & Gesandtschaft',
+        rankOrder: 3,
+        rankTitle: 'Meisterstufe',
+        previousRankProfession: 'Diplomat',
+        nextRankProfession: 'Friedensstifter',
+        parentIds: ['diplomat'],
+        childIds: ['friedensstifter'],
+        description: 'Außerordentlicher Gesandter und bevollmächtigter Minister an fremden Herrscherhöfen.',
+        prerequisites: [
+          { type: 'profession', label: 'Diplomat', targetId: 'diplomat' },
+          { type: 'experience_years', label: '4 Jahre Praxis', minValue: 4 }
+        ],
+        careerRoutes: [
+          { id: 'ges_r1', name: 'Beglaubigungsschreiben des Monarchen', type: 'social_recognition', description: 'Verleihung der vollen Gesandtschaftsbefugnis.', requirementsSummary: 'Beglaubigung' }
+        ],
+        suggestedCompetencies: ['Geopolitische Strategie', 'Hohe Staatsdiplomatie', 'Bündnisverhandlungen', 'Staatsrecht'],
+        possibleRanks: ['Gesandter', 'Außerordentlicher Gesandter', 'Botschafter']
+      },
+      {
+        id: 'friedensstifter',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Friedensstifter',
+        tier: 'beruf',
+        category: 'Diplomatie & Gesandtschaft',
+        rankOrder: 4,
+        rankTitle: 'Spitzenamt',
+        previousRankProfession: 'Gesandter',
+        parentIds: ['gesandter'],
+        childIds: [],
+        description: 'Chefunterhändler bei Reichsfriedensschlüssen, Großallianzen und epochalen Konfliktbeilegungen.',
+        prerequisites: [
+          { type: 'profession', label: 'Gesandter', targetId: 'gesandter' },
+          { type: 'experience_years', label: '6 Jahre Praxis', minValue: 6 }
+        ],
+        careerRoutes: [
+          { id: 'fs_r1', name: 'Friedensdiplom & Reichsanerkennung', type: 'social_recognition', description: 'Ehrentitel für die Schlichtung kriegerischer Konflikte.', requirementsSummary: 'Kaiserliche Würdigung' }
+        ],
+        suggestedCompetencies: ['Internationale Friedensarchitektur', 'Krisenintervention', 'Historische Staatsverträge', 'Maximale Autorität'],
+        possibleRanks: ['Chefvermittler', 'Großgesandter', 'Friedensstifter']
+      },
+
+      // -----------------------------------------------------------------------
+      // KATEGORIE: Staatsführung & Kanzlei
+      // -----------------------------------------------------------------------
+      {
+        id: 'konsulent',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Konsulent',
+        tier: 'beruf',
+        category: 'Staatsführung & Kanzlei',
+        rankOrder: 1,
+        rankTitle: 'Grundstufe',
+        nextRankProfession: 'Berater',
+        parentIds: ['staatsdienst_root'],
+        childIds: ['berater'],
+        description: 'Sach- und Rechtsverständiger für die Vorbereitung staatlicher Vorhaben, Gutachten und Kanzleientwürfe.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'kon_r1', name: 'Gutachterprüfung', type: 'exam', description: 'Abschluss in Rechts- und Verwaltungsgutachten.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Gutachtenerstellung', 'Rechtskunde', 'Aktenführung', 'Analytisches Denken'],
+        possibleRanks: ['Kanzleikonsulent', 'Rechtskonsulent', 'Oberkonsulent']
+      },
+      {
+        id: 'berater',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Berater',
+        tier: 'beruf',
+        category: 'Staatsführung & Kanzlei',
+        rankOrder: 2,
+        rankTitle: 'Fachstufe',
+        previousRankProfession: 'Konsulent',
+        nextRankProfession: 'Siegelbewahrer',
+        parentIds: ['konsulent'],
+        childIds: ['siegelbewahrer'],
+        description: 'Vertrauter Ratgeber des Herrschers oder Landesfürsten mit ständiger Stimme im Hofrat.',
+        prerequisites: [
+          { type: 'profession', label: 'Konsulent', targetId: 'konsulent' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'ber_r1', name: 'Hofratspatent', type: 'social_recognition', description: 'Ernennung zum stimmberechtigten Hofrat.', requirementsSummary: 'Patent des Landesherrn' }
+        ],
+        suggestedCompetencies: ['Strategische Staatsberatung', 'Finanz- & Innenpolitik', 'Rhetorik & Debatte', 'Verschwiegenheit'],
+        possibleRanks: ['Regierungsrat', 'Hofrat', 'Geheimer Rat']
+      },
+      {
+        id: 'siegelbewahrer',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Siegelbewahrer',
+        tier: 'beruf',
+        category: 'Staatsführung & Kanzlei',
+        rankOrder: 3,
+        rankTitle: 'Meisterstufe',
+        previousRankProfession: 'Berater',
+        nextRankProfession: 'Kanzler',
+        parentIds: ['berater'],
+        childIds: ['kanzler'],
+        description: 'Hüter der Reichssiegel und Siegelringe; beglaubigt alle Gesetze, Schenkungen und königlichen Erlasse.',
+        prerequisites: [
+          { type: 'profession', label: 'Berater', targetId: 'berater' },
+          { type: 'experience_years', label: '4 Jahre Praxis', minValue: 4 }
+        ],
+        careerRoutes: [
+          { id: 'sb_r1', name: 'Siegelbestallung', type: 'social_recognition', description: 'Offizielle Übergabe des Staats- und Kanzleisiegels.', requirementsSummary: 'Kanzleibestallung' }
+        ],
+        suggestedCompetencies: ['Siegel- & Urkundenrecht', 'Fälschungserkennung', 'Staatsrechtliche Prüfung', 'Aktenkontrolle'],
+        possibleRanks: ['Geheimer Siegelbewahrer', 'Großsiegelbewahrer']
+      },
+      {
+        id: 'kanzler',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Kanzler',
+        tier: 'beruf',
+        category: 'Staatsführung & Kanzlei',
+        rankOrder: 4,
+        rankTitle: 'Spitzenamt',
+        previousRankProfession: 'Siegelbewahrer',
+        parentIds: ['siegelbewahrer'],
+        childIds: [],
+        description: 'Leiter der Staatskanzlei, erster Minister der Krone und oberster Koordinator aller Regierungsgeschäfte.',
+        prerequisites: [
+          { type: 'profession', label: 'Siegelbewahrer', targetId: 'siegelbewahrer' },
+          { type: 'experience_years', label: '6 Jahre Praxis', minValue: 6 }
+        ],
+        careerRoutes: [
+          { id: 'kz_r1', name: 'Kanzlerpatent des Monarchen', type: 'social_recognition', description: 'Erhebung zum Staatskanzler durch den Herrscher.', requirementsSummary: 'Kanzlerbestallung' }
+        ],
+        suggestedCompetencies: ['Staatsführung & Exekutive', 'Regierungskoordination', 'Verfassungs- & Reichspolitik', 'Kabinettsleitung'],
+        possibleRanks: ['Vizekanzler', 'Staatskanzler', 'Großkanzler']
+      },
+
+      // -----------------------------------------------------------------------
+      // KATEGORIE: Rechtspflege & Landesverwaltung
+      // -----------------------------------------------------------------------
+      {
+        id: 'vogt',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Vogt',
+        tier: 'beruf',
+        category: 'Rechtspflege & Landesverwaltung',
+        rankOrder: 1,
+        rankTitle: 'Grundstufe',
+        nextRankProfession: 'Verwalter',
+        parentIds: ['staatsdienst_root'],
+        childIds: ['verwalter'],
+        description: 'Landesherrlicher Amtmann für Bezirksordnung, Abgabenerhebung und niedere Gerichtsbarkeit.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'vg_r1', name: 'Vogteibestallung', type: 'exam', description: 'Nachweis der Kenntnisse im Abgaben- und Polizeirecht.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Abgabenerhebung', 'Ordnungsaufsicht', 'Niedere Gerichtsbarkeit', 'Lokale Verwaltung'],
+        possibleRanks: ['Untervogt', 'Vogt', 'Amtsvogt']
+      },
+      {
+        id: 'verwalter',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Verwalter',
+        tier: 'beruf',
+        category: 'Rechtspflege & Landesverwaltung',
+        rankOrder: 2,
+        rankTitle: 'Fachstufe',
+        previousRankProfession: 'Vogt',
+        nextRankProfession: 'Güterverwalter',
+        parentIds: ['vogt'],
+        childIds: ['gueterverwalter'],
+        description: 'Leiter von Ämtern, Speicherhäusern und landesherrlichen Domänen.',
+        prerequisites: [
+          { type: 'profession', label: 'Vogt', targetId: 'vogt' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'vw_r1', name: 'Amtsverwalter-Patent', type: 'exam', description: 'Prüfung über Rechnungslegung und Domänenverwaltung.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Wirtschaftsführung', 'Kämmereiwesen', 'Personalaufsicht', 'Vertragswesen'],
+        possibleRanks: ['Amtsverwalter', 'Oberverwalter']
+      },
+      {
+        id: 'gueterverwalter',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Güterverwalter',
+        tier: 'beruf',
+        category: 'Rechtspflege & Landesverwaltung',
+        rankOrder: 3,
+        rankTitle: 'Fachstufe',
+        previousRankProfession: 'Verwalter',
+        nextRankProfession: 'Kurfürstlicher Beamter',
+        parentIds: ['verwalter'],
+        childIds: ['kurfuerstlicher_beamter'],
+        description: 'Oberste ökonomische Verwaltung aller Krongüter, Pachten, Forste und Bergregale eines Landesteils.',
+        prerequisites: [
+          { type: 'profession', label: 'Verwalter', targetId: 'verwalter' },
+          { type: 'experience_years', label: '3 Jahre Praxis', minValue: 3 }
+        ],
+        careerRoutes: [
+          { id: 'gv_r1', name: 'Domänenpatent', type: 'social_recognition', description: 'Betrauung mit der Oberaufsicht über Krongüter.', requirementsSummary: '3 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Domänenökonomie', 'Ertragsrechnung', 'Pachtverträge', 'Ressourcenplanung'],
+        possibleRanks: ['Güterverwalter', 'Oberrentmeister', 'Domänendirektor']
+      },
+      {
+        id: 'kurfuerstlicher_beamter',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Kurfürstlicher Beamter',
+        tier: 'beruf',
+        category: 'Rechtspflege & Landesverwaltung',
+        rankOrder: 4,
+        rankTitle: 'Meisterstufe',
+        previousRankProfession: 'Güterverwalter',
+        nextRankProfession: 'Landrichter',
+        parentIds: ['gueterverwalter'],
+        childIds: ['landrichter'],
+        description: 'Bestallter Regierungsbeamter mit Aufsicht über landesweite Verwaltungsbezirke und landesherrliche Dekrete.',
+        prerequisites: [
+          { type: 'profession', label: 'Güterverwalter', targetId: 'gueterverwalter' },
+          { type: 'experience_years', label: '4 Jahre Praxis', minValue: 4 }
+        ],
+        careerRoutes: [
+          { id: 'kb_r1', name: 'Beamtenbestallung des Kurfürsten', type: 'social_recognition', description: 'Urkunde über hoheitliche Amtsbefugnisse.', requirementsSummary: 'Kurfürstliches Patent' }
+        ],
+        suggestedCompetencies: ['Hoheitsverwaltung', 'Dekretumsetzung', 'Reichssteueraufsicht', 'Bezirksinspektion'],
+        possibleRanks: ['Amtsrat', 'Oberregierungsbeamter', 'Kurfürstlicher Rat']
+      },
+      {
+        id: 'landrichter',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Landrichter',
+        tier: 'beruf',
+        category: 'Rechtspflege & Landesverwaltung',
+        rankOrder: 5,
+        rankTitle: 'Spitzenamt',
+        previousRankProfession: 'Kurfürstlicher Beamter',
+        parentIds: ['kurfuerstlicher_beamter'],
+        childIds: [],
+        description: 'Oberster Richter des Landgerichts mit Befugnis über Blut- und Hochgerichtsbarkeit im gesamten Fürstentum.',
+        prerequisites: [
+          { type: 'profession', label: 'Kurfürstlicher Beamter', targetId: 'kurfuerstlicher_beamter' },
+          { type: 'experience_years', label: '5 Jahre Praxis', minValue: 5 }
+        ],
+        careerRoutes: [
+          { id: 'lr_r1', name: 'Richterweihe & Schöffenbestallung', type: 'social_recognition', description: 'Ernennung zum Obersten Richter durch den Fürsten.', requirementsSummary: 'Richterpatent' }
+        ],
+        suggestedCompetencies: ['Hoch- & Blutgerichtsbarkeit', 'Reichsgesetzgebung', 'Urteilsfindung', 'Verfassungsrecht'],
+        possibleRanks: ['Landrichter', 'Oberlandrichter', 'Präsident des Landgerichts']
+      },
+
+      // -----------------------------------------------------------------------
+      // KATEGORIE: Hofzeremoniell & Protokoll
+      // -----------------------------------------------------------------------
+      {
+        id: 'herold',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Herold',
+        tier: 'beruf',
+        category: 'Hofzeremoniell & Protokoll',
+        rankOrder: 1,
+        rankTitle: 'Grundstufe',
+        nextRankProfession: 'Wappenkundiger',
+        parentIds: ['staatsdienst_root'],
+        childIds: ['wappenkundiger'],
+        description: 'Zeremonieller Bote der Krone, Ausrufer bei Festen, Turnieren und offiziellen Proklamationen.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'he_r1', name: 'Heroldseid', type: 'exam', description: 'Eid auf Neutralität und exakte Nachrichtenübermittlung.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Stimmbeherrschung & Vortrag', 'Proklamationsrecht', 'Hofzeremonien', 'Reitsicherheit'],
+        possibleRanks: ['Knappe des Herolds', 'Herold', 'Oberherold']
+      },
+      {
+        id: 'wappenkundiger',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Wappenkundiger',
+        tier: 'beruf',
+        category: 'Hofzeremoniell & Protokoll',
+        rankOrder: 2,
+        rankTitle: 'Fachstufe',
+        previousRankProfession: 'Herold',
+        nextRankProfession: 'Zeremonienmeister',
+        parentIds: ['herold'],
+        childIds: ['zeremonienmeister'],
+        description: 'Gelehrter der Heraldik, Genealogie, Wappenrollen, Standesnachweise und Adelsmatrikel.',
+        prerequisites: [
+          { type: 'profession', label: 'Herold', targetId: 'herold' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'wk_r1', name: 'Wappenmeisterprüfung', type: 'exam', description: 'Nachweis profunder Kenntnisse der Reichsheraldik.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Heraldik & Blasonierung', 'Adelsgenealogie', 'Urkundenkunde', 'Turnierregeln'],
+        possibleRanks: ['Wappenmaler', 'Wappenkundiger', 'Reichswappenmeister']
+      },
+      {
+        id: 'zeremonienmeister',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Zeremonienmeister',
+        tier: 'beruf',
+        category: 'Hofzeremoniell & Protokoll',
+        rankOrder: 3,
+        rankTitle: 'Meisterstufe',
+        previousRankProfession: 'Wappenkundiger',
+        nextRankProfession: 'Truchsess',
+        parentIds: ['wappenkundiger'],
+        childIds: ['truchsess'],
+        description: 'Leiter des Hofprotokolls, imperialer Krönungsfeiern, Staatsempfänge, Hoffeste und diplomatischer Audienzen.',
+        prerequisites: [
+          { type: 'profession', label: 'Wappenkundiger', targetId: 'wappenkundiger' },
+          { type: 'experience_years', label: '3 Jahre Praxis', minValue: 3 }
+        ],
+        careerRoutes: [
+          { id: 'zm_r1', name: 'Protokollbestallung', type: 'social_recognition', description: 'Ernennung zum Obersten Zeremonienmeister am Hofe.', requirementsSummary: '3 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Imperiales Hofprotokoll', 'Sitzordnungen & Ränge', 'Fest- & Feierregie', 'Etikette-Aufsicht'],
+        possibleRanks: ['Vizezeremonienmeister', 'Zeremonienmeister', 'Oberzeremonienmeister']
+      },
+      {
+        id: 'truchsess',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Truchsess',
+        tier: 'beruf',
+        category: 'Hofzeremoniell & Protokoll',
+        rankOrder: 4,
+        rankTitle: 'Meisterstufe',
+        previousRankProfession: 'Zeremonienmeister',
+        nextRankProfession: 'Hofmarschall',
+        parentIds: ['zeremonienmeister'],
+        childIds: ['hofmarschall'],
+        description: 'Erzamt der Hofhaltung mit Aufsicht über die fürstliche Tafel, Festbankette und Vorräte des Hofstaates.',
+        prerequisites: [
+          { type: 'profession', label: 'Zeremonienmeister', targetId: 'zeremonienmeister' },
+          { type: 'experience_years', label: '4 Jahre Praxis', minValue: 4 }
+        ],
+        careerRoutes: [
+          { id: 'tr_r1', name: 'Truchsessenpatent', type: 'social_recognition', description: 'Verleihung des Erzamtes durch den Hof.', requirementsSummary: 'Erzamtsverleihung' }
+        ],
+        suggestedCompetencies: ['Hofwirtschaft', 'Tafelzeremoniell', 'Festbankett-Koordination', 'Hoflogistik'],
+        possibleRanks: ['Tafelmeister', 'Truchsess', 'Erobertruchsess']
+      },
+      {
+        id: 'hofmarschall',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Hofmarschall',
+        tier: 'beruf',
+        category: 'Hofzeremoniell & Protokoll',
+        rankOrder: 5,
+        rankTitle: 'Spitzenamt',
+        previousRankProfession: 'Truchsess',
+        parentIds: ['truchsess'],
+        childIds: [],
+        description: 'Oberster Beamter des fürstlichen Hofstaats und oberster Leiter der gesamten Palast- und Hofstaatsverwaltung.',
+        prerequisites: [
+          { type: 'profession', label: 'Truchsess', targetId: 'truchsess' },
+          { type: 'experience_years', label: '5 Jahre Praxis', minValue: 5 }
+        ],
+        careerRoutes: [
+          { id: 'hm_r1', name: 'Hofmarschallbestallung', type: 'social_recognition', description: 'Höchste Bestallung im Hofstaat durch den Herrscher.', requirementsSummary: 'Hofpatent' }
+        ],
+        suggestedCompetencies: ['Hofstaatsführung', 'Palastverwaltung', 'Sicherheits- & Hofaufsicht', 'Staatshaushalt Hof'],
+        possibleRanks: ['Vizehofmarschall', 'Hofmarschall', 'Obersthofmarschall']
+      },
+
+      // -----------------------------------------------------------------------
+      // KATEGORIE: Hofschutz & Sicherheit
+      // -----------------------------------------------------------------------
+      {
+        id: 'koerperdouble',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Körperdouble',
+        tier: 'beruf',
+        category: 'Hofschutz & Sicherheit',
+        rankOrder: 1,
+        rankTitle: 'Grundstufe',
+        nextRankProfession: 'Leibwächter',
+        parentIds: ['staatsdienst_root'],
+        childIds: ['leibwaechter'],
+        description: 'Täuschungsfigur zur Ablenkung von Anschlägen und Absicherung hochgefährlicher öffentlicher Auftritte.',
+        prerequisites: [
+          { type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }
+        ],
+        careerRoutes: [
+          { id: 'kd_r1', name: 'Schattenprüfung', type: 'exam', description: 'Prüfung in Gestik, Mimik und Täuschungskunst.', requirementsSummary: '1 Jahr Praxis' }
+        ],
+        suggestedCompetencies: ['Nachahmung & Mimik', 'Körperbeherrschung', 'Gefahrenerkennung', 'Täuschung'],
+        possibleRanks: ['Double', 'Geheimdouble', 'Chefdoublant']
+      },
+      {
+        id: 'leibwaechter',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Leibwächter',
+        tier: 'beruf',
+        category: 'Hofschutz & Sicherheit',
+        rankOrder: 2,
+        rankTitle: 'Fachstufe',
+        previousRankProfession: 'Körperdouble',
+        nextRankProfession: 'Personenschützer',
+        parentIds: ['koerperdouble'],
+        childIds: ['personenschuetzer'],
+        description: 'Bewaffneter Nahschutz der Herrscherfamilie und Gefahrenabwehr in Palasträumen und auf Reisen.',
+        prerequisites: [
+          { type: 'profession', label: 'Körperdouble', targetId: 'koerperdouble' },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2 }
+        ],
+        careerRoutes: [
+          { id: 'lw_r1', name: 'Nahschutz-Eignungsprüfung', type: 'exam', description: 'Prüfung im bewaffneten und unbewaffneten Personenschutz.', requirementsSummary: '2 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Nahkampf & Parieren', 'Aufmerksamkeit & Wachsamkeit', 'Fluchtwegesicherung', 'Körperlicher Schutz'],
+        possibleRanks: ['Leibgardist', 'Leibwächter', 'Oberleibwächter']
+      },
+      {
+        id: 'personenschuetzer',
+        fieldId: 'staatsdienst_diplomatie',
+        name: 'Personenschützer',
+        tier: 'beruf',
+        category: 'Hofschutz & Sicherheit',
+        rankOrder: 3,
+        rankTitle: 'Meisterstufe',
+        previousRankProfession: 'Leibwächter',
+        parentIds: ['leibwaechter'],
+        childIds: [],
+        description: 'Taktischer Leiter des Personenschutzes, Routensicherer, Ermittler und Koordinator des Sicherheitsstabs.',
+        prerequisites: [
+          { type: 'profession', label: 'Leibwächter', targetId: 'leibwaechter' },
+          { type: 'experience_years', label: '4 Jahre Praxis', minValue: 4 }
+        ],
+        careerRoutes: [
+          { id: 'ps_r1', name: 'Kommandoprüfung Leibwache', type: 'exam', description: 'Führung und taktische Leitung des Personenschutzkommandos.', requirementsSummary: '4 Jahre Praxis' }
+        ],
+        suggestedCompetencies: ['Taktische Einsatzleitung', 'Bedrohungsanalyse', 'Konvoi- & Routenführung', 'Krisenentschärfung'],
+        possibleRanks: ['Einsatzleiter Personenschutz', 'Hauptmann der Leibwache', 'Kommandeur des Personenschutzes']
+      }
+    ]
   }
 };
 
@@ -2771,18 +3301,19 @@ export const PROFESSION_TREES: Record<string, ProfessionTreeField> = {
  */
 export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
   switch (fieldId) {
+    case 'staatsdienst_diplomatie':
     case 'adel_herrschaft':
       return {
-        entryName: 'Hofpage',
-        entryRanks: ['Page', 'Hofgehilfe'],
-        entryDesc: 'Hofetikette, Ahnenkunde und Dienst am Hofe.',
-        core1Name: 'Herold',
+        entryName: 'Hofpage / Kanzleigehilfe',
+        entryRanks: ['Page', 'Kanzleigehilfe'],
+        entryDesc: 'Hofetikette, Urkundenkunde, Gesandtschaftslehre und diplomatischer Dienst.',
+        core1Name: 'Herold & Zeremonienmeister',
         core1Ranks: ['Wappenkundler', 'Herold'],
-        core2Name: 'Zeremonienmeister',
-        core2Ranks: ['Hofmeister', 'Zeremonienmeister'],
-        spec1Name: 'Hofmarschall',
-        spec1Ranks: ['Truchsess', 'Hofmarschall'],
-        apexName: 'Großkanzler',
+        core2Name: 'Diplomat & Gesandter',
+        core2Ranks: ['Legationssekretär', 'Gesandter'],
+        spec1Name: 'Hofmarschall & Berater',
+        spec1Ranks: ['Hofberater', 'Hofmarschall'],
+        apexName: 'Großkanzler & Minister',
         apexRanks: ['Kanzler', 'Großkanzler'],
         promotionRouteName: 'Kanzleibestallung & Hofratspatent',
         routeType: 'social_recognition' as const
@@ -2890,13 +3421,13 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
       return {
         entryName: 'Werkstofflehrling',
         entryRanks: ['Lehrling', 'Handlanger'],
-        entryDesc: 'Materialauswahl von Leder, Seil, Glas und Holz.',
+        entryDesc: 'Materialauswahl von Leder, Textil, Glas und Ton.',
         core1Name: 'Gerber & Kürschner',
         core1Ranks: ['Geselle', 'Fachhandwerker'],
-        core2Name: 'Glasmacher & Zimmermann',
-        core2Ranks: ['Handwerksgeselle', 'Polier'],
-        spec1Name: 'Meister-Wagner & Seilermeister',
-        spec1Ranks: ['Altgeselle', 'Meister'],
+        core2Name: 'Schneider & Gewandmacher',
+        core2Ranks: ['Handwerksgeselle', 'Schneider'],
+        spec1Name: 'Glasmacher & Töpfer',
+        spec1Ranks: ['Hüttenmeister', 'Meister'],
         apexName: 'Zunftoberhaupt der Werkstoffe',
         apexRanks: ['Zunftoberhaupt', 'Obermeister'],
         promotionRouteName: 'Zunftbrief & Meisterprüfung',
@@ -2906,15 +3437,15 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
       return {
         entryName: 'Luxusgewerbe-Lehrling',
         entryRanks: ['Apprentice', 'Eleve'],
-        entryDesc: 'Feingefühl für Gerüche, Edelsteine, Braukunst und Feinkost.',
-        core1Name: 'Juwelier & Brauer',
-        core1Ranks: ['Goldschmied', 'Braumeister'],
-        core2Name: 'Koch & Florist',
-        core2Ranks: ['Chef de Partie', 'Floristmeister'],
-        spec1Name: 'Edelsteinschmied & Parfümeur',
-        spec1Ranks: ['Maître', 'Feinparfümeur'],
+        entryDesc: 'Feingefühl für Gemmen, seltene Düfte, Uhrmacherei und Zierpflanzen.',
+        core1Name: 'Juwelier & Goldschmied',
+        core1Ranks: ['Goldschmied', 'Juwelier'],
+        core2Name: 'Parfümeur & Duftmischer',
+        core2Ranks: ['Duftkünstler', 'Essenzenbrenner'],
+        spec1Name: 'Uhrmacher & Florist',
+        spec1Ranks: ['Feinmechanicus', 'Floristmeister'],
         apexName: 'Großmeister des Luxusgewerbes',
-        apexRanks: ['Hofjuwelier', 'Starkoch'],
+        apexRanks: ['Hofjuwelier', 'Hoflieferant'],
         promotionRouteName: 'Hoflieferanten-Patent',
         routeType: 'social_recognition' as const
       };
@@ -2925,9 +3456,9 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
         entryDesc: 'Feldarbeit, Bodenvorbereitung und Erntehelfer.',
         core1Name: 'Bauer & Landwirt',
         core1Ranks: ['Hofbauer', 'Kätner'],
-        core2Name: 'Fischer & Bergmann',
-        core2Ranks: ['Fischergeselle', 'Bergknappe'],
-        spec1Name: 'Kräutersammler & Verkäufer',
+        core2Name: 'Fischer & Teichwirt',
+        core2Ranks: ['Fischergeselle', 'Teichmeister'],
+        spec1Name: 'Kräutersammler & Imker',
         spec1Ranks: ['Fachlandwirt', 'Hofverwalter'],
         apexName: 'Hofbesitzer & Agrarmeister',
         apexRanks: ['Großbauer', 'Gutsverwalter'],
@@ -3030,21 +3561,22 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
         promotionRouteName: 'Bühnenkrönung & Ehrenplatz',
         routeType: 'social_recognition' as const
       };
+    case 'bildung_erziehung':
     case 'private_gesellschaftsrollen':
       return {
-        entryName: 'Schüler / Anwärter',
-        entryRanks: ['Schüler', 'Junior'],
-        entryDesc: 'Grundausbildung, Lernen und Erfüllung täglicher Lebensaufgaben.',
-        core1Name: 'Student & Hausfrau / Hausmann',
-        core1Ranks: ['Student', 'Hausvorstand'],
-        core2Name: 'Gesellschaftlicher Stand',
-        core2Ranks: ['Bürger', 'Standesvertreter'],
-        spec1Name: 'Akademischer Anwärter & Patron',
-        spec1Ranks: ['Absolvent', 'Familienoberhaupt'],
-        apexName: 'Patriarch / Matriarch & Ehrengast',
-        apexRanks: ['Patriarch', 'Matriarch', 'Ehrenbürger'],
-        promotionRouteName: 'Anerkennung des Lebenswerks',
-        routeType: 'social_recognition' as const
+        entryName: 'Schulmeister-Anwärter & Gehilfe',
+        entryRanks: ['Schulgehilfe', 'Hilfslehrer'],
+        entryDesc: 'Didaktische Grundausbildung, Lektüre und Betreuung von Lernenden.',
+        core1Name: 'Lehrer & Erzieher',
+        core1Ranks: ['Lehrer', 'Schulmeister'],
+        core2Name: 'Gilden-Ausbilder & Fechtmeister',
+        core2Ranks: ['Instruktor', 'Gildenmeister'],
+        spec1Name: 'Dozent & Prinzenerzieher',
+        spec1Ranks: ['Oberlehrer', 'Akademiedozent'],
+        apexName: 'Professor & Rektor',
+        apexRanks: ['Professor', 'Rektor', 'Großmeister der Lehre'],
+        promotionRouteName: 'Akademische Bestallung & Lehrpatent',
+        routeType: 'exam' as const
       };
     default:
       return {
@@ -3065,60 +3597,198 @@ export function getDomainCareerVocabulary(fieldId: string, fieldName: string) {
   }
 }
 
-const NOBLE_TITLES = new Set(['kaiser', 'könig', 'herzog', 'fürst', 'graf', 'baron', 'prinz', 'kronprinz', 'erzherzog', 'kurfürst']);
+const NOBLE_TITLES = new Set([
+  'kaiser', 'kaiserin', 'könig', 'königin', 'großherzog', 'großherzogin', 'kurfürst', 'kurfürstin',
+  'herzog', 'herzogin', 'fürst', 'fürstin', 'landgraf', 'landgräfin', 'markgraf', 'markgräfin',
+  'pfalzgraf', 'pfalzgräfin', 'graf', 'gräfin', 'burggraf', 'burggräfin', 'vizegraf', 'vizegräfin',
+  'baron', 'baronin', 'freiherr', 'freiin', 'ritter', 'edler', 'edle', 'junker', 'edelfräulein',
+  'patrizier', 'prinz', 'prinzessin', 'kronprinz', 'kronprinzessin', 'erbprinz', 'erbprinzessin',
+  'erbherzog', 'erbherzogstochter', 'erbgraf', 'erbgräfin', 'komtesse', 'baronssohn', 'baronstochter',
+  'lord', 'lady', 'monarch', 'regent', 'adel'
+]);
 
 /**
- * Creates a generic fallback tree for any field using domain-appropriate vocabulary.
+ * Enriches any tree field ensuring all nodes have category, rankOrder, rankTitle,
+ * and links to the previous/next rank in their respective progression chain.
+ */
+export function enrichTreeNodesWithHierarchy(tree: ProfessionTreeField): ProfessionTreeField {
+  const nodeMap = new Map<string, ProfessionTreeNode>();
+  for (const n of tree.nodes) {
+    nodeMap.set(n.id, n);
+  }
+
+  // Derive categories and rank details if not explicitly set
+  const enrichedNodes = tree.nodes.map(node => {
+    let category = node.category;
+    let rankOrder = node.rankOrder;
+    let rankTitle = node.rankTitle;
+    let nextRankProfession = node.nextRankProfession;
+    let previousRankProfession = node.previousRankProfession;
+
+    // Determine category from specialization, parent, or tree name
+    if (!category) {
+      if (node.tier === 'einstieg') {
+        category = 'Grundausbildung';
+      } else if (node.specializationOf && nodeMap.has(node.specializationOf)) {
+        category = nodeMap.get(node.specializationOf)!.name;
+      } else if (node.parentIds.length > 0 && nodeMap.has(node.parentIds[0]) && nodeMap.get(node.parentIds[0])!.tier !== 'einstieg') {
+        category = nodeMap.get(node.parentIds[0])!.name;
+      } else {
+        category = node.name;
+      }
+    }
+
+    // Determine rank order and title based on tier
+    if (rankOrder === undefined) {
+      if (node.tier === 'einstieg') {
+        rankOrder = 0;
+        rankTitle = 'Einstiegsstufe';
+      } else if (node.tier === 'beruf') {
+        rankOrder = 1;
+        rankTitle = 'Grundstufe / Geselle';
+      } else if (node.tier === 'spezialisierung') {
+        rankOrder = 2;
+        rankTitle = 'Fachstufe / Spezialist';
+      } else if (node.tier === 'meister') {
+        rankOrder = 3;
+        rankTitle = 'Meisterstufe';
+      }
+    }
+
+    // Determine previous and next profession names if available
+    if (!nextRankProfession && node.childIds && node.childIds.length > 0) {
+      const firstChild = nodeMap.get(node.childIds[0]);
+      if (firstChild) {
+        nextRankProfession = firstChild.name;
+      }
+    }
+
+    if (!previousRankProfession && node.parentIds && node.parentIds.length > 0) {
+      const parent = nodeMap.get(node.parentIds[0]);
+      if (parent && parent.tier !== 'einstieg') {
+        previousRankProfession = parent.name;
+      }
+    }
+
+    return {
+      ...node,
+      category,
+      rankOrder,
+      rankTitle,
+      nextRankProfession,
+      previousRankProfession
+    };
+  });
+
+  return {
+    ...tree,
+    nodes: enrichedNodes
+  };
+}
+
+/**
+ * Creates a generic fallback tree for any field using domain-appropriate vocabulary,
+ * grouping raw presets into structured categories and sequential hierarchical ranks.
  */
 export function generateGenericTreeForField(fieldId: string, fieldName: string): ProfessionTreeField {
   const rootId = `${fieldId}_root`;
   const cleanFieldName = fieldName || fieldId;
 
+  // Normalize fieldId for backwards compatibility
+  const normalizedFieldId = fieldId === 'adel_herrschaft' ? 'staatsdienst_diplomatie' :
+                           fieldId === 'private_gesellschaftsrollen' ? 'bildung_erziehung' : fieldId;
+
   // Find jobs defined in JOB_CATEGORIES for this field
-  const categoryPreset = JOB_CATEGORIES.find(c => c.fieldId === fieldId);
+  const categoryPreset = JOB_CATEGORIES.find(c => c.fieldId === normalizedFieldId || c.fieldId === fieldId);
   const rawJobs = categoryPreset ? categoryPreset.jobs : [];
 
-  // Filter out noble titles and split multiple jobs if separated by slashes
-  const validJobs: string[] = [];
-  for (const j of rawJobs) {
-    const parts = j.split(' / ');
-    for (const part of parts) {
-      const trimmed = part.trim();
-      const lower = trimmed.toLowerCase();
-      if (!NOBLE_TITLES.has(lower) && !validJobs.includes(trimmed)) {
-        validJobs.push(trimmed);
-      }
+  // Group raw jobs into category branches.
+  // In jobPresets, entries are often grouped naturally or contain slash-pairs ("JobA / JobB")
+  interface JobHierarchyItem {
+    name: string;
+    category: string;
+    rankOrder: number;
+    rankTitle: string;
+    nextRank?: string;
+    prevRank?: string;
+  }
+
+  const items: JobHierarchyItem[] = [];
+  let categoryCounter = 1;
+
+  for (let entryIdx = 0; entryIdx < rawJobs.length; entryIdx++) {
+    const rawEntry = rawJobs[entryIdx];
+    const parts = rawEntry.split(' / ').map(p => p.trim()).filter(p => !NOBLE_TITLES.has(p.toLowerCase()));
+    if (parts.length === 0) continue;
+
+    // Use clean category label derived from the entry or group
+    let categoryName = cleanFieldName;
+    if (parts.length >= 2) {
+      categoryName = `${parts[0]} & ${parts[1]}`;
+    } else {
+      categoryName = parts[0];
     }
+
+    // Rank titles according to depth
+    const rankTitles = ['Grundstufe', 'Fachstufe', 'Meisterstufe', 'Spitzenamt', 'Ehrenrang'];
+
+    parts.forEach((jobName, pIdx) => {
+      // Avoid duplicate names in the field
+      if (items.some(it => it.name.toLowerCase() === jobName.toLowerCase())) return;
+
+      const rankOrder = pIdx + 1;
+      const rankTitle = rankTitles[Math.min(pIdx, rankTitles.length - 1)];
+      const nextRank = pIdx + 1 < parts.length ? parts[pIdx + 1] : undefined;
+      const prevRank = pIdx > 0 ? parts[pIdx - 1] : undefined;
+
+      items.push({
+        name: jobName,
+        category: categoryName,
+        rankOrder,
+        rankTitle,
+        nextRank,
+        prevRank
+      });
+    });
+    categoryCounter++;
   }
 
-  // If no preset jobs found, provide clean default profession nodes (never combinations!)
-  if (validJobs.length === 0) {
-    validJobs.push(`Fachmann für ${cleanFieldName}`, `Spezialist für ${cleanFieldName}`);
+  // If no preset jobs found, provide clean default profession nodes
+  if (items.length === 0) {
+    items.push(
+      { name: `Fachmann für ${cleanFieldName}`, category: cleanFieldName, rankOrder: 1, rankTitle: 'Fachstufe', nextRank: `Meister für ${cleanFieldName}` },
+      { name: `Meister für ${cleanFieldName}`, category: cleanFieldName, rankOrder: 2, rankTitle: 'Meisterstufe', prevRank: `Fachmann für ${cleanFieldName}` }
+    );
   }
 
-  const childNodes: ProfessionTreeNode[] = validJobs.map((jobName, index) => {
-    const slug = jobName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const childNodes: ProfessionTreeNode[] = items.map((item, index) => {
+    const slug = item.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
     const nodeId = `${fieldId}.${slug}_${index}`;
     return {
       id: nodeId,
       fieldId,
-      name: jobName,
+      name: item.name,
       tier: 'beruf',
-      parentIds: [rootId],
+      category: item.category,
+      rankOrder: item.rankOrder,
+      rankTitle: item.rankTitle,
+      nextRankProfession: item.nextRank,
+      previousRankProfession: item.prevRank,
+      parentIds: item.prevRank ? [] : [rootId],
       childIds: [],
-      description: `Fachausbildung und selbstständige Berufsausübung als ${jobName} im Bereich ${cleanFieldName}.`,
-      prerequisites: [{ type: 'experience_years', label: '1 Jahr Praxiserfahrung', minValue: 1 }],
+      description: `Fachausbildung und selbstständige Berufsausübung als ${item.name} im Fachbereich ${cleanFieldName}.`,
+      prerequisites: [{ type: 'experience_years', label: `${item.rankOrder} Jahr(e) Praxiserfahrung`, minValue: item.rankOrder }],
       careerRoutes: [
         {
           id: `route_${nodeId}`,
-          name: `${jobName}-Fachprüfung`,
+          name: `${item.name}-Fachprüfung`,
           type: 'exam',
-          description: `Nachweis selbstständiger Fachbefähigung als ${jobName}.`,
-          requirementsSummary: '1 Jahr Praxis'
+          description: `Nachweis selbstständiger Fachbefähigung als ${item.name}.`,
+          requirementsSummary: `${item.rankOrder} Jahr(e) Praxis`
         }
       ],
-      suggestedCompetencies: [`Fachkunde ${jobName}`, 'Arbeitsorganisation', 'Materialkunde', 'Qualitätskontrolle'],
-      possibleRanks: ['Geselle', 'Fachkraft', 'Meister']
+      suggestedCompetencies: [`Fachkunde ${item.name}`, 'Arbeitsorganisation', 'Qualitätskontrolle', 'Sorgfalt'],
+      possibleRanks: [item.rankTitle, item.name]
     };
   });
 
@@ -3127,8 +3797,11 @@ export function generateGenericTreeForField(fieldId: string, fieldName: string):
     fieldId,
     name: 'Lehrling',
     tier: 'einstieg',
+    category: 'Grundausbildung',
+    rankOrder: 0,
+    rankTitle: 'Einstiegsstufe',
     parentIds: [],
-    childIds: childNodes.map(c => c.id),
+    childIds: childNodes.filter(c => c.rankOrder === 1).map(c => c.id),
     description: `Einstieg in den Berufszweig „${cleanFieldName}“`,
     prerequisites: [],
     careerRoutes: [
@@ -3148,26 +3821,53 @@ export function generateGenericTreeForField(fieldId: string, fieldName: string):
       'Lernfähigkeit',
       'Sorgfalt'
     ],
-    possibleRanks: ['Lehrling', 'Auszubildender']
+    possibleRanks: ['Lehrling', 'Auszubildender', 'Anwärter']
   };
 
-  return {
+  return enrichTreeNodesWithHierarchy({
     fieldId,
     fieldName: cleanFieldName,
-    description: `Berufsentwicklung und Karrierepfade im Bereich ${cleanFieldName}`,
+    description: `Berufsentwicklung und hierarchische Karrierepfade im Bereich ${cleanFieldName}`,
     rootNodeId: rootId,
     nodes: [rootNode, ...childNodes]
-  };
+  });
 }
 
 /**
- * Returns the complete ProfessionTreeField for a given fieldId.
+ * Returns the complete ProfessionTreeField for a given fieldId,
+ * with normalized aliases and enriched category / hierarchy information.
+ * Each branch contains its own Lehrling entry at the top, followed by Geselle,
+ * promotions/specializations, and master ranks.
  */
 export function getProfessionTreeForField(fieldId: string, fieldName?: string): ProfessionTreeField {
-  if (PROFESSION_TREES[fieldId]) {
-    return PROFESSION_TREES[fieldId];
-  }
-  return generateGenericTreeForField(fieldId, fieldName || fieldId);
+  // Check domain aliases
+  const ALIASES: Record<string, string> = {
+    adel_herrschaft: 'staatsdienst_diplomatie',
+    militaer_streitkraefte: 'militaer_sicherheit',
+    verwaltung_wirtschaft: 'verwaltung_recht',
+    arkan_magie: 'magie_arkana',
+    unabhaengige_abenteurer: 'abenteuer_sondergewerbe',
+    landwirtschaft_versorgung: 'natur_landwirtschaft'
+  };
+
+  const normalizedFieldId = ALIASES[fieldId] || fieldId;
+
+  // Build full hierarchical branches (Lehrling -> Geselle -> Beförderung/Spezialisierung -> Meister)
+  const branches = getBranchesForField(normalizedFieldId, fieldName);
+  const allNodes: ProfessionTreeNode[] = branches.flatMap(b => convertProgressionToNodes(normalizedFieldId, b));
+
+  const cleanFieldName =
+    fieldName ||
+    JOB_CATEGORIES.find(c => c.fieldId === normalizedFieldId)?.category ||
+    normalizedFieldId;
+
+  return enrichTreeNodesWithHierarchy({
+    fieldId: normalizedFieldId,
+    fieldName: cleanFieldName,
+    description: `Hierarchische Berufe, Spezialisierungen und Meisterstufen im Fachbereich ${cleanFieldName}.`,
+    rootNodeId: allNodes[0]?.id || `${normalizedFieldId}_root`,
+    nodes: allNodes
+  });
 }
 
 /**
@@ -3178,15 +3878,17 @@ export function findTreeNodeByNameOrId(term: string, fieldId?: string): Professi
   const lower = term.toLowerCase().trim();
 
   // If fieldId is given, search that tree first
-  if (fieldId && PROFESSION_TREES[fieldId]) {
-    const found = PROFESSION_TREES[fieldId].nodes.find(
+  if (fieldId) {
+    const tree = getProfessionTreeForField(fieldId);
+    const found = tree.nodes.find(
       n => n.id.toLowerCase() === lower || n.name.toLowerCase() === lower || n.name.toLowerCase().includes(lower)
     );
     if (found) return found;
   }
 
-  // Search all registered trees
-  for (const tree of Object.values(PROFESSION_TREES)) {
+  // Search through standard fields
+  for (const cat of JOB_CATEGORIES) {
+    const tree = getProfessionTreeForField(cat.fieldId);
     const found = tree.nodes.find(
       n => n.id.toLowerCase() === lower || n.name.toLowerCase() === lower || n.name.toLowerCase().includes(lower)
     );

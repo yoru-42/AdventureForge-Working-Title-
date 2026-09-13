@@ -16,6 +16,7 @@ import {
 import { PRESET_NOBILITY_TITLES } from '../services/positionService';
 import { getCatalogCompetenciesForProfession } from '../lib/professionCompetencies';
 import { calculateCompetencyProgress } from '../services/professionCompetencyService';
+import EverydaySkillsSelect, { parseEverydaySkills } from './EverydaySkillsSelect';
 import {
   Check,
   Lock,
@@ -25,7 +26,12 @@ import {
   Info,
   X,
   Award,
-  Trash2
+  Trash2,
+  Briefcase,
+  Layers,
+  Compass,
+  ArrowRight,
+  ArrowDown
 } from 'lucide-react';
 
 export interface ProfessionSkillTreeProps {
@@ -50,6 +56,10 @@ export interface ProfessionSkillTreeProps {
   onSecondaryProfessionsChange?: (secondaries: SecondaryProfession[]) => void;
   socialTitles?: SocialTitleState[];
   onSocialTitlesChange?: (titles: SocialTitleState[]) => void;
+  everydaySkills?: string;
+  onEverydaySkillsChange?: (skills: string) => void;
+  activeCategoryTab?: 'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen';
+  onSelectCategoryTab?: (tab: 'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen') => void;
   onSelectProfession: (professionName: string, specialization?: string, fieldId?: string) => void;
   readOnly?: boolean;
 }
@@ -112,6 +122,10 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   onSecondaryProfessionsChange,
   socialTitles = [],
   onSocialTitlesChange,
+  everydaySkills = '',
+  onEverydaySkillsChange,
+  activeCategoryTab = 'hauptberuf',
+  onSelectCategoryTab,
   onSelectProfession,
   readOnly = false
 }) => {
@@ -125,7 +139,20 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   const [editingExpNodeId, setEditingExpNodeId] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
-  // Modals for "Nebenberufe +" and "Adelige Titel +"
+  // Automatically ensure inline inspector is comfortably in view
+  useEffect(() => {
+    if (inspectingNodeId) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`node-inspector-${inspectingNodeId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [inspectingNodeId]);
+
+  // Modals for "Nebenberufe +", "Adelige Titel +" and "Alltagskompetenzen"
   const [isAddSecondaryModalOpen, setIsAddSecondaryModalOpen] = useState(false);
   const [customSecondaryName, setCustomSecondaryName] = useState('');
   const [customSecondarySpec, setCustomSecondarySpec] = useState('');
@@ -134,6 +161,12 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   const [selectedNobilityPreset, setSelectedNobilityPreset] = useState('');
   const [customNobilityTitle, setCustomNobilityTitle] = useState('');
   const [nobilityGrantedBy, setNobilityGrantedBy] = useState('');
+
+  const [isEverydayModalOpen, setIsEverydayModalOpen] = useState(false);
+
+  const everydaySkillItems = useMemo(() => {
+    return parseEverydaySkills(everydaySkills || '');
+  }, [everydaySkills]);
 
   const currentExp: ProfessionExperience = useMemo(() => {
     if (professionExperience) {
@@ -150,13 +183,31 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
     };
   }, [professionExperience, experienceYears, experienceMonths, experienceDays]);
 
-  const rootNode = useMemo(() => {
-    return tree.nodes.find(n => n.tier === 'einstieg') || tree.nodes[0];
-  }, [tree]);
+  const groupedBranches = useMemo(() => {
+    const map = new Map<string, ProfessionTreeNode[]>();
 
-  const coreNodes = useMemo(() => {
-    return tree.nodes.filter(n => n.tier === 'beruf');
-  }, [tree]);
+    for (const node of tree.nodes) {
+      const branch = node.category || tree.fieldName || 'Berufszweig';
+      if (!map.has(branch)) {
+        map.set(branch, []);
+      }
+      map.get(branch)!.push(node);
+    }
+
+    const groups: { branchName: string; nodes: ProfessionTreeNode[] }[] = [];
+    map.forEach((nodes, branchName) => {
+      // Sort nodes: Lehrling (rankOrder: 0) -> Geselle (1) -> Spezialisierung (2) -> Meister (3)
+      const sorted = [...nodes].sort((a, b) => {
+        const rankA = a.rankOrder ?? 0;
+        const rankB = b.rankOrder ?? 0;
+        if (rankA !== rankB) return rankA - rankB;
+        return a.name.localeCompare(b.name, 'de');
+      });
+      groups.push({ branchName, nodes: sorted });
+    });
+
+    return groups;
+  }, [tree.nodes, tree.fieldName]);
 
   // Prerequisites evaluation
   const evaluations = useMemo(() => {
@@ -593,18 +644,28 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   // Keine "Kernberuf" Beschriftung, keine Pfade-Buttons, keine abgeschnittenen Texte.
   // Es reicht ein kleines Feld mit "Erlernt" + "Details".
   // ---------------------------------------------------------------------------
-  const renderCompactNode = (node: ProfessionTreeNode) => {
+  const renderCompactNode = (node: ProfessionTreeNode, nextRankName?: string) => {
     const isLearned = isNodeLearned(node);
     const isInspected = inspectingNodeId === node.id;
     const evaluation = evaluations.get(node.id);
     const isAvailable = evaluation ? evaluation.isAvailable : true;
     const isLocked = !isAvailable && !isLearned;
 
+    const rankLabel = node.rankTitle
+      ? node.rankTitle
+      : node.rankOrder !== undefined && node.rankOrder > 0
+      ? `Stufe ${node.rankOrder}`
+      : node.tier === 'einstieg'
+      ? 'Einstiegsstufe'
+      : 'Fachberuf';
+
+    const nextProfession = nextRankName || node.nextRankProfession;
+
     return (
       <div
         key={node.id}
         id={`tree-node-${node.id}`}
-        className={`relative flex flex-col justify-between p-3.5 rounded-xl transition-all duration-150 border ${
+        className={`relative flex flex-col justify-between p-3.5 sm:p-4 rounded-xl transition-all duration-150 border h-full w-full min-w-0 ${
           isLearned
             ? 'bg-amber-950/30 border-amber-500/70 shadow-sm shadow-amber-950/30'
             : isInspected
@@ -614,22 +675,37 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
             : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 hover:bg-slate-800/50 shadow-sm'
         }`}
       >
-        {/* Titel ohne Abschneiden, keine störenden Badges */}
-        <div className="flex items-start justify-between gap-2 min-w-0">
-          <span
-            className="text-sm font-bold text-white tracking-wide font-serif break-words leading-snug"
-            title={node.name}
-          >
-            {node.name}
-          </span>
-          {isLocked && (
+        <div className="flex flex-col gap-2 min-w-0">
+          {/* Titel & Schloss */}
+          <div className="flex items-start justify-between gap-2 min-w-0">
             <span
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-900/60 text-rose-300 text-[10px] shrink-0"
-              title="Voraussetzungen noch nicht erfüllt"
+              className="text-sm font-bold text-white tracking-wide font-serif break-words leading-snug"
+              title={node.name}
             >
-              <Lock className="w-2.5 h-2.5" />
+              {node.name}
             </span>
-          )}
+            {isLocked && (
+              <span
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-900/60 text-rose-300 text-[10px] shrink-0"
+                title="Voraussetzungen noch nicht erfüllt"
+              >
+                <Lock className="w-2.5 h-2.5" />
+              </span>
+            )}
+          </div>
+
+          {/* Stufe & Aufstiegs-Verbindung */}
+          <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-0.5 gap-2 min-w-0">
+            <span className="px-2 py-0.5 rounded bg-slate-950/70 border border-slate-800 text-amber-300/90 font-medium text-[10px] shrink-0">
+              {rankLabel}
+            </span>
+            {nextProfession && (
+              <span className="text-[10px] text-slate-400 flex items-center gap-1 min-w-0 truncate max-w-[170px]" title={`Nächster Rang: ${nextProfession}`}>
+                <ArrowRight className="w-3 h-3 text-amber-400/80 shrink-0" />
+                <span className="truncate">{nextProfession}</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Untere Leiste: Kleines Feld "Erlernt" + "Details" Button */}
@@ -1015,138 +1091,109 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* AUSGEWÄHLTE BERUFE: Hauptberuf, Nebenberufe, [Nebenberufe +], [Adelige Titel +] */}
+      {/* BERUFSZWEIGE MIT HIERARCHISCHER ENTWICKLUNG (VON OBEN NACH UNTEN)          */}
       {/* ========================================================================= */}
-      <div className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-3 mb-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            Ausgewählte Berufe:
-          </span>
-
-          {/* Hauptberuf Tag */}
-          {currentProfession ? (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/80 border border-amber-500/60 text-amber-300 font-semibold">
-              <span>Hauptberuf: {currentProfession}</span>
-              {currentSpecialization && (
-                <span className="text-amber-200/80 font-normal">({currentSpecialization})</span>
-              )}
-            </span>
-          ) : (
-            <span className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-500 italic">
-              Kein Hauptberuf festgelegt
-            </span>
-          )}
-
-          {/* Secondary Professions Badges */}
-          {secondaryProfessions.map(sec => (
-            <span
-              key={sec.id}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/70 border border-emerald-600/60 text-emerald-300 font-medium"
-            >
-              <span>Nebenberuf: {sec.profession}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  const matchNode = tree.nodes.find(
-                    n => n.name.toLowerCase() === sec.profession.toLowerCase()
-                  );
-                  if (matchNode) {
-                    handleToggleLearned(matchNode);
-                  } else if (onSecondaryProfessionsChange) {
-                    onSecondaryProfessionsChange(secondaryProfessions.filter(s => s.id !== sec.id));
-                  }
-                }}
-                className="hover:text-rose-300 ml-0.5 cursor-pointer text-emerald-400"
-                title="Nebenberuf entfernen"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-
-          {/* Tag: Nebenberufe + */}
-          <button
-            type="button"
-            onClick={() => setIsAddSecondaryModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-medium transition cursor-pointer"
-            title="Weiteren Nebenberuf hinzufügen"
-          >
-            <Plus className="w-3.5 h-3.5 text-amber-400" />
-            <span>Nebenberufe +</span>
-          </button>
-
-          {/* Adelige Titel Tags */}
-          {nobleTitles.map(t => (
-            <span
-              key={t.id}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-950/70 border border-indigo-500/60 text-indigo-300 font-medium"
-            >
-              <Award className="w-3 h-3 text-indigo-400" />
-              <span>Adelstitel: {t.title}</span>
-              <button
-                type="button"
-                onClick={() => handleRemoveNobilityTitle(t.id)}
-                className="hover:text-rose-300 ml-0.5 cursor-pointer text-indigo-400"
-                title="Adelstitel entfernen"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-
-          {/* Tag: Adelige Titel + */}
-          <button
-            type="button"
-            onClick={() => setIsNobilityModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-medium transition cursor-pointer"
-            title="Adelige Titel verwalten"
-          >
-            <Award className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Adelige Titel +</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 1. WURZELKNOTEN: EINSTIEG / GRUNDAUSBILDUNG                                */}
-      {/* ========================================================================= */}
-      <div className="w-full max-w-sm">
-        {rootNode && renderCompactNode(rootNode)}
-      </div>
-
-      {/* VERBINDUNGSLINIE */}
-      <div className="w-0.5 h-6 bg-gradient-to-b from-amber-500/60 to-amber-500/40 my-1 mx-auto" />
-
-      {/* ========================================================================= */}
-      {/* 2. BERUFE DES FACHBEREICHS (Kompakt, ohne Pfade, mit Erlernt-Feld)       */}
-      {/* ========================================================================= */}
-      <div className="w-full flex flex-col items-center">
-        <div className="w-full flex items-center justify-center gap-3 my-2">
+      <div className="w-full flex flex-col gap-6 my-3">
+        <div className="w-full flex items-center justify-center gap-3 my-1">
           <div className="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent flex-1" />
-          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400/90 px-3 py-0.5 rounded-full bg-slate-900 border border-slate-800">
-            Berufe des Fachbereichs
+          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400/90 px-3.5 py-0.5 rounded-full bg-slate-900 border border-slate-800 flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-amber-400" />
+            Berufszweige (Lehrling → Geselle → Spezialisierung → Meister)
           </span>
           <div className="h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent flex-1" />
         </div>
 
-        {/* Raster der Berufe */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 w-full">
-          {coreNodes.map(node => (
-            <div key={node.id} className="flex flex-col gap-2">
-              {renderCompactNode(node)}
-            </div>
-          ))}
+        <div className="flex flex-col gap-8 w-full max-w-4xl mx-auto">
+          {groupedBranches.map(({ branchName, nodes }) => {
+            // Group nodes by their hierarchical rankOrder:
+            const tier0 = nodes.filter(n => (n.rankOrder ?? 0) === 0);
+            const tier1 = nodes.filter(n => (n.rankOrder ?? 0) === 1);
+            const tier2 = nodes.filter(n => (n.rankOrder ?? 0) === 2);
+            const tier3 = nodes.filter(n => (n.rankOrder ?? 0) === 3);
+
+            const activeTiers = [
+              { rankOrder: 0, title: 'Lehrling / Einstieg', nodes: tier0 },
+              { rankOrder: 1, title: 'Grundstufe / Geselle', nodes: tier1 },
+              { rankOrder: 2, title: 'Beförderungen & Spezialisierungen', nodes: tier2 },
+              { rankOrder: 3, title: 'Meisterstufe', nodes: tier3 }
+            ].filter(t => t.nodes.length > 0);
+
+            return (
+              <div
+                key={branchName}
+                className="w-full bg-slate-950/70 border border-slate-800/90 rounded-2xl p-4 sm:p-6 flex flex-col gap-4 shadow-sm"
+              >
+                {/* Branch Header */}
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm shadow-amber-500/50" />
+                    <h4 className="text-sm sm:text-base font-bold text-amber-200 uppercase tracking-wider font-serif">
+                      Berufszweig: {branchName}
+                    </h4>
+                  </div>
+                  <span className="text-[10px] sm:text-xs font-medium text-slate-400 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
+                    {nodes.length} Stufen & Pfade
+                  </span>
+                </div>
+
+                {/* Vertical progression: von oben nach unten */}
+                <div className="flex flex-col items-center w-full">
+                  {activeTiers.map((tierGroup, tierIdx) => {
+                    const isLastTier = tierIdx === activeTiers.length - 1;
+                    const nextTierGroup = activeTiers[tierIdx + 1];
+                    const nextSampleName = nextTierGroup?.nodes[0]?.name;
+
+                    return (
+                      <div key={tierGroup.rankOrder} className="flex flex-col items-center w-full">
+                        {/* Tier label badge */}
+                        <div className="flex items-center gap-1.5 my-2 text-[10px] sm:text-xs font-semibold text-slate-400 tracking-wider uppercase">
+                          <span>{tierGroup.title}</span>
+                        </div>
+
+                        {/* Node cards in this tier */}
+                        <div
+                          className={`grid w-full gap-3.5 ${
+                            tierGroup.nodes.length === 1
+                              ? 'max-w-md mx-auto grid-cols-1'
+                              : tierGroup.nodes.length === 2
+                              ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl mx-auto'
+                              : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                          }`}
+                        >
+                          {tierGroup.nodes.map(node => (
+                            <div key={node.id} className="flex flex-col h-full w-full min-w-0">
+                              {renderCompactNode(node, nextSampleName)}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Inline Detail-Inspektor direkt beim ausgewählten Knoten */}
+                        {tierGroup.nodes.some(n => n.id === inspectingNodeId) && (() => {
+                          const targetNode = tierGroup.nodes.find(n => n.id === inspectingNodeId);
+                          if (!targetNode) return null;
+                          return (
+                            <div className="w-full mt-3 animate-in fade-in zoom-in-95 duration-200">
+                              {renderNodeInspector(targetNode)}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Connecting downward arrow to next level */}
+                        {!isLastTier && (
+                          <div className="flex flex-col items-center my-2.5 text-amber-500/60">
+                            <div className="w-0.5 h-4 bg-gradient-to-b from-amber-500/50 to-amber-500/30" />
+                            <ArrowDown className="w-4 h-4 -mt-1 text-amber-400/80" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
-
-      {/* ========================================================================= */}
-      {/* 3. DETAIL-INSPEKTOR (Mit 1 Klick aufrufbar & schließbar)                   */}
-      {/* ========================================================================= */}
-      {inspectingNodeId && (() => {
-        const targetNode = tree.nodes.find(n => n.id === inspectingNodeId);
-        if (!targetNode) return null;
-        return renderNodeInspector(targetNode);
-      })()}
 
       {/* ========================================================================= */}
       {/* MODAL: NEBENBERUFE +                                                      */}
@@ -1204,8 +1251,8 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
                   Schnellauswahl aus diesem Fachbereich:
                 </span>
                 <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
-                  {coreNodes
-                    .filter(n => !isNodeLearned(n))
+                  {tree.nodes
+                    .filter(n => n.tier === 'beruf' && !isNodeLearned(n))
                     .map(n => (
                       <button
                         key={n.id}
@@ -1374,6 +1421,55 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Alltagskompetenzen verwalten */}
+      {isEverydayModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-sky-500/40 rounded-2xl w-full max-w-lg p-5 shadow-2xl flex flex-col gap-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Compass className="w-5 h-5 text-sky-400" />
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Alltagskompetenzen & Praktische Fertigkeiten
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEverydayModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Verwalte Alltagskompetenzen, Hobbys und lebenspraktische Fähigkeiten deines Charakters.
+            </p>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs text-slate-300 font-bold uppercase tracking-wider">
+                Alltagskompetenzen
+              </label>
+              <EverydaySkillsSelect
+                value={everydaySkills}
+                onChange={onEverydaySkillsChange || (() => {})}
+                placeholder="Alltagskompetenzen und praktische Fertigkeiten im Alltag"
+                className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-sky-500 transition min-h-[55px]"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsEverydayModalOpen(false)}
+                className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold transition cursor-pointer"
+              >
+                Fertig
+              </button>
+            </div>
           </div>
         </div>
       )}

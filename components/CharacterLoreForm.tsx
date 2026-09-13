@@ -1648,20 +1648,60 @@ export const CharacterLoreForm: React.FC<Props> = ({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                  Rolle / Beruf
-                </label>
-                <ProfessionSelect
-                  value={getDetail('role', '') || getDetail('profession', '')} 
-                  onChange={(val, detectedField) => {
-                    updateMultipleDetails({
-                      role: val,
-                      profession: val,
-                      ...(detectedField ? { professionField: detectedField } : {})
-                    });
-                  }}
-                  placeholder="Beruf wählen oder eintragen..." 
-                />
+                <div className="flex items-center justify-between gap-1">
+                  <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                    Rolle / Beruf
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setCharTab('beruf_talente')}
+                    className="text-[10px] text-amber-400/90 hover:text-amber-300 font-medium transition-colors cursor-pointer"
+                    title="Zu 4. Berufe & Talente wechseln"
+                  >
+                    In Berufe & Talente anpassen
+                  </button>
+                </div>
+
+                <div
+                  onClick={() => setCharTab('beruf_talente')}
+                  className="bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl p-3 text-white transition-all cursor-pointer min-h-[46px] flex flex-col justify-center gap-1 group shadow-inner"
+                  title="Klicken, um Berufe & Talente zu öffnen"
+                >
+                  {(getDetail('role', '') || getDetail('profession', '')) ? (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors break-words">
+                          {getDetail('role', '') || getDetail('profession', '')}
+                        </span>
+                        {(getDetail('professionRank', '') || getDetail('professionLevel', '')) && (
+                          <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-amber-950/60 border border-amber-500/40 text-amber-300 shrink-0">
+                            {getDetail('professionRank', '') || getDetail('professionLevel', '')}
+                          </span>
+                        )}
+                      </div>
+                      {getDetail('professionField', '') && (
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
+                          <span>{getDetail('professionField', '')}</span>
+                          {getDetail('professionSpecialization', '') && (
+                            <span className="text-slate-500">({getDetail('professionSpecialization', '')})</span>
+                          )}
+                        </div>
+                      )}
+                      {Array.isArray(getDetail('secondaryProfessions', [])) && getDetail('secondaryProfessions', []).length > 0 && (
+                        <div className="text-[10px] text-slate-500">
+                          Nebenberufe: {getDetail('secondaryProfessions', []).map((sp: any) => typeof sp === 'string' ? sp : (sp?.profession || sp?.name)).filter(Boolean).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-xs text-slate-500">
+                      <span>Kein Beruf ausgewählt</span>
+                      <span className="text-[10px] text-amber-400/90 group-hover:text-amber-300 font-medium">
+                        Auswählen
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

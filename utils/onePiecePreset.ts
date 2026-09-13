@@ -1,5 +1,6 @@
 import { Territory } from '../types';
 import { generateOrganicShape } from './mapUtils';
+import { StorageService } from '../lib/storageService';
 
 interface CanonIsland {
   id: string;
@@ -274,20 +275,18 @@ const CANON_ISLANDS: CanonIsland[] = [
 export function getOnePieceTerritories(worldTitle?: string): Territory[] {
   if (typeof window !== 'undefined') {
     try {
-      const saved = localStorage.getItem('onepiece_world_template');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Update the root world node name if worldTitle is custom
-          const root = parsed.find(t => t.parentId === null);
-          if (root && worldTitle) {
-            root.name = worldTitle;
-          }
-          return parsed;
+      const saved = StorageService.getItemSync<Territory[]>('onepiece_world_template') ||
+        (localStorage.getItem('onepiece_world_template') ? JSON.parse(localStorage.getItem('onepiece_world_template')!) : null);
+      if (saved && Array.isArray(saved) && saved.length > 0) {
+        // Update the root world node name if worldTitle is custom
+        const root = saved.find(t => t.parentId === null);
+        if (root && worldTitle) {
+          root.name = worldTitle;
         }
+        return saved;
       }
     } catch (e) {
-      console.error("Failed to load onepiece_world_template from localStorage", e);
+      console.error("Failed to load onepiece_world_template", e);
     }
   }
 

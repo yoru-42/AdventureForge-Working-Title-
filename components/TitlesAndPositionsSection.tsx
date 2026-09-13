@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { SocialTitleState, OfficeState, PositionState } from '../types';
-import { ACQUISITION_METHODS, SOCIAL_TITLE_TYPES } from '../services/positionService';
+import { ACQUISITION_METHODS, SOCIAL_TITLE_TYPES, PRESET_NOBILITY_TITLES } from '../services/positionService';
+import { NOBLE_CHILD_GROUPS } from './jobPresets';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
-import { Plus, Trash2, Edit3, Shield, Award, Landmark, Check, X, Info } from 'lucide-react';
+import { NobilitySkillTree } from './NobilitySkillTree';
+import { Plus, Trash2, Edit3, Shield, Award, Landmark, Check, X, Info, Crown, Sparkles } from 'lucide-react';
 
 interface TitlesAndPositionsSectionProps {
   socialTitles?: SocialTitleState[];
@@ -116,99 +118,39 @@ export const TitlesAndPositionsSection: React.FC<TitlesAndPositionsSectionProps>
         </div>
       </div>
 
-      {/* 1. ADELSTITEL & GESELLSCHAFTLICHE TITEL */}
-      <div id="section-social-titles" className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Award className="w-4 h-4 text-amber-400" />
-            <h4 className="text-sm font-bold text-white tracking-wide">
-              Adelstitel & Gesellschaftliche Titel
-            </h4>
+      {/* 1. ADELSTITEL & GESELLSCHAFTLICHE TITEL - TALENTBAUM */}
+      <div id="section-social-titles" className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <Crown className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white tracking-wide font-serif">
+                Adelstitel & Herrscherhäuser
+              </h4>
+              <p className="text-[11px] text-slate-400">
+                Talent- und Rangbaum der Adelsstände, Lehnsherrschaften und dynastischen Linien
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            id="add-social-title-btn"
-            onClick={() => {
-              setEditingTitle({
-                id: `title_${Date.now()}`,
-                title: '',
-                titleType: 'nobility',
-                inherited: false,
-                reason: ''
-              });
-              setIsAddingTitle(true);
-            }}
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-amber-400" />
-            <span>Titel hinzufügen</span>
-          </button>
         </div>
 
-        {socialTitles.length === 0 ? (
-          <div className="py-4 text-center text-xs text-slate-500 italic bg-slate-950/20 rounded-lg border border-dashed border-slate-800">
-            Keine gesellschaftlichen Titel oder Adelstitel hinterlegt.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {socialTitles.map(title => (
-              <div
-                key={title.id}
-                id={`social-title-card-${title.id}`}
-                className="p-3 bg-slate-950/40 border border-slate-800/70 rounded-xl flex items-start justify-between gap-3"
-              >
-                <div className="flex flex-col gap-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold text-white">
-                      {title.title}
-                    </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                      {SOCIAL_TITLE_TYPES[title.titleType || 'nobility'] || title.titleType}
-                    </span>
-                    {title.inherited && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/40 text-amber-300 border border-amber-800/60">
-                        Geerbt
-                      </span>
-                    )}
-                  </div>
-                  {title.grantedBy && (
-                    <span className="text-[11px] text-slate-400">
-                      Verliehen durch: <strong className="text-slate-300 font-medium">{title.grantedBy}</strong>
-                    </span>
-                  )}
-                  {title.reason && (
-                    <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">
-                      {title.reason}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    id={`edit-social-title-${title.id}`}
-                    onClick={() => {
-                      setEditingTitle({ ...title });
-                      setIsAddingTitle(false);
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                    title="Bearbeiten"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    id={`delete-social-title-${title.id}`}
-                    onClick={() => handleDeleteTitle(title.id)}
-                    className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                    title="Entfernen"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Nobility Talent Tree */}
+        <NobilitySkillTree
+          socialTitles={socialTitles}
+          onChangeSocialTitles={onChangeSocialTitles}
+          onOpenCustomTitleModal={() => {
+            setEditingTitle({
+              id: `title_${Date.now()}`,
+              title: '',
+              titleType: 'nobility',
+              inherited: false,
+              reason: ''
+            });
+            setIsAddingTitle(true);
+          }}
+        />
       </div>
 
       {/* 2. ÄMTER */}
@@ -447,6 +389,38 @@ export const TitlesAndPositionsSection: React.FC<TitlesAndPositionsSectionProps>
             </div>
 
             <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-300">Vorlage auswählen (optional)</label>
+                <select
+                  value=""
+                  onChange={e => {
+                    const found = PRESET_NOBILITY_TITLES.find(p => p.title === e.target.value);
+                    if (found) {
+                      const isInherited = !!found.isDynastic ||
+                        found.title.toLowerCase().includes('prinz') ||
+                        found.title.toLowerCase().includes('erb') ||
+                        found.title.toLowerCase().includes('sohn') ||
+                        found.title.toLowerCase().includes('tochter');
+                      setEditingTitle({
+                        ...editingTitle,
+                        title: found.title,
+                        titleType: 'nobility',
+                        inherited: isInherited,
+                        reason: found.description
+                      });
+                    }
+                  }}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  <option value="">-- Vorlage aus Adelstitel & Herrscherhäuser wählen --</option>
+                  {PRESET_NOBILITY_TITLES.map(p => (
+                    <option key={p.title} value={p.title}>
+                      {p.title} ({p.category || 'Adel'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-semibold text-slate-300">Titelbezeichnung</label>
                 <input
