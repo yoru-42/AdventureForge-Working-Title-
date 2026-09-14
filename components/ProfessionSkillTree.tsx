@@ -1411,9 +1411,33 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
 
                         {/* Connecting downward arrow to next level */}
                         {!isLastTier && (
-                          <div className="flex flex-col items-center my-2.5 text-amber-500/60">
+                          <div className="flex flex-col items-center w-full mt-2 mb-1">
                             <div className="w-0.5 h-4 bg-gradient-to-b from-amber-500/50 to-amber-500/30" />
-                            <ArrowDown className="w-4 h-4 -mt-1 text-amber-400/80" />
+                            
+                            {nextTierGroup && nextTierGroup.nodes.length > 1 ? (
+                              <div className="w-full flex flex-col items-center">
+                                {/* Horizontal branching line */}
+                                <div 
+                                  className="border-t border-amber-500/30 relative"
+                                  style={{
+                                    width: nextTierGroup.nodes.length === 2 ? '50%' : nextTierGroup.nodes.length === 3 ? '66%' : '80%',
+                                    maxWidth: nextTierGroup.nodes.length === 2 ? '300px' : '600px'
+                                  }}
+                                >
+                                  <div className="absolute inset-x-0 top-0 flex justify-between">
+                                    {nextTierGroup.nodes.map((_, i) => (
+                                      <div key={i} className="flex flex-col items-center w-1">
+                                        <div className="w-0.5 h-3 bg-gradient-to-b from-amber-500/30 to-amber-500/10" />
+                                        <ArrowDown className="w-3 h-3 -mt-1 text-amber-500/60" />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="h-4" /> {/* Spacer */}
+                              </div>
+                            ) : (
+                              <ArrowDown className="w-4 h-4 -mt-1 text-amber-500/60" />
+                            )}
                           </div>
                         )}
                       </div>
