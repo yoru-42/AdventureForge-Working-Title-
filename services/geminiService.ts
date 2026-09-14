@@ -5249,7 +5249,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
    - 'harvestableParts': Verwertbare Handwerksmaterialien & Alchemiezutaten
    - 'goldDrop': Typische Währungsausbeute
 6. Fähigkeiten & Macht:
-   - 'abilities': Liste von 2-4 spezifischen Fähigkeiten mit Name, category ('Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Talente'), cost, description und activationCondition.`;
+   - 'abilities': Liste von 2-4 spezifischen Fähigkeiten mit Name, category ('Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung'), cost, description und activationCondition.`;
       }
 
       contextPrompt += `\n\nText: "${text}"\n`;
@@ -5521,7 +5521,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
               type: Type.OBJECT,
               properties: {
                 name: { type: Type.STRING, description: "Name der Fähigkeit." },
-                category: { type: Type.STRING, description: "Eines aus: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Talente'." },
+                category: { type: Type.STRING, description: "Eines aus: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung'." },
                 cost: { type: Type.STRING, description: "Kosten oder Abklingzeit (z.B. '20 MP', 'Alle 3 Runden')." },
                 description: { type: Type.STRING, description: "Wirkung und Ablauf der Fertigkeit." },
                 activationCondition: { type: Type.STRING, description: "Auslöserbedingung (z.B. 'Bei <30% HP')." },
@@ -5864,10 +5864,15 @@ WICHTIGSTE DIREKTIVEN:
 2. 'name' MUSS ausschließlich der kurze Name des Eintrags sein (z.B. "Thermalbucht", "Calm Belt").
 3. 'description' MUSS eine packend geschriebene, detailreiche Beschreibung auf Deutsch sein (mindestens 1-2 Absätze). Nimm absolut KEINEN Bezug auf den Nutzer, den Spieler, oder dessen spezifische Charakter-Eigenschaften, Fähigkeiten oder Rassenmerkmale.
 4. 'population', 'ruler', 'climate', 'culture', 'terrain', 'faction': Befülle diese Grundfelder sinnvoll oder erfinde passende Werte.
-5. ERWEITERTER GEBIETS-CODEX: Befülle ZWINGEND auch die erweiterten JSON-Felder für Geografie (biome, size, borders, waters, mountains, forests), Gesellschaft (races, language, religion, livingStandard), Politik (allies, enemies, government), Wirtschaft (resources, trade, currency, exports, imports), Militär (dangerLevel, militaryStrength, defense) und Besonderheiten (landmarks, pointsOfInterest, dungeons, magicPlaces, naturalWonders).
-6. Bestimme passende 'x' und 'y' Koordinaten (Ganzzahlen zwischen 10 und 90). Platziere es zwingend in einer FREIEN Zone ohne Überschneidung mit existierenden Orten.
-7. PERSPEKTIVE: Beschreibe den Ort aus der neutralen Sicht eines objektiven Kartografen/Historikers.
-8. KI-KARTEN-LAYOUT, HIMMELSRICHTUNGEN & ENTFERNUNGEN: Fülle 'layoutPreset', 'compassDirections', 'envNeighbours' und 'distancesToNeighbours'.
+5. HERRSCHAFT, MILITÄR, WIRTSCHAFT & TÄGLICHE AUFGABEN (Zentral für die Weltsimulation):
+   - Feudale Hierarchie: Befülle 'rulingTitle' (Titel/Rang, z.B. Dorfältester, Schulze, Baron), 'overlord' (übergeordnete Herrschaft / Lehnsherr, z.B. Baron von Weißstein, Herzog von Falkenwacht), 'feudalRank' (Rangordnung) und 'lawEnforcement' (Ordnungshüter, Büttel, Stadtgarde).
+   - Militär & Schutz: Befülle 'combatReadyPopulation' (wieviele von der Bevölkerung können tatsächlich kämpfen, z.B. '50 von 200 Einwohnern'), 'standingArmy' (Berufstruppen/Garnison), 'militiaAndConscripts' (Bauernmiliz/Aufgebot), 'defenseStructures' (Palisaden, Wehrtürme, Gräben), 'armamentAndSupply' (Waffen, Ausrüstung, Bögen) und 'defense'.
+   - Wirtschaft, Jobs & Alltagsaufgaben: Befülle 'dailyJobs' (Berufe der Bewohner, z.B. Ackerbau, Holzschlag, Handwerk), 'localTasks' (tägliche anstehende Aufgaben/Verantwortungen im Ort), 'tradeGoods' (Warenüberschüsse für Händler), 'tradeDemands' (Mangelwaren, die von Händlern gesucht/gekauft werden), 'merchantsAndFairs' (Markttage, Händlerkarawanen) und 'tradeContracts' (Verträge, Zölle).
+   - Navigation: Befülle 'accessRoutes' (Straßen, Zuwege, Pfade) und 'travelDangers' (Gefahren auf den Reiserouten).
+6. ERWEITERTER GEBIETS-CODEX: Befülle auch die weiteren Felder für Geografie (biome, size, borders, waters, mountains, forests), Gesellschaft (races, language, religion, livingStandard), Politik (allies, enemies, government), Wirtschaft (resources, trade, currency, exports, imports), Militär (dangerLevel, militaryStrength) und Besonderheiten (landmarks, pointsOfInterest, dungeons, magicPlaces, naturalWonders).
+7. Bestimme passende 'x' und 'y' Koordinaten (Ganzzahlen zwischen 10 und 90). Platziere es zwingend in einer FREIEN Zone ohne Überschneidung mit existierenden Orten.
+8. PERSPEKTIVE: Beschreibe den Ort aus der neutralen Sicht eines objektiven Kartografen/Historikers.
+9. KI-KARTEN-LAYOUT, HIMMELSRICHTUNGEN & ENTFERNUNGEN: Fülle 'layoutPreset', 'compassDirections', 'envNeighbours' und 'distancesToNeighbours'.
 
 Schreibe alle Antworten auf Deutsch.`;
 
@@ -5969,35 +5974,52 @@ ${entriesToUse.slice(0, 35).map((l: any) => `- [${l.category || 'Codex'}] ${l.ti
           religion: { type: Type.STRING, description: "Religion / Glaube (z.B. 'Lichtkult')." },
           livingStandard: { type: Type.STRING, description: "Lebensstandard (z.B. 'Wohlhabend')." },
 
-          // Politik
+          // Politik & Feudale Hierarchie
+          rulingTitle: { type: Type.STRING, description: "Titel / Rang des Vorstehers (z.B. 'Dorfältester', 'Baron', 'Herzog')." },
+          overlord: { type: Type.STRING, description: "Übergeordnete Herrschaft / Lehnsherr (z.B. 'Baron Cedric von Weißstein', 'Dem Herzogtum Falkenwacht unterstellt')." },
+          feudalRank: { type: Type.STRING, description: "Feudale Rangstufe / Einordnung (z.B. 'Dorf der Baronie Weißstein')." },
+          lawEnforcement: { type: Type.STRING, description: "Gesetzeshüter & Ordnung (z.B. '1 Dorfbüttel & Ältestenrat', 'Stadtgarde')." },
           allies: { type: Type.STRING, description: "Verbündete (z.B. 'Königreich Thal')." },
           enemies: { type: Type.STRING, description: "Feinde (z.B. 'Ork-Stämme')." },
-          government: { type: Type.STRING, description: "Regierungsform (z.B. 'Monarchie')." },
+          government: { type: Type.STRING, description: "Regierungsform (z.B. 'Monarchie', 'Dorfältestenrat')." },
 
-          // Wirtschaft
+          // Wirtschaft, Berufe & Aufgaben
           resources: { type: Type.STRING, description: "Wichtigste Ressourcen (z.B. 'Eisen, Weizen')." },
-          trade: { type: Type.STRING, description: "Handel (z.B. 'Lebhafter Seehandel')." },
-          currency: { type: Type.STRING, description: "Währung (z.B. 'Goldmünzen')." },
-          exports: { type: Type.STRING, description: "Export (z.B. 'Stahlwaffen')." },
-          imports: { type: Type.STRING, description: "Import (z.B. 'Seide, Gewürze')." },
+          trade: { type: Type.STRING, description: "Handel & Wirtschaft (z.B. 'Landwirtschaft, Holzschlag, Viehhandel')." },
+          currency: { type: Type.STRING, description: "Währung (z.B. 'Silbermünzen')." },
+          exports: { type: Type.STRING, description: "Export (z.B. 'Stahlwaffen, Wolle')." },
+          imports: { type: Type.STRING, description: "Import (z.B. 'Salz, Eisenwaren')." },
+          dailyJobs: { type: Type.STRING, description: "Alltägliche Berufe & Erwerbsarbeiten der Bewohner (z.B. '65% Ackerbauern, 15% Holzfäller, 10% Handwerker')." },
+          localTasks: { type: Type.STRING, description: "Tägliche Aufgaben & Pflichten im Gebiet (z.B. 'Feldbestellung, Holzeinschlag für den Winter, Wehrtordienst')." },
+          tradeGoods: { type: Type.STRING, description: "Lokale Handelswaren & Überschüsse, die Händler kaufen können (z.B. 'Getreide, Wolle, Honig, Schnittholz')." },
+          tradeDemands: { type: Type.STRING, description: "Gesuchte Waren / Mangelgüter, die von eintreffenden Händlern gebraucht werden (z.B. 'Salz, Eisenwerkzeuge, Arznei')." },
+          merchantsAndFairs: { type: Type.STRING, description: "Reisende Händler & Marktzyklen (z.B. 'Wöchentlicher Markttag am Tag des Lichts')." },
+          tradeContracts: { type: Type.STRING, description: "Handelsverträge, Zölle & Abgaben (z.B. 'Zehnt an die Baronie, freier Durchzug für Holzwagen')." },
 
-          // Militär
-          dangerLevel: { type: Type.STRING, description: "Gefahrenstufe (z.B. 'Sicher', 'Extrem hoch')." },
-          militaryStrength: { type: Type.STRING, description: "Militärische Stärke (z.B. 'Starke Stadtwache')." },
-          defense: { type: Type.STRING, description: "Verteidigung (z.B. 'Hohe Steinmauern')." },
+          // Militär, Schutz & Verteidigung
+          dangerLevel: { type: Type.STRING, description: "Gefahrenstufe (z.B. 'Sicher', 'Gefahren durch Wolfsrudel')." },
+          militaryStrength: { type: Type.STRING, description: "Militärische Stärke & Schutz (z.B. 'Dorfmiliz und Wachturm')." },
+          defense: { type: Type.STRING, description: "Verteidigungsanlagen (z.B. 'Holzpalisade, Erdwall, verstärktes Tor')." },
+          combatReadyPopulation: { type: Type.STRING, description: "Kampffähige Personen / Wehrkraft (z.B. '50 von 200 Einwohnern können mit Mistgabeln, Äxten und Jagdbögen kämpfen')." },
+          standingArmy: { type: Type.STRING, description: "Stehendes Militär / Garnison (z.B. 'Keine stehende Truppe, nur 3 bezahlte Torwächter')." },
+          militiaAndConscripts: { type: Type.STRING, description: "Miliz, Bauernwehr oder Bürgeraufgebot (z.B. 'Bauernwehr der Männer und Frauen bei Alarm')." },
+          defenseStructures: { type: Type.STRING, description: "Schutzbauten & Befestigung (z.B. 'Eichene Palisade, befestigtes Torhaus mit Alarmglocke')." },
+          armamentAndSupply: { type: Type.STRING, description: "Bewaffnung & Ausrüstung der Verteidiger (z.B. 'Jagdbögen, Piken, Holzschilde, keine Rüstungen')." },
 
           // Besonderheiten
-          landmarks: { type: Type.STRING, description: "Wahrzeichen (z.B. 'Die Weiße Zitadelle')." },
-          pointsOfInterest: { type: Type.STRING, description: "Sehenswürdigkeiten (z.B. 'Der fliegende Markt')." },
+          landmarks: { type: Type.STRING, description: "Wahrzeichen (z.B. 'Die Weiße Zitadelle', 'Der Dorfbrunnen')." },
+          pointsOfInterest: { type: Type.STRING, description: "Sehenswürdigkeiten (z.B. 'Der fliegende Markt', 'Alte Schmiede')." },
           dungeons: { type: Type.STRING, description: "Dungeons (z.B. 'Katakomben des Leids')." },
           magicPlaces: { type: Type.STRING, description: "Magische Orte (z.B. 'Kristallquelle')." },
           naturalWonders: { type: Type.STRING, description: "Naturwunder (z.B. 'Glühende Wasserfälle')." },
 
-          // Karten-Vorgaben
+          // Karten- & Reise-Vorgaben
           layoutPreset: { type: Type.STRING, description: "Karten-Layout (hafenbucht, insel_dorf, gebirgspass, waldlichtung, festung_zitadelle, freie_ebene, archipel, dungeon, keins)." },
           compassDirections: { type: Type.STRING, description: "Himmelsrichtungen (z.B. 'Norden: Hafen, Osten: Vulkan')." },
           envNeighbours: { type: Type.STRING, description: "Unmittelbare Umgebung (z.B. 'Umgeben von steilen Felswänden, ein kleiner Fluss fließt mittig.')." },
-          distancesToNeighbours: { type: Type.STRING, description: "Reisedistanzen zu Nachbargebieten (z.B. '1 Tagesreise zum Hafen, 3 Stunden zum Gebirge')." }
+          distancesToNeighbours: { type: Type.STRING, description: "Reisedistanzen zu Nachbargebieten (z.B. '1 Tagesreise zum Hafen, 3 Stunden zum Gebirge')." },
+          accessRoutes: { type: Type.STRING, description: "Zuwege & Handelsstraßen (z.B. 'Befestigte Königsstraße nach Süden, Waldpfad nach Norden')." },
+          travelDangers: { type: Type.STRING, description: "Gefahren auf den Reiserouten (z.B. 'Wegelagerer im Grenzwald, steile Schluchtpassagen')." }
         },
         required: ["name", "type", "description"]
       };

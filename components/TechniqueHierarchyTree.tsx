@@ -8,8 +8,19 @@ import {
   resolveKinesisName, 
   formatAbilityTypeLabel 
 } from '../utils/abilityHierarchy';
+import { 
+  WEAPON_CATEGORIES, 
+  ALL_WEAPONS, 
+  WEAPON_MASTERY_RANKS, 
+  WIELDING_STYLES, 
+  getWeaponById, 
+  findWeaponByName, 
+  getWeaponsByCategory,
+  WeaponTypeDefinition 
+} from '../lib/weaponTypesData';
 import { TechniqueSmartFillModal } from './TechniqueSmartFillModal';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import { WeaponSkillTree } from './WeaponSkillTree';
 
 export interface TechniqueHierarchyTreeProps {
   powerSources: CharacterPowerSource[];
@@ -31,7 +42,7 @@ export const CATEGORY_TABS = [
   'Techniken',
   'Ultimative Techniken',
   'Transformationen',
-  'Talente'
+  'Waffenbeherrschung'
 ] as const;
 
 export type AbilityCategoryTab = typeof CATEGORY_TABS[number];
@@ -41,7 +52,7 @@ export const CATEGORY_ADD_LABELS: Record<AbilityCategoryTab, string> = {
   'Techniken': 'Technik hinzufügen',
   'Ultimative Techniken': 'Ultimative Technik hinzufügen',
   'Transformationen': 'Transformation hinzufügen',
-  'Talente': 'Talent hinzufügen',
+  'Waffenbeherrschung': 'Waffenbeherrschung hinzufügen',
 };
 
 export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
@@ -49,7 +60,7 @@ export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
   'Techniken': 'Erste Technik erstellen',
   'Ultimative Techniken': 'Erste ultimative Technik erstellen',
   'Transformationen': 'Erste Transformation erstellen',
-  'Talente': 'Erstes Talent erstellen',
+  'Waffenbeherrschung': 'Erste Waffenbeherrschung erstellen',
 };
 
 const TECHNIQUE_MODES = [
@@ -146,6 +157,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
   // 6. Helfer: Prüfen, zu welcher Kategorie ein Eintrag gehört
   const getTechniqueCategory = (tech: TechniqueItem): AbilityCategoryTab => {
+    if (tech.category === 'Talente') return 'Waffenbeherrschung';
     if (tech.category && CATEGORY_TABS.includes(tech.category as AbilityCategoryTab)) {
       return tech.category as AbilityCategoryTab;
     }
@@ -161,7 +173,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       'Techniken': 0,
       'Ultimative Techniken': 0,
       'Transformationen': 0,
-      'Talente': 0
+      'Waffenbeherrschung': 0
     };
 
     if (!activeBaseAbility) return counts;
@@ -448,20 +460,25 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       defaultType = 'Transformation';
       defaultCostVal = 25;
       defaultCostStr = `25 ${costResource}`;
-    } else if (activeCategory === 'Talente') {
-      defaultName = 'Neues Talent';
+    } else if (activeCategory === 'Waffenbeherrschung' || (activeCategory as string) === 'Talente') {
+      const defaultWeapon = ALL_WEAPONS[1] || ALL_WEAPONS[0]; // Langschwert
+      defaultName = `Waffenbeherrschung: ${defaultWeapon.name}`;
       defaultType = 'Spezial';
+      defaultTier = 'Rang 1: Novize / Grundausbildung';
       defaultCostVal = 0;
       defaultCostStr = 'Rang 1';
     }
 
+    const isWpnMastery = activeCategory === 'Waffenbeherrschung' || (activeCategory as string) === 'Talente';
+    const defaultWeapon = isWpnMastery ? (ALL_WEAPONS[1] || ALL_WEAPONS[0]) : null;
+
     const newEntry: TechniqueItem = {
       id: newId,
       name: defaultName,
-      description: '',
-      category: activeCategory,
+      description: isWpnMastery && defaultWeapon ? defaultWeapon.description : '',
+      category: isWpnMastery ? 'Waffenbeherrschung' : activeCategory,
       type: defaultType,
-      subtype: '',
+      subtype: isWpnMastery && defaultWeapon ? defaultWeapon.categoryName : '',
       mode: defaultMode,
       tier: defaultTier,
       baseAbilityIds: [activeBaseAbility.id],
@@ -470,20 +487,25 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       powerSourceName: activePowerSource.powerName || activePowerSource.source,
       element: activeBaseAbility.element,
       abilityType: activeBaseAbility.abilityType,
-      targetType: 'Selbst / Verbündete / Feinde',
-      effects: [],
+      targetType: isWpnMastery ? 'Einzelziel / Nahkampf' : 'Selbst / Verbündete / Feinde',
+      effects: isWpnMastery && defaultWeapon ? [...defaultWeapon.damageTypes] : [],
       costResourceName: costResource,
       costValue: defaultCostVal,
       costFormula: 'absolut',
       cost: defaultCostStr,
-      range: 'Nahkampf / Mittlere Distanz',
-      duration: 'Sofort',
+      range: isWpnMastery && defaultWeapon ? (defaultWeapon.rangeCategory === 'Fernkampf' ? 'Fernkampf' : defaultWeapon.rangeCategory === 'Stangenreichweite' ? 'Stangenreichweite' : 'Nahkampf') : 'Nahkampf / Mittlere Distanz',
+      duration: isWpnMastery ? 'Permanent / Haltung' : 'Sofort',
       summonCount: defaultSummonCount,
       summonCostValue: defaultSummonCostVal,
       level: 1,
       maxLevel: 10,
       xp: 0,
-      xpNeeded: 100
+      xpNeeded: 100,
+      weaponType: isWpnMastery && defaultWeapon ? defaultWeapon.name : undefined,
+      weaponCategory: isWpnMastery && defaultWeapon ? defaultWeapon.categoryName : undefined,
+      masteryLevel: isWpnMastery ? 'Rang 1: Novize / Grundausbildung' : undefined,
+      wieldingStyle: isWpnMastery && defaultWeapon ? defaultWeapon.wieldingStyles[0] : undefined,
+      weaponManeuver: isWpnMastery && defaultWeapon && defaultWeapon.maneuvers.length > 0 ? defaultWeapon.maneuvers[0] : undefined
     };
 
     const updatedTech = [...techniques, newEntry];
@@ -562,6 +584,20 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   // KI Smart Fill Callback
   const handleTechniqueCreatedViaSmartFill = (newTech: TechniqueItem, targetBaId: string) => {
     newTech.category = activeCategory;
+    if (activeCategory === 'Waffenbeherrschung') {
+      const matchedWeapon = findWeaponByName(newTech.name) || findWeaponByName(newTech.description || '') || ALL_WEAPONS[1];
+      newTech.weaponType = newTech.weaponType || matchedWeapon.name;
+      newTech.weaponCategory = newTech.weaponCategory || matchedWeapon.categoryName;
+      newTech.masteryLevel = newTech.masteryLevel || 'Rang 1: Novize / Grundausbildung';
+      newTech.wieldingStyle = newTech.wieldingStyle || matchedWeapon.wieldingStyles[0];
+      newTech.weaponManeuver = newTech.weaponManeuver || (matchedWeapon.maneuvers.length > 0 ? matchedWeapon.maneuvers[0] : undefined);
+      if (!newTech.range) {
+        newTech.range = matchedWeapon.rangeCategory === 'Fernkampf' ? 'Fernkampf' : (matchedWeapon.rangeCategory === 'Stangenreichweite' ? 'Stangenreichweite' : 'Nahkampf');
+      }
+      if (!newTech.effects || newTech.effects.length === 0) {
+        newTech.effects = [...matchedWeapon.damageTypes];
+      }
+    }
     const updatedTech = [...techniques, newTech];
     const updatedBa = baseAbilities.map(ba => {
       if (ba.id === targetBaId) {
@@ -813,7 +849,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
           {CATEGORY_TABS.map((tab, tabIdx) => {
             const isTabActive = activeCategory === tab;
             const count = categoryCounts[tab] || 0;
@@ -822,14 +858,14 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 key={`cat-tab-${tab}-${tabIdx}`}
                 type="button"
                 onClick={() => setActiveCategory(tab)}
-                className={`px-2.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer border ${
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer border ${
                   isTabActive
                     ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
                     : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
                 }`}
               >
-                <span className="truncate">{tab}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ml-1 shrink-0 ${
+                <span className="text-left leading-snug break-words">{tab}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ml-2 shrink-0 ${
                   isTabActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800/80 text-slate-400'
                 }`}>
                   {count}
@@ -843,48 +879,82 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       {/* ============================================================ */}
       {/* 4. INHALT DER AUSGEWÄHLTEN GRUNDFÄHIGKEIT + KATEGORIE         */}
       {/* ============================================================ */}
-      <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3.5">
-        {/* Header des Inhaltsbereichs */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/70 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400">
-              {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : 'Keine Grundfähigkeit'}
-            </span>
-            <span className="text-slate-600">→</span>
-            <span className="text-xs font-extrabold text-amber-400">
-              {activeCategory} ({activeEntries.length})
-            </span>
-          </div>
-
-          {!readOnly && activeBaseAbility && (
+      {activeCategory === 'Waffenbeherrschung' ? (
+        <WeaponSkillTree
+          techniques={techniques}
+          activeBaseAbility={activeBaseAbility}
+          baseAbilities={baseAbilities}
+          activePowerSource={activePowerSource}
+          onUpdateEntry={handleUpdateEntry}
+          onAddEntry={(newEntry) => {
+            if (newEntry) {
+              const entryToAdd: TechniqueItem = {
+                id: newEntry.id || `tech_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                name: newEntry.name || 'Waffenbeherrschung (Rang 1)',
+                category: 'Waffenbeherrschung',
+                powerSourceId: activePowerSource?.id,
+                baseAbilityIds: activeBaseAbility ? [activeBaseAbility.id] : [],
+                baseAbilityNames: activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name || ''] : [],
+                ...newEntry
+              };
+              onChange(powerSources, baseAbilities, [...techniques, entryToAdd]);
+            } else {
+              handleAddEntry();
+            }
+          }}
+          onDeleteEntry={handleDeleteEntry}
+          readOnly={readOnly}
+          onOpenSmartFill={() => {
+            setSmartFillModalState({
+              isOpen: true,
+              powerSourceId: activePowerSource?.id,
+              baseAbilityId: activeBaseAbility?.id
+            });
+          }}
+        />
+      ) : (
+        <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3.5">
+          {/* Header des Inhaltsbereichs */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/70 pb-3">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSmartFillModalState({
-                    isOpen: true,
-                    powerSourceId: activePowerSource?.id,
-                    baseAbilityId: activeBaseAbility.id
-                  });
-                }}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                title="KI-gestützte Erstellung"
-              >
-                <LucideIcons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Smart Fill</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleAddEntry}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-              >
-                <LucideIcons.Plus className="w-3.5 h-3.5" />
-                <span>{CATEGORY_ADD_LABELS[activeCategory]}</span>
-              </button>
+              <span className="text-xs font-bold text-slate-400">
+                {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : 'Keine Grundfähigkeit'}
+              </span>
+              <span className="text-slate-600">→</span>
+              <span className="text-xs font-extrabold text-amber-400">
+                {activeCategory} ({activeEntries.length})
+              </span>
             </div>
-          )}
-        </div>
+
+            {!readOnly && activeBaseAbility && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSmartFillModalState({
+                      isOpen: true,
+                      powerSourceId: activePowerSource?.id,
+                      baseAbilityId: activeBaseAbility.id
+                    });
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="KI-gestützte Erstellung"
+                >
+                  <LucideIcons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Smart Fill</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddEntry}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <LucideIcons.Plus className="w-3.5 h-3.5" />
+                  <span>{CATEGORY_ADD_LABELS[activeCategory]}</span>
+                </button>
+              </div>
+            )}
+          </div>
 
         {/* Listenansicht der Einträge */}
         {!activeBaseAbility ? (
@@ -921,14 +991,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
               const isTechOrUlt = activeCategory === 'Techniken' || activeCategory === 'Ultimative Techniken';
               const isTransform = activeCategory === 'Transformationen';
               const isPassive = activeCategory === 'Passive Fähigkeiten';
-              const isTalent = activeCategory === 'Talente';
 
               return (
                 <div 
                   key={`entry-${entry.id || 'e'}-${idx}`}
                   className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 sm:p-3.5 flex flex-col gap-3 transition-all hover:border-slate-700/80"
                 >
-                  {/* Erste Zeile: Name, Modus, Typ, Tier, Löschen */}
+                  {/* Erste Zeile für Fähigkeiten */}
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start">
                     {/* Name */}
                     <div className={`${isTechOrUlt ? 'sm:col-span-5' : 'sm:col-span-6'} flex flex-col gap-1`}>
@@ -1008,21 +1077,20 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                       </div>
                     )}
 
-                    {/* Passive/Talent Auslöser bzw. Rang */}
-                    {(isPassive || isTalent || isTransform) && (
+                    {/* Passive Auslöser bzw. Form */}
+                    {(isPassive || isTransform) && (
                       <div className="sm:col-span-5 flex flex-col gap-1">
                         <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          {isPassive ? 'Bedingung / Auslöser' : isTalent ? 'Rang / Stufe' : 'Form / Gestalt'}
+                          {isPassive ? 'Bedingung / Auslöser' : 'Form / Gestalt'}
                         </label>
                         <input
                           type="text"
                           disabled={readOnly}
                           className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
-                          value={isPassive ? (entry.activationCondition || '') : isTalent ? (entry.tier || '') : (entry.transformName || '')}
-                          placeholder={isPassive ? 'z.B. Permanent aktiv, Bei HP < 25%' : isTalent ? 'z.B. Rang 1, Experte' : 'z.B. Schattenwolf-Form'}
+                          value={isPassive ? (entry.activationCondition || '') : (entry.transformName || '')}
+                          placeholder={isPassive ? 'z.B. Permanent aktiv, Bei HP < 25%' : 'z.B. Schattenwolf-Form'}
                           onChange={e => {
                             if (isPassive) handleUpdateEntry(entry.id, { activationCondition: e.target.value });
-                            else if (isTalent) handleUpdateEntry(entry.id, { tier: e.target.value });
                             else handleUpdateEntry(entry.id, { transformName: e.target.value });
                           }}
                         />
@@ -1192,6 +1260,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* ============================================================ */}
       {/* 5. KI SMART FILL MODAL                                       */}

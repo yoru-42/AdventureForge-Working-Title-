@@ -235,7 +235,7 @@ export function normalizeAbilityHierarchy(char: any): {
   if (Array.isArray(char.abilities)) {
     char.abilities.forEach(ability => {
       if (!ability) return;
-      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Talente'].includes(ability.category);
+      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung', 'Talente'].includes(ability.category);
       if (!isOtherCategory) {
         registerBaseAbility({
           id: ability.id,
@@ -310,8 +310,8 @@ export function normalizeAbilityHierarchy(char: any): {
       id: techId,
       name: techName,
       description: tech.description || '',
-      category,
-      type: tech.type || (category === 'Transformationen' ? 'Transformation' : (category === 'Passive Fähigkeiten' ? 'Support' : (category === 'Talente' ? 'Spezial' : 'Angriff'))),
+      category: (category === 'Talente' ? 'Waffenbeherrschung' : category),
+      type: tech.type || (category === 'Transformationen' ? 'Transformation' : (category === 'Passive Fähigkeiten' ? 'Support' : (category === 'Waffenbeherrschung' || category === 'Talente' ? 'Spezial' : 'Angriff'))),
       subtype: tech.subtype || '',
       mode: tech.mode || 'Normal',
       tier: tech.tier || (category === 'Ultimative Techniken' ? 'Tier 4' : 'Tier 1'),
@@ -353,7 +353,7 @@ export function normalizeAbilityHierarchy(char: any): {
     char.abilities.forEach(ability => {
       if (!ability) return;
       const canonicalBaId = baIdAliasMap.get(ability.id) || ability.id;
-      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Talente'].includes(ability.category);
+      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung', 'Talente'].includes(ability.category);
 
       if (isOtherCategory) {
         registerTechnique(ability, ability.category, canonicalBaId);
@@ -418,7 +418,7 @@ export function syncCharacterAbilityTree(
     };
   });
 
-  // Ergänze Einträge aus anderen Kategorien (Passive Fähigkeiten, Ultimative Techniken, Transformationen, Talente)
+  // Ergänze Einträge aus anderen Kategorien (Passive Fähigkeiten, Ultimative Techniken, Transformationen, Waffenbeherrschung, Talente)
   const additionalLegacyAbilities: PowerAbility[] = techniques
     .filter(t => t.category && t.category !== 'Techniken')
     .map(t => {

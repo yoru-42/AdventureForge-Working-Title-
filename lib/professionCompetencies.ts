@@ -1,4 +1,5 @@
 import { ProfessionCompetency } from '../types';
+import { getTierCompetencySetForJob } from './professionTierCompetenciesData';
 
 export interface ProfessionCompetencyDefinition {
   id: string;
@@ -27,33 +28,25 @@ export interface ProfessionCatalogEntry {
 }
 
 /**
- * The 19 core professional fields defined in AdventureForge Berufssystem V2.
- * Expandable and not hardcoded into UI lists.
+ * The 16 core professional fields defined in AdventureForge.
  */
 export const PROFESSION_FIELDS: ProfessionFieldDefinition[] = [
-  { id: 'staatsdienst_diplomatie', name: 'Staatswesen, Diplomatie & Hofdienst', description: 'Diplomatie, Kanzleiwesen, Konsulenten, Gesandte, Herolde und Hofämter' },
-  { id: 'verwaltung_wirtschaft', name: 'Verwaltung, Recht & Wirtschaft', description: 'Finanzwesen, Steuern, Handel, Kanzleiwesen und Kurierdienste' },
-  { id: 'militaer_streitkraefte', name: 'Militär & reguläre Streitkräfte', description: 'Militärischer Dienst, Heerführung, Taktik, Belagerung und Garde' },
-  { id: 'unabhaengige_abenteurer', name: 'Unabhängige Kämpfer & Abenteurer', description: 'Freie Abenteurer, Söldner, Monsterjäger und Expeditionskämpfer' },
-  { id: 'geheimoperationen_ueberleben', name: 'Geheimdienst & Verdeckte Operationen', description: 'Spionage, verdeckte Einsätze, Aufklärung und Infiltration' },
-  { id: 'religion_klerus', name: 'Religion, Klerus & Seelsorge', description: 'Gottesdienst, Hoher Klerus, Seelsorge, Ordenswesen und Shinto-Pfade' },
-  { id: 'arkan_magie', name: 'Arkan & Magische Künste', description: 'Arkanes Studium, Runenzeichnen, Spruchwirken und arkane Meisterschaft' },
-  { id: 'wissenschaft_forschung', name: 'Wissenschaft & Forschung', description: 'Medizin, Alchemie, Astronomie, Naturphilosophie und Gelehrsamkeit' },
-  { id: 'bildung_erziehung', name: 'Bildung, Lehre & Ausbildung', description: 'Lehrer, Gildenlehrer, Fechtmeister, Akademiedozenten und Ausbilder' },
-  { id: 'bau_handwerk', name: 'Bauhandwerk & Architektur', description: 'Holzbau, Mauerwerk, Steinmetzkunst, Zimmerei und Festungsbau' },
-  { id: 'metall_waffen', name: 'Metallurgie, Schmiedekunst & Waffen', description: 'Metallverarbeitung, Grobschmiede, Schwert- und Rüstungsbau, Feinmechanik' },
-  { id: 'materialverarbeitung', name: 'Materialverarbeitung & Textilhandwerk', description: 'Gerberei, Kürschnerei, Seilerei, Glasmacherei, Weberei und Keramik' },
-  { id: 'bergbau_rohstoffe', name: 'Bergbau, Erze & Rohstoffgewinnung', description: 'Gewinnung von Erzen, Mineralien, Kohle, Steinbrüche und Verhüttung' },
-  { id: 'lebensmittel_ernaehrung', name: 'Lebensmittel, Brauwesen & Gastronomie', description: 'Backkunst, Brauwesen, Müllerei, Metzgerei, Kellerei und Gastronomie' },
-  { id: 'landwirtschaft_versorgung', name: 'Landwirtschaft & Naturressourcen', description: 'Ackerbau, Viehzucht, Grundversorgung und Forstwirtschaft' },
-  { id: 'seefahrt', name: 'Seefahrt & Schifffahrt', description: 'Seemannschaft, Navigation, Schiffszimmerei, Lotsen und Fischerei' },
-  { id: 'wandernde_erkundung', name: 'Wildnis, Erkundung & Jagdwesen', description: 'Wildnisüberleben, Fährtenlesen, Jagdwesen und Erkundung' },
-  { id: 'tierfuehrung_tamer', name: 'Tierführung, Zucht & Zähmung', description: 'Abrichtung, Falknerei, Großtierführung und Bestienbändigung' },
-  { id: 'kriminelle_berufe', name: 'Schattenwelt & Kriminelle Professionen', description: 'Taschendiebstahl, Schmuggel, Hehlerei und Fälschung' },
-  { id: 'haushalt_dienste', name: 'Haushalt & Persönlicher Dienst', description: 'Butlerwesen, Kammerdienst, Hauswirtschaft und persönliche Assistenz' },
-  { id: 'kunst_kultur', name: 'Kunst, Musik & Literatur', description: 'Bildende Künste, Musik, Dichtkunst, Malerei und Bildhauerei' },
-  { id: 'unterhaltung_spezial', name: 'Darstellendes Spiel & Unterhaltung', description: 'Schauspiel, Tanz, Puppenspiel, Artistik und Gauklertum' },
-  { id: 'luxus_spezial', name: 'Luxushandwerk & Kunstgewerbe', description: 'Goldschmiedekunst, Edelsteinschleiferei, Parfümerie und Feinkunst' }
+  { id: 'lebensmittel_versorgung', name: 'Lebensmittel & Versorgung', description: 'Kochen, Backen, Brauen, Müllerei, Gastronomie und Vorratshaltung' },
+  { id: 'bau_handwerk', name: 'Bau & Handwerk', description: 'Holzbau, Mauerwerk, Steinmetzkunst, Zimmerei, Weberei, Gerberei und Keramik' },
+  { id: 'metall_feinhandwerk', name: 'Metall & Feinhandwerk', description: 'Schmiedekunst, Rüstungs- und Waffenbau, Goldschmiede, Juwelierkunst und Feinmechanik' },
+  { id: 'natur_landwirtschaft', name: 'Natur & Landwirtschaft', description: 'Ackerbau, Viehzucht, Forstwirt, Bergbau, Jagd und Tierpflege' },
+  { id: 'medizin', name: 'Medizin', description: 'Heilkunde, Chirurgie, Pharmazie, Kräuterkunde und Feldmedizin' },
+  { id: 'wissenschaft', name: 'Wissenschaft', description: 'Forschung, Naturphilosophie, Alchemie, Archäologie, Astronomie und Lehre' },
+  { id: 'handel_wirtschaft', name: 'Handel & Wirtschaft', description: 'Kaufmannswesen, Markt-, Fern- und Großhandel, Banken und Warenprüfung' },
+  { id: 'dienstleistung', name: 'Dienstleistung', description: 'Hauswirtschaft, Fuhrwesen, Botendienste, Pflege, Hofdienste und persönliche Assistenz' },
+  { id: 'verwaltung', name: 'Verwaltung', description: 'Kanzleiwesen, Schriftführung, Steuern, Justiz, Diplomatie und Archivwesen' },
+  { id: 'militaer', name: 'Militär', description: 'Reguläre Streitkräfte, Wachdienste, Taktik, Belagerungstechnik und Offizierskorps' },
+  { id: 'seefahrt', name: 'Seefahrt', description: 'Seemannschaft, Navigation, Schiffszimmerei, Lotsenwesen und Fischerei' },
+  { id: 'kriminalitaet', name: 'Kriminalität', description: 'Schattenwelt, Diebstahl, Einbruch, Schmuggel, Hehlerei und verdeckte Aktivitäten' },
+  { id: 'magie', name: 'Magie', description: 'Arkanes Studium, Runenzeichnen, Spruchwirken, Beschwörung und arkane Meisterschaft' },
+  { id: 'kunst_kultur', name: 'Kunst & Kultur', description: 'Musik, Gesang, Schauspiel, Malerei, Bildhauerei, Dichtung und Unterhaltung' },
+  { id: 'religion', name: 'Religion', description: 'Klerus, Priesterschaft, Seelsorge, Ordenswesen, Tempeldienst und Rituale' },
+  { id: 'abenteuer', name: 'Abenteuer', description: 'Freie Abenteurer, Monsterjagd, Schatzsuche, Ruinenforschung, Söldnertum und Kundschaft' }
 ];
 
 export function getProfessionFieldDisplayName(fieldId?: string): string {
@@ -61,28 +54,51 @@ export function getProfessionFieldDisplayName(fieldId?: string): string {
   const match = PROFESSION_FIELDS.find(f => f.id === fieldId);
   if (match) return match.name;
   const KNOWN: Record<string, string> = {
-    adel_herrschaft: 'Staatswesen, Diplomatie & Hofdienst',
-    staatsdienst_diplomatie: 'Staatswesen, Diplomatie & Hofdienst',
-    private_gesellschaftsrollen: 'Bildung, Lehre & Ausbildung',
-    bildung_erziehung: 'Bildung, Lehre & Ausbildung',
-    unterhaltung_spezial: 'Darstellendes Spiel & Unterhaltung',
-    bergbau_rohstoffe: 'Bergbau, Erze & Rohstoffgewinnung',
-    bau_handwerk: 'Bauhandwerk & Architektur',
-    lebensmittel_ernaehrung: 'Lebensmittel, Brauwesen & Gastronomie',
-    seefahrt: 'Seefahrt & Schifffahrt',
-    wissenschaft_forschung: 'Wissenschaft & Forschung',
-    militaer_sicherheit: 'Militär & reguläre Streitkräfte',
-    militaer_streitkraefte: 'Militär & reguläre Streitkräfte',
-    magie_arkana: 'Arkan & Magische Künste',
-    arkan_magie: 'Arkan & Magische Künste',
-    verwaltung_recht: 'Verwaltung, Recht & Wirtschaft',
-    verwaltung_wirtschaft: 'Verwaltung, Recht & Wirtschaft',
-    abenteuer_sondergewerbe: 'Unabhängige Kämpfer & Abenteurer',
-    natur_landwirtschaft: 'Landwirtschaft & Naturressourcen',
-    handel_wirtschaft: 'Verwaltung, Recht & Wirtschaft',
-    schrift_bildung: 'Bildung, Lehre & Ausbildung',
-    alchemie: 'Wissenschaft & Forschung',
-    medizin_heilkunde: 'Wissenschaft & Forschung',
+    lebensmittel_versorgung: 'Lebensmittel & Versorgung',
+    lebensmittel_ernaehrung: 'Lebensmittel & Versorgung',
+    bau_handwerk: 'Bau & Handwerk',
+    materialverarbeitung: 'Bau & Handwerk',
+    metall_feinhandwerk: 'Metall & Feinhandwerk',
+    metall_waffen: 'Metall & Feinhandwerk',
+    luxus_spezial: 'Metall & Feinhandwerk',
+    natur_landwirtschaft: 'Natur & Landwirtschaft',
+    landwirtschaft_versorgung: 'Natur & Landwirtschaft',
+    bergbau_rohstoffe: 'Natur & Landwirtschaft',
+    tierfuehrung_tamer: 'Natur & Landwirtschaft',
+    medizin: 'Medizin',
+    medizin_heilkunde: 'Medizin',
+    wissenschaft: 'Wissenschaft',
+    wissenschaft_forschung: 'Wissenschaft',
+    alchemie: 'Wissenschaft',
+    bildung_erziehung: 'Wissenschaft',
+    handel_wirtschaft: 'Handel & Wirtschaft',
+    dienstleistung: 'Dienstleistung',
+    haushalt_dienste: 'Dienstleistung',
+    private_gesellschaftsrollen: 'Dienstleistung',
+    verwaltung: 'Verwaltung',
+    verwaltung_recht: 'Verwaltung',
+    verwaltung_wirtschaft: 'Verwaltung',
+    staatsdienst_diplomatie: 'Verwaltung',
+    adel_herrschaft: 'Verwaltung',
+    schrift_bildung: 'Verwaltung',
+    militaer: 'Militär',
+    militaer_sicherheit: 'Militär',
+    militaer_streitkraefte: 'Militär',
+    seefahrt: 'Seefahrt',
+    kriminalitaet: 'Kriminalität',
+    kriminelle_berufe: 'Kriminalität',
+    geheimoperationen_ueberleben: 'Kriminalität',
+    magie: 'Magie',
+    magie_arkana: 'Magie',
+    arkan_magie: 'Magie',
+    kunst_kultur: 'Kunst & Kultur',
+    unterhaltung_spezial: 'Kunst & Kultur',
+    religion: 'Religion',
+    religion_klerus: 'Religion',
+    abenteuer: 'Abenteuer',
+    unabhaengige_abenteurer: 'Abenteuer',
+    wandernde_erkundung: 'Abenteuer',
+    abenteuer_sondergewerbe: 'Abenteuer'
   };
   if (KNOWN[fieldId]) return KNOWN[fieldId];
   return fieldId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -761,5 +777,52 @@ export function getCatalogCompetenciesForProfession(professionName: string): Pro
   if (entry && entry.competencies.length > 0) {
     return entry.competencies;
   }
-  return generateGenericCompetencyDefinitions(professionName);
+  
+  // Extract tier competencies (Lehrling, Geselle, Spezialisierung, Meister)
+  const tierComps = getTierCompetencySetForJob(professionName);
+  const pName = professionName.trim() || 'Beruf';
+  const prefix = normalizeProfessionKey(pName) || 'custom';
+  const result: ProfessionCompetencyDefinition[] = [];
+
+  tierComps.lehrling.forEach((name, idx) => {
+    result.push({
+      id: `${prefix}_lehrling_${idx}`,
+      professionId: prefix,
+      name,
+      category: 'Grundlage',
+      description: `Grundlegende Fertigkeit auf Stufe Lehrling für ${pName}.`
+    });
+  });
+
+  tierComps.geselle.forEach((name, idx) => {
+    result.push({
+      id: `${prefix}_geselle_${idx}`,
+      professionId: prefix,
+      name,
+      category: 'Fortgeschritten',
+      description: `Fachkompetenz auf Stufe Geselle für ${pName}.`
+    });
+  });
+
+  tierComps.spezialisierung.forEach((name, idx) => {
+    result.push({
+      id: `${prefix}_spez_${idx}`,
+      professionId: prefix,
+      name,
+      category: 'Spezialisierung',
+      description: `Vertiefte Spezialisierungskompetenz für ${pName}.`
+    });
+  });
+
+  tierComps.meister.forEach((name, idx) => {
+    result.push({
+      id: `${prefix}_meister_${idx}`,
+      professionId: prefix,
+      name,
+      category: 'Meisterschaft',
+      description: `Höchste Meisterschaftskompetenz für ${pName}.`
+    });
+  });
+
+  return result.length > 0 ? result : generateGenericCompetencyDefinitions(professionName);
 }

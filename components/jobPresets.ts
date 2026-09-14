@@ -5,367 +5,405 @@ export interface JobCategory {
 }
 
 // ============================================================================
-// ADVENTUREFORGE BERUFSKATALOG & BERUFSZWEIGE (BEREINIGT & ENTKOPPELT)
-// WICHTIGE SYSTEMREGELN:
-// 1. Adelstitel (Kaiser, König, Herzog, Graf, Baron, Prinz etc.) sind Standes-
-//    und Herrschaftstitel, KEINE Berufe. Sie befinden sich ausschließlich im
-//    Tag "Adelige Titel".
-// 2. Jeder Beruf besitzt genau EINEN eindeutigen, sachlich passenden Berufszweig.
-// 3. Dubletten wurden konsequent entfernt.
+// ADVENTUREFORGE BERUFSKATALOG & BERUFSZWEIGE
+// 16 KERN-BERUFSZWEIGE NACH SYSTEMVORGABE
 // ============================================================================
 
 export const JOB_CATEGORIES: JobCategory[] = [
   {
-    fieldId: "staatsdienst_diplomatie",
-    category: "Staatswesen, Diplomatie & Hofdienst",
+    fieldId: "lebensmittel_versorgung",
+    category: "Lebensmittel & Versorgung",
     jobs: [
-      "Diplomat / Gesandter",
-      "Berater / Konsulent",
-      "Unterhändler / Friedensstifter",
-      "Kanzler / Siegelbewahrer",
-      "Verwalter / Güterverwalter",
-      "Kurfürstlicher Beamter",
-      "Vogt / Landrichter",
-      "Herold / Wappenkundiger",
-      "Zeremonienmeister",
-      "Hofmarschall / Truchsess",
-      "Leibwächter / Personenschützer",
-      "Körperdouble"
-    ]
-  },
-  {
-    fieldId: "verwaltung_wirtschaft",
-    category: "Verwaltung, Recht & Wirtschaft",
-    jobs: [
-      "Buchhalter",
-      "Steuereintreiber / Rentmeister",
-      "Händler / Kaufmann",
-      "Notar / Justitiar",
-      "Schreiber / Kopist",
-      "Zöllner / Grenzkontrolleur",
-      "Gutsverwalter / Ökonom",
-      "Verhandlungsführer",
-      "Kurier / Depeschenträger"
-    ]
-  },
-  {
-    fieldId: "militaer_streitkraefte",
-    category: "Militär & reguläre Streitkräfte",
-    jobs: [
-      "Soldat / Infanterist",
-      "Offizier",
-      "Kommandant",
-      "General",
-      "Admiral",
-      "Taktiker / Stratege",
-      "Quartiermeister",
-      "Grenzpatrouille / Grenzwächter",
-      "Belagerungsingenieur",
-      "Kanonier / Artillerist",
-      "Scharfschütze / Armbrustschütze",
-      "Scout / Aufklärer",
-      "Duellant / Fechter",
-      "Kavallerist / Reiter",
-      "Drachenritter / Luftkavallerie"
-    ]
-  },
-  {
-    fieldId: "unabhaengige_abenteurer",
-    category: "Unabhängige Kämpfer & Abenteurer",
-    jobs: [
-      "Freier Abenteurer",
-      "Söldner",
-      "Gladiator / Arenakämpfer",
-      "Berserker",
-      "Monsterjäger / Drachenjäger",
-      "Kopfgeldjäger",
-      "Schatzsucher",
-      "Dungeon-Pionier"
-    ]
-  },
-  {
-    fieldId: "geheimoperationen_ueberleben",
-    category: "Geheimdienst & Verdeckte Operationen",
-    jobs: [
-      "Spion / Agent",
-      "Infiltrator / Schattenläufer",
-      "Ninja / Shinobi",
-      "Auftragskiller / Assasine",
-      "Chiffrierer / Geheimkurier",
-      "Scharfrichter / Henker",
-      "Informant / Horcher",
-      "Überlebenskünstler"
-    ]
-  },
-  {
-    fieldId: "religion_klerus",
-    category: "Religion, Klerus & Seelsorge",
-    jobs: [
-      "Kleriker / Priester",
-      "Hochpriester / Kardinal",
-      "Bischof / Propst",
-      "Abt / Äbtissin",
-      "Kriegspriester",
-      "Paladin / Ordensritter",
-      "Inquisitor",
-      "Exorzist",
-      "Pilger",
-      "Orakel",
-      "Kannushi / Shinshoku",
-      "Gūji (Oberpriester)",
-      "Negi / Gon-Negi",
-      "Miko",
-      "Kannagi",
-      "Sohei (Kriegermönch)",
-      "Yamabushi",
-      "Onmyōji",
-      "Ajari"
-    ]
-  },
-  {
-    fieldId: "arkan_magie",
-    category: "Arkan & Magische Künste",
-    jobs: [
-      "Magier / Zauberer",
-      "Arkanist",
-      "Elementarmagier",
-      "Sigilmancer",
-      "Talismanzer",
-      "Runenmeister",
-      "Magischer Kunstfertiger",
-      "Medium / Seher",
-      "Traumwandler",
-      "Nekromant",
-      "Runenritter",
-      "Curseblade / Fluchklinge",
-      "Geisterrufer"
-    ]
-  },
-  {
-    fieldId: "wissenschaft_forschung",
-    category: "Wissenschaft & Forschung",
-    jobs: [
-      "Gelehrter / Philosoph",
-      "Arzt / Mediziner",
-      "Alchemist",
-      "Apotheker / Pharmazeut",
-      "Naturforscher / Biologe",
-      "Astronom / Sternkundiger",
-      "Archäologe / Historiker",
-      "Kryptograph / Sprachforscher",
-      "Kartograph / Geograph",
-      "Bibliothekar / Archivar",
-      "Giftmischer / Toxikologe"
-    ]
-  },
-  {
-    fieldId: "bildung_erziehung",
-    category: "Bildung, Lehre & Ausbildung",
-    jobs: [
-      "Lehrer / Schulmeister",
-      "Gildenlehrer / Ausbilder",
-      "Fechtmeister / Kampfinstruktor",
-      "Akademiedozent / Professor",
-      "Hofmeister / Prinzenerzieher",
-      "Reitmeister"
+      "Koch",
+      "Küchenhilfe",
+      "Bäcker",
+      "Konditor",
+      "Metzger",
+      "Fischverarbeiter",
+      "Brauer",
+      "Brenner",
+      "Müller",
+      "Wirt",
+      "Gastwirt",
+      "Schankwirt",
+      "Kellner",
+      "Tavernenkoch",
+      "Hofkoch",
+      "Käser",
+      "Vorkoster"
     ]
   },
   {
     fieldId: "bau_handwerk",
-    category: "Bauhandwerk & Architektur",
+    category: "Bau & Handwerk",
     jobs: [
-      "Architekt / Festungsbauer",
-      "Steinmetz / Steinbildhauer",
-      "Maurer",
+      "Schreiner",
       "Zimmermann",
+      "Tischler",
+      "Maurer",
+      "Steinmetz",
       "Dachdecker",
+      "Glaser",
+      "Töpfer",
+      "Keramiker",
+      "Gerber",
+      "Lederhandwerker",
+      "Sattler",
+      "Schuhmacher",
+      "Schneider",
+      "Weber",
+      "Färber",
+      "Seiler",
+      "Korbflechter",
+      "Papiermacher",
+      "Buchbinder",
+      "Wagenbauer",
+      "Böttcher",
       "Brunnenbauer",
       "Brückenbauer",
-      "Tischler / Schreinermeister"
+      "Architekt",
+      "Handwerkergehilfe"
     ]
   },
   {
-    fieldId: "metall_waffen",
-    category: "Metallurgie, Schmiedekunst & Waffen",
+    fieldId: "metall_feinhandwerk",
+    category: "Metall & Feinhandwerk",
     jobs: [
+      "Schmied",
       "Grobschmied",
       "Waffenschmied",
-      "Schwertschmied",
-      "Rüstungsschmied / Plattner",
-      "Runenschmied",
-      "Feinmechaniker / Uhrmacher",
+      "Rüstungsschmied",
+      "Goldschmied",
+      "Silberschmied",
+      "Juwelier",
+      "Edelsteinschleifer",
+      "Werkzeugmacher",
+      "Hufschmied",
+      "Feinmechaniker",
       "Schlosser",
-      "Gießer / Bronzegießer",
-      "Kesselschmied"
+      "Gießer",
+      "Kesselschmied",
+      "Graveur",
+      "Runenschmied",
+      "Artefaktschmied"
     ]
   },
   {
-    fieldId: "materialverarbeitung",
-    category: "Materialverarbeitung & Textilhandwerk",
+    fieldId: "natur_landwirtschaft",
+    category: "Natur & Landwirtschaft",
     jobs: [
-      "Gerber",
-      "Kürschner",
-      "Seiler / Reepschläger",
-      "Glasmacher / Glasbläser",
-      "Schneider / Gewandschneider",
-      "Weber / Tuchmacher",
-      "Töpfer / Keramiker",
-      "Wagner / Stellmacher",
-      "Böttcher / Fassbinder",
-      "Holzschnitzer"
-    ]
-  },
-  {
-    fieldId: "bergbau_rohstoffe",
-    category: "Bergbau, Erze & Rohstoffgewinnung",
-    jobs: [
-      "Bergmann / Hauer",
-      "Steinhauer / Steinbrecher",
-      "Prospektor / Erzsucher",
-      "Hüttenarbeiter / Schmelzer",
+      "Bauer",
+      "Feldarbeiter",
+      "Gärtner",
+      "Obstbauer",
+      "Winzer",
+      "Imker",
+      "Viehzüchter",
+      "Hirte",
+      "Jäger",
+      "Förster",
+      "Holzfäller",
+      "Kräutersammler",
+      "Pflanzenkundler",
+      "Bergarbeiter",
+      "Minenarbeiter",
+      "Steinbrucharbeiter",
+      "Prospektor",
       "Köhler",
-      "Salzsieder",
-      "Stollenbauer / Minenzimmerer"
+      "Falkner",
+      "Pferdezüchter",
+      "Fallensteller",
+      "Fährtenleser"
     ]
   },
   {
-    fieldId: "lebensmittel_ernaehrung",
-    category: "Lebensmittel, Brauwesen & Gastronomie",
+    fieldId: "medizin",
+    category: "Medizin",
     jobs: [
-      "Koch / Küchenchef",
-      "Bäcker / Konditor",
-      "Brauer / Mälzer",
-      "Metzger / Fleischer",
-      "Müller",
-      "Käser",
-      "Winzer / Kellermeister",
-      "Fischräucherer / Konservierer",
-      "Schankwirt / Gastronom"
+      "Arzt",
+      "Heiler",
+      "Feldarzt",
+      "Militärarzt",
+      "Feldscher",
+      "Chirurg",
+      "Apotheker",
+      "Kräuterkundiger",
+      "Hebamme",
+      "Krankenpfleger",
+      "Giftkundiger",
+      "Anatom",
+      "Tierarzt",
+      "Schiffsarzt",
+      "Magieheiler"
     ]
   },
   {
-    fieldId: "landwirtschaft_versorgung",
-    category: "Landwirtschaft & Naturressourcen",
+    fieldId: "wissenschaft",
+    category: "Wissenschaft",
     jobs: [
-      "Bauer / Landwirt",
-      "Viehzüchter / Rinderhirte",
-      "Schäfer / Schafhirte",
-      "Milchbauer / Molkereifachmann",
-      "Imker / Zeidler",
-      "Obstbauer / Pomologe",
-      "Kräuterbauer",
-      "Holzfäller / Forstwirt"
+      "Gelehrter",
+      "Forscher",
+      "Historiker",
+      "Chronist",
+      "Archäologe",
+      "Kartograph",
+      "Astronom",
+      "Naturkundler",
+      "Geograph",
+      "Sprachgelehrter",
+      "Alchemist",
+      "Magieforscher",
+      "Magietheoretiker",
+      "Kristallkundiger",
+      "Lehrer",
+      "Ausbilder",
+      "Professor"
+    ]
+  },
+  {
+    fieldId: "handel_wirtschaft",
+    category: "Handel & Wirtschaft",
+    jobs: [
+      "Händler",
+      "Kaufmann",
+      "Markthändler",
+      "Fernhändler",
+      "Großhändler",
+      "Krämer",
+      "Warenhändler",
+      "Lebensmittelhändler",
+      "Stoffhändler",
+      "Waffenhändler",
+      "Rüstungshändler",
+      "Juwelier / Juwelenhändler",
+      "Viehhändler",
+      "Antiquitätenhändler",
+      "Geldwechsler",
+      "Bankier",
+      "Schiffshändler",
+      "Straßenverkäufer",
+      "Marktverkäufer",
+      "Warenprüfer",
+      "Makler",
+      "Händleragent",
+      "Auktionator",
+      "Lagerverwalter",
+      "Lagerarbeiter"
+    ]
+  },
+  {
+    fieldId: "dienstleistung",
+    category: "Dienstleistung",
+    jobs: [
+      "Barbier",
+      "Friseur",
+      "Kosmetiker",
+      "Wäscher",
+      "Reinigungskraft",
+      "Dienstbote",
+      "Hausdiener",
+      "Butler",
+      "Haushälter",
+      "Kinderbetreuer",
+      "Pfleger",
+      "Stallknecht",
+      "Pferdepfleger",
+      "Stallmeister",
+      "Bote",
+      "Kurier",
+      "Postbote",
+      "Fuhrmann",
+      "Kutscher",
+      "Reiseführer",
+      "Karawanenführer",
+      "Kurtisane",
+      "Maid",
+      "Leibeigener"
+    ]
+  },
+  {
+    fieldId: "verwaltung",
+    category: "Verwaltung",
+    jobs: [
+      "Schreiber",
+      "Stadtschreiber",
+      "Sekretär",
+      "Buchhalter",
+      "Verwalter",
+      "Beamter",
+      "Steuereintreiber",
+      "Zollbeamter",
+      "Zöllner",
+      "Richter",
+      "Gerichtsschreiber",
+      "Notar",
+      "Gesandter",
+      "Diplomat",
+      "Kanzleimitarbeiter",
+      "Bibliothekar",
+      "Archivist",
+      "Statthalter",
+      "Herold",
+      "Zeremonienmeister",
+      "Hofmarschall"
+    ]
+  },
+  {
+    fieldId: "militaer",
+    category: "Militär",
+    jobs: [
+      "Soldat",
+      "Gardist",
+      "Stadtwache",
+      "Grenzwächter",
+      "Bogenschütze",
+      "Armbrustschütze",
+      "Späher",
+      "Aufklärer",
+      "Belagerungstechniker",
+      "Ingenieur",
+      "Versorgungssoldat",
+      "Quartiermeister",
+      "Militärhandwerker",
+      "Waffenmeister",
+      "Offizier",
+      "Kommandant",
+      "General",
+      "Kavallerist",
+      "Leibwächter",
+      "Karawanenwächter"
     ]
   },
   {
     fieldId: "seefahrt",
-    category: "Seefahrt & Schifffahrt",
+    category: "Seefahrt",
     jobs: [
-      "Kapitän / Schiffsführer",
-      "Steuermann / Navigator",
-      "Seemann / Matrose",
-      "Bootsmann",
-      "Hochseefischer / Flussfischer",
+      "Matrose",
+      "Deckarbeiter",
+      "Steuermann",
+      "Navigator",
       "Schiffszimmermann",
-      "Lotse / Hafenmeister",
       "Segelmacher",
-      "Taucher / Perlentaucher"
+      "Fischer",
+      "Hafenarbeiter",
+      "Hafenmeister",
+      "Schiffskoch",
+      "Kanonier",
+      "Ausguck",
+      "Kapitän",
+      "Lotsenführer",
+      "Bootsmann",
+      "Taucher"
     ]
   },
   {
-    fieldId: "wandernde_erkundung",
-    category: "Wildnis, Erkundung & Jagdwesen",
+    fieldId: "kriminalitaet",
+    category: "Kriminalität",
     jobs: [
-      "Jäger / Waidmann",
-      "Fallensteller / Trapper",
-      "Fährtenleser / Tracker",
-      "Kundschafter / Wildnisscout",
-      "Expeditionsleiter / Entdecker",
-      "Wildnisführer / Bergführer",
-      "Kräutersammler / Wildkräuterkundiger",
-      "Nomade / Karawanenführer"
-    ]
-  },
-  {
-    fieldId: "tierfuehrung_tamer",
-    category: "Tierführung, Zucht & Zähmung",
-    jobs: [
-      "Tiertrainer / Tierabrichter",
-      "Falkner / Beizjäger",
-      "Pferdezüchter / Gestütsmeister",
-      "Hundeführer / Meuteleiter",
-      "Mahout (Großtierführer)",
-      "Beast Tamer / Bestienbändiger",
-      "Drachenzähmer",
-      "Tierheilkundiger / Veterinär"
-    ]
-  },
-  {
-    fieldId: "kriminelle_berufe",
-    category: "Schattenwelt & Kriminelle Professionen",
-    jobs: [
-      "Dieb / Taschendieb",
-      "Einbrecher / Fassadenkletterer",
+      "Dieb",
+      "Taschendieb",
+      "Einbrecher",
       "Schmuggler",
-      "Pirat / Kaperfahrer",
       "Hehler",
-      "Fälscher (Dokumente & Münzen)",
-      "Glücksspieler / Trickbetrüger",
-      "Schurke / Bandenführer",
-      "Bandit / Wegelagerer"
+      "Fälscher",
+      "Spion",
+      "Informant",
+      "Glücksspieler",
+      "Erpresser",
+      "Attentäter",
+      "Auftragskiller",
+      "Bandit",
+      "Pirat",
+      "Straßenräuber",
+      "Bandenführer",
+      "Scharfrichter"
     ]
   },
   {
-    fieldId: "haushalt_dienste",
-    category: "Haushalt & Persönlicher Dienst",
+    fieldId: "magie",
+    category: "Magie",
     jobs: [
-      "Butler / Majordomus",
-      "Kammerdiener / Zofe",
-      "Haushälter / Hauswirtschaftsleiter",
-      "Kutscher / Fuhrunternehmer",
-      "Vorkoster",
-      "Hauswirtschafter",
-      "Amme / Erzieher",
-      "Hausbursche / Hausgehilfe"
+      "Magier",
+      "Magielehrer",
+      "Runenschreiber",
+      "Verzauberer",
+      "Beschwörer",
+      "Wahrsager",
+      "Ritualist",
+      "Arkanist",
+      "Elementarmagier",
+      "Sigilmancer",
+      "Talismanzer",
+      "Nekromant",
+      "Medium",
+      "Traumwandler"
     ]
   },
   {
     fieldId: "kunst_kultur",
-    category: "Kunst, Musik & Literatur",
+    category: "Kunst & Kultur",
     jobs: [
-      "Musiker / Instrumentalist",
-      "Maler / Porträtist",
-      "Schriftsteller / Dichter",
-      "Bänkelsänger / Minnesänger",
-      "Komponist / Kapellmeister",
-      "Bildhauer / Meistermaler"
-    ]
-  },
-  {
-    fieldId: "unterhaltung_spezial",
-    category: "Darstellendes Spiel & Unterhaltung",
-    jobs: [
-      "Schauspieler / Mime",
-      "Tänzer / Balletttänzer",
-      "Puppenspieler / Marionettenspieler",
-      "Akrobat / Gaukler",
-      "Artist / Jongleur",
-      "Sänger / Diva",
-      "Schausteller / Illusionist"
-    ]
-  },
-  {
-    fieldId: "luxus_spezial",
-    category: "Luxushandwerk & Kunstgewerbe",
-    jobs: [
-      "Goldschmied / Silberschmied",
-      "Juwelier / Gemmologe",
-      "Edelsteinschleifer",
-      "Parfümeur",
-      "Florist / Kunstgärtner",
+      "Musiker",
+      "Sänger",
+      "Tänzer",
+      "Schauspieler",
+      "Akrobat",
+      "Jongleur",
+      "Barde",
+      "Geschichtenerzähler",
+      "Maler",
+      "Bildhauer",
+      "Zeichner",
+      "Schriftsteller",
+      "Dichter",
       "Instrumentenbauer",
-      "Buchbinder / Buchmaler",
-      "Graveur"
+      "Tätowierer",
+      "Puppenspieler",
+      "Komponist",
+      "Schausteller"
+    ]
+  },
+  {
+    fieldId: "religion",
+    category: "Religion",
+    jobs: [
+      "Priester",
+      "Priesterin",
+      "Mönch",
+      "Nonne",
+      "Tempeldiener",
+      "Tempelwächter",
+      "Hohepriester",
+      "Seelsorger",
+      "Exorzist",
+      "Missionar",
+      "Pilgerführer",
+      "Ritualmeister",
+      "Bestattungspriester",
+      "Paladin",
+      "Inquisitor",
+      "Orakel"
+    ]
+  },
+  {
+    fieldId: "abenteuer",
+    category: "Abenteuer",
+    jobs: [
+      "Abenteurer",
+      "Monsterjäger",
+      "Schatzsucher",
+      "Kopfgeldjäger",
+      "Dungeonforscher",
+      "Ruinenforscher",
+      "Kundschafter",
+      "Söldner",
+      "Expeditionsteilnehmer",
+      "Monsterkundiger",
+      "Gladiator",
+      "Berserker",
+      "Bestienbändiger",
+      "Drachenzähmer",
+      "Überlebenskünstler"
     ]
   }
 ];
@@ -409,6 +447,38 @@ export const NOBLE_CHILD_GROUPS: NobleChildGroup[] = [
 // Backwards-compatible export name for existing imports.
 export const NOBLE_CHILDREN_GROUPS = NOBLE_CHILD_GROUPS;
 
+export const FIELD_ID_ALIASES: Record<string, string> = {
+  staatsdienst_diplomatie: 'verwaltung',
+  adel_herrschaft: 'verwaltung',
+  verwaltung_wirtschaft: 'verwaltung',
+  verwaltung_recht: 'verwaltung',
+  militaer_streitkraefte: 'militaer',
+  militaer_sicherheit: 'militaer',
+  unabhaengige_abenteurer: 'abenteuer',
+  abenteuer_sondergewerbe: 'abenteuer',
+  geheimoperationen_ueberleben: 'kriminalitaet',
+  religion_klerus: 'religion',
+  arkan_magie: 'magie',
+  magie_arkana: 'magie',
+  wissenschaft_forschung: 'wissenschaft',
+  alchemie: 'wissenschaft',
+  medizin_heilkunde: 'medizin',
+  bildung_erziehung: 'wissenschaft',
+  schrift_bildung: 'verwaltung',
+  private_gesellschaftsrollen: 'dienstleistung',
+  metall_waffen: 'metall_feinhandwerk',
+  materialverarbeitung: 'bau_handwerk',
+  bergbau_rohstoffe: 'natur_landwirtschaft',
+  lebensmittel_ernaehrung: 'lebensmittel_versorgung',
+  landwirtschaft_versorgung: 'natur_landwirtschaft',
+  wandernde_erkundung: 'abenteuer',
+  tierfuehrung_tamer: 'natur_landwirtschaft',
+  kriminelle_berufe: 'kriminalitaet',
+  haushalt_dienste: 'dienstleistung',
+  unterhaltung_spezial: 'kunst_kultur',
+  luxus_spezial: 'metall_feinhandwerk'
+};
+
 /** Finds the profession field for a profession name. */
 export function getFieldIdForJob(jobName: string): string | undefined {
   if (!jobName || !jobName.trim()) return undefined;
@@ -436,21 +506,11 @@ export function getFieldIdForJob(jobName: string): string | undefined {
     }
   }
 
-  // Backwards compatibility for old field IDs
-  if (lower.includes('diplomat') || lower.includes('berater') || lower.includes('kanzler') || lower.includes('herold')) {
-    return 'staatsdienst_diplomatie';
-  }
-  if (lower.includes('lehrer') || lower.includes('ausbilder') || lower.includes('schüler') || lower.includes('student')) {
-    return 'bildung_erziehung';
-  }
-
   return undefined;
 }
 
 export function getJobCategoryByFieldId(fieldId: string): JobCategory | undefined {
   if (!fieldId) return undefined;
-  // Handle backwards compatibility alias
-  const normalizedId = fieldId === 'adel_herrschaft' ? 'staatsdienst_diplomatie' :
-                       fieldId === 'private_gesellschaftsrollen' ? 'bildung_erziehung' : fieldId;
-  return JOB_CATEGORIES.find(c => c.fieldId === normalizedId || c.category.toLowerCase() === normalizedId.toLowerCase());
+  const targetId = FIELD_ID_ALIASES[fieldId] || fieldId;
+  return JOB_CATEGORIES.find(c => c.fieldId === targetId || c.category.toLowerCase() === targetId.toLowerCase());
 }

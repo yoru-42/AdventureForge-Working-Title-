@@ -2151,34 +2151,70 @@ Hinweis: Für diesen genauen Standort existiert kein detaillierter Eintrag in de
     // If we found the territory, extract its specific fields
     const typeLabel = activeTerr.type ? activeTerr.type.toUpperCase() : 'ORT';
     const owner = activeTerr.ruler || activeTerr.controlledByFactionId || '';
+    const rulingTitle = activeTerr.rulingTitle || '';
+    const overlord = activeTerr.overlord || '';
+    const feudalRank = activeTerr.feudalRank || '';
+    const lawEnforcement = activeTerr.lawEnforcement || '';
+    
     const residents = activeTerr.population || '';
+    const combatReady = activeTerr.combatReadyPopulation || '';
+    const standingArmy = activeTerr.standingArmy || '';
+    const militia = activeTerr.militiaAndConscripts || '';
+    const defenseStructures = activeTerr.defenseStructures || activeTerr.defense || '';
+    const armament = activeTerr.armamentAndSupply || '';
+    
+    const dailyJobs = activeTerr.dailyJobs || '';
+    const localTasks = activeTerr.localTasks || '';
+    const tradeGoods = activeTerr.tradeGoods || activeTerr.exports || '';
+    const tradeDemands = activeTerr.tradeDemands || activeTerr.imports || '';
+    const merchantsAndFairs = activeTerr.merchantsAndFairs || '';
+    const tradeContracts = activeTerr.tradeContracts || '';
     const functionTrade = activeTerr.trade || '';
     const equipment = activeTerr.resources || '';
-    const security = activeTerr.defense || '';
+    
+    const accessRoutes = activeTerr.accessRoutes || activeTerr.routeFrom || '';
+    const travelDangers = activeTerr.travelDangers || '';
     const poi = activeTerr.pointsOfInterest || '';
+    const landmarks = activeTerr.landmarks || '';
     const desc = activeTerr.description || '';
     const danger = activeTerr.dangerLevel || '';
     const terrain = activeTerr.terrain || '';
     const climate = activeTerr.climate || '';
 
-    return `\nAKTUELLES GEBIET / STANDORT:
+    return `\nAKTUELLES GEBIET / STANDORT (SIMULATIONSDATENBANK):
 - Name: ${activeTerr.name} (Typ: ${typeLabel})
 ${desc ? `- Beschreibung: ${desc}` : ''}
 ${terrain ? `- Umgebung/Gelände: ${terrain}` : ''}
 ${climate ? `- Klima: ${climate}` : ''}
-${owner ? `- Besitzer/Herrscher: ${owner}` : ''}
-${residents ? `- Personal / Bewohner (Hintergrund-Präsenz): ${residents}` : ''}
-${functionTrade ? `- Funktion/Nutzung: ${functionTrade}` : ''}
-${equipment ? `- Ausstattung/Ressourcen: ${equipment}` : ''}
-${security ? `- Sicherheit/Wachen: ${security}` : ''}
-${poi ? `- Besonderheiten/POIs: ${poi}` : ''}
-${danger ? `- Gefahrenstufe/Risiken: ${danger}` : ''}
+${owner ? `- Herrscher/Leitung: ${owner}${rulingTitle ? ` (${rulingTitle})` : ''}` : ''}
+${overlord ? `- Übergeordnete Herrschaft (Lehnsherr): ${overlord}` : ''}
+${feudalRank ? `- Feudale Ordnung: ${feudalRank}` : ''}
+${lawEnforcement ? `- Ordnungshüter & Gerichtsbarkeit: ${lawEnforcement}` : ''}
+${residents ? `- Gesamtbevölkerung: ${residents}` : ''}
+${combatReady ? `- Kampffähige Bürger / Wehrkraft: ${combatReady}` : ''}
+${standingArmy ? `- Stehende Truppe / Garnison / Wachen: ${standingArmy}` : ''}
+${militia ? `- Miliz / Aufgebot: ${militia}` : ''}
+${defenseStructures ? `- Schutzanlagen & Befestigung: ${defenseStructures}` : ''}
+${armament ? `- Bewaffnung & Zeughaus: ${armament}` : ''}
+${dailyJobs ? `- Berufe & Alltagsarbeiten der Bewohner: ${dailyJobs}` : ''}
+${localTasks ? `- Tägliche Aufgaben & Pflichten im Ort: ${localTasks}` : ''}
+${tradeGoods ? `- Warenangebot / Lokale Güter & Überschüsse: ${tradeGoods}` : ''}
+${tradeDemands ? `- Nachgefragte Güter / Bedarf von Händlern: ${tradeDemands}` : ''}
+${merchantsAndFairs ? `- Märkte & Reisende Händler: ${merchantsAndFairs}` : ''}
+${tradeContracts ? `- Verträge & Zölle: ${tradeContracts}` : ''}
+${functionTrade ? `- Wirtschaftszweig / Funktion: ${functionTrade}` : ''}
+${equipment ? `- Ressourcen / Ausstattung: ${equipment}` : ''}
+${accessRoutes ? `- Zuwege & Straßen: ${accessRoutes}` : ''}
+${travelDangers ? `- Reiserisiken im Umland: ${travelDangers}` : ''}
+${landmarks ? `- Wahrzeichen / Bauwerke: ${landmarks}` : ''}
+${poi ? `- Besondere Orte: ${poi}` : ''}
+${danger ? `- Gefahrenstufe / Bedrohungen: ${danger}` : ''}
 
-WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN DUNGEON MASTER (STRENGSTENS EINZUHALTEN):
-Du MUSST die oben gelisteten namenlosen Personalgruppen, Bediensteten, Wachen, Köche oder Bewohner ("Personal / Bewohner") sowie die Sicherheitsvorkehrungen aktiv und lebendig in das Geschehen im Hintergrund deiner Antworten einbinden! 
-- Sie sind im Hintergrund präsent: Diener eilen durch die Flure des Anwesens, Köche klappern in der Küche mit Töpfen, Wachen patrouillieren auf den Mauern oder Gängen.
-- Reagiere dynamisch auf die Situation: Wenn es zu einem Schrei, Lärm oder Kampf kommt, stürmen nahegelegene Wachen oder Bedienstete besorgt in das Zimmer. Wenn der Spieler die Küche betritt, agieren dort die Köche fleißig und reagieren auf ihn. Wenn er die Gänge durchstreift, begegnet er dem Hauspersonal, das seiner Arbeit nachgeht.
-- Lass die Szene nicht leer oder ausgestorben wirken, sondern fülle sie mit dem beschriebenen Personal/Bewohnern, um eine lebendige, stimmige und logische Kulisse zu erschaffen!`;
+WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
+1. LEBENDIGE BEWOHNER & ALLTAG: Binde die täglichen Berufe (${dailyJobs || 'Bewohner'}), laufende Aufgaben (${localTasks || 'Arbeiten'}) und das Verhalten der Einheimischen aktiv in die Erzählung und Hintergründe ein. Die Welt schläft nicht – Bauern bestellen Felder, Handwerker hämmern, Wachen patrouillieren.
+2. HERRSCHAFT & FEUDALE LOGIK: Beachte die Herrschaftsverhältnisse (${owner || 'Lokale Leitung'}${overlord ? `, unterstellt: ${overlord}` : ''}). NPCs respektieren ihre Lehnsherren und kennen ihren Rang.
+3. VERTEIDIGUNG & WEHRHAFTIGKEIT: Wenn es zu Kämpfen oder Alarm kommt, reagieren die Verteidiger gemäß ihrer tatsächlichen Wehrkraft (${combatReady || 'Verteidiger'}, ${defenseStructures || 'Schutzanlagen'}).
+4. HANDEL & REISEN: Erwähnte Händler, Warenangebote und Zuwege entsprechen den realen Gegebenheiten des Ortes.`;
   };
 
   const renderDialogueText = (text: string) => {

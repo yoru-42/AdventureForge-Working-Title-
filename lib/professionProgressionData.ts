@@ -1,5 +1,6 @@
 import { ProfessionTreeNode, ProfessionNodeTier } from './professionTreeData';
 import { JOB_CATEGORIES } from '../components/jobPresets';
+import { getTierCompetencySetForJob } from './professionTierCompetenciesData';
 
 export interface ProfessionRankStep {
   idSuffix: string;
@@ -1376,12 +1377,29 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
  * Maps field IDs to their primary career branch keys.
  */
 export const FIELD_BRANCH_MAP: Record<string, string[]> = {
+  // 16 Kern-Berufszweige
+  lebensmittel_versorgung: ['koch', 'baecker', 'brauer', 'metzger', 'winzer', 'mueller', 'kaeser'],
+  bau_handwerk: ['architekt', 'steinmetz', 'zimmermann', 'maurer', 'tischler', 'schneider', 'gerber', 'weber', 'toepfer'],
+  metall_feinhandwerk: ['schmied', 'waffenschmied', 'goldschmied', 'juwelier', 'mechaniker', 'schlosser', 'giesser'],
+  natur_landwirtschaft: ['bauer', 'jaeger', 'foerster', 'bergmann', 'imker', 'schaefer', 'pferdezuechter'],
+  medizin: ['arzt', 'heiler', 'apotheker', 'feldscher', 'chirurg', 'kraeuterkundiger'],
+  wissenschaft: ['alchemist', 'gelehrter', 'astronom', 'kartograph', 'archaeologe', 'lehrer'],
+  handel_wirtschaft: ['kaufmann', 'haendler', 'grosshaendler', 'bankier', 'lagerverwalter'],
+  dienstleistung: ['diener', 'butler', 'kutscher', 'barbier', 'bote', 'reisefuehrer'],
+  verwaltung: ['schreiber', 'buchhalter', 'notar', 'diplomat', 'richter', 'beamter', 'archivar', 'statthalter'],
+  militaer: ['soldat', 'gardist', 'schuetze', 'kavallerist', 'scout', 'quartiermeister', 'waffenmeister'],
+  seefahrt: ['seemann', 'steuermann', 'schiffszimmermann', 'fischer', 'kapitaen', 'lotse'],
+  kriminalitaet: ['taschendieb', 'einbrecher', 'hehler', 'schmuggler', 'spion', 'assasine', 'bandit', 'pirat'],
+  magie: ['magier', 'runenschmied', 'verzauberer', 'beschwoerer', 'wahrsager', 'arkanist'],
+  kunst_kultur: ['maler', 'bildhauer', 'barde', 'musiker', 'schauspieler', 'dichter', 'schriftsteller'],
+  religion: ['priester', 'paladin', 'inquisitor', 'moench', 'exorzist', 'seelsorger'],
+  abenteuer: ['abenteurer', 'soeldner', 'gladiator', 'monsterjaeger', 'schatzsucher', 'kundschafter'],
+
+  // Legacy Aliases for backwards compatibility
   metall_waffen: ['schmied', 'mechaniker', 'instrumentenbauer', 'schlosser', 'giesser'],
   lebensmittel_ernaehrung: ['koch', 'baecker', 'brauer', 'metzger', 'winzer', 'mueller', 'kaeser'],
-  bau_handwerk: ['architekt', 'steinmetz', 'zimmermann', 'maurer', 'tischler'],
   militaer_streitkraefte: ['soldat', 'schuetze', 'kavallerist', 'scout'],
   militaer_sicherheit: ['soldat', 'schuetze', 'kavallerist', 'scout'],
-  seefahrt: ['seemann', 'steuermann', 'schiffszimmermann', 'fischer'],
   magie_arkana: ['magier', 'runenschmied', 'alchemist'],
   arkan_magie: ['magier', 'runenschmied', 'alchemist'],
   wissenschaft_forschung: ['alchemist', 'apotheker', 'astronom', 'kartograph'],
@@ -1392,7 +1410,6 @@ export const FIELD_BRANCH_MAP: Record<string, string[]> = {
   abenteuer_sondergewerbe: ['abenteurer', 'soeldner', 'gladiator', 'monsterjaeger'],
   geheimoperationen_ueberleben: ['spion', 'infiltrator', 'assasine'],
   landwirtschaft_versorgung: ['bauer', 'schaefer', 'imker', 'foerster'],
-  natur_landwirtschaft: ['bauer', 'schaefer', 'imker', 'foerster'],
   religion_klerus: ['priester', 'paladin', 'inquisitor'],
   materialverarbeitung: ['gerber', 'schneider', 'weber', 'glasmacher', 'toepfer'],
   bergbau_rohstoffe: ['bergmann', 'steinhauer', 'prospektor', 'schmelzer'],
@@ -1400,7 +1417,6 @@ export const FIELD_BRANCH_MAP: Record<string, string[]> = {
   tierfuehrung_tamer: ['tiertrainer', 'falkner', 'pferdezuechter'],
   kriminelle_berufe: ['taschendieb', 'einbrecher', 'hehler', 'schmuggler'],
   haushalt_dienste: ['diener', 'zofe', 'butler'],
-  kunst_kultur: ['maler', 'bildhauer', 'barde'],
   unterhaltung_spezial: ['schauspieler', 'gaukler', 'illusionist'],
   luxus_spezial: ['goldschmied', 'juwelier', 'parfuemeur'],
   bildung_erziehung: ['lehrer', 'fechtmeister', 'dozent']
@@ -1422,6 +1438,97 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
   const clean = jobName.trim();
   const lower = clean.toLowerCase();
 
+  // Wine & Viticulture
+  if (lower.includes('winzer') || lower.includes('wein') || lower.includes('kelter') || lower.includes('reben') || lower.includes('oenolog')) {
+    return {
+      entryName: 'Weinberggehilfe & Kelterbursche',
+      entryTitle: 'Einstieg & Weinbergpflege',
+      journeyName: clean,
+      journeyTitle: 'Weinbau & Kellerwirtschaft',
+      specName: 'Kellermeister & Weinsommelier',
+      specTitle: 'Fassausbau & Cuvéekunst',
+      masterName: 'Weingutsleiter & Oberkellermeister',
+      masterTitle: 'Weingutsdirektion & Lagenmeister'
+    };
+  }
+  // Brewing & Malting
+  if (lower.includes('brauer') || lower.includes('bier') || lower.includes('mälzer')) {
+    return {
+      entryName: 'Braubursche & Fasswäscher',
+      entryTitle: 'Einstieg & Sudhausdienst',
+      journeyName: clean,
+      journeyTitle: 'Braukunst & Gärungskontrolle',
+      specName: 'Braumeister & Biersommelier',
+      specTitle: 'Spezialsud & Fassreifung',
+      masterName: 'Brauereidirektor & Zunftbraumeister',
+      masterTitle: 'Großbrauereileitung & Zunftvorsitz'
+    };
+  }
+  // Restaurant Service & Waiter
+  if (lower.includes('kellner') || lower.includes('schank') || lower.includes('bedienung') || lower.includes('service')) {
+    return {
+      entryName: 'Schankbursche & Saalläufer',
+      entryTitle: 'Einstieg & Gästebewirtung',
+      journeyName: clean,
+      journeyTitle: 'Servierpraxis & Kundenbetreuung',
+      specName: 'Chef de Rang & Bankettleiter',
+      specTitle: 'Weinservice & Festsaalkoordination',
+      masterName: 'Maître d’Hôtel & Oberkellner',
+      masterTitle: 'Gastronomieleitung & Serviceinspektion'
+    };
+  }
+  // Gardening & Botany
+  if (lower.includes('gärtner') || lower.includes('garten') || lower.includes('pflanz') || lower.includes('botan')) {
+    return {
+      entryName: 'Gartengehilfe & Beetpfleger',
+      entryTitle: 'Einstieg & Anzuchtpraxis',
+      journeyName: clean,
+      journeyTitle: 'Gartenbau & Gehölzpflege',
+      specName: 'Gartenbauspezialist & Ziergärtner',
+      specTitle: 'Veredelung & Parkgestaltung',
+      masterName: 'Hofgärtnermeister & Parkdirektor',
+      masterTitle: 'Gartenarchitektur & Direktion'
+    };
+  }
+  // Beekeeping & Apiary
+  if (lower.includes('imker') || lower.includes('bien') || lower.includes('zeidl')) {
+    return {
+      entryName: 'Zeidlergehilfe & Bienenbursche',
+      entryTitle: 'Einstieg & Bienenstockbetreuung',
+      journeyName: clean,
+      journeyTitle: 'Imkerei & Honigernte',
+      specName: 'Königinnenzüchter & Metbrauer',
+      specTitle: 'Völkerzucht & Veredelung',
+      masterName: 'Zeidlermeister & Imkerobermeister',
+      masterTitle: 'Zunftleitung & Bienenschutz'
+    };
+  }
+  // Fishing & Aquaculture
+  if (lower.includes('fischer') || lower.includes('fischfang') || lower.includes('netz')) {
+    return {
+      entryName: 'Netzflicker & Bootsjunge',
+      entryTitle: 'Einstieg & Fangvorbereitung',
+      journeyName: clean,
+      journeyTitle: 'Fischerei & Gewässerkunde',
+      specName: 'Hochseefischer & Zuchtmeister',
+      specTitle: 'Schwarmortung & Teichwirtschaft',
+      masterName: 'Fischereimeister & Oberaufseher',
+      masterTitle: 'Innungsleitung & Revierverwaltung'
+    };
+  }
+  // Culinary & Food
+  if (lower.includes('koch') || lower.includes('küche') || lower.includes('bäcker') || lower.includes('konditor') || lower.includes('metzger') || fieldId.includes('lebensmittel')) {
+    return {
+      entryName: `Küchenjunge & Gehilfe (${clean})`,
+      entryTitle: 'Einstieg & Vorbereitung',
+      journeyName: clean,
+      journeyTitle: 'Fachpraxis & Zubereitung',
+      specName: `Chefkoch & Spezialist (${clean})`,
+      specTitle: 'Rezeptur & Veredelung',
+      masterName: `Küchenmeister & Zunftältester (${clean})`,
+      masterTitle: 'Betriebsleitung & Fachvorsitz'
+    };
+  }
   // Domestic / Service
   if (lower.includes('diener') || lower.includes('zofe') || lower.includes('butler') || lower.includes('kammer') || lower.includes('page') || fieldId === 'haushalt_dienste') {
     return {
@@ -1657,30 +1764,95 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
     };
   }
 
-  // Artisan / Craft suffix -er
-  if (clean.endsWith('er')) {
-    return {
-      entryName: `${clean}gehilfe & Handwerksanwärter`,
-      entryTitle: 'Einstieg & Handwerksgrundlagen',
-      journeyName: clean,
-      journeyTitle: 'Selbstständige Ausführung',
-      specName: `Kunstfertiger ${clean} & Spezialist`,
-      specTitle: 'Sonderanfertigung & Vertiefung',
-      masterName: `${clean}meister & Werkstattleiter`,
-      masterTitle: 'Zunftmeisterschaft & Innungsleitung'
-    };
+  // Generic fallback for any other profession
+  return {
+    entryName: `Lehrling (${clean}) & Nachwuchskraft`,
+    entryTitle: 'Einstieg & Grundausbildung',
+    journeyName: clean,
+    journeyTitle: 'Fachpraxis & Ausführung',
+    specName: `Fachspezialist (${clean}) & Experte`,
+    specTitle: 'Spezialisierung & Vertiefung',
+    masterName: `Leitender ${clean} & Fachmeister`,
+    masterTitle: 'Meisterstufe & Fachleitung'
+  };
+}
+
+export function getRoleSpecificPossibleRanks(
+  cleanName: string,
+  fieldId: string,
+  rankOrder: number,
+  titleName: string
+): string[] {
+  const lower = cleanName.toLowerCase();
+
+  if (rankOrder === 0) {
+    if (lower.includes('winzer') || lower.includes('wein') || lower.includes('kelter')) {
+      return ['Weinberggehilfe', 'Kelterbursche', 'Jungwinzer'];
+    }
+    if (lower.includes('brauer') || lower.includes('bier') || lower.includes('mälzer')) {
+      return ['Braubursche', 'Sudhausgehilfe', 'Jungbrauer'];
+    }
+    if (lower.includes('koch') || lower.includes('küche') || lower.includes('gastronomie')) {
+      return ['Küchenjunge', 'Beikoch-Lehrling', 'Jungkoch'];
+    }
+    if (lower.includes('bäcker') || lower.includes('konditor')) {
+      return ['Backstubenjunge', 'Teigmacher-Lehrling', 'Jungbäcker'];
+    }
+    if (lower.includes('gärtner') || lower.includes('garten') || lower.includes('botan')) {
+      return ['Gartengehilfe', 'Beetpfleger', 'Jung-Gärtner'];
+    }
+    if (lower.includes('bauer') || lower.includes('landwirt') || lower.includes('acker') || fieldId.includes('landwirtschaft')) {
+      return ['Hofknecht', 'Jungbauer', 'Saatgehilfe'];
+    }
+    if (lower.includes('fischer') || lower.includes('seemann') || lower.includes('schiff')) {
+      return ['Bootsjunge', 'Decksbursche', 'Leichtmatrose'];
+    }
+    if (lower.includes('magi') || lower.includes('zauber') || lower.includes('arkan')) {
+      return ['Arkan-Novize', 'Schriftrollenschüler', 'Adept'];
+    }
+    if (lower.includes('priester') || lower.includes('klerik') || lower.includes('mönch')) {
+      return ['Akolyth', 'Tempelnovize', 'Klosterschüler'];
+    }
+    if (lower.includes('soldat') || lower.includes('krieg') || lower.includes('wache') || lower.includes('garde')) {
+      return ['Rekrut', 'Garde-Anwärter', 'Wachgehilfe'];
+    }
+    if (lower.includes('schütze') || lower.includes('bogen')) {
+      return ['Pfeiljunge', 'Spanngehilfe', 'Jungschütze'];
+    }
+    if (lower.includes('schmied') || lower.includes('schlosser')) {
+      return ['Schmiedejunge', 'Blasebalgtreiber', 'Schmiedelehrling'];
+    }
+    if (lower.includes('schreiner') || lower.includes('tischler') || lower.includes('zimmer')) {
+      return ['Hobeljunge', 'Zimmererlehrling', 'Schreinerlehrling'];
+    }
+    if (lower.includes('schneider') || lower.includes('weber')) {
+      return ['Nadelbursche', 'Zuschneiderlehrling', 'Jungschneider'];
+    }
+    return [titleName, `Lehrling (${cleanName})`, `Nachwuchskraft (${cleanName})`];
   }
 
-  return {
-    entryName: `Anwärter & Gehilfe (${clean})`,
-    entryTitle: 'Einstiegsstufe & Einarbeitung',
-    journeyName: clean,
-    journeyTitle: 'Reguläre Berufsausübung',
-    specName: `Fachkundiger ${clean} & Spezialist`,
-    specTitle: 'Beförderung & Fachbereich',
-    masterName: `Leitender ${clean} & Zunftältester`,
-    masterTitle: 'Höchste Leitungsstufe'
-  };
+  if (rankOrder === 1) {
+    return [cleanName, `Fachkraft (${cleanName})`, `Geselle (${cleanName})`];
+  }
+
+  if (rankOrder === 2) {
+    return [titleName, `Senior-${cleanName}`, `Fachspezialist (${cleanName})`];
+  }
+
+  // rankOrder === 3 (Meister)
+  if (lower.includes('winzer') || lower.includes('wein') || lower.includes('kelter')) {
+    return ['Weingutsleiter', 'Oberkellermeister', 'Winzermeister'];
+  }
+  if (lower.includes('brauer') || lower.includes('bier')) {
+    return ['Brauereidirektor', 'Braumeister', 'Zunftbraumeister'];
+  }
+  if (lower.includes('koch') || lower.includes('küche')) {
+    return ['Küchenmeister', 'Chef de Cuisine', 'Küchendirektor'];
+  }
+  if (lower.includes('bauer') || lower.includes('landwirt')) {
+    return ['Gutsbesitzer', 'Agrarmeister', 'Dorfschulze'];
+  }
+  return [titleName, `Zunftmeister (${cleanName})`, `Obermeister (${cleanName})`];
 }
 
 /**
@@ -1695,6 +1867,7 @@ export function generateDefaultRanksForJob(
   const cleanName = jobName.trim();
   const slug = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_');
   const titles = getRoleSpecificTitles(cleanName, fieldId);
+  const tierComps = getTierCompetencySetForJob(cleanName, fieldId);
 
   return {
     branchKey: slug,
@@ -1709,8 +1882,8 @@ export function generateDefaultRanksForJob(
         rankOrder: 0,
         rankTitle: titles.entryTitle,
         description: `Einstieg in das Berufsfeld ${cleanName}: Grundausbildung, Materialkunde und Unterstützung erfahrener Kräfte.`,
-        suggestedCompetencies: ['Arbeitsplatz vorbereiten', 'Werkzeuge pflegen', 'Sorgfalt & Zuverlässigkeit', 'Grundlegende Handgriffe'],
-        possibleRanks: [titles.entryName, 'Gehilfe', 'Anwärter'],
+        suggestedCompetencies: tierComps.lehrling,
+        possibleRanks: getRoleSpecificPossibleRanks(cleanName, fieldId, 0, titles.entryName),
         nextRankName: titles.journeyName
       },
       {
@@ -1720,8 +1893,8 @@ export function generateDefaultRanksForJob(
         rankOrder: 1,
         rankTitle: titles.journeyTitle,
         description: `Reguläre, selbstständige Ausübung des Berufs als ${cleanName} mit solider Fachkenntnis.`,
-        suggestedCompetencies: [`Fachpraxis ${cleanName}`, 'Arbeitsorganisation', 'Qualitätskontrolle', 'Selbstständige Ausführung'],
-        possibleRanks: [cleanName, `Geselle (${cleanName})`, `Fachkraft`],
+        suggestedCompetencies: tierComps.geselle,
+        possibleRanks: getRoleSpecificPossibleRanks(cleanName, fieldId, 1, titles.journeyName),
         requiredExperienceYears: 1,
         prerequisiteJobName: titles.entryName,
         nextRankName: titles.specName
@@ -1733,8 +1906,8 @@ export function generateDefaultRanksForJob(
         rankOrder: 2,
         rankTitle: titles.specTitle,
         description: `Vertiefte Fachrichtung und gehobene Spezialkenntnisse als ${cleanName}.`,
-        suggestedCompetencies: [`Vertiefte Fachkunde`, 'Schwierige Aufgabenstellungen', 'Sondertechniken', 'Fachliche Anleitung'],
-        possibleRanks: [titles.specName, `Senior-${cleanName}`, `Fachprüfer`],
+        suggestedCompetencies: tierComps.spezialisierung,
+        possibleRanks: getRoleSpecificPossibleRanks(cleanName, fieldId, 2, titles.specName),
         requiredExperienceYears: 2,
         prerequisiteJobName: titles.journeyName,
         nextRankName: titles.masterName
@@ -1746,8 +1919,8 @@ export function generateDefaultRanksForJob(
         rankOrder: 3,
         rankTitle: titles.masterTitle,
         description: `Höchste Befähigung, Ausbildungsberechtigung und meisterhafte Führungskompetenz als ${cleanName}.`,
-        suggestedCompetencies: ['Meisterhafte Praxis', 'Betriebsleitung', 'Ausbildung von Nachwuchskräften', 'Qualitätsstandard'],
-        possibleRanks: [titles.masterName, `Zunftältester`],
+        suggestedCompetencies: tierComps.meister,
+        possibleRanks: getRoleSpecificPossibleRanks(cleanName, fieldId, 3, titles.masterName),
         requiredExperienceYears: 4,
         prerequisiteJobName: titles.specName
       }

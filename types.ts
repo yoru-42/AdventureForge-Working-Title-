@@ -303,7 +303,7 @@ export interface TechniqueItem {
   type?: 'Angriff' | 'Transformation' | 'Verteidigung' | 'Support' | 'Heilung' | 'Zustandseffekt' | 'Spezial' | 'Beschwörung' | string; 
   subtype?: string;
   mode?: 'Normal' | 'Verstärkt' | 'Dauerhaft' | 'Aufgeladen' | 'Schnellzauber' | 'Konter' | 'Bereich' | 'Fernkampf' | 'Nahkampf' | 'Kanalisiert' | string;
-  category?: 'Passive Fähigkeiten' | 'Techniken' | 'Ultimative Techniken' | 'Transformationen' | 'Talente' | string;
+  category?: 'Passive Fähigkeiten' | 'Techniken' | 'Ultimative Techniken' | 'Transformationen' | 'Waffenbeherrschung' | 'Talente' | string;
   baseAbilityIds?: string[]; // Liste verknüpfter Grundfähigkeiten
   baseAbilityNames?: string[]; // Anzeigenamen (z.B. ["Kryokinese", "Aerokinese"])
   powerSourceId?: string;
@@ -340,6 +340,12 @@ export interface TechniqueItem {
   // Optionale Zusatzfelder für Transformationen / Bedingungen
   activationCondition?: string;
   transformName?: string;
+  // Optionale Zusatzfelder für Waffenbeherrschung
+  weaponType?: string;
+  weaponCategory?: string;
+  masteryLevel?: string;
+  wieldingStyle?: string;
+  weaponManeuver?: string;
 }
 
 export interface PowerAbility {
@@ -872,6 +878,10 @@ export interface Territory {
   densityJustification?: string; // Kontextuelle Begründung (z.B. Handelszentrum, Hafen, Festung, Lore)
   plausibilityStatus?: 'plausibel' | 'ungewoehnlich_begruendet' | 'unplausibel_korrigiert'; // Status der Plausibilitätsprüfung
   ruler?: string;
+  rulingTitle?: string; // Titel/Rang (z.B. Dorfältester, Schulze, Baron, Graf, Herzog, König)
+  overlord?: string; // Übergeordnete Herrschaft / Lehnsherr (wer steht hierarchisch darüber)
+  feudalRank?: string; // Feudale Rangstufe & Lehnshierarchie
+  lawEnforcement?: string; // Ordnungshüter, Büttel, Stadtgarde, Gerichtsbarkeit
   culture?: string;
 
   // RPG Maker Tile Map Data for detailed grid/brush view
@@ -903,17 +913,28 @@ export interface Territory {
   enemies?: string;
   government?: string;
 
-  // Wirtschaft
+  // Wirtschaft, Berufe & Aufgaben
   resources?: string;
   trade?: string;
   currency?: string;
   exports?: string;
   imports?: string;
+  dailyJobs?: string; // Berufe & Alltagsarbeiten der Bewohner (z.B. 60% Bauern, 15% Fischer/Jäger, 15% Handwerker)
+  localTasks?: string; // Tägliche Aufgaben & Pflichten im Gebiet (z.B. Feldbestellung, Wehrmauerdienst, Holzschlag)
+  tradeGoods?: string; // Warenangebot / Überschüsse für Händler
+  tradeDemands?: string; // Nachgefragte Waren & Mangelgüter von eintreffenden Händlern
+  merchantsAndFairs?: string; // Reisende Händler, Karawanen & Markttage
+  tradeContracts?: string; // Handelsverträge, Zölle & Abkommen
 
-  // Militär
+  // Militär, Schutz & Verteidigung
   dangerLevel?: string;
   militaryStrength?: string;
   defense?: string;
+  combatReadyPopulation?: string; // Wehrfähige Personen / Kampfkraft (z.B. 50 von 200 Einwohnern können kämpfen)
+  standingArmy?: string; // Stehendes Militär, Garnison, Berufssoldaten (z.B. 10 bezahlte Stadtwachen)
+  militiaAndConscripts?: string; // Miliz, Bürgerwehr, Landsturm
+  defenseStructures?: string; // Schutzanlagen & Befestigung (z.B. Palisade, Wehrturm, Wassergraben)
+  armamentAndSupply?: string; // Bewaffnung & Ausrüstung der Verteidiger (z.B. Jagdbögen, Speere, Äxte)
 
   // Besonderheiten
   landmarks?: string;
@@ -931,6 +952,8 @@ export interface Territory {
   distance?: string;
   direction?: string;
   routeFrom?: string;
+  accessRoutes?: string; // Zuwege, Handelsstraßen & Pfade
+  travelDangers?: string; // Gefahren auf den Reiserouten (Wegelagerer, Mautstellen, Bestien)
 
   // Ort-/Region-Marker
   placeMarkers?: any[];

@@ -848,7 +848,7 @@ export function getArchetypeKeyForJob(jobTitle: string): string {
 
   // Religion
   if (
-    /priester|kleriker|mönch|nonne|inquisitor|diener|exorzist|orakel|paladin/i.test(title)
+    /priester|kleriker|mönch|nonne|inquisitor|gottesdiener|exorzist|orakel|paladin/i.test(title)
   ) {
     return "religion";
   }
@@ -867,9 +867,9 @@ export function getArchetypeKeyForJob(jobTitle: string): string {
     return "natur";
   }
 
-  // Dienstleistung
+  // Dienstleistung & Haushalt
   if (
-    /wirt|kellner|maid|mädchen|magd|koch|friseur|herberg|bote|butler|haus/i.test(title)
+    /diener|zofe|wirt|kellner|maid|mädchen|magd|koch|friseur|herberg|bote|butler|haus/i.test(title)
   ) {
     return "dienstleistung";
   }
@@ -898,7 +898,14 @@ export function getArchetypeKeyForJob(jobTitle: string): string {
   return "handwerk"; // Default to handwerk
 }
 
+import { getDetailedDutiesForJobAndTier } from '../lib/professionDutiesDetailed';
+
 export function getDutiesForProfessionAndLevel(jobTitle: string, level: string): string[] {
+  const detailed = getDetailedDutiesForJobAndTier(jobTitle, level);
+  if (detailed && detailed.length > 0) {
+    return detailed;
+  }
+
   const key = getArchetypeKeyForJob(jobTitle);
   const archetype = DUTIES_BY_ARCHETYPE[key];
   if (!archetype) return [];

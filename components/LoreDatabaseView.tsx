@@ -1808,7 +1808,28 @@ const LoreDatabaseView: React.FC<Props> = ({
             pointsOfInterest: data.pointsOfInterest || prev.pointsOfInterest,
             dungeons: data.dungeons || prev.dungeons,
             magicPlaces: data.magicPlaces || prev.magicPlaces,
-            naturalWonders: data.naturalWonders || prev.naturalWonders
+            naturalWonders: data.naturalWonders || prev.naturalWonders,
+            // Feudale Ordnung & Hierarchie
+            rulingTitle: data.rulingTitle || prev.rulingTitle,
+            overlord: data.overlord || prev.overlord,
+            feudalRank: data.feudalRank || prev.feudalRank,
+            lawEnforcement: data.lawEnforcement || prev.lawEnforcement,
+            // Militär, Wehrkraft & Schutz
+            combatReadyPopulation: data.combatReadyPopulation || prev.combatReadyPopulation,
+            standingArmy: data.standingArmy || prev.standingArmy,
+            militiaAndConscripts: data.militiaAndConscripts || prev.militiaAndConscripts,
+            defenseStructures: data.defenseStructures || prev.defenseStructures,
+            armamentAndSupply: data.armamentAndSupply || prev.armamentAndSupply,
+            // Wirtschaft, Berufe & Aufgaben
+            dailyJobs: data.dailyJobs || prev.dailyJobs,
+            localTasks: data.localTasks || prev.localTasks,
+            tradeGoods: data.tradeGoods || prev.tradeGoods,
+            tradeDemands: data.tradeDemands || prev.tradeDemands,
+            merchantsAndFairs: data.merchantsAndFairs || prev.merchantsAndFairs,
+            tradeContracts: data.tradeContracts || prev.tradeContracts,
+            // Navigation & Zuwege
+            accessRoutes: data.accessRoutes || prev.accessRoutes,
+            travelDangers: data.travelDangers || prev.travelDangers
           };
         } else {
           return {
@@ -1849,7 +1870,28 @@ const LoreDatabaseView: React.FC<Props> = ({
             pointsOfInterest: data.pointsOfInterest || '',
             dungeons: data.dungeons || '',
             magicPlaces: data.magicPlaces || '',
-            naturalWonders: data.naturalWonders || ''
+            naturalWonders: data.naturalWonders || '',
+            // Feudale Ordnung & Hierarchie
+            rulingTitle: data.rulingTitle || '',
+            overlord: data.overlord || '',
+            feudalRank: data.feudalRank || '',
+            lawEnforcement: data.lawEnforcement || '',
+            // Militär, Wehrkraft & Schutz
+            combatReadyPopulation: data.combatReadyPopulation || '',
+            standingArmy: data.standingArmy || '',
+            militiaAndConscripts: data.militiaAndConscripts || '',
+            defenseStructures: data.defenseStructures || '',
+            armamentAndSupply: data.armamentAndSupply || '',
+            // Wirtschaft, Berufe & Aufgaben
+            dailyJobs: data.dailyJobs || '',
+            localTasks: data.localTasks || '',
+            tradeGoods: data.tradeGoods || '',
+            tradeDemands: data.tradeDemands || '',
+            merchantsAndFairs: data.merchantsAndFairs || '',
+            tradeContracts: data.tradeContracts || '',
+            // Navigation & Zuwege
+            accessRoutes: data.accessRoutes || '',
+            travelDangers: data.travelDangers || ''
           };
         }
       });

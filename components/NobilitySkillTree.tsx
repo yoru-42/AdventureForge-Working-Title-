@@ -722,17 +722,6 @@ export const NobilitySkillTree: React.FC<NobilitySkillTreeProps> = ({
               {isHeld ? <X className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
               <span>{isHeld ? 'Titel ablegen' : 'Titel annehmen'}</span>
             </button>
-
-            {/* Single-Click Close Button */}
-            <button
-              type="button"
-              onClick={() => setInspectingNodeId(null)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border border-slate-700 ml-1"
-              title="Details schließen"
-            >
-              <X className="w-3.5 h-3.5 text-amber-400" />
-              <span>Schließen</span>
-            </button>
           </div>
         </div>
 

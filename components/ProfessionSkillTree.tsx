@@ -15,7 +15,9 @@ import {
 } from '../types';
 import { PRESET_NOBILITY_TITLES } from '../services/positionService';
 import { getCatalogCompetenciesForProfession } from '../lib/professionCompetencies';
+import { getCompetenciesForJobTier } from '../lib/professionTierCompetenciesData';
 import { calculateCompetencyProgress } from '../services/professionCompetencyService';
+import { getDetailedDutiesForJobAndTier } from '../lib/professionDutiesDetailed';
 import EverydaySkillsSelect, { parseEverydaySkills } from './EverydaySkillsSelect';
 import {
   Check,
@@ -31,7 +33,8 @@ import {
   Layers,
   Compass,
   ArrowRight,
-  ArrowDown
+  ArrowDown,
+  ClipboardList
 } from 'lucide-react';
 
 export interface ProfessionSkillTreeProps {
@@ -426,57 +429,70 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
     const isRoot = node.tier === 'einstieg';
     let baseList: { name: string; category: string; defaultScore: number; defaultTalent: number }[] = [];
 
-    if (isRoot) {
-      baseList = [
-        { name: 'Arbeitsplatz vorbereiten', category: 'Grundlagen', defaultScore: 68, defaultTalent: 3 },
-        { name: 'Werkzeuge sicher benutzen', category: 'Grundlagen', defaultScore: 75, defaultTalent: 4 },
-        { name: 'einfache Tätigkeiten', category: 'Grundlagen', defaultScore: 62, defaultTalent: 3 },
-        { name: 'Materialkunde & Lagerung', category: 'Grundlagen', defaultScore: 54, defaultTalent: 3 }
-      ];
+    // 1. If node has suggestedCompetencies (already tailored per job & tier), use them!
+    if (node.suggestedCompetencies && node.suggestedCompetencies.length > 0) {
+      baseList = node.suggestedCompetencies.map((name, idx) => ({
+        name,
+        category: idx < 2 ? 'Grundlagen' : 'Fachpraxis',
+        defaultScore: isRoot ? 60 : 50,
+        defaultTalent: 3
+      }));
     } else {
-      const catalogEntries = getCatalogCompetenciesForProfession(node.name);
-      if (catalogEntries.length > 0) {
-        baseList = catalogEntries.slice(0, 7).map(c => ({
-          name: c.name,
-          category: c.category === 'Grundlage' ? 'Grundlagen' : c.category,
-          defaultScore: c.category === 'Grundlage' ? 65 : 45,
-          defaultTalent: 3
-        }));
-      } else if (node.suggestedCompetencies && node.suggestedCompetencies.length > 0) {
-        baseList = node.suggestedCompetencies.map(name => ({
+      const tierRank = node.rankOrder ?? (node.tier === 'einstieg' ? 0 : node.tier === 'beruf' ? 1 : node.tier === 'spezialisierung' ? 2 : 3);
+      const tierComps = getCompetenciesForJobTier(node.name || currentProfession, tierRank, fieldId);
+      if (tierComps.length > 0) {
+        baseList = tierComps.map(name => ({
           name,
-          category: 'Grundlagen',
-          defaultScore: 55,
+          category: isRoot ? 'Grundlagen' : 'Fachpraxis',
+          defaultScore: isRoot ? 60 : 50,
           defaultTalent: 3
         }));
       } else {
-        baseList = [
-          { name: `${node.name} Grundlagen`, category: 'Grundlagen', defaultScore: 50, defaultTalent: 3 },
-          { name: `Werkzeuge & Techniken`, category: 'Grundlagen', defaultScore: 50, defaultTalent: 3 }
-        ];
+        const catalogEntries = getCatalogCompetenciesForProfession(node.name);
+        if (catalogEntries.length > 0) {
+          baseList = catalogEntries.slice(0, 6).map(c => ({
+            name: c.name,
+            category: c.category === 'Grundlage' ? 'Grundlagen' : c.category,
+            defaultScore: c.category === 'Grundlage' ? 65 : 45,
+            defaultTalent: 3
+          }));
+        } else {
+          baseList = [
+            { name: `${node.name} Grundlagen`, category: 'Grundlagen', defaultScore: 50, defaultTalent: 3 },
+            { name: `Fachpraxis & Arbeitsorganisation`, category: 'Grundlagen', defaultScore: 50, defaultTalent: 3 }
+          ];
+        }
       }
     }
 
-    const compItems: NodeCompetencyItem[] = baseList.map(item => {
+    const compItems: NodeCompetencyItem[] = [];
+    const seenCompNames = new Set<string>();
+
+    for (const item of baseList) {
+      const norm = item.name.trim().toLowerCase();
+      if (seenCompNames.has(norm)) continue;
+      seenCompNames.add(norm);
+
       const match = competencies.find(
         c => c.name.toLowerCase() === item.name.toLowerCase() || c.name.toLowerCase().includes(item.name.toLowerCase())
       );
       if (match) {
-        return {
+        compItems.push({
           name: match.name,
           proficiency: match.proficiency,
           category: item.category,
           talent: match.talent ?? item.defaultTalent,
           raw: match
-        };
+        });
+      } else {
+        compItems.push({
+          name: item.name,
+          proficiency: item.defaultScore,
+          category: item.category,
+          talent: item.defaultTalent
+        });
       }
-      return {
-        name: item.name,
-        proficiency: item.defaultScore,
-        category: item.category,
-        talent: item.defaultTalent
-      };
-    });
+    }
 
     const userMatches = competencies.filter(
       c =>
@@ -484,7 +500,9 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
         (c.professionId && c.professionId.toLowerCase() === node.name.toLowerCase())
     );
     for (const uc of userMatches) {
-      if (!compItems.some(ci => ci.name.toLowerCase() === uc.name.toLowerCase())) {
+      const norm = uc.name.trim().toLowerCase();
+      if (!seenCompNames.has(norm)) {
+        seenCompNames.add(norm);
         compItems.push({
           name: uc.name,
           proficiency: uc.proficiency,
@@ -496,36 +514,130 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
       }
     }
 
+    // Distinct domain-specific aptitudes / talents (never duplicating competency names)
     let talentItems: NodeTalentItem[] = [];
-    if (isRoot) {
+    const lowerNode = (node.name || '').toLowerCase();
+
+    if (lowerNode.includes('kraut') || lowerNode.includes('kraeuter') || lowerNode.includes('pflanz')) {
       talentItems = [
-        { name: 'Handgeschick', score: 3 },
-        { name: 'Lernfähigkeit', score: 4 },
-        { name: 'Sorgfalt', score: 3 }
+        { name: 'Pflanzenkunde & Erkennungsgabe', score: 4 },
+        { name: 'Geruchssinn & Kräutergespür', score: 5 },
+        { name: 'Rezepturgefühl & Dosierung', score: 3 }
       ];
-    } else if (node.name.toLowerCase().includes('koch')) {
+    } else if (lowerNode.includes('schütz') || lowerNode.includes('jaeger') || lowerNode.includes('jäger') || lowerNode.includes('falkner')) {
       talentItems = [
-        { name: 'Fleischgerichte', score: 3 },
-        { name: 'Saucen', score: 5 },
-        { name: 'Gemüse schneiden', score: 4 }
+        { name: 'Ruhige Hand & Zielsicherheit', score: 5 },
+        { name: 'Entfernungsschätzung', score: 4 },
+        { name: 'Waidmännische Geduld', score: 3 }
       ];
-    } else if (node.name.toLowerCase().includes('schmied')) {
+    } else if (lowerNode.includes('koch') || lowerNode.includes('küche')) {
       talentItems = [
-        { name: 'Hammerschlag', score: 4 },
-        { name: 'Feuergefühl', score: 5 },
-        { name: 'Formgebung', score: 3 }
+        { name: 'Geschmackssinn', score: 5 },
+        { name: 'Garmethoden-Gefühl', score: 4 },
+        { name: 'Schnittfertigkeit', score: 3 }
       ];
-    } else if (node.name.toLowerCase().includes('bäcker') || node.name.toLowerCase().includes('baecker')) {
+    } else if (lowerNode.includes('schmied') || lowerNode.includes('metall')) {
       talentItems = [
-        { name: 'Teigführung', score: 4 },
-        { name: 'Ofenhitze', score: 5 },
+        { name: 'Hammerschlag & Präzision', score: 4 },
+        { name: 'Feuergefühl & Glutbeurteilung', score: 5 },
+        { name: 'Formgebung & Augenmaß', score: 3 }
+      ];
+    } else if (lowerNode.includes('bäcker') || lowerNode.includes('baecker')) {
+      talentItems = [
+        { name: 'Teigführung & Gärgefühl', score: 4 },
+        { name: 'Ofenhitze & Backzeit', score: 5 },
         { name: 'Rezepturgefühl', score: 3 }
       ];
+    } else if (lowerNode.includes('winzer') || lowerNode.includes('kelter') || lowerNode.includes('wein')) {
+      talentItems = [
+        { name: 'Verkostungssinn & Bukettbeurteilung', score: 5 },
+        { name: 'Rebengefühl & Schnittpraxis', score: 4 },
+        { name: 'Kellerwitterung & Gärungsgespür', score: 4 }
+      ];
+    } else if (lowerNode.includes('brauer') || lowerNode.includes('bier')) {
+      talentItems = [
+        { name: 'Maischegefühl & Läuterblick', score: 4 },
+        { name: 'Hopfennase & Aromenprüfung', score: 5 },
+        { name: 'Sudhaussinn & Reifekontrolle', score: 3 }
+      ];
+    } else if (lowerNode.includes('arzt') || lowerNode.includes('heiler') || lowerNode.includes('chirurg') || lowerNode.includes('feldscher')) {
+      talentItems = [
+        { name: 'Diagnoseblick & Tastsinn', score: 5 },
+        { name: 'Ruhige Hände bei Eingriffen', score: 4 },
+        { name: 'Einfühlungsvermögen & Sorgfalt', score: 4 }
+      ];
+    } else if (lowerNode.includes('alchem') || lowerNode.includes('apothek')) {
+      talentItems = [
+        { name: 'Substanzgespür & Reinheitsblick', score: 5 },
+        { name: 'Destillationsgefühl', score: 4 },
+        { name: 'Präzisionswägung', score: 3 }
+      ];
+    } else if (lowerNode.includes('magi') || lowerNode.includes('arkan') || lowerNode.includes('zauber')) {
+      talentItems = [
+        { name: 'Mana-Fokus & Resonanz', score: 5 },
+        { name: 'Spruchfluss & Gestik', score: 4 },
+        { name: 'Arkanes Vorstellungsvermögen', score: 3 }
+      ];
+    } else if (lowerNode.includes('soldat') || lowerNode.includes('krieg') || lowerNode.includes('garde')) {
+      talentItems = [
+        { name: 'Kampfreflex & Reaktion', score: 4 },
+        { name: 'Klingenführung & Parade', score: 4 },
+        { name: 'Standfestigkeit & Zähigkeit', score: 5 }
+      ];
+    } else if (lowerNode.includes('dieb') || lowerNode.includes('schurke') || lowerNode.includes('spion')) {
+      talentItems = [
+        { name: 'Fingerspitzengefühl & Tasten', score: 5 },
+        { name: 'Schattenschritt & Lautlosigkeit', score: 4 },
+        { name: 'Wachsamkeit & Umgebungssinn', score: 4 }
+      ];
+    } else if (lowerNode.includes('seemann') || lowerNode.includes('matros') || lowerNode.includes('schiff')) {
+      talentItems = [
+        { name: 'Gleichgewicht bei Seegang', score: 5 },
+        { name: 'Wettergespür & Windrichtung', score: 4 },
+        { name: 'Tauwerksinn & Schwindelfreiheit', score: 4 }
+      ];
+    } else if (lowerNode.includes('kauf') || lowerNode.includes('händl')) {
+      talentItems = [
+        { name: 'Verhandlungsgeschick & Rhetorik', score: 5 },
+        { name: 'Warenblick & Wertermittlung', score: 4 },
+        { name: 'Menschenkenntnis', score: 4 }
+      ];
+    } else if (lowerNode.includes('schreib') || lowerNode.includes('notar') || lowerNode.includes('kanzl')) {
+      talentItems = [
+        { name: 'Kalligraphiefluss & Federführung', score: 5 },
+        { name: 'Urkundensinn & Rechtsverständnis', score: 4 },
+        { name: 'Sprachgefühl & Orthographie', score: 4 }
+      ];
+    } else if (lowerNode.includes('diener') || lowerNode.includes('butler') || lowerNode.includes('zofe')) {
+      talentItems = [
+        { name: 'Aufrechte Haltung & Etikette', score: 5 },
+        { name: 'Diskrete Aufmerksamkeit', score: 5 },
+        { name: 'Tafelordnung & Blick für Details', score: 4 }
+      ];
+    } else if (lowerNode.includes('steinmetz') || lowerNode.includes('maurer') || lowerNode.includes('zimmer')) {
+      talentItems = [
+        { name: 'Räumliches Vorstellungsvermögen', score: 5 },
+        { name: 'Schlagkraft & Meißelführung', score: 4 },
+        { name: 'Lot- und Winkelgenauigkeit', score: 4 }
+      ];
+    } else if (lowerNode.includes('schneider') || lowerNode.includes('weber') || lowerNode.includes('gerber')) {
+      talentItems = [
+        { name: 'Fingerspitzengefühl & Nadeltechnik', score: 5 },
+        { name: 'Schnittmuster-Vorstellung', score: 4 },
+        { name: 'Stoff- und Fasergespür', score: 4 }
+      ];
+    } else if (lowerNode.includes('barde') || lowerNode.includes('musiker') || lowerNode.includes('sänger')) {
+      talentItems = [
+        { name: 'Gehör & Harmonielehre', score: 5 },
+        { name: 'Bühnenpräsenz & Ausstrahlung', score: 4 },
+        { name: 'Improvisationstalent', score: 4 }
+      ];
     } else {
-      talentItems = compItems.slice(0, 3).map(ci => ({
-        name: ci.name,
-        score: ci.talent || 3
-      }));
+      talentItems = [
+        { name: 'Handgeschick & Sorgfalt', score: 4 },
+        { name: 'Fachliche Auffassungsgabe', score: 4 },
+        { name: 'Methodische Ausdauer', score: 3 }
+      ];
     }
 
     talentItems = talentItems.map(t => {
@@ -821,17 +933,6 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
                 Als Hauptberuf festlegen
               </button>
             )}
-
-            {/* Prominent Single-Click Close Button */}
-            <button
-              type="button"
-              onClick={() => setInspectingNodeId(null)}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border border-slate-700 ml-1"
-              title="Details schließen"
-            >
-              <X className="w-3.5 h-3.5 text-amber-400" />
-              <span>Schließen</span>
-            </button>
           </div>
         </div>
 
@@ -983,42 +1084,73 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
           </div>
         </div>
 
+        {/* Typische Aufgaben & Pflichten (Passend zum Beruf & Rang) */}
+        {(() => {
+          const nodeDuties = getDetailedDutiesForJobAndTier(node.name || currentProfession || '', node.tier);
+          if (!nodeDuties || nodeDuties.length === 0) return null;
+          return (
+            <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <ClipboardList className="w-3.5 h-3.5 text-amber-400" />
+                <span>Typische Aufgaben & Berufspflichten</span>
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+                {nodeDuties.map((duty, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-start gap-2 text-xs py-1.5 px-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 text-slate-200"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                    <span className="leading-relaxed break-words">{duty}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Fachkompetenzen & Talente */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Kompetenzen */}
           <div className="flex flex-col gap-2">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Zugeordnete Fachkompetenzen
             </span>
-            <div className="flex flex-col gap-1 max-h-48 overflow-y-auto pr-1">
+            <div className="flex flex-col gap-2 overflow-x-hidden">
               {compItems.map(comp => (
                 <div
                   key={comp.name}
-                  className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-950/40 border border-slate-800/60"
+                  className="flex flex-col gap-2 text-xs p-3 rounded-lg bg-slate-950/70 border border-slate-800"
                 >
-                  <span className="text-slate-200 truncate pr-2">{comp.name}</span>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="font-mono text-amber-400 text-xs font-bold w-10 text-right">
-                      {comp.proficiency}%
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleAdjustProficiency(comp.name, -5)}
-                      className="w-4 h-4 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 flex items-center justify-center text-[10px] cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAdjustProficiency(comp.name, +5)}
-                      className="w-4 h-4 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 flex items-center justify-center text-[10px] cursor-pointer"
-                    >
-                      +
-                    </button>
+                  <span className="text-slate-200 font-medium leading-relaxed break-words">
+                    {comp.name}
+                  </span>
+                  <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/60">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded bg-amber-950/50 border border-amber-500/40 font-mono text-amber-300 text-xs font-bold min-w-[3.25rem] text-center">
+                        {comp.proficiency}%
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleAdjustProficiency(comp.name, -5)}
+                        className="w-6 h-6 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 flex items-center justify-center text-xs font-bold cursor-pointer transition active:scale-95"
+                        title="Kompetenzstufe um 5% verringern"
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAdjustProficiency(comp.name, +5)}
+                        className="w-6 h-6 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 flex items-center justify-center text-xs font-bold cursor-pointer transition active:scale-95"
+                        title="Kompetenzstufe um 5% erhöhen"
+                      >
+                        +
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handlePracticeComp(comp)}
-                      className="px-1.5 py-0.5 bg-amber-950/80 hover:bg-amber-800 text-amber-300 rounded text-[10px] font-bold transition cursor-pointer"
+                      className="px-3 py-1 bg-amber-900/60 hover:bg-amber-800 text-amber-200 border border-amber-600/40 rounded text-[11px] font-bold transition cursor-pointer active:scale-95 whitespace-nowrap"
                       title="35 XP durch praktische Übung"
                     >
                       Üben
@@ -1034,45 +1166,39 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Berufstalente & Begabungen
             </span>
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2 overflow-x-hidden">
               {talentItems.map(t => (
                 <div
                   key={t.name}
-                  className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-slate-950/40 border border-slate-800/60"
+                  className="flex flex-col gap-2 text-xs p-3 rounded-lg bg-slate-950/70 border border-slate-800"
                 >
-                  <span className="text-slate-300 truncate pr-2">{t.name}</span>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {[1, 2, 3, 4, 5].map(starNum => (
-                      <button
-                        key={starNum}
-                        type="button"
-                        onClick={() => handleSetTalent(t.name, starNum)}
-                        className="p-0.5 hover:scale-110 transition cursor-pointer"
-                        title={`${starNum}/5 Sterne`}
-                      >
-                        <Star
-                          className={`w-3.5 h-3.5 ${
-                            starNum <= t.score ? 'fill-amber-400 text-amber-400' : 'text-slate-600'
-                          }`}
-                        />
-                      </button>
-                    ))}
+                  <span className="text-slate-200 font-medium leading-relaxed break-words">
+                    {t.name}
+                  </span>
+                  <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/60">
+                    <span className="text-[11px] text-slate-400">Veranlagung:</span>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map(starNum => (
+                        <button
+                          key={starNum}
+                          type="button"
+                          onClick={() => handleSetTalent(t.name, starNum)}
+                          className="p-1 hover:scale-110 transition cursor-pointer"
+                          title={`${starNum}/5 Sterne`}
+                        >
+                          <Star
+                            className={`w-4 h-4 ${
+                              starNum <= t.score ? 'fill-amber-400 text-amber-400' : 'text-slate-600'
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-
-        {/* Footer Close */}
-        <div className="flex justify-end pt-2 border-t border-slate-800">
-          <button
-            type="button"
-            onClick={() => setInspectingNodeId(null)}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-lg transition cursor-pointer"
-          >
-            Details schließen
-          </button>
         </div>
       </div>
     );
