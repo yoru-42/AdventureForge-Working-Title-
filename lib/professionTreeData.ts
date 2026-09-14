@@ -1,16 +1,62 @@
-import { ProfessionCompetency, ProfessionExperience, ProfessionProgress } from '../types';
+import { ProfessionCompetency, ProfessionExperience, ProfessionProgress, SecondaryProfession } from '../types';
 import { JOB_CATEGORIES } from '../components/jobPresets';
 import { getBranchesForField, convertProgressionToNodes } from './professionProgressionData';
 
+export type ProfessionNodeType =
+  | 'training'
+  | 'profession'
+  | 'specialization'
+  | 'advanced_profession'
+  | 'promotion'
+  | 'leadership';
+
 export type ProfessionNodeTier = 'einstieg' | 'beruf' | 'spezialisierung' | 'meister';
 
+export type ProfessionPrerequisiteType =
+  | 'profession'
+  | 'specialization'
+  | 'competence'
+  | 'competency'
+  | 'experience'
+  | 'experience_years'
+  | 'attribute'
+  | 'equipment'
+  | 'knowledge'
+  | 'location'
+  | 'institution'
+  | 'mentor'
+  | 'title'
+  | 'position'
+  | 'story_requirement'
+  | 'rank'
+  | 'social_recognition'
+  | 'exam_or_master';
+
 export interface ProfessionPrerequisite {
-  type: 'profession' | 'experience_years' | 'competency' | 'rank' | 'social_recognition' | 'exam_or_master';
+  type: ProfessionPrerequisiteType;
   label: string;
+  id?: string;
   targetId?: string;
+  targetFieldId?: string;
+  targetFieldName?: string;
   minValue?: number;
+  value?: number;
   description?: string;
+  required?: boolean; // true by default (hard vs soft requirement)
 }
+
+export interface EvaluatedPrerequisite {
+  prerequisite: ProfessionPrerequisite;
+  isFulfilled: boolean;
+  detail: string;
+  isHard: boolean;
+  crossField?: {
+    fieldId: string;
+    fieldName: string;
+  };
+}
+
+export type NodeStatus = 'learned' | 'unlocked' | 'locked' | 'training';
 
 export interface ProfessionCareerRoute {
   id: string;
@@ -24,6 +70,7 @@ export interface ProfessionTreeNode {
   id: string;
   fieldId: string;
   name: string;
+  nodeType?: ProfessionNodeType;
   tier: ProfessionNodeTier;
   parentIds: string[];
   childIds: string[];
@@ -38,6 +85,12 @@ export interface ProfessionTreeNode {
   rankTitle?: string;
   nextRankProfession?: string;
   previousRankProfession?: string;
+  competenceIds?: string[];
+  specializationIds?: string[];
+  unlocks?: string[];
+  isMainProfession?: boolean;
+  isSecondaryProfession?: boolean;
+  positionTitle?: string;
 }
 
 export interface ProfessionTreeField {
@@ -49,14 +102,20 @@ export interface ProfessionTreeField {
 }
 
 export interface NodeEvaluationResult {
+  status: NodeStatus;
   isAvailable: boolean;
   isActive: boolean;
+  isLearned: boolean;
   missingPrerequisites: string[];
   fulfilledPrerequisites: string[];
+  softPrerequisites: EvaluatedPrerequisite[];
+  allEvaluations: EvaluatedPrerequisite[];
 }
 
 /**
- * Evaluates whether a character meets the prerequisites for a specific tree node.
+ * Evaluates whether a character meets the prerequisites for a specific tree node,
+ * taking into account main profession, secondary professions, cross-branch requirements,
+ * competencies, experience years, and hard vs. soft requirements.
  */
 export function evaluateNodePrerequisites(
   node: ProfessionTreeNode,
@@ -65,6 +124,8 @@ export function evaluateNodePrerequisites(
     professionField?: string;
     professionSpecialization?: string;
     professionRank?: string;
+    secondaryProfessions?: (SecondaryProfession | string)[];
+    additionalDirections?: string[];
     experienceYears?: number;
     competencies?: ProfessionCompetency[];
   }
@@ -73,63 +134,145 @@ export function evaluateNodePrerequisites(
   const currentSpec = (currentCharacter.professionSpecialization || '').toLowerCase().trim();
   const nodeNameLower = node.name.toLowerCase().trim();
 
-  // Active check
-  const isActive = currentProf === nodeNameLower || currentSpec === nodeNameLower || (node.tier === 'einstieg' && !currentProf);
+  // Extract all learned professions and directions
+  const learnedProfessions = new Set<string>();
+  if (currentProf) learnedProfessions.add(currentProf);
+  if (currentSpec) learnedProfessions.add(currentSpec);
+
+  if (Array.isArray(currentCharacter.secondaryProfessions)) {
+    currentCharacter.secondaryProfessions.forEach(sp => {
+      if (typeof sp === 'string') {
+        learnedProfessions.add(sp.toLowerCase().trim());
+      } else if (sp && typeof sp === 'object') {
+        if (sp.profession) learnedProfessions.add(sp.profession.toLowerCase().trim());
+        if (sp.specialization) learnedProfessions.add(sp.specialization.toLowerCase().trim());
+        if (sp.jobTitle) learnedProfessions.add(sp.jobTitle.toLowerCase().trim());
+      }
+    });
+  }
+
+  if (Array.isArray(currentCharacter.additionalDirections)) {
+    currentCharacter.additionalDirections.forEach(dir => {
+      if (typeof dir === 'string') {
+        learnedProfessions.add(dir.toLowerCase().trim());
+      }
+    });
+  }
+
+  // Active & Learned check
+  const isMain = currentProf === nodeNameLower || (node.tier === 'einstieg' && !currentProf);
+  const isLearned = isMain || learnedProfessions.has(nodeNameLower);
 
   const missingPrerequisites: string[] = [];
   const fulfilledPrerequisites: string[] = [];
-
-  if (node.tier === 'einstieg' || node.prerequisites.length === 0) {
-    return {
-      isAvailable: true,
-      isActive,
-      missingPrerequisites: [],
-      fulfilledPrerequisites: ['Keine Vorbedingungen erforderlich']
-    };
-  }
+  const softPrerequisites: EvaluatedPrerequisite[] = [];
+  const allEvaluations: EvaluatedPrerequisite[] = [];
 
   const expYears = currentCharacter.experienceYears || 0;
   const comps = currentCharacter.competencies || [];
 
   for (const req of node.prerequisites) {
-    if (req.type === 'experience_years') {
-      const minYears = req.minValue || 1;
+    const isHard = req.required !== false;
+    let isFulfilled = false;
+    let detail = '';
+
+    const crossField = req.targetFieldId
+      ? {
+          fieldId: req.targetFieldId,
+          fieldName: req.targetFieldName || req.targetFieldId
+        }
+      : undefined;
+
+    if (req.type === 'experience_years' || req.type === 'experience') {
+      const minYears = req.minValue || req.value || 1;
       if (expYears >= minYears) {
-        fulfilledPrerequisites.push(`Berufserfahrung: ${expYears}/${minYears} Jahre`);
+        isFulfilled = true;
+        detail = `Berufserfahrung: ${expYears}/${minYears} Jahre`;
       } else {
-        missingPrerequisites.push(`Mindestens ${minYears} ${minYears === 1 ? 'Jahr' : 'Jahre'} Berufserfahrung erforderlich (aktuell: ${expYears} J.)`);
+        isFulfilled = false;
+        detail = `Mindestens ${minYears} ${minYears === 1 ? 'Jahr' : 'Jahre'} Berufserfahrung erforderlich (aktuell: ${expYears} J.)`;
       }
-    } else if (req.type === 'profession') {
-      const target = (req.targetId || '').toLowerCase();
-      const match = currentProf.includes(target) || (target.length >= 4 && target.includes(currentProf));
+    } else if (req.type === 'profession' || req.type === 'specialization') {
+      const target = (req.targetId || req.label || '').toLowerCase().trim();
+      const match = Array.from(learnedProfessions).some(
+        lp => lp === target || lp.includes(target) || (target.length >= 4 && target.includes(lp))
+      );
       if (match) {
-        fulfilledPrerequisites.push(`Basisberuf: ${req.label}`);
+        isFulfilled = true;
+        detail = `Basisberuf „${req.label}“ erlernt`;
       } else {
-        missingPrerequisites.push(`Basisberuf „${req.label}“ erforderlich`);
+        isFulfilled = false;
+        if (crossField) {
+          detail = `Basisberuf „${req.label}“ (benötigt aus Berufszweig ${crossField.fieldName})`;
+        } else {
+          detail = `Basisberuf „${req.label}“ erforderlich`;
+        }
       }
-    } else if (req.type === 'competency') {
-      const minScore = req.minValue || 50;
-      const target = (req.targetId || '').toLowerCase();
-      const foundComp = comps.find(c => c.name.toLowerCase().includes(target));
+    } else if (req.type === 'competence' || req.type === 'competency') {
+      const minScore = req.minValue || req.value || 40;
+      const target = (req.targetId || req.label || '').toLowerCase().trim();
+      const foundComp = comps.find(c => c.name.toLowerCase().includes(target) || target.includes(c.name.toLowerCase()));
       if (foundComp && (foundComp.proficiency || 0) >= minScore) {
-        fulfilledPrerequisites.push(`Kompetenz „${foundComp.name}“ ≥ ${minScore}% (aktuell: ${foundComp.proficiency}%)`);
+        isFulfilled = true;
+        detail = `Kompetenz „${foundComp.name}“ ≥ ${minScore}% (aktuell: ${foundComp.proficiency}%)`;
       } else if (foundComp) {
-        missingPrerequisites.push(`Kompetenz „${foundComp.name}“ benötigt ${minScore}% (aktuell: ${foundComp.proficiency}%)`);
+        isFulfilled = false;
+        detail = `Kompetenz „${foundComp.name}“ benötigt ${minScore}% (aktuell: ${foundComp.proficiency}%)`;
       } else {
-        missingPrerequisites.push(`Kompetenz „${req.label}“ (min. ${minScore}%) noch nicht erlernt`);
+        isFulfilled = false;
+        if (crossField) {
+          detail = `Kompetenz „${req.label}“ (min. ${minScore}%, benötigt aus Berufszweig ${crossField.fieldName})`;
+        } else {
+          detail = `Kompetenz „${req.label}“ (min. ${minScore}%) noch nicht erlernt`;
+        }
       }
-    } else if (req.type === 'rank') {
-      fulfilledPrerequisites.push(req.label);
     } else {
-      fulfilledPrerequisites.push(req.label);
+      // General or soft requirement
+      isFulfilled = true;
+      detail = req.label;
+    }
+
+    const evalItem: EvaluatedPrerequisite = {
+      prerequisite: req,
+      isFulfilled,
+      detail,
+      isHard,
+      crossField
+    };
+
+    allEvaluations.push(evalItem);
+
+    if (isHard) {
+      if (isFulfilled) {
+        fulfilledPrerequisites.push(detail);
+      } else {
+        missingPrerequisites.push(detail);
+      }
+    } else {
+      softPrerequisites.push(evalItem);
     }
   }
 
+  const isAvailable = missingPrerequisites.length === 0;
+
+  let status: NodeStatus = 'locked';
+  if (isLearned) {
+    status = 'learned';
+  } else if (isAvailable) {
+    status = node.nodeType === 'training' ? 'training' : 'unlocked';
+  } else {
+    status = 'locked';
+  }
+
   return {
-    isAvailable: missingPrerequisites.length === 0,
-    isActive,
+    status,
+    isAvailable,
+    isActive: isMain,
+    isLearned,
     missingPrerequisites,
-    fulfilledPrerequisites
+    fulfilledPrerequisites,
+    softPrerequisites,
+    allEvaluations
   };
 }
 

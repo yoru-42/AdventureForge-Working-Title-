@@ -1,4 +1,4 @@
-import { ProfessionTreeNode, ProfessionNodeTier } from './professionTreeData';
+import { ProfessionTreeNode, ProfessionNodeTier, ProfessionNodeType, ProfessionPrerequisite } from './professionTreeData';
 import { JOB_CATEGORIES } from '../components/jobPresets';
 import { getTierCompetencySetForJob } from './professionTierCompetenciesData';
 
@@ -6,14 +6,23 @@ export interface ProfessionRankStep {
   idSuffix: string;
   name: string;
   tier: ProfessionNodeTier;
-  rankOrder: number; // 0 = Lehrling, 1 = Geselle/Grundstufe, 2 = Spezialisierung/Beförderung, 3 = Meisterstufe
+  nodeType?: ProfessionNodeType;
+  rankOrder: number; // 0 = Ausbildung/Lehrling, 1 = Basisberuf, 2 = Spezialisierung/Fachberuf, 3 = Meister/Leitung
   rankTitle: string;
   description: string;
   suggestedCompetencies: string[];
   possibleRanks: string[];
   requiredExperienceYears?: number;
   prerequisiteJobName?: string;
+  prerequisites?: ProfessionPrerequisite[];
+  crossBranchRequirements?: {
+    fieldId: string;
+    fieldName: string;
+    competencyName?: string;
+    professionName?: string;
+  }[];
   nextRankName?: string;
+  positionTitle?: string;
 }
 
 export interface ProfessionBranchProgression {
@@ -885,62 +894,85 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
   },
 
   // ===========================================================================
-  // SEEFAHRT (seefahrt)
+  // SEEFAHRT & NAVIGATION (seefahrt)
   // ===========================================================================
   seemann: {
     branchKey: 'seemann',
     branchName: 'Seemann',
-    category: 'Seemann',
-    description: 'Hochseeschifffahrt, Takelageklettern, Rudern, Knoten und Sturmbeherrschung.',
+    category: 'Nautik & Schifffahrt',
+    description: 'Befahrung der Meere, Segelführung, Takelage, Seemannschaft und nautische Führung.',
     ranks: [
       {
-        idSuffix: 'lehrling',
-        name: 'Schiffsjunge & Decksbursche',
+        idSuffix: 'schiffsjunge',
+        name: 'Schiffsjunge & Leichtmatrose',
         tier: 'einstieg',
+        nodeType: 'training',
         rankOrder: 0,
-        rankTitle: 'Einstieg & Takelagedienst',
-        description: 'Decks schrubben, Tauwerk aufschießen, Rumpfkalfaterung und Segel hissen.',
-        suggestedCompetencies: ['Knotenkunde', 'Decksdienst', 'Bilgenpumpen', 'Takelageklettern'],
-        possibleRanks: ['Schiffsjunge', 'Decksbursche'],
-        nextRankName: 'Leichtmatrose'
+        rankTitle: 'Seefahrtsanwärter',
+        description: 'Deck schrubben, Taue aufschießen, Segel bergen, Ausguck halten und Seemannsknoten schlagen.',
+        suggestedCompetencies: ['Knotenkunde', 'Takelage klettern', 'Segelbedienung', 'Ausguckdienst'],
+        possibleRanks: ['Schiffsjunge', 'Kajütenwächter', 'Leichtmatrose'],
+        nextRankName: 'Matrose / Seemann'
       },
       {
-        idSuffix: 'geselle',
-        name: 'Leichtmatrose',
+        idSuffix: 'matrose',
+        name: 'Matrose / Seemann',
         tier: 'beruf',
+        nodeType: 'profession',
         rankOrder: 1,
-        rankTitle: 'Wachdienst & Decksarbeit',
-        description: 'Selbstständige Seemannschaft, Ausguck, Reffen bei Seegang und Beibootführung.',
-        suggestedCompetencies: ['Segel setzen', 'Ausguck & Wetterzeichen', 'Rudergehen', 'Kabelgattpflege'],
-        possibleRanks: ['Matrose', 'Vollmatrose'],
+        rankTitle: 'Vollmatrose & Seemann',
+        description: 'Wetterfeste Schiffsbedienung, Rudergänger, Segeltrimmen und Beidrehen bei Sturm.',
+        suggestedCompetencies: ['Seemannschaft', 'Ruderdienst', 'Sturmsicherung', 'Takelagereparatur'],
+        possibleRanks: ['Vollmatrose', 'Bootsmannsmaat', 'Seemann'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Schiffsjunge & Decksbursche',
-        nextRankName: 'Vollmatrose & Bootsmann'
+        prerequisiteJobName: 'Schiffsjunge & Leichtmatrose',
+        nextRankName: 'Erfahrener Seemann'
       },
       {
-        idSuffix: 'bootsmann',
-        name: 'Vollmatrose & Bootsmann',
+        idSuffix: 'erfahrener_seemann',
+        name: 'Erfahrener Seemann',
         tier: 'spezialisierung',
+        nodeType: 'advanced_profession',
         rankOrder: 2,
-        rankTitle: 'Takelageführung & Segelaufsicht',
-        description: 'Leitung der Wachen, Havariebekämpfung, Anker- und Takelagemeisterschaft auf hoher See.',
-        suggestedCompetencies: ['Bootsmannswache', 'Havariebehebung', 'Strömungskunde', 'Decksdisziplin'],
-        possibleRanks: ['Bootsmann', 'Quartiermeister', 'Kabelgattmeister'],
+        rankTitle: 'Befahrener Seemann',
+        description: 'Hochseeerprobter Seemann, Bootsmannsaufgaben, Loten bei Untiefen und Enterkampfführung.',
+        suggestedCompetencies: ['Hochseenavigation', 'Bootsmannsarbeit', 'Nautisches Loten', 'Enterabwehr'],
+        possibleRanks: ['Bootsmann', 'Schirrmeister', 'Altmatrose'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Leichtmatrose',
-        nextRankName: 'Oberbootsmann & Segelmeister'
+        prerequisiteJobName: 'Matrose / Seemann',
+        nextRankName: 'Steuermann'
       },
       {
-        idSuffix: 'segelmeister',
-        name: 'Oberbootsmann & Segelmeister',
+        idSuffix: 'steuermann',
+        name: 'Steuermann',
+        tier: 'spezialisierung',
+        nodeType: 'promotion',
+        rankOrder: 2,
+        rankTitle: 'Navigation & Schiffssteuerung',
+        description: 'Kursberechnung mit Astrolabium und Kompass, Wind- und Strömungsanalyse und Wachführung.',
+        suggestedCompetencies: ['Astronavigation', 'Seekartenlesen', 'Kompasspeilung', 'Wachführung auf See'],
+        possibleRanks: ['Zweiter Steuermann', 'Erster Steuermann', 'Obersteuermann'],
+        requiredExperienceYears: 3,
+        prerequisites: [
+          { type: 'profession', label: 'Matrose / Seemann', targetId: 'Matrose', required: true },
+          { type: 'competence', label: 'Astronavigation & Peilung', targetId: 'Astronavigation', minValue: 50, required: true },
+          { type: 'experience_years', label: '3 Jahre Seefahrtserfahrung', minValue: 3, required: true }
+        ],
+        nextRankName: 'Kapitän / Schiffsführer'
+      },
+      {
+        idSuffix: 'kapitaen',
+        name: 'Kapitän / Schiffsführer',
         tier: 'meister',
+        nodeType: 'leadership',
         rankOrder: 3,
-        rankTitle: 'Decksleitung & Schiffsbetrieb',
-        description: 'Oberste operative Führung des Schiffsbetriebs unter dem Kapitän, Segel- und Ausrüstungsdirektion.',
-        suggestedCompetencies: ['Flottenmanöver', 'Sturmtaktik', 'Schiffsführung', 'Rigg-Konstruktion'],
-        possibleRanks: ['Oberbootsmann', 'Segelmeister', 'Schiffer'],
-        requiredExperienceYears: 4,
-        prerequisiteJobName: 'Vollmatrose & Bootsmann'
+        rankTitle: 'Kapitän / Schiffsführer',
+        description: 'Oberbefehl über Schiff und Besatzung, Schiffsgerichtsbarkeit, Routenwahl und Flottille.',
+        suggestedCompetencies: ['Schiffskommando', 'Reedereiwesen', 'Seekriegsführung', 'Internationales Seerecht'],
+        possibleRanks: ['Schiffskapitän', 'Flottillenkapitän', 'Kommodore'],
+        positionTitle: 'Schiffskommandant / Kapitän',
+        requiredExperienceYears: 5,
+        prerequisiteJobName: 'Steuermann'
       }
     ]
   },
@@ -1368,6 +1400,356 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         possibleRanks: ['Hofgoldschmied', 'Kronjuwelier', 'Oberstmeister der Juwelierzunft'],
         requiredExperienceYears: 4,
         prerequisiteJobName: 'Filigranschmied & Gemmensetzer'
+      }
+    ]
+  },
+
+  // ===========================================================================
+  // MEDIZIN, CHIRURGIE & HEILKUNDE (medizin)
+  // ===========================================================================
+  arzt: {
+    branchKey: 'arzt',
+    branchName: 'Arzt',
+    category: 'Arzt',
+    description: 'Diagnostik, Heilung von Krankheiten, Chirurgie und medizinische Versorgung.',
+    ranks: [
+      {
+        idSuffix: 'ausbildung',
+        name: 'Medizinische Ausbildung',
+        tier: 'einstieg',
+        nodeType: 'training',
+        rankOrder: 0,
+        rankTitle: 'Medizinische Grundausbildung',
+        description: 'Einführung in Anatomie, Kräutertränke, Wundverbände, Desinfektion und Krankenpflege.',
+        suggestedCompetencies: ['Anatomiegrundlagen', 'Wundversorgung', 'Kräuterarzneien', 'Krankenbeobachtung'],
+        possibleRanks: ['Medizinstudent', 'Hospitalfamulus', 'Heilerlehrling'],
+        nextRankName: 'Arzt'
+      },
+      {
+        idSuffix: 'arzt',
+        name: 'Arzt',
+        tier: 'beruf',
+        nodeType: 'profession',
+        rankOrder: 1,
+        rankTitle: 'Praktizierender Arzt',
+        description: 'Selbstständige Behandlung von Kranken, Diagnosefindung, Verordnung von Arzneien und Notfallmedizin.',
+        suggestedCompetencies: ['Diagnostik', 'Krankheitslehre', 'Wundnaht & Verband', 'Toxikologie'],
+        possibleRanks: ['Praktischer Arzt', 'Stadtarzt', 'Hospitalarzt'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Medizinische Ausbildung',
+        nextRankName: 'Chirurg'
+      },
+      {
+        idSuffix: 'chirurg',
+        name: 'Chirurg',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Chirurgie & Schnittkunst',
+        description: 'Operative Eingriffe, Knochenrichten, Geschwür-Exzision und invasive Notfallchirurgie.',
+        suggestedCompetencies: ['Chirurgische Schnittführung', 'Amputation & Gefäßligatur', 'Knochenreposition', 'Schmerzstillung'],
+        possibleRanks: ['Operateur', 'Chirurg', 'Wundchirurg'],
+        requiredExperienceYears: 2,
+        prerequisites: [
+          { type: 'profession', label: 'Arzt', targetId: 'Arzt', required: true },
+          { type: 'competence', label: 'Anatomie & Organlehre', targetId: 'Anatomie', minValue: 50, required: true },
+          { type: 'competence', label: 'Wundversorgung & Aderlass', targetId: 'Wundversorgung', minValue: 50, required: true },
+          { type: 'experience_years', label: '2 Jahre medizinische Praxis', minValue: 2, required: true },
+          { type: 'knowledge', label: 'Praktische Hospitalerfahrung', required: false }
+        ],
+        nextRankName: 'Fachchirurg'
+      },
+      {
+        idSuffix: 'fachchirurg',
+        name: 'Fachchirurg',
+        tier: 'spezialisierung',
+        nodeType: 'advanced_profession',
+        rankOrder: 2,
+        rankTitle: 'Fachchirurg & Operateur',
+        description: 'Schwere thorax- und bauchchirurgische Eingriffe, Schädelöffnungen und Organrekonstruktionen.',
+        suggestedCompetencies: ['Organrekonstruktion', 'Schädelchirurgie', 'Blutstillungstechniken', 'Infektionsprophylaxe'],
+        possibleRanks: ['Fachchirurg', 'Oberoperateur', 'Klinischer Chirurg'],
+        requiredExperienceYears: 3,
+        prerequisiteJobName: 'Chirurg',
+        nextRankName: 'Leitender Chirurg'
+      },
+      {
+        idSuffix: 'leitender_chirurg',
+        name: 'Leitender Chirurg',
+        tier: 'meister',
+        nodeType: 'leadership',
+        rankOrder: 3,
+        rankTitle: 'Leitender Chirurg / Chefarzt',
+        description: 'Leitung der chirurgischen Hospitalabteilung, Ausbildung angehender Chirurgen und Gutachten.',
+        suggestedCompetencies: ['Operationssaalleitung', 'Komplexe Chirurgie', 'Ärztliches Gutachten', 'Klinikorganisation'],
+        possibleRanks: ['Leitender Chirurg', 'Chefarzt der Chirurgie', 'Hospitaldirektor'],
+        positionTitle: 'Leitender Chirurg des Hospitals',
+        requiredExperienceYears: 5,
+        prerequisiteJobName: 'Fachchirurg'
+      },
+      {
+        idSuffix: 'militaerarzt',
+        name: 'Militärarzt & Sanitätsoffizier',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Militärischer Sanitätsdienst',
+        description: 'Verwundetenversorgung auf dem Schlachtfeld, Lazarettorganisation und Seuchenkontrolle im Felde.',
+        suggestedCompetencies: ['Feldlazarett-Logistik', 'Granatsplitter-Extraktion', 'Militärische Triage', 'Feldhygiene'],
+        possibleRanks: ['Feldstabsarzt', 'Regimentsarzt', 'Militärarzt'],
+        requiredExperienceYears: 2,
+        prerequisites: [
+          { type: 'profession', label: 'Arzt', targetId: 'Arzt', required: true },
+          { type: 'competence', label: 'Militärische Feldversorgung', targetId: 'Feldversorgung', targetFieldId: 'militaer', targetFieldName: 'Militär & Sicherheit', minValue: 45, required: true },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2, required: true }
+        ],
+        nextRankName: 'Meisterarzt & Chefarzt'
+      },
+      {
+        idSuffix: 'chefarzt',
+        name: 'Meisterarzt & Chefarzt',
+        tier: 'meister',
+        nodeType: 'leadership',
+        rankOrder: 3,
+        rankTitle: 'Ärztlicher Direktor / Meisterarzt',
+        description: 'Höchste ärztliche Autorität, Aufsicht über alle Heilanstalten der Region und Erforschung neuer Heilmethoden.',
+        suggestedCompetencies: ['Medizinische Forschung', 'Hospitalleitung', 'Epidemiekontrolle', 'Kollegiumsführung'],
+        possibleRanks: ['Chefarzt', 'Ärztlicher Direktor', 'Leibarzt des Herrschers'],
+        positionTitle: 'Ärztlicher Direktor',
+        requiredExperienceYears: 5,
+        prerequisiteJobName: 'Arzt'
+      }
+    ]
+  },
+
+  chirurg: {
+    branchKey: 'chirurg',
+    branchName: 'Chirurg',
+    category: 'Chirurgie',
+    description: 'Spezialdisziplin der operativen Schnittkunst und Organwiederherstellung.',
+    ranks: [
+      {
+        idSuffix: 'ausbildung',
+        name: 'Chirurgische Assistenz',
+        tier: 'einstieg',
+        nodeType: 'training',
+        rankOrder: 0,
+        rankTitle: 'Operationsassistenz',
+        description: 'Instrumentenkunde, Klemmenführung, Nahtmaterial vorbereiten und Wundhaken halten.',
+        suggestedCompetencies: ['Instrumentenführung', 'Blutstillung', 'Sterilisation', 'Nahttechnik'],
+        possibleRanks: ['Chirurgie-Assistent', 'Operationsfamulus'],
+        nextRankName: 'Chirurg'
+      },
+      {
+        idSuffix: 'chirurg',
+        name: 'Chirurg',
+        tier: 'beruf',
+        nodeType: 'profession',
+        rankOrder: 1,
+        rankTitle: 'Operateur & Chirurg',
+        description: 'Eigenständige Durchführung von Schnittoperationen, Knochenrichten und Abszesseröffnungen.',
+        suggestedCompetencies: ['Schnittoperationen', 'Knochenreposition', 'Ligatur', 'Wundverschluss'],
+        possibleRanks: ['Wundchirurg', 'Klinischer Operateur'],
+        requiredExperienceYears: 1,
+        prerequisites: [
+          { type: 'profession', label: 'Arzt', targetId: 'Arzt', required: true },
+          { type: 'competence', label: 'Anatomie', targetId: 'Anatomie', minValue: 45, required: true }
+        ],
+        nextRankName: 'Fachchirurg'
+      },
+      {
+        idSuffix: 'fachchirurg',
+        name: 'Fachchirurg',
+        tier: 'spezialisierung',
+        nodeType: 'advanced_profession',
+        rankOrder: 2,
+        rankTitle: 'Fachchirurg',
+        description: 'Hochspezialisierte Eingriffe an inneren Organen, Thorax und Knochengelenken.',
+        suggestedCompetencies: ['Gelenkrekonstruktion', 'Thoraxeingriffe', 'Feinchirurgie', 'Narkoseführung'],
+        possibleRanks: ['Fachchirurg', 'Oberoperateur'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Chirurg',
+        nextRankName: 'Leitender Chirurg'
+      },
+      {
+        idSuffix: 'leitender_chirurg',
+        name: 'Leitender Chirurg',
+        tier: 'meister',
+        nodeType: 'leadership',
+        rankOrder: 3,
+        rankTitle: 'Leitender Chirurg des Hospitals',
+        description: 'Führung des gesamten Operationstrakts und Ausbildung neuer Generationen von Chirurgen.',
+        suggestedCompetencies: ['Chefarztvisite', 'Krisenintervention', 'Akademische Chirurgie', 'Hospitalleitung'],
+        possibleRanks: ['Leitender Chirurg', 'Chefarzt der Chirurgie'],
+        positionTitle: 'Leitender Chirurg',
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Fachchirurg'
+      }
+    ]
+  },
+
+  heiler: {
+    branchKey: 'heiler',
+    branchName: 'Heiler',
+    category: 'Heilkunde',
+    description: 'Ganzheitliche Naturheilkunde, Kräutertherapie, Wundbehandlung und Pflege.',
+    ranks: [
+      {
+        idSuffix: 'lehrling',
+        name: 'Kräuterheiler-Lehrling',
+        tier: 'einstieg',
+        nodeType: 'training',
+        rankOrder: 0,
+        rankTitle: 'Heiler-Novize',
+        description: 'Pflanzensammeln, Salben rühren, Umschläge wickeln und Bettung Kranker.',
+        suggestedCompetencies: ['Kräutersuche', 'Salbenherstellung', 'Fiebersenkung', 'Pflege'],
+        possibleRanks: ['Heilerlehrling', 'Kräutersammler'],
+        nextRankName: 'Heiler'
+      },
+      {
+        idSuffix: 'heiler',
+        name: 'Heiler',
+        tier: 'beruf',
+        nodeType: 'profession',
+        rankOrder: 1,
+        rankTitle: 'Heilkundiger',
+        description: 'Behandlung von Wunden, Fiebern, Vergiftungen und chronischen Leiden mit Naturheilmitteln.',
+        suggestedCompetencies: ['Naturheilkunde', 'Wundbehandlung', 'Tinkturenbrauen', 'Antidote'],
+        possibleRanks: ['Dorfheiler', 'Heilkundiger', 'Sanitäter'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Kräuterheiler-Lehrling',
+        nextRankName: 'Meisterheiler'
+      },
+      {
+        idSuffix: 'meisterheiler',
+        name: 'Meisterheiler & Chefpfleger',
+        tier: 'meister',
+        nodeType: 'leadership',
+        rankOrder: 3,
+        rankTitle: 'Oberster Heilkundiger',
+        description: 'Vollendetes Wissen um Lebenskräfte, seltene Essenzen und überregionale Heilanstalten.',
+        suggestedCompetencies: ['Meisterkräuterkunde', 'Geist- & Körperregeneration', 'Sanatoriumsleitung', 'Lebenselixiere'],
+        possibleRanks: ['Meisterheiler', 'Großhospitalar', 'Ordensheiler'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Heiler'
+      }
+    ]
+  },
+
+  apotheker: {
+    branchKey: 'apotheker',
+    branchName: 'Apotheker',
+    category: 'Pharmazie & Arzneikunde',
+    description: 'Mischen von Arzneien, Destillaten, Salben und pharmazeutischen Rezepturen.',
+    ranks: [
+      {
+        idSuffix: 'lehrling',
+        name: 'Offizin-Gehilfe',
+        tier: 'einstieg',
+        nodeType: 'training',
+        rankOrder: 0,
+        rankTitle: 'Apothekerlehrling',
+        description: 'Mörsern von Wurzeln, Gläser säubern, Kräuter wiegen und Trockenkammer betreuen.',
+        suggestedCompetencies: ['Mörsertechnik', 'Substanzen wiegen', 'Trocknungsprozesse', 'Offizinordnung'],
+        possibleRanks: ['Apothekerlehrling', 'Offizinbursche'],
+        nextRankName: 'Apotheker'
+      },
+      {
+        idSuffix: 'apotheker',
+        name: 'Apotheker',
+        tier: 'beruf',
+        nodeType: 'profession',
+        rankOrder: 1,
+        rankTitle: 'Pharmazeut & Arzneimeister',
+        description: 'Rezepturgerechtes Ansetzen von Tinkturen, Pillen, Schlaftrunken und Gegengiften.',
+        suggestedCompetencies: ['Arzneizubereitung', 'Destillationsverfahren', 'Pillendrehen', 'Giftstoffkunde'],
+        possibleRanks: ['Apotheker', 'Offizin-Leiter', 'Provisor'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Offizin-Gehilfe',
+        nextRankName: 'Stadtapotheker'
+      },
+      {
+        idSuffix: 'stadtapotheker',
+        name: 'Stadtapotheker & Ratspharmazeut',
+        tier: 'meister',
+        nodeType: 'leadership',
+        rankOrder: 3,
+        rankTitle: 'Aufsichtsrat für Arzneiwesen',
+        description: 'Prüfung aller Heilstoffe der Stadt, Privilegierte Rezepturen und Hofapothekenleitung.',
+        suggestedCompetencies: ['Reichsrezepturen', 'Arzneimonopol', 'Hofpharmazie', 'Gutachterwesen'],
+        possibleRanks: ['Stadtapotheker', 'Hofapotheker', 'Oberoffizinmeister'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Apotheker'
+      }
+    ]
+  },
+
+  // ===========================================================================
+  // BAU & HANDWERK (bau_handwerk)
+  // ===========================================================================
+  zimmermann: {
+    branchKey: 'zimmermann',
+    branchName: 'Zimmermann',
+    category: 'Holzbau & Konstruktion',
+    description: 'Errichtung von Dachstühlen, Fachwerken, Brücken und hölzernen Großkonstruktionen.',
+    ranks: [
+      {
+        idSuffix: 'lehrling',
+        name: 'Zimmermann-Lehrling',
+        tier: 'einstieg',
+        nodeType: 'training',
+        rankOrder: 0,
+        rankTitle: 'Zimmererlehrling',
+        description: 'Balken zurichten, Zapflöcher stemmen, Holznägel schnitzen und Hebezeuge bedienen.',
+        suggestedCompetencies: ['Axtführung', 'Zapfenverbindung', 'Holzsortierung', 'Rüstungsaufbau'],
+        possibleRanks: ['Zimmerlehrling', 'Balkenschneider'],
+        nextRankName: 'Zimmermann'
+      },
+      {
+        idSuffix: 'zimmermann',
+        name: 'Zimmermann',
+        tier: 'beruf',
+        nodeType: 'profession',
+        rankOrder: 1,
+        rankTitle: 'Zimmermann & Holzkonstrukteur',
+        description: 'Konstruktion von Dachstühlen, Wandgebinden, Treppen und tragendem Holzfachwerk.',
+        suggestedCompetencies: ['Dachstuhlabbund', 'Fachwerkbau', 'Statiklehre Holz', 'Holzverbindungstechniken'],
+        possibleRanks: ['Zimmergeselle', 'Wandergeselle', 'Holzbaumeister'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Zimmermann-Lehrling',
+        nextRankName: 'Schiffszimmermann'
+      },
+      {
+        idSuffix: 'schiffszimmermann',
+        name: 'Schiffszimmermann',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Werft- & Schiffsbautechnik',
+        description: 'Biegen von Spanten, Planken kalfatern, Masten setzen und Rumpfreparaturen auf See.',
+        suggestedCompetencies: ['Spantenbau', 'Kalfaterung', 'Dampfbiegen von Hartholz', 'Mastsetzen'],
+        possibleRanks: ['Schiffszimmermann', 'Kalfaterer', 'Dockzimmermann'],
+        requiredExperienceYears: 2,
+        prerequisites: [
+          { type: 'profession', label: 'Zimmermann', targetId: 'Zimmermann', required: true },
+          { type: 'competence', label: 'Schiffskunde & Rumpfbau', targetId: 'Schiffskunde', targetFieldId: 'seefahrt', targetFieldName: 'Seefahrt', minValue: 40, required: true },
+          { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2, required: true }
+        ],
+        nextRankName: 'Zimmermeister & Werftmeister'
+      },
+      {
+        idSuffix: 'zimmermeister',
+        name: 'Zimmermeister & Werftmeister',
+        tier: 'meister',
+        nodeType: 'leadership',
+        rankOrder: 3,
+        rankTitle: 'Zimmermeister / Werftleiter',
+        description: 'Bauleitung großer Kathedralendachstühle, Galeerenwerften und Zunftführung.',
+        suggestedCompetencies: ['Großkonstruktionsplanung', 'Werftleitung', 'Meisterabbund', 'Zunftobermeister'],
+        possibleRanks: ['Zimmermeister', 'Werftmeister', 'Oberbauleiter Holz'],
+        positionTitle: 'Werftmeister',
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Zimmermann'
       }
     ]
   }
@@ -1946,10 +2328,70 @@ export function convertProgressionToNodes(
     const parentIds: string[] = prevStep ? [`${fieldId}.${branchKey}_${prevStep.idSuffix}`] : [];
     const childIds: string[] = nextStep ? [`${fieldId}.${branchKey}_${nextStep.idSuffix}`] : [];
 
+    // Assemble prerequisites
+    const prerequisites: ProfessionPrerequisite[] = [];
+    if (rankStep.prerequisites && rankStep.prerequisites.length > 0) {
+      prerequisites.push(...rankStep.prerequisites);
+    } else {
+      if (rankStep.prerequisiteJobName) {
+        prerequisites.push({
+          type: 'profession',
+          label: rankStep.prerequisiteJobName,
+          targetId: rankStep.prerequisiteJobName,
+          required: true
+        });
+      }
+      if (rankStep.requiredExperienceYears) {
+        prerequisites.push({
+          type: 'experience_years',
+          label: `${rankStep.requiredExperienceYears} Jahr(e) Berufserfahrung`,
+          minValue: rankStep.requiredExperienceYears,
+          required: true
+        });
+      }
+    }
+
+    if (rankStep.crossBranchRequirements && rankStep.crossBranchRequirements.length > 0) {
+      rankStep.crossBranchRequirements.forEach(cbr => {
+        if (cbr.competencyName) {
+          prerequisites.push({
+            type: 'competence',
+            label: cbr.competencyName,
+            targetId: cbr.competencyName,
+            targetFieldId: cbr.fieldId,
+            targetFieldName: cbr.fieldName,
+            minValue: 40,
+            required: true
+          });
+        }
+        if (cbr.professionName) {
+          prerequisites.push({
+            type: 'profession',
+            label: cbr.professionName,
+            targetId: cbr.professionName,
+            targetFieldId: cbr.fieldId,
+            targetFieldName: cbr.fieldName,
+            required: true
+          });
+        }
+      });
+    }
+
+    const nodeType: ProfessionNodeType =
+      rankStep.nodeType ||
+      (rankStep.rankOrder === 0
+        ? 'training'
+        : rankStep.rankOrder === 1
+        ? 'profession'
+        : rankStep.rankOrder === 2
+        ? 'specialization'
+        : 'leadership');
+
     nodes.push({
       id: nodeId,
       fieldId,
       name: rankStep.name,
+      nodeType,
       tier: rankStep.tier,
       category: progression.branchName,
       rankOrder: rankStep.rankOrder,
@@ -1960,29 +2402,21 @@ export function convertProgressionToNodes(
       childIds,
       specializationOf: prevStep ? `${fieldId}.${branchKey}_${prevStep.idSuffix}` : undefined,
       description: rankStep.description,
-      prerequisites: rankStep.requiredExperienceYears
-        ? [
-            ...(rankStep.prerequisiteJobName
-              ? [{ type: 'profession' as const, label: rankStep.prerequisiteJobName, targetId: rankStep.prerequisiteJobName }]
-              : []),
-            {
-              type: 'experience_years' as const,
-              label: `${rankStep.requiredExperienceYears} Jahr(e) Berufserfahrung`,
-              minValue: rankStep.requiredExperienceYears
-            }
-          ]
-        : [],
+      prerequisites,
       careerRoutes: [
         {
           id: `route_${nodeId}`,
           name: `${rankStep.name}-Prüfung / Anerkennung`,
           type: rankStep.rankOrder === 0 ? 'experience' : 'exam',
           description: `Qualifikationsschritt für die Stufe ${rankStep.rankTitle}.`,
-          requirementsSummary: rankStep.requiredExperienceYears ? `${rankStep.requiredExperienceYears} Jahr(e) Praxis` : 'Offener Einstieg'
+          requirementsSummary: rankStep.requiredExperienceYears
+            ? `${rankStep.requiredExperienceYears} Jahr(e) Praxis`
+            : 'Offener Einstieg'
         }
       ],
       suggestedCompetencies: rankStep.suggestedCompetencies,
-      possibleRanks: rankStep.possibleRanks
+      possibleRanks: rankStep.possibleRanks,
+      positionTitle: rankStep.positionTitle
     });
   });
 

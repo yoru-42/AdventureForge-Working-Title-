@@ -221,12 +221,14 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
         professionSpecialization: currentSpecialization,
         professionRank: currentRank,
         experienceYears: currentExp.years,
-        competencies
+        competencies,
+        secondaryProfessions,
+        additionalDirections
       });
       map.set(node.id, evalResult);
     }
     return map;
-  }, [tree, currentProfession, currentSpecialization, currentRank, currentExp.years, competencies]);
+  }, [tree, currentProfession, currentSpecialization, currentRank, currentExp.years, competencies, secondaryProfessions, additionalDirections]);
 
   // Role & Learned detection helpers
   const isNodeMain = (node: ProfessionTreeNode): boolean => {
@@ -773,6 +775,19 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
 
     const nextProfession = nextRankName || node.nextRankProfession;
 
+    const nodeTypeBadgeLabel =
+      node.nodeType === 'training'
+        ? 'Ausbildung'
+        : node.nodeType === 'specialization'
+        ? 'Spezialisierung'
+        : node.nodeType === 'advanced_profession'
+        ? 'Fachberuf'
+        : node.nodeType === 'promotion'
+        ? 'Beförderung'
+        : node.nodeType === 'leadership'
+        ? 'Leitungsamt'
+        : null;
+
     return (
       <div
         key={node.id}
@@ -788,14 +803,21 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
         }`}
       >
         <div className="flex flex-col gap-2 min-w-0">
-          {/* Titel & Schloss */}
+          {/* Titel & Schloss / Typ-Badge */}
           <div className="flex items-start justify-between gap-2 min-w-0">
-            <span
-              className="text-sm font-bold text-white tracking-wide font-serif break-words leading-snug"
-              title={node.name}
-            >
-              {node.name}
-            </span>
+            <div className="flex flex-col min-w-0">
+              <span
+                className="text-sm font-bold text-white tracking-wide font-serif break-words leading-snug"
+                title={node.name}
+              >
+                {node.name}
+              </span>
+              {nodeTypeBadgeLabel && (
+                <span className="text-[10px] text-slate-400 font-sans mt-0.5">
+                  {nodeTypeBadgeLabel}
+                </span>
+              )}
+            </div>
             {isLocked && (
               <span
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-900/60 text-rose-300 text-[10px] shrink-0"
@@ -914,7 +936,29 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
                   Erlernt (Nebenberuf)
                 </span>
               )}
+              {node.nodeType && (
+                <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-medium">
+                  {node.nodeType === 'training'
+                    ? 'Ausbildung'
+                    : node.nodeType === 'specialization'
+                    ? 'Spezialisierung'
+                    : node.nodeType === 'advanced_profession'
+                    ? 'Fachberuf'
+                    : node.nodeType === 'promotion'
+                    ? 'Beförderung'
+                    : node.nodeType === 'leadership'
+                    ? 'Leitungsamt'
+                    : 'Berufsstufe'}
+                </span>
+              )}
             </div>
+
+            {node.positionTitle && (
+              <div className="text-xs text-amber-400/90 font-medium mt-1">
+                Dienststellung / Amt: <span className="text-white font-semibold">{node.positionTitle}</span>
+              </div>
+            )}
+
             {node.description && (
               <p className="text-xs text-slate-300 mt-1.5 leading-relaxed max-w-2xl">
                 {node.description}
@@ -936,8 +980,69 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
           </div>
         </div>
 
+        {/* Voraussetzungen: Detaillierte Prüfung (Pflicht, Soft, Fachübergreifend) */}
+        {node.prerequisites && node.prerequisites.length > 0 && (
+          <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Qualifikationsvoraussetzungen</span>
+              {isLocked ? (
+                <span className="text-rose-400 text-[10px] font-semibold flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Nicht vollständig erfüllt
+                </span>
+              ) : (
+                <span className="text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Bereit zur Freischaltung
+                </span>
+              )}
+            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+              {evaluation?.allEvaluations ? (
+                evaluation.allEvaluations.map((evalItem, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
+                      evalItem.isFulfilled
+                        ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-200'
+                        : evalItem.isHard
+                        ? 'bg-rose-950/30 border-rose-800/50 text-rose-200'
+                        : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {evalItem.isFulfilled ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : evalItem.isHard ? (
+                        <X className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      ) : (
+                        <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      )}
+                      <span className="truncate">{evalItem.prerequisite?.label || evalItem.detail}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 shrink-0 ml-2">
+                      {evalItem.isHard ? 'Pflicht' : 'Empfohlen'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                node.prerequisites.map((req, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-2 rounded-lg border bg-slate-900/60 border-slate-800 text-xs text-slate-300"
+                  >
+                    <span>{req.label}</span>
+                    <span className="text-[10px] text-slate-400">
+                      {req.required !== false ? 'Pflicht' : 'Empfohlen'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Prerequisites notice if locked */}
-        {isLocked && evaluation && evaluation.missingPrerequisites.length > 0 && (
+        {isLocked && evaluation && evaluation.missingPrerequisites.length > 0 && !node.prerequisites?.length && (
           <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-xs text-rose-200">
             <span className="font-bold block mb-1">Voraussetzungen noch nicht erfüllt:</span>
             <ul className="space-y-0.5 pl-4 list-disc text-[11px] text-rose-300">
