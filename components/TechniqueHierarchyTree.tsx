@@ -257,8 +257,6 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   };
 
   const handleDeletePowerSource = (psId: string) => {
-    if (safePowerSources.length <= 1) return;
-
     const deletedBaIds = baseAbilities.filter(ba => ba.powerSourceId === psId).map(ba => ba.id);
     const remainingPs = safePowerSources.filter(ps => ps.id !== psId);
     const remainingBa = baseAbilities.filter(ba => ba.powerSourceId !== psId);
@@ -702,17 +700,15 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
             </div>
 
             <div className="flex items-end justify-end">
-              {safePowerSources.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => handleDeletePowerSource(activePowerSource.id)}
-                  className="px-2.5 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[30px] flex items-center gap-1 cursor-pointer"
-                  title="Diese Kraftquelle löschen"
-                >
-                  <LucideIcons.Trash2 className="w-3 h-3" />
-                  <span>Löschen</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => handleDeletePowerSource(activePowerSource.id)}
+                className="px-2.5 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[30px] flex items-center gap-1 cursor-pointer"
+                title="Diese Kraftquelle löschen"
+              >
+                <LucideIcons.Trash2 className="w-3 h-3" />
+                <span>Löschen</span>
+              </button>
             </div>
           </div>
         )}
@@ -779,7 +775,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
         {/* Inline-Konfiguration der aktiv ausgewählten Grundfähigkeit */}
         {activeBaseAbility && !readOnly && (
-          <div className="mt-1 pt-2 border-t border-slate-800/60 grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <div className="mt-1 pt-2 border-t border-slate-800/60 grid grid-cols-1 sm:grid-cols-5 gap-2">
             <div className="flex flex-col gap-1 sm:col-span-2">
               <label className="text-[9px] font-bold text-slate-400 uppercase">
                 Kinese / Bezeichner
@@ -812,25 +808,27 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
               <label className="text-[9px] font-bold text-slate-400 uppercase">
                 Fähigkeitsart
               </label>
-              <div className="flex gap-1.5 items-center">
-                <select
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                  value={activeBaseAbility.abilityType || 'creation_manipulation'}
-                  onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { abilityType: e.target.value as AbilityType })}
-                >
-                  {ABILITY_TYPES.map((at, atIdx) => (
-                    <option key={`at-${at.id}-${atIdx}`} value={at.id}>{at.label}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
-                  className="p-1 text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 rounded-lg transition-colors h-[30px] w-[30px] flex items-center justify-center cursor-pointer shrink-0"
-                  title="Diese Grundfähigkeit löschen"
-                >
-                  <LucideIcons.Trash2 className="w-3 h-3" />
-                </button>
-              </div>
+              <select
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
+                value={activeBaseAbility.abilityType || 'creation_manipulation'}
+                onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { abilityType: e.target.value as AbilityType })}
+              >
+                {ABILITY_TYPES.map((at, atIdx) => (
+                  <option key={`at-${at.id}-${atIdx}`} value={at.id}>{at.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-end justify-end">
+              <button
+                type="button"
+                onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
+                className="px-2.5 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[30px] flex items-center gap-1 cursor-pointer"
+                title="Diese Grundfähigkeit löschen"
+              >
+                <LucideIcons.Trash2 className="w-3 h-3" />
+                <span>Löschen</span>
+              </button>
             </div>
           </div>
         )}

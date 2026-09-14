@@ -840,10 +840,6 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
 
           {/* Alltagskompetenzen & Praktische Fertigkeiten */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs text-sky-300 font-bold uppercase tracking-wider flex items-center gap-2">
-              <Compass className="w-3.5 h-3.5 text-sky-400" />
-              <span>Alltagskompetenzen & Praktische Fertigkeiten</span>
-            </label>
             <EverydaySkillsSelect
               value={everydaySkills}
               onChange={onEverydaySkillsChange}

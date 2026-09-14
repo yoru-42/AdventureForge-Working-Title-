@@ -1683,7 +1683,7 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
       {/* MODAL: Alltagskompetenzen verwalten */}
       {isEverydayModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-sky-500/40 rounded-2xl w-full max-w-lg p-5 shadow-2xl flex flex-col gap-4">
+          <div className="bg-slate-900 border border-sky-500/40 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-5 shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Compass className="w-5 h-5 text-sky-400" />
