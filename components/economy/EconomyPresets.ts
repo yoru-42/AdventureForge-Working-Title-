@@ -35,20 +35,9 @@ export const HOLDING_TYPES: HoldingTypePreset[] = [
   { type: 'custom', label: 'Benutzerdefinierter Betrieb', icon: 'Settings', defaultIncome: 120, defaultUpkeep: 25, description: 'Individuell gestaltetes Wirtschafts- und Managementobjekt.' }
 ];
 
-export const STANDARD_AUTHORITIES = [
-  'Tagesgeschäft leiten',
-  'Preise festlegen',
-  'Personal einstellen & entlassen',
-  'Aufgaben & Pflichten delegieren',
-  'Aufträge vergeben & annehmen',
-  'Lagerbestände & Einkauf verwalten',
-  'Budget & Finanzen freigeben',
-  'Ausbauten & Upgrades anordnen',
-  'Hausrecht & Sicherheit durchsetzen',
-  'Gewinne entnehmen',
-  'Verhandlungen führen',
-  'Betriebsbeschlüsse fassen'
-];
+import { EXPANDED_AUTHORITIES, ALL_AUTHORITY_NAMES } from '../../lib/professionAuthoritiesData';
+
+export const STANDARD_AUTHORITIES = ALL_AUTHORITY_NAMES;
 
 export const AUTHORITY_DUTIES_MAP: Record<string, string> = {
   'Tagesgeschäft leiten': 'Operative Leitung und Koordination des laufenden Tagesgeschäfts',
@@ -62,7 +51,15 @@ export const AUTHORITY_DUTIES_MAP: Record<string, string> = {
   'Hausrecht & Sicherheit durchsetzen': 'Sicherheitskontrollen, Durchsetzung der Ordnung und des Hausrechts',
   'Gewinne entnehmen': 'Abrechnung und Verwaltung von Betriebsüberschüssen',
   'Verhandlungen führen': 'Verhandlungsführung mit Handelspartnern, Kunden und Behörden',
-  'Betriebsbeschlüsse fassen': 'Entscheidungsfindung bei betrieblichen Grundsatzfragen'
+  'Betriebsbeschlüsse fassen': 'Entscheidungsfindung bei betrieblichen Grundsatzfragen',
+  'Qualitätskontrolle & Werkabnahme': 'Qualitätsprüfung und finale Abnahme von Erzeugnissen, Rezepturen und Arbeiten',
+  'Ausbildung & Lehrlingsaufsicht': 'Fachliche Unterweisung, Prüfungsvorbereitung und Aufsicht von Auszubildenden',
+  'Dienst- & Schichtpläne anordnen': 'Verbindliche Festlegung der Dienst-, Wach- und Küchenpläne',
+  'Schlüsselgewalt & Lagerzugang': 'Führung der Hauptschlüssel für Kassen, Vorratskammern und Archive',
+  'Disziplinar- & Rügegewalt': 'Verhängung von Verweisen, Dienststrafen und Disziplinarmaßnahmen',
+  'Gilden- & Zunftvertretung': 'Offizielle Standesvertretung vor Gilden, Zünften und Behörden',
+  'Rezeptur- & Werkgeheimnisse hüten': 'Wahrung und Verwaltung von Meisterrezepturen, Legierungen und Formeln',
+  'Notfall- & Evakuierungskommando': 'Befehlsgewalt bei Notfällen, Brandbekämpfung, Seuchen oder Verteidigung'
 };
 
 export const getHoldingPresets = (type: EconomyHolding['type']): {

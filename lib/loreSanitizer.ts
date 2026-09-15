@@ -235,6 +235,22 @@ export function enrichAndCompleteCharacterDetails(entry: any, worldContext?: any
 
   const skillsData = getPlausibleSkillsForProfession(effectiveProfession, finalTitle);
 
+  // Appearance with genetic/familial inheritance support
+  const playerObj = worldContext?.player || {};
+  const playerApp = playerObj?.appearance || {};
+  const isPlayerFamily = !!(
+    (details.relationship && (details.relationship.toLowerCase().includes('spieler') || (playerObj.name && details.relationship.toLowerCase().includes(playerObj.name.toLowerCase())))) ||
+    (details.family && playerObj.family && details.family.toLowerCase().includes(playerObj.family.toLowerCase())) ||
+    (details.family && playerObj.name && details.family.toLowerCase().includes(playerObj.name.toLowerCase()))
+  );
+
+  const defaultRace = (isPlayerFamily && playerApp.race) ? playerApp.race : 'Mensch';
+  const defaultRaceFeatures = (isPlayerFamily && playerApp.raceFeatures) ? playerApp.raceFeatures : 'Keine Auffälligkeiten';
+  const defaultHairColor = (isPlayerFamily && playerApp.hairColor) ? playerApp.hairColor : 'Dunkelbraun';
+  const defaultEyeColor = (isPlayerFamily && playerApp.eyeColor) ? playerApp.eyeColor : 'Braun';
+  const defaultOrigin = (isPlayerFamily && (playerApp.origin || playerObj.origin)) ? (playerApp.origin || playerObj.origin) : safeTrim(worldContext?.title, 'Heimatort');
+  const defaultFamily = (isPlayerFamily && (playerApp.family || playerObj.family)) ? (playerApp.family || playerObj.family) : '';
+
   const enrichedDetails = {
     ...details,
     // Clean name fields without profession prefix
@@ -259,17 +275,17 @@ export function enrichAndCompleteCharacterDetails(entry: any, worldContext?: any
     gender: safeTrim(details.gender, 'Männlich'),
     age: safeTrim(details.age, '38'),
     build: safeTrim(details.build, 'Kräftig'),
-    race: safeTrim(details.race, 'Mensch'),
-    raceFeatures: safeTrim(details.raceFeatures, 'Keine Auffälligkeiten'),
-    hairColor: safeTrim(details.hairColor, 'Dunkelbraun'),
-    eyeColor: safeTrim(details.eyeColor, 'Braun'),
+    race: safeTrim(details.race, defaultRace),
+    raceFeatures: safeTrim(details.raceFeatures, defaultRaceFeatures),
+    hairColor: safeTrim(details.hairColor, defaultHairColor),
+    eyeColor: safeTrim(details.eyeColor, defaultEyeColor),
     height: safeTrim(details.height, '178 cm'),
     measurements: safeTrim(details.measurements, ''),
     cupSize: safeTrim(details.cupSize, '-'),
     outfit: safeTrim(details.outfit, 'Zweckmäßige, wetterfeste Arbeitskleidung aus Leinen und Loden'),
     looks: safeTrim(details.looks, 'Wettergegerbtes Gesicht mit aufmerksamem, ruhigem Blick'),
-    origin: safeTrim(details.origin, safeTrim(worldContext?.title, 'Heimatort')),
-    family: safeTrim(details.family, ''),
+    origin: safeTrim(details.origin, defaultOrigin),
+    family: safeTrim(details.family, defaultFamily),
     faction: safeTrim(details.faction, ''),
 
     // Personality & Mindset

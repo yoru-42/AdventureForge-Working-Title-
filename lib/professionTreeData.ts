@@ -1,6 +1,7 @@
 import { ProfessionCompetency, ProfessionExperience, ProfessionProgress, SecondaryProfession } from '../types';
 import { JOB_CATEGORIES } from '../components/jobPresets';
 import { getBranchesForField, convertProgressionToNodes } from './professionProgressionData';
+import { getSuggestedAuthoritiesForProfession } from './professionAuthoritiesData';
 
 export type ProfessionNodeType =
   | 'training'
@@ -91,6 +92,9 @@ export interface ProfessionTreeNode {
   isMainProfession?: boolean;
   isSecondaryProfession?: boolean;
   positionTitle?: string;
+  authorities?: string[];
+  suggestedAuthorities?: string[];
+  grantedAuthorities?: string[];
 }
 
 export interface ProfessionTreeField {
@@ -3813,13 +3817,20 @@ export function enrichTreeNodesWithHierarchy(tree: ProfessionTreeField): Profess
       }
     }
 
+    const suggestedAuthorities =
+      node.suggestedAuthorities ||
+      node.authorities ||
+      getSuggestedAuthoritiesForProfession(node.name, rankOrder ?? node.tier);
+
     return {
       ...node,
       category,
       rankOrder,
       rankTitle,
       nextRankProfession,
-      previousRankProfession
+      previousRankProfession,
+      suggestedAuthorities,
+      authorities: suggestedAuthorities
     };
   });
 
@@ -4040,3 +4051,86 @@ export function findTreeNodeByNameOrId(term: string, fieldId?: string): Professi
 
   return undefined;
 }
+
+/**
+ * Validates a ProfessionTreeField according to V7 rules:
+ * - No cycles (A -> B -> C -> A)
+ * - No self-prerequisites (node requires itself)
+ * - Reachability (all nodes reachable from entry/training)
+ */
+export function validateProfessionTree(tree: ProfessionTreeField): { isValid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const nodeMap = new Map<string, ProfessionTreeNode>();
+  tree.nodes.forEach(n => nodeMap.set(n.id, n));
+
+  // 1. Check self prerequisites
+  for (const node of tree.nodes) {
+    if (node.prerequisites) {
+      for (const req of node.prerequisites) {
+        if (req.targetId === node.id || req.targetId === node.name) {
+          errors.push(`Selbstvoraussetzung gefunden: Knoten "${node.name}" (${node.id}) verlangt sich selbst.`);
+        }
+      }
+    }
+  }
+
+  // 2. Check cycle detection (DFS with visited states: 0=unvisited, 1=visiting, 2=visited)
+  const visitState = new Map<string, number>();
+  function dfsCycle(nodeId: string, path: string[]): boolean {
+    visitState.set(nodeId, 1);
+    const node = nodeMap.get(nodeId);
+    if (node && node.childIds) {
+      for (const childId of node.childIds) {
+        const state = visitState.get(childId) || 0;
+        if (state === 1) {
+          errors.push(`Zyklus im Berufstree entdeckt: ${path.join(' -> ')} -> ${childId}`);
+          return true;
+        }
+        if (state === 0) {
+          dfsCycle(childId, [...path, childId]);
+        }
+      }
+    }
+    visitState.set(nodeId, 2);
+    return false;
+  }
+
+  for (const node of tree.nodes) {
+    if ((visitState.get(node.id) || 0) === 0) {
+      dfsCycle(node.id, [node.id]);
+    }
+  }
+
+  // 3. Reachability check from root or entry/training nodes
+  const reachable = new Set<string>();
+  const entryNodes = tree.nodes.filter(
+    n => n.rankOrder === 0 || n.tier === 'einstieg' || n.nodeType === 'training' || !n.parentIds || n.parentIds.length === 0
+  );
+
+  function markReachable(nodeId: string) {
+    if (reachable.has(nodeId)) return;
+    reachable.add(nodeId);
+    const node = nodeMap.get(nodeId);
+    if (node?.childIds) {
+      for (const childId of node.childIds) {
+        markReachable(childId);
+      }
+    }
+  }
+
+  entryNodes.forEach(e => markReachable(e.id));
+  if (tree.rootNodeId) markReachable(tree.rootNodeId);
+
+  for (const node of tree.nodes) {
+    if (!reachable.has(node.id)) {
+      // Mark as warned
+      errors.push(`Unerreichbarer Knoten: "${node.name}" (${node.id}) kann nicht von einer Ausbildungs-/Einstiegsstufe erreicht werden.`);
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+

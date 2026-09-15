@@ -597,6 +597,96 @@ export interface OfficeState {
   description?: string;
 }
 
+export type ProfessionNodeType =
+  | 'training'
+  | 'profession'
+  | 'specialization'
+  | 'advanced_profession'
+  | 'promotion'
+  | 'leadership';
+
+export interface ProfessionPrerequisite {
+  type:
+    | 'profession'
+    | 'competency'
+    | 'competence'
+    | 'experience'
+    | 'experience_years'
+    | 'talent'
+    | 'story'
+    | 'story_requirement'
+    | 'position'
+    | 'education'
+    | 'cross_profession'
+    | 'knowledge'
+    | 'attribute'
+    | string;
+  targetId?: string;
+  targetName?: string;
+  targetFieldId?: string;
+  targetFieldName?: string;
+  minimumValue?: number;
+  minValue?: number;
+  value?: number;
+  label?: string;
+  required?: boolean;
+  description?: string;
+}
+
+export interface ProfessionCompetencyRequirement {
+  competencyId?: string;
+  competencyName: string;
+  minimumProficiency: number; // 0-100
+  requiredPracticeCount?: number;
+  description?: string;
+}
+
+export interface ProfessionPosition {
+  id: string;
+  name: string;
+  type:
+    | 'deputy'
+    | 'supervisor'
+    | 'leadership'
+    | 'executive';
+  professionIds?: string[];
+  prerequisites?: ProfessionPrerequisite[];
+  grantsAuthority?: boolean;
+  authorityScope?: string[];
+  description?: string;
+}
+
+export interface ProfessionTreeNode {
+  id: string;
+  professionId?: string;
+  name: string;
+  fieldId: string;
+  nodeType: ProfessionNodeType;
+  parentIds?: string[];
+  childIds?: string[];
+  prerequisites?: ProfessionPrerequisite[];
+  requiredCompetencies?: ProfessionCompetencyRequirement[];
+  requiredExperience?: {
+    years?: number;
+    months?: number;
+  };
+  description?: string;
+  grantsProfession?: boolean;
+  grantsPosition?: boolean;
+  positionId?: string;
+  tier?: 'einstieg' | 'beruf' | 'spezialisierung' | 'meister';
+  category?: string;
+  rankOrder?: number;
+  rankTitle?: string;
+  nextRankProfession?: string;
+  previousRankProfession?: string;
+  suggestedCompetencies?: string[];
+  possibleRanks?: string[];
+  authorities?: string[];
+  suggestedAuthorities?: string[];
+  grantedAuthorities?: string[];
+}
+
 export interface PositionState {
   id: string;
   title: string; // e.g. "Kapitän der 'Morgenstern'", "Hauptmann der Stadtwache"

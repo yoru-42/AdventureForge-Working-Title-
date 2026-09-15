@@ -15,7 +15,8 @@ import { ProfessionCompetencySection } from './ProfessionCompetencySection';
 import { TitlesAndPositionsSection } from './TitlesAndPositionsSection';
 import { getDutiesForProfessionAndLevel } from './professionDuties';
 import { STANDARD_AUTHORITIES, AUTHORITY_DUTIES_MAP } from './economy/EconomyPresets';
-import { BookOpen, Plus, Trash2, ChevronDown, ChevronUp, Briefcase, Layers, Award, Compass } from 'lucide-react';
+import { EXPANDED_AUTHORITIES, getSuggestedAuthoritiesForProfession, AuthorityDefinition } from '../lib/professionAuthoritiesData';
+import { BookOpen, Plus, Trash2, ChevronDown, ChevronUp, Briefcase, Layers, Award, Compass, Shield, Check, X, Filter } from 'lucide-react';
 
 const normalizeForCompare = (s: string) =>
   s.trim().toLowerCase().replace(/^[-*•]\s*/, '').replace(/\s+/g, ' ');
@@ -214,8 +215,13 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
 
   // 4 Category Tabs navigation: Hauptberuf, Nebenberufe, Adelige Titel, Alltagskompetenzen
   const [activeCategoryTab, setActiveCategoryTab] = useState<'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen' | 'alle'>('hauptberuf');
+  const [authorityCategoryFilter, setAuthorityCategoryFilter] = useState<string>('all');
 
   const parsedEverydayCount = everydaySkills ? parseEverydaySkills(everydaySkills).length : 0;
+
+  const suggestedAuthorities = React.useMemo(() => {
+    return getSuggestedAuthoritiesForProfession(profession, professionLevel || professionRank);
+  }, [profession, professionLevel, professionRank]);
 
   const suggestedDuties = profession && professionLevel
     ? getDutiesForProfessionAndLevel(profession, professionLevel)
@@ -439,52 +445,140 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
 
         {/* 1.4 BEFUGNISSE & WEISUNGSRECHTE (Wirtschaft / Betrieb) */}
         {onAuthoritiesChange && (
-          <div className="pt-3 border-t border-slate-800/60 flex flex-col gap-2">
-            <div className="flex items-center justify-between">
+          <div className="pt-3 border-t border-slate-800/60 flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider block">
+                <label className="text-xs text-slate-200 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
                   Befugnisse & Weisungsrechte im Betrieb
                 </label>
-                <span className="text-[10px] text-slate-500">
+                <span className="text-[10px] text-slate-400 block mt-0.5">
                   Operative Handlungsrechte im Wirtschafts- und Managementsystem
                 </span>
               </div>
-              {authorities.length > 0 && (
-                <span className="text-[10px] text-amber-400 font-mono font-medium">
-                  {authorities.length} aktiv
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400">
+                  <strong className="text-amber-400 font-mono font-bold">{authorities.length}</strong> von {EXPANDED_AUTHORITIES.length} aktiv
                 </span>
-              )}
+              </div>
             </div>
-            <div className="flex flex-col gap-1.5 pt-1">
-              {STANDARD_AUTHORITIES.map(auth => {
-                const has = authorities.includes(auth);
-                return (
+
+            {/* Quick Actions & Recommendations */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950 border border-slate-800/80">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase font-bold text-slate-400">
+                  {profession ? `Passend für ${profession}:` : 'Empfohlene Befugnisse:'}
+                </span>
+                <span className="text-[11px] font-bold text-amber-300">
+                  {suggestedAuthorities.length} typische Rechte
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {suggestedAuthorities.length > 0 && (
                   <button
-                    key={auth}
                     type="button"
                     onClick={() => {
-                      const next = has
-                        ? authorities.filter(a => a !== auth)
-                        : [...authorities, auth];
-                      onAuthoritiesChange(next);
+                      const merged = Array.from(new Set([...authorities, ...suggestedAuthorities]));
+                      onAuthoritiesChange(merged);
                     }}
-                    className={`px-3 py-2 rounded-xl text-xs font-medium border text-left flex items-center justify-between transition cursor-pointer ${
-                      has
-                        ? 'bg-amber-950/20 border-amber-500/40 text-amber-200'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                    }`}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold flex items-center gap-1 transition"
                   >
-                    <span>{auth}</span>
-                    <span
-                      className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
-                        has ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-900 text-slate-600'
+                    <Check className="w-3 h-3 text-amber-400" />
+                    Vorgeschlagene übernehmen
+                  </button>
+                )}
+
+                {authorities.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onAuthoritiesChange([])}
+                    className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-semibold transition"
+                  >
+                    Alle abwählen
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Category Filter Tabs */}
+            <div className="flex flex-wrap gap-1 p-1 bg-slate-950/80 rounded-xl border border-slate-800/80">
+              {[
+                { id: 'all', label: 'Alle', count: EXPANDED_AUTHORITIES.length },
+                { id: 'leadership', label: 'Leitung & Personal', count: EXPANDED_AUTHORITIES.filter(a => a.category === 'leadership').length },
+                { id: 'finance', label: 'Finanzen & Handel', count: EXPANDED_AUTHORITIES.filter(a => a.category === 'finance').length },
+                { id: 'operations', label: 'Betrieb & Qualität', count: EXPANDED_AUTHORITIES.filter(a => a.category === 'operations').length },
+                { id: 'security', label: 'Sicherheit & Liegenschaft', count: EXPANDED_AUTHORITIES.filter(a => a.category === 'security').length }
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setAuthorityCategoryFilter(cat.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                    authorityCategoryFilter === cat.id
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'bg-slate-900/60 text-slate-400 border border-transparent hover:text-slate-200 hover:bg-slate-900'
+                  }`}
+                >
+                  {cat.label} ({cat.count})
+                </button>
+              ))}
+            </div>
+
+            {/* List of Authorities */}
+            <div className="grid grid-cols-1 gap-1.5 pt-0.5">
+              {EXPANDED_AUTHORITIES
+                .filter(auth => authorityCategoryFilter === 'all' || auth.category === authorityCategoryFilter)
+                .map(auth => {
+                  const has = authorities.includes(auth.name);
+                  const isSuggested = suggestedAuthorities.includes(auth.name);
+
+                  return (
+                    <div
+                      key={auth.name}
+                      onClick={() => {
+                        const next = has
+                          ? authorities.filter(a => a !== auth.name)
+                          : [...authorities, auth.name];
+                        onAuthoritiesChange(next);
+                      }}
+                      className={`p-3 rounded-xl border text-left flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition cursor-pointer ${
+                        has
+                          ? 'bg-amber-950/25 border-amber-500/50 text-amber-100 shadow-sm'
+                          : 'bg-slate-950 border-slate-800/80 text-slate-300 hover:text-slate-100 hover:border-slate-700'
                       }`}
                     >
-                      {has ? 'Aktiv' : 'Aus'}
-                    </span>
-                  </button>
-                );
-              })}
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs font-bold">{auth.name}</span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-900 text-slate-400 border border-slate-800">
+                            {auth.categoryLabel}
+                          </span>
+                          {isSuggested && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+                              Empfohlen für {profession || 'Beruf'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          {auth.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                        <span
+                          className={`text-[10px] px-3 py-1 rounded-lg font-bold uppercase transition ${
+                            has
+                              ? 'bg-amber-500 text-slate-950 shadow-sm'
+                              : 'bg-slate-900 text-slate-500 border border-slate-800'
+                          }`}
+                        >
+                          {has ? 'Aktiv' : 'Aus'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
         )}

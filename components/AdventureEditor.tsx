@@ -1470,6 +1470,15 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         ...npcs.map(n => ({
           name: n.name + (n.nickname ? ` (${n.nickname})` : ''),
           role: n.role,
+          age: n.appearance?.age || '',
+          gender: n.appearance?.gender || '',
+          race: n.appearance?.race || 'Mensch',
+          raceFeatures: n.appearance?.raceFeatures || 'keine',
+          hairColor: n.appearance?.hairColor || '',
+          eyeColor: n.appearance?.eyeColor || '',
+          build: n.appearance?.build || '',
+          looks: n.appearance?.looks || '',
+          origin: n.appearance?.origin || '',
           family: n.appearance?.family || (n as any).family || '',
           relation: n.relationship || n.conduct || '',
           description: n.bio || ''
@@ -1479,6 +1488,15 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           .map(l => ({
             name: l.title + (l.details?.nickname ? ` (${l.details.nickname})` : ''),
             role: l.details?.role || '',
+            age: l.details?.age || '',
+            gender: l.details?.gender || '',
+            race: l.details?.race || 'Mensch',
+            raceFeatures: l.details?.raceFeatures || 'keine',
+            hairColor: l.details?.hairColor || '',
+            eyeColor: l.details?.eyeColor || '',
+            build: l.details?.build || '',
+            looks: l.details?.looks || '',
+            origin: l.details?.origin || '',
             family: l.details?.family || '',
             relation: l.details?.relationship || l.details?.conduct || '',
             description: l.description || ''

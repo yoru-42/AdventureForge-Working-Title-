@@ -69,6 +69,20 @@ STRENGSTE REGELN FÜR DIE BIOGRAFIE & CHARAKTERERSTELLUNG:
 
 export const CHARACTER_BIO_7_QUESTIONS_PROMPT = CHARACTER_BIO_8_QUESTIONS_PROMPT;
 
+export const FAMILY_HEREDITY_RULES_PROMPT = `
+### GENETISCHE VERERBUNG & FAMILIENÄHNLICHKEIT BEI AUSSEHEN (STRENGSTE DIRECTIVE):
+Das Aussehen von Familienmitgliedern (Eltern, Kinder, Geschwister, Vorfahren) MUSS zwingend optisch und genetisch zueinander passen:
+1. KINDER & ELTERN (Das Aussehen der Kinder wird von den Eltern bestimmt):
+   - Wenn Kinder (Sohn, Tochter) erstellt werden, MUSS ihr Aussehen (Haarfarbe, Augenfarbe, Rasse, Rassemerkmale, Statur, Hautton, Gesichtszüge) von den Eltern abstammen und ihnen sichtlich ähneln!
+   - Kinder erben typischerweise die Haarfarbe oder Augenfarbe eines Elternteils oder eine stimmige Kombination beider Eltern (z. B. dunkle Haare des Vaters, blaue Augen der Mutter).
+   - Besondere Rassemerkmale (z.B. Elfenohren, Hörner, Schuppen, Tiermerkmale, Hautfärbung) werden direkt von den Eltern vererbt.
+2. ELTERN VON CHARAKTEREN (Vorfahren):
+   - Wenn die Eltern (Vater, Mutter) eines bereits bekannten Charakters oder des Spielers erstellt werden, MÜSSEN sie als biologische Quelle für dessen Merkmale dienen.
+   - Mindestens ein Elternteil muss die Haarfarbe, Augenfarbe oder markante Gesichtszüge des Kindes/Spielers teilen oder logisch begründen.
+3. GESCHWISTER:
+   - Geschwister (Bruder, Schwester) teilen dieselbe Rasse, dieselben Rassemerkmale und harmonische Aussehensmerkmale (gleiche oder eng verwandte Haar- und Augenfarben aus dem elterlichen Genpool).
+4. DIESE VERERBUNGSREGEL GILT GLEICHERMASSEN FÜR DIE FAMILIE DES SPIELERS/NUTZERS WIE AUCH FÜR ALLE NPC-FAMILIEN!`;
+
 export class GeminiService {
   private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 5, initialDelay = 1500): Promise<Response> {
     let attempt = 0;
@@ -1416,7 +1430,9 @@ ANWEISUNGEN:
         ? "NPCs können exzentrisch, geheimnisvoll oder manipulativ sein. Sie haben oft eigene, komplexe Agenden."
         : "NPCs haben eine gesunde Mischung aus alltäglichen und interessanten Persönlichkeitszügen.";
 
-      const playerContext = player ? `\nHauptcharakter (Spieler) in der Welt: ${player.name} (${player.role}). ${player.bio}` : '';
+      const playerApp: any = player?.appearance || {};
+      const playerContext = player ? `\nHauptcharakter (Spieler) in der Welt: ${player.name} (${player.role}). ${player.bio}
+      Aussehen des Spielers (Referenz für Verwandte des Spielers): Rasse: ${playerApp.race || 'Mensch'} (${playerApp.raceFeatures || 'keine'}), Haare: ${playerApp.hairColor || 'Unbekannt'}, Augen: ${playerApp.eyeColor || 'Unbekannt'}, Statur: ${playerApp.build || 'Normal'}, Aussehen/Gesicht: ${playerApp.looks || 'Normal'}, Herkunft/Familie: ${playerApp.origin || ''} / ${playerApp.family || (player as any).family || ''}` : '';
       const prologueContext = prologue ? `\nProlog der Geschichte:\n${prologue}` : '';
       
       const existingAppearance: any = existingData?.appearance || {};
@@ -1433,6 +1449,8 @@ ANWEISUNGEN:
       ${heroicContext}
       ${dramaContext}
       ${factionInstruction}
+      
+      ${FAMILY_HEREDITY_RULES_PROMPT}
       
       Bereits vorhandene Daten für diesen NPC (MÜSSEN UNBEDINGT BEIBEHALTEN UND SINNVOLL INTEGRIERT WERDEN):
       - Name: ${existingData?.name || 'Zufällig'}
@@ -4165,6 +4183,17 @@ Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.
     return this.callWithRetry(async () => {
       const ai = this.getAI();
       
+      const playerObj = worldContext?.player || {};
+      const playerApp = playerObj?.appearance || {};
+      const playerContextText = (playerObj?.name && (playerApp.hairColor || playerApp.eyeColor || playerApp.race)) ? `
+### SPIELERCHARAKTER-REFERENZ (Falls der erstellte Charakter mit dem Spieler verwandt ist):
+- Name: "${playerObj.name}" (${playerObj.role || 'Spieler'})
+- Rasse & Merkmale: "${playerApp.race || 'Mensch'}" (${playerApp.raceFeatures || 'keine'})
+- Haarfarbe: "${playerApp.hairColor || 'Unbekannt'}" | Augenfarbe: "${playerApp.eyeColor || 'Unbekannt'}" | Statur: "${playerApp.build || 'Normal'}"
+- Gesicht / Aussehen: "${playerApp.looks || 'Normal'}"
+- Herkunft & Familie: "${playerApp.origin || ''}" / "${playerApp.family || playerObj.family || ''}"
+WICHTIG: Falls dieser Charakter ein Familienmitglied des Spielers ist (z.B. Mutter, Vater, Sohn, Tochter, Schwester, Bruder), MUSS sein Aussehen dem Aussehen des Spielers genetisch gleichen bzw. daraus vererbt sein!` : '';
+
       let contextPrompt = `Leite aus dem folgenden Freitext die Charakter-Werte für ein RPG ab.
 WICHTIGSTE DIRECTIVE: Erfinde detailreich alle Details, Kräfte und Fähigkeiten, die fehlen oder nicht genau im Freitext beschrieben sind, passend für ein RPG. Jedes einzelne Feld MUSS befüllt werden!
 
@@ -4172,6 +4201,9 @@ WICHTIGSTE DIRECTIVE: Erfinde detailreich alle Details, Kräfte und Fähigkeiten
 - Trage als Name ('name', 'callName', 'rufName') NIEMALS den Beruf oder Titel ein!
 - FALSCH: "Bauer Jochen", "Wirtin Martha", "Dorfschulze Kuno", "Schmied Heinrich"
 - RICHTIG: name: "Jochen", profession: "Bauer", role: "Bauer", callName: "Jochen"; name: "Martha", profession: "Wirtin", role: "Wirtin", callName: "Martha"!
+
+${FAMILY_HEREDITY_RULES_PROMPT}
+${playerContextText}
 
 ### BEZIEHUNGEN & VERHALTEN (MANDATORISCH):
 Befülle zwingend die Felder "relationship" (Beziehungen zu anderen Charakteren oder Gilden) und "conduct" (Verhalten anderen gegenüber). Erfinde hierbei emotionale Bezüge, Kameradschaften oder Fehden, damit der Charakter lebendig wirkt!
@@ -4330,9 +4362,11 @@ Es gibt bereits registrierte Charaktere/NPCs in dieser Welt. Analysiere diese so
 
 Hier sind die bestehenden Charaktere:
 ${existingCodexCharacters.map(c => `- Name: "${c.name}"
-  * Alter: "${c.age || 'Unbekannt'}"
+  * Alter / Geschlecht: "${c.age || 'Unbekannt'}" / "${c.gender || 'Unbekannt'}"
   * Herkunft / Standort: "${c.origin || c.location || 'Unbekannt'}"
   * RPG-Rolle: "${c.role || 'Unbekannt'}"
+  * Rasse & Merkmale: "${c.race || 'Mensch'}" (${c.raceFeatures || 'keine'})
+  * Aussehen (Haare/Augen/Statur): "${c.hairColor || 'Unbekannt'}" / "${c.eyeColor || 'Unbekannt'}" / "${c.build || 'Normal'}" (${c.looks || ''})
   * Familie/Zugehörigkeit: "${c.family || 'Keine'}"
   * Beziehung/Verhalten/Details: "${c.relation || c.description || 'Keine Angabe'}"`).join('\n')}`;
       }
@@ -5023,6 +5057,15 @@ ${JSON.stringify(params.relationships.map(r => ({ target: r.targetCharacter, typ
     return this.callWithRetry(async () => {
       const ai = this.getAI();
       
+      const playerObj = worldContext?.player || {};
+      const playerApp = playerObj?.appearance || {};
+      const playerRef = (playerObj?.name && (playerApp.hairColor || playerApp.eyeColor || playerApp.race)) ? `
+- REFERENZ SPIELERCHARAKTER (Für den Fall, dass der Charakter mit dem Spieler verwandt ist):
+  * Name: "${playerObj.name}" (${playerObj.role || 'Spieler'})
+  * Rasse: "${playerApp.race || 'Mensch'}" (${playerApp.raceFeatures || 'keine'})
+  * Aussehen: Haare "${playerApp.hairColor || 'Unbekannt'}", Augen "${playerApp.eyeColor || 'Unbekannt'}", Statur "${playerApp.build || 'Normal'}", Gesicht "${playerApp.looks || 'Normal'}"
+  * Familie: "${playerApp.family || playerObj.family || ''}"` : '';
+
       let contextPrompt = `Erstelle einen hochpräzisen, packenden und detailreichen RPG-Lore-Eintrag aus dem folgenden Text für die Kategorie "${category}".
 WICHTIGSTE DIRECTIVEN:
 0. KEINE EMOJIS: Verwende unter KEINEN Umständen Emojis in den Textfeldern oder Namen!
@@ -5033,7 +5076,8 @@ WICHTIGSTE DIRECTIVEN:
 5. STRENGSTES GEHEIMNIS- & SPOILERVERBOT (SPIELER- & NPC-GEHEIMNISSE): Beziehe dich unter KEINEN Umständen in der Beschreibung (description) oder in anderen öffentlichen/normalen Textfeldern auf Geheimnisse, verborgenes Wissen oder "Stufe 3"-Geheimnisse des Spielers/Nutzers (das Geheimnis des Nutzers/Spielers) oder anderer Charaktere/Orte! Wenn in der Welten-Beschreibung, in den bestehenden Codex-Einträgen oder im "Enthülltes / Verborgenes Wissen" (revealedKnowledge) geheimes Wissen definiert ist, gilt dies als absolute Blackbox. Es darf NIEMALS unaufgefordert in der Beschreibung, Biografie oder anderen öffentlichen/normalen Feldern dieses Eintrags erwähnt, angedeutet, referenziert oder gespoilert werden! Die öffentliche Beschreibung muss vollkommen frei von diesen Geheimnissen bleiben.
 6. ABSOLUTES VERBOT VON ZUKÜNFTIGEN EREIGNISSEN / KEIN VORGRIFF: Generiere NIEMALS Ereignisse, Fakten oder Begebenheiten, die in der Zukunft liegen oder noch gar nicht passiert sind! Der Spielstart, Prolog bzw. die erste Szene der Geschichte repräsentieren die absolute Gegenwart. Der Codex und die Zeitlinie dürfen ausschließlich die historische Vergangenheit (Vorgeschichte) enthalten ODER neue Ereignisse dokumentieren, die bereits nachweislich im Chat/Spielgeschehen passiert sind. Generiere niemals im Voraus, was passieren "wird" oder was der Spieler noch erleben "wird".
 7. KEINE UNERLAUBTE SPIELER-BEZIEHUNG / DISTANZ HALTEN: Beziehe den Spieler oder Hauptcharakter (z.B. "${playerName || 'Spieler'}") NIEMALS eigenmächtig in Beziehungen, Treffen, Bekanntschaften oder Ereignisse ein, es sei denn, der Nutzer-Text/Prompt verlangt dies explizit, oder die Chat-Historie belegt ein solches Treffen/Bezug bereits zweifelsfrei! Erfinde niemals aus dem Nichts Beziehungen wie 'Freund von ${playerName}' oder Treffen wie 'Hat ${playerName} gestern getroffen', wenn der Spieler diesen Charakter laut Spielstand/Text noch gar nicht kennt oder getroffen hat. NPCs haben anfangs keinerlei Bezug zum Spieler.
-8. 3-STUFEN-LOGIK DER GEHEIMNISSE (STRENGSTE DIRECTIVE & HARMONIE MIT MOTIVATION): Stufe 1 (secretsStage1), Stufe 2 (secretsStage2) und Stufe 3 (secretsStage3) MÜSSEN zwingend zur Gesinnung, Rolle und dem Hauptziel ('goal') des Eintrags passen. Erfinde NIEMALS unangebrachte Bösewicht-Klischees (wie Gehirnwäscher/Opferkulte/Ausbeutung) bei beschützenden oder edlen Charakteren! Wenn das Ziel "Mädchen vor Gefahren schützen" lautet, MUSS Stufe 3 ein wahren Schutzgeheimnis beinhalten (z. B. ein geheimes Asylnetzwerk oder verborgene Schutzmagie). Sie müssen sich ausschließlich auf die historische Vorgeschichte beziehen und das Spieler-Geheimnis als Blackbox behandeln.`;
+8. 3-STUFEN-LOGIK DER GEHEIMNISSE (STRENGSTE DIRECTIVE & HARMONIE MIT MOTIVATION): Stufe 1 (secretsStage1), Stufe 2 (secretsStage2) und Stufe 3 (secretsStage3) MÜSSEN zwingend zur Gesinnung, Rolle und dem Hauptziel ('goal') des Eintrags passen. Erfinde NIEMALS unangebrachte Bösewicht-Klischees (wie Gehirnwäscher/Opferkulte/Ausbeutung) bei beschützenden oder edlen Charakteren! Wenn das Ziel "Mädchen vor Gefahren schützen" lautet, MUSS Stufe 3 ein wahren Schutzgeheimnis beinhalten (z. B. ein geheimes Asylnetzwerk oder verborgene Schutzmagie). Sie müssen sich ausschließlich auf die historische Vorgeschichte beziehen und das Spieler-Geheimnis als Blackbox behandeln.
+${category === 'Charaktere' ? `${FAMILY_HEREDITY_RULES_PROMPT}\n${playerRef}` : ''}`;
 
       if (worldContext) {
         contextPrompt = `### WELTBESCHREIBUNG ODER ZEITLINIEN-PROMPT (Kontext für die Erstellung):
@@ -5733,6 +5777,15 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
         'Protagonist'
       ).trim();
 
+      const effectivePlayer = playerContext || worldContext?.player || {};
+      const playerApp = effectivePlayer.appearance || {};
+      const playerAppearanceContext = (playerApp.hairColor || playerApp.eyeColor || playerApp.race || playerApp.build) ? `
+- AUSSEHEN DES SPIELERS (WICHTIGSTE REFERENZ FÜR FAMILIENÄHNLICHKEIT):
+  * Rasse & Merkmale: "${playerApp.race || 'Mensch'}" (${playerApp.raceFeatures || 'keine'})
+  * Haarfarbe: "${playerApp.hairColor || 'Unbekannt'}" | Augenfarbe: "${playerApp.eyeColor || 'Unbekannt'}"
+  * Statur & Gesichtszüge: "${playerApp.build || 'Normal'}" | "${playerApp.looks || 'Normal'}"
+  * Herkunft / Familie: "${playerApp.origin || ''}" / "${playerApp.family || effectivePlayer.family || ''}"` : '';
+
       const existingTitles = allLoreEntries
         ? allLoreEntries.map(e => `Kategorie: "${e.category}" | Name: "${e.title || 'Unbenannt'}"`).join('\n')
         : '';
@@ -5752,7 +5805,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
 ${powerInstruction}
 
 ### WICHTIG: DER SPIELERCHARAKTER / PROTAGONIST DER WELT:
-${effectivePlayerName ? `- Name des Spielers: "${effectivePlayerName}" (Rolle: ${playerRole})` : '- Der Spieler ist der Protagonist der Spielwelt.'}
+${effectivePlayerName ? `- Name des Spielers: "${effectivePlayerName}" (Rolle: ${playerRole})` : '- Der Spieler ist der Protagonist der Spielwelt.'}${playerAppearanceContext}
 - STRENGSTES VERBOT EINES SPIELER-NPC-EINTRAGS:
   Erstelle UNTER KEINEN UMSTÄNDEN einen Eintrag in "Charaktere", "Gegner" oder einer anderen Kategorie für den Spieler selbst (${effectivePlayerName ? `weder mit dem Namen "${effectivePlayerName}" noch als Klon` : 'als Spielercharakter'})!
   Der Spieler existiert bereits als eigenständige Spielfigur im System und ist KEIN NPC.
@@ -5768,6 +5821,10 @@ ${effectivePlayerName ? `- Name des Spielers: "${effectivePlayerName}" (Rolle: $
      * Vergib passende Vornamen und den gemeinsamen Familiennamen (z. B. Vater: "Thomas Dornbusch", Mutter: "Helena Dornbusch", Schwester: "Mara Dornbusch").
      * Bei der Familie des Spielers: Der Spieler selbst erhält KEINEN Eintrag, aber jedes Familienmitglied verweist in seiner Biografie, seinem "relationship"-Feld (z. B. "Mutter von ${effectivePlayerName || 'Spieler'}") und seinem "family"-Feld auf die Verwandtschaft.
      * Vernetze die Familienmitglieder untereinander logisch in ihren "relationships"-Details (z. B. wer mit wem verheiratet ist, Geschwisterdynamiken, Zuneigung, Sorgen).
+     * GENETISCHE VERERBUNG & FAMILIENÄHNLICHKEIT BEI AUSSEHEN (STRENGSTE DIRECTIVE):
+       - Das Aussehen der Kinder wird von den Eltern bestimmt!
+       - Bei der Familie des Spielers: Das Aussehen der Eltern, Geschwister und Kinder MUSS dem Aussehen des Spielers genetisch gleichen bzw. die Quelle dafür sein (gleiche/verwandte Haarfarbe, Augenfarbe, Rasse, Rassemerkmale wie Tierohren/Elfenohren/Hörner/Schuppen, Hauttyp und Statur).
+       - Bei NPC-Familien: Eltern und Kinder MÜSSEN sich optisch stark ähneln. Kinder erben Haarfarbe, Augenfarbe, Rassemerkmale und Statur von ihren Eltern!
      * Optional kann bei Bedarf ein passender Ort erstellt werden (z. B. der "Bauernhof der Dornbuschs" oder das "Herrenhaus"), falls passend.
 2. FRAKTIONEN & GRUPPEN-ENSEMBLES:
    - Wenn der Nutzer eine Fraktion, eine Gilde, eine Bande, eine Schiffsbesatzung oder ein Gremium nennt:

@@ -112,24 +112,23 @@ function extractResponseText(response: any): string {
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
+    'gemini-2.5-flash',
+    'gemini-3.1-flash-lite',
     'gemini-3.8-flash',
-    'gemini-flash-latest',
-    'gemini-3.1-flash-lite'
+    'gemini-flash-latest'
   ];
   
   // Map legacy, non-existent, or alias model requests to verified stable models
-  let targetModel = 'gemini-3.8-flash';
+  let targetModel = 'gemini-2.5-flash';
   if (requestedModel) {
-    if (requestedModel.includes('3.1-pro') || requestedModel.includes('gemini-3.1-pro-preview') || requestedModel.includes('2.5-pro') || requestedModel.includes('pro')) {
-      targetModel = 'gemini-3.8-flash'; // Default to 3.8-flash for high reliability on free tier
+    if (requestedModel.includes('flash-lite') || requestedModel.includes('lite')) {
+      targetModel = 'gemini-3.1-flash-lite';
     } else if (requestedModel.includes('image')) {
       targetModel = 'gemini-3.1-flash-lite-image';
-    } else if (requestedModel.includes('flash-lite') || requestedModel.includes('lite')) {
-      targetModel = 'gemini-3.1-flash-lite';
-    } else if (requestedModel.includes('flash') || requestedModel.includes('2.5-flash') || requestedModel.includes('3.8-flash')) {
+    } else if (requestedModel.includes('3.8-flash')) {
       targetModel = 'gemini-3.8-flash';
     } else {
-      targetModel = requestedModel;
+      targetModel = 'gemini-2.5-flash';
     }
   }
   

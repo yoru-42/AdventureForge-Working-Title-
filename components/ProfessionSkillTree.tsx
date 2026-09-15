@@ -18,6 +18,7 @@ import { getCatalogCompetenciesForProfession } from '../lib/professionCompetenci
 import { getCompetenciesForJobTier } from '../lib/professionTierCompetenciesData';
 import { calculateCompetencyProgress } from '../services/professionCompetencyService';
 import { getDetailedDutiesForJobAndTier } from '../lib/professionDutiesDetailed';
+import { getSuggestedAuthoritiesForProfession } from '../lib/professionAuthoritiesData';
 import EverydaySkillsSelect, { parseEverydaySkills } from './EverydaySkillsSelect';
 import {
   Check,
@@ -34,7 +35,11 @@ import {
   Compass,
   ArrowRight,
   ArrowDown,
-  ClipboardList
+  ClipboardList,
+  ChevronDown,
+  ChevronUp,
+  Shield,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export interface ProfessionSkillTreeProps {
@@ -144,11 +149,11 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   const [editingExpNodeId, setEditingExpNodeId] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
-  // Automatically ensure inline inspector is comfortably in view
+  // Automatically ensure expanded node is comfortably in view
   useEffect(() => {
     if (inspectingNodeId) {
       const timer = setTimeout(() => {
-        const el = document.getElementById(`node-inspector-${inspectingNodeId}`);
+        const el = document.getElementById(`tree-node-${inspectingNodeId}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
@@ -756,141 +761,18 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   };
 
   // ---------------------------------------------------------------------------
-  // COMPACT CLEAN TALENT TREE NODE RENDERING
-  // Keine "Kernberuf" Beschriftung, keine Pfade-Buttons, keine abgeschnittenen Texte.
-  // Es reicht ein kleines Feld mit "Erlernt" + "Details".
+  // UNIFIED TALENT TREE NODE RENDERING
+  // Einheitliches Feld: Saubere Karte mit integrierter Akkordeon-Detailansicht.
+  // Keine doppelten Beschriftungen, Stufen-Tags oder störenden Pfeile.
   // ---------------------------------------------------------------------------
-  const renderCompactNode = (node: ProfessionTreeNode, nextRankName?: string) => {
+  const renderTreeNode = (node: ProfessionTreeNode) => {
+    const isMain = isNodeMain(node);
     const isLearned = isNodeLearned(node);
     const isInspected = inspectingNodeId === node.id;
     const evaluation = evaluations.get(node.id);
     const isAvailable = evaluation ? evaluation.isAvailable : true;
     const isLocked = !isAvailable && !isLearned;
 
-    const rankLabel = node.rankTitle
-      ? node.rankTitle
-      : node.rankOrder !== undefined && node.rankOrder > 0
-      ? `Stufe ${node.rankOrder}`
-      : node.tier === 'einstieg'
-      ? 'Einstiegsstufe'
-      : 'Fachberuf';
-
-    const nextProfession = nextRankName || node.nextRankProfession;
-
-    const nodeTypeBadgeLabel =
-      node.nodeType === 'training'
-        ? 'Ausbildung'
-        : node.nodeType === 'specialization'
-        ? 'Spezialisierung'
-        : node.nodeType === 'advanced_profession'
-        ? 'Fachberuf'
-        : node.nodeType === 'promotion'
-        ? 'Beförderung'
-        : node.nodeType === 'leadership'
-        ? 'Leitungsamt'
-        : null;
-
-    return (
-      <div
-        key={node.id}
-        id={`tree-node-${node.id}`}
-        className={`relative flex flex-col justify-between p-3.5 sm:p-4 rounded-xl transition-all duration-150 border h-full w-full min-w-0 ${
-          isLearned
-            ? 'bg-amber-950/30 border-amber-500/70 shadow-sm shadow-amber-950/30'
-            : isInspected
-            ? 'bg-slate-900 border-amber-400/80 ring-1 ring-amber-400/40 shadow-sm'
-            : isLocked
-            ? 'bg-slate-950/80 border-slate-800/80 opacity-75'
-            : 'bg-slate-900/90 border-slate-800 hover:border-slate-700 hover:bg-slate-800/50 shadow-sm'
-        }`}
-      >
-        <div className="flex flex-col gap-2 min-w-0">
-          {/* Titel & Schloss / Typ-Badge */}
-          <div className="flex items-start justify-between gap-2 min-w-0">
-            <div className="flex flex-col min-w-0">
-              <span
-                className="text-sm font-bold text-white tracking-wide font-serif break-words leading-snug"
-                title={node.name}
-              >
-                {node.name}
-              </span>
-              {nodeTypeBadgeLabel && (
-                <span className="text-[10px] text-slate-400 font-sans mt-0.5">
-                  {nodeTypeBadgeLabel}
-                </span>
-              )}
-            </div>
-            {isLocked && (
-              <span
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-950/60 border border-rose-900/60 text-rose-300 text-[10px] shrink-0"
-                title="Voraussetzungen noch nicht erfüllt"
-              >
-                <Lock className="w-2.5 h-2.5" />
-              </span>
-            )}
-          </div>
-
-          {/* Stufe & Aufstiegs-Verbindung */}
-          <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 pt-0.5 gap-2 min-w-0">
-            <span className="px-2 py-0.5 rounded bg-slate-950/70 border border-slate-800 text-amber-300/90 font-medium text-[10px] shrink-0">
-              {rankLabel}
-            </span>
-            {nextProfession && (
-              <span className="text-[10px] text-slate-400 flex items-center gap-1 min-w-0 truncate max-w-[170px]" title={`Nächster Rang: ${nextProfession}`}>
-                <ArrowRight className="w-3 h-3 text-amber-400/80 shrink-0" />
-                <span className="truncate">{nextProfession}</span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Untere Leiste: Kleines Feld "Erlernt" + "Details" Button */}
-        <div className="flex items-center justify-between gap-2 mt-3 pt-2.5 border-t border-slate-800/80">
-          {/* Kleines Feld mit "Erlernt" */}
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={isLearned}
-              onChange={() => handleToggleLearned(node)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-500"
-            />
-            <span
-              className={`text-xs font-medium transition ${
-                isLearned ? 'text-amber-300 font-semibold' : 'text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              Erlernt
-            </span>
-          </label>
-
-          {/* Details / Info 1-Click Toggle */}
-          <button
-            type="button"
-            onClick={() => setInspectingNodeId(isInspected ? null : node.id)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-1 shrink-0 ${
-              isInspected
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 font-bold'
-                : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700'
-            }`}
-            title={isInspected ? 'Details schließen' : 'Details einsehen'}
-          >
-            <Info className="w-3 h-3 text-slate-400" />
-            <span>{isInspected ? 'Schließen' : 'Details'}</span>
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // ---------------------------------------------------------------------------
-  // 1-CLICK EXPANDABLE DETAIL INSPECTOR
-  // ---------------------------------------------------------------------------
-  const renderNodeInspector = (node: ProfessionTreeNode) => {
-    const isMain = isNodeMain(node);
-    const isLearned = isNodeLearned(node);
-    const evaluation = evaluations.get(node.id);
-    const isAvailable = evaluation ? evaluation.isAvailable : true;
-    const isLocked = !isAvailable && !isLearned;
     const { compItems, talentItems } = getNodeCompetenciesAndTalents(node);
 
     // Sub-specializations for this core node
@@ -916,397 +798,466 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
     const isEditingProg = editingProgNodeId === node.id;
     const isEditingExp = editingExpNodeId === node.id;
 
+    // Authorities / Weisungsrechte
+    const nodeAuthorities = node.suggestedAuthorities || node.authorities || getSuggestedAuthoritiesForProfession(node.name, node.rankOrder ?? node.tier);
+
     return (
       <div
-        id={`node-inspector-${node.id}`}
-        className="w-full bg-slate-900 border-2 border-amber-500/60 rounded-2xl p-4 sm:p-5 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150 my-3"
+        key={node.id}
+        id={`tree-node-${node.id}`}
+        className={`relative flex flex-col p-4 sm:p-5 rounded-2xl transition-all duration-200 border w-full min-w-0 ${
+          isInspected
+            ? 'bg-slate-900/95 border-amber-500/80 ring-1 ring-amber-500/40 shadow-xl'
+            : isLearned
+            ? 'bg-amber-950/25 border-amber-500/60 shadow-sm'
+            : isLocked
+            ? 'bg-slate-950/80 border-slate-800/80 opacity-75'
+            : 'bg-slate-900/85 border-slate-800 hover:border-slate-700 hover:bg-slate-800/40 shadow-sm'
+        }`}
       >
-        {/* Header: Title & 1-Click Close */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-3">
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-bold text-white font-serif uppercase tracking-wider">
-                {node.name}
-              </h3>
-              {isMain && (
-                <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/60 text-amber-300 text-[10px] font-bold">
-                  Aktueller Hauptberuf
+        {/* HEADER AREA */}
+        <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex items-start justify-between gap-3 min-w-0">
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm sm:text-base font-bold text-white tracking-wide font-serif break-words">
+                  {node.name}
+                </span>
+                {isMain && (
+                  <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/60 text-amber-300 text-[10px] font-bold">
+                    Aktueller Hauptberuf
+                  </span>
+                )}
+                {isLearned && !isMain && (
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/60 text-emerald-300 text-[10px] font-bold">
+                    Erlernt (Nebenberuf)
+                  </span>
+                )}
+              </div>
+
+              {node.positionTitle && (
+                <div className="text-xs text-amber-400/90 font-medium mt-1">
+                  Dienststellung / Amt: <span className="text-white font-semibold">{node.positionTitle}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Right actions: Locked indicator & Set Main button */}
+            <div className="flex items-center gap-2 shrink-0">
+              {isLocked && (
+                <span
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-rose-950/60 border border-rose-900/60 text-rose-300 text-[11px]"
+                  title="Voraussetzungen noch nicht erfüllt"
+                >
+                  <Lock className="w-3 h-3 text-rose-400" />
+                  <span className="text-[10px] font-medium hidden sm:inline">Gesperrt</span>
                 </span>
               )}
               {isLearned && !isMain && (
-                <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/60 text-emerald-300 text-[10px] font-bold">
-                  Erlernt (Nebenberuf)
-                </span>
-              )}
-              {node.nodeType && (
-                <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-medium">
-                  {node.nodeType === 'training'
-                    ? 'Ausbildung'
-                    : node.nodeType === 'specialization'
-                    ? 'Spezialisierung'
-                    : node.nodeType === 'advanced_profession'
-                    ? 'Fachberuf'
-                    : node.nodeType === 'promotion'
-                    ? 'Beförderung'
-                    : node.nodeType === 'leadership'
-                    ? 'Leitungsamt'
-                    : 'Berufsstufe'}
-                </span>
-              )}
-            </div>
-
-            {node.positionTitle && (
-              <div className="text-xs text-amber-400/90 font-medium mt-1">
-                Dienststellung / Amt: <span className="text-white font-semibold">{node.positionTitle}</span>
-              </div>
-            )}
-
-            {node.description && (
-              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed max-w-2xl">
-                {node.description}
-              </p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            {/* If learned but not main, allow promoting to main */}
-            {isLearned && !isMain && (
-              <button
-                type="button"
-                onClick={() => handleSetMain(node)}
-                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg text-xs font-bold transition cursor-pointer"
-              >
-                Als Hauptberuf festlegen
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Voraussetzungen: Detaillierte Prüfung (Pflicht, Soft, Fachübergreifend) */}
-        {node.prerequisites && node.prerequisites.length > 0 && (
-          <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Qualifikationsvoraussetzungen</span>
-              {isLocked ? (
-                <span className="text-rose-400 text-[10px] font-semibold flex items-center gap-1">
-                  <Lock className="w-3 h-3" /> Nicht vollständig erfüllt
-                </span>
-              ) : (
-                <span className="text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
-                  <Check className="w-3 h-3" /> Bereit zur Freischaltung
-                </span>
-              )}
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-              {evaluation?.allEvaluations ? (
-                evaluation.allEvaluations.map((evalItem, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
-                      evalItem.isFulfilled
-                        ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-200'
-                        : evalItem.isHard
-                        ? 'bg-rose-950/30 border-rose-800/50 text-rose-200'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {evalItem.isFulfilled ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      ) : evalItem.isHard ? (
-                        <X className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                      ) : (
-                        <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      )}
-                      <span className="truncate">{evalItem.prerequisite?.label || evalItem.detail}</span>
-                    </div>
-                    <span className="text-[10px] text-slate-400 shrink-0 ml-2">
-                      {evalItem.isHard ? 'Pflicht' : 'Empfohlen'}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                node.prerequisites.map((req, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-2 rounded-lg border bg-slate-900/60 border-slate-800 text-xs text-slate-300"
-                  >
-                    <span>{req.label}</span>
-                    <span className="text-[10px] text-slate-400">
-                      {req.required !== false ? 'Pflicht' : 'Empfohlen'}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Prerequisites notice if locked */}
-        {isLocked && evaluation && evaluation.missingPrerequisites.length > 0 && !node.prerequisites?.length && (
-          <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-xs text-rose-200">
-            <span className="font-bold block mb-1">Voraussetzungen noch nicht erfüllt:</span>
-            <ul className="space-y-0.5 pl-4 list-disc text-[11px] text-rose-300">
-              {evaluation.missingPrerequisites.map((req, idx) => (
-                <li key={idx}>{req}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Mögliche Vertiefungen / Spezialisierungen (ohne Pfade-Banner) */}
-        {specializations.length > 0 && (
-          <div className="flex flex-col gap-1.5 bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Mögliche Spezialisierungen & Meistertitel
-            </span>
-            <div className="flex items-center gap-2 flex-wrap">
-              {specializations.map(specNode => {
-                const isCurrentSpec = currentSpecialization?.toLowerCase().trim() === specNode.name.toLowerCase().trim();
-                return (
-                  <button
-                    key={specNode.id}
-                    type="button"
-                    onClick={() => {
-                      onSelectProfession(isMain ? currentProfession : node.name, specNode.name, fieldId);
-                      setFeedbackMsg(`Spezialisierung '${specNode.name}' gewählt.`);
-                      setTimeout(() => setFeedbackMsg(null), 2500);
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer border ${
-                      isCurrentSpec
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 font-semibold'
-                        : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
-                    }`}
-                  >
-                    {specNode.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Grid: Progress & Experience */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
-          {/* Berufsfortschritt */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-300">Berufsfortschritt</span>
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono font-bold text-amber-400">{progressVal} %</span>
-                {isMain && (
-                  <button
-                    type="button"
-                    onClick={() => setEditingProgNodeId(isEditingProg ? null : node.id)}
-                    className="text-slate-400 hover:text-amber-300 transition cursor-pointer p-0.5"
-                    title="Schieberegler anpassen"
-                  >
-                    <Sliders className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
-              <div
-                className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all"
-                style={{ width: `${Math.max(0, Math.min(100, progressVal))}%` }}
-              />
-            </div>
-
-            {isMain && isEditingProg && (
-              <div className="flex items-center gap-2 mt-1">
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={progressVal}
-                  onChange={e => handleUpdateProgress(parseInt(e.target.value, 10) || 0)}
-                  className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Berufserfahrung */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-slate-300">Erfahrung & Praxis</span>
-              <div className="flex items-center gap-1.5">
-                <span className="font-mono text-slate-200">{formattedExp}</span>
-                {isMain && (
-                  <button
-                    type="button"
-                    onClick={() => setEditingExpNodeId(isEditingExp ? null : node.id)}
-                    className="text-[11px] text-amber-400 hover:text-amber-300 underline cursor-pointer"
-                  >
-                    {isEditingExp ? 'Fertig' : 'Ändern'}
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {isMain && isEditingExp ? (
-              <div className="flex items-center gap-2 text-xs mt-1">
-                <label className="text-slate-400 text-[10px]">Jahre:</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={currentExp.years}
-                  onChange={e =>
-                    handleUpdateExperience(parseInt(e.target.value, 10) || 0, currentExp.months || 0, currentExp.days || 0)
-                  }
-                  className="w-12 bg-slate-900 border border-slate-700 rounded px-1 text-white font-mono text-center text-xs"
-                />
-                <label className="text-slate-400 text-[10px]">Monate:</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="11"
-                  value={currentExp.months || 0}
-                  onChange={e =>
-                    handleUpdateExperience(currentExp.years, parseInt(e.target.value, 10) || 0, currentExp.days || 0)
-                  }
-                  className="w-12 bg-slate-900 border border-slate-700 rounded px-1 text-white font-mono text-center text-xs"
-                />
-                <label className="text-slate-400 text-[10px]">Tage:</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="30"
-                  value={currentExp.days || 0}
-                  onChange={e =>
-                    handleUpdateExperience(currentExp.years, currentExp.months || 0, parseInt(e.target.value, 10) || 0)
-                  }
-                  className="w-12 bg-slate-900 border border-slate-700 rounded px-1 text-white font-mono text-center text-xs"
-                />
-              </div>
-            ) : (
-              <span className="text-[11px] text-slate-400">
-                Akkumulierte Tätigkeitszeit in diesem Fachbereich
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Typische Aufgaben & Pflichten (Passend zum Beruf & Rang) */}
-        {(() => {
-          const nodeDuties = getDetailedDutiesForJobAndTier(node.name || currentProfession || '', node.tier);
-          if (!nodeDuties || nodeDuties.length === 0) return null;
-          return (
-            <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                <ClipboardList className="w-3.5 h-3.5 text-amber-400" />
-                <span>Typische Aufgaben & Berufspflichten</span>
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
-                {nodeDuties.map((duty, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-start gap-2 text-xs py-1.5 px-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 text-slate-200"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                    <span className="leading-relaxed break-words">{duty}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Fachkompetenzen & Talente */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Kompetenzen */}
-          <div className="flex flex-col gap-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Zugeordnete Fachkompetenzen
-            </span>
-            <div className="flex flex-col gap-2 overflow-x-hidden">
-              {compItems.map(comp => (
-                <div
-                  key={comp.name}
-                  className="flex flex-col gap-2 text-xs p-3 rounded-lg bg-slate-950/70 border border-slate-800"
+                <button
+                  type="button"
+                  onClick={() => handleSetMain(node)}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg text-xs font-bold transition cursor-pointer"
                 >
-                  <span className="text-slate-200 font-medium leading-relaxed break-words">
-                    {comp.name}
+                  Als Hauptberuf
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Kurzbeschreibung */}
+          {node.description && (
+            <p className="text-xs text-slate-300 leading-relaxed mt-0.5">
+              {node.description}
+            </p>
+          )}
+        </div>
+
+        {/* Action / Control Bar: [x] Erlernt on left, [Details/Schließen] toggle on right */}
+        <div className="flex items-center justify-between gap-3 mt-3.5 pt-3 border-t border-slate-800/80">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isLearned}
+              onChange={() => handleToggleLearned(node)}
+              className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-500"
+            />
+            <span
+              className={`text-xs font-semibold transition ${
+                isLearned ? 'text-amber-300' : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Erlernt
+            </span>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setInspectingNodeId(isInspected ? null : node.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+              isInspected
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm'
+                : 'bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700'
+            }`}
+            title={isInspected ? 'Details einklappen' : 'Details & Steigerung aufklappen'}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>{isInspected ? 'Schließen' : 'Details'}</span>
+            {isInspected ? <ChevronUp className="w-3.5 h-3.5 text-amber-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+          </button>
+        </div>
+
+        {/* EXPANDED INLINE ACCORDION SECTION (Gleiches Feld, kein zweites Fenster) */}
+        {isInspected && (
+          <div className="mt-4 pt-4 border-t border-slate-800/90 flex flex-col gap-4 animate-in fade-in duration-200">
+            {/* Voraussetzungen */}
+            {node.prerequisites && node.prerequisites.length > 0 && (
+              <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>Qualifikationsvoraussetzungen</span>
+                  {isLocked ? (
+                    <span className="text-rose-400 text-[10px] font-semibold flex items-center gap-1">
+                      <Lock className="w-3 h-3" /> Nicht vollständig erfüllt
+                    </span>
+                  ) : (
+                    <span className="text-emerald-400 text-[10px] font-semibold flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Bereit zur Freischaltung
+                    </span>
+                  )}
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                  {evaluation?.allEvaluations ? (
+                    evaluation.allEvaluations.map((evalItem, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
+                          evalItem.isFulfilled
+                            ? 'bg-emerald-950/20 border-emerald-800/40 text-emerald-200'
+                            : evalItem.isHard
+                            ? 'bg-rose-950/30 border-rose-800/50 text-rose-200'
+                            : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {evalItem.isFulfilled ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          ) : evalItem.isHard ? (
+                            <X className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          ) : (
+                            <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          )}
+                          <span className="truncate">{evalItem.prerequisite?.label || evalItem.detail}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 shrink-0 ml-2">
+                          {evalItem.isHard ? 'Pflicht' : 'Empfohlen'}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    node.prerequisites.map((req, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded-lg border bg-slate-900/60 border-slate-800 text-xs text-slate-300"
+                      >
+                        <span>{req.label}</span>
+                        <span className="text-[10px] text-slate-400">
+                          {req.required !== false ? 'Pflicht' : 'Empfohlen'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Missing prerequisites warning */}
+            {isLocked && evaluation && evaluation.missingPrerequisites.length > 0 && !node.prerequisites?.length && (
+              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-xs text-rose-200">
+                <span className="font-bold block mb-1">Voraussetzungen noch nicht erfüllt:</span>
+                <ul className="space-y-0.5 pl-4 list-disc text-[11px] text-rose-300">
+                  {evaluation.missingPrerequisites.map((req, idx) => (
+                    <li key={idx}>{req}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Mögliche Spezialisierungen & Vertiefungen */}
+            {specializations.length > 0 && (
+              <div className="flex flex-col gap-1.5 bg-slate-950/40 p-3 rounded-xl border border-slate-800">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Mögliche Spezialisierungen & Meistertitel
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {specializations.map(specNode => {
+                    const isCurrentSpec = currentSpecialization?.toLowerCase().trim() === specNode.name.toLowerCase().trim();
+                    return (
+                      <button
+                        key={specNode.id}
+                        type="button"
+                        onClick={() => {
+                          onSelectProfession(isMain ? currentProfession : node.name, specNode.name, fieldId);
+                          setFeedbackMsg(`Spezialisierung '${specNode.name}' gewählt.`);
+                          setTimeout(() => setFeedbackMsg(null), 2500);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium transition cursor-pointer border ${
+                          isCurrentSpec
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 font-semibold'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+                        }`}
+                      >
+                        {specNode.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Grid: Progress & Experience */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800">
+              {/* Berufsfortschritt */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-300">Berufsfortschritt</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-bold text-amber-400">{progressVal} %</span>
+                    {isMain && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingProgNodeId(isEditingProg ? null : node.id)}
+                        className="text-slate-400 hover:text-amber-300 transition cursor-pointer p-0.5"
+                        title="Schieberegler anpassen"
+                      >
+                        <Sliders className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, progressVal))}%` }}
+                  />
+                </div>
+
+                {isMain && isEditingProg && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={progressVal}
+                      onChange={e => handleUpdateProgress(parseInt(e.target.value, 10) || 0)}
+                      className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Berufserfahrung */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-300">Erfahrung & Praxis</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-slate-200">{formattedExp}</span>
+                    {isMain && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingExpNodeId(isEditingExp ? null : node.id)}
+                        className="text-[11px] text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                      >
+                        {isEditingExp ? 'Fertig' : 'Ändern'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {isMain && isEditingExp ? (
+                  <div className="flex items-center gap-2 text-xs mt-1">
+                    <label className="text-slate-400 text-[10px]">Jahre:</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={currentExp.years}
+                      onChange={e =>
+                        handleUpdateExperience(parseInt(e.target.value, 10) || 0, currentExp.months || 0, currentExp.days || 0)
+                      }
+                      className="w-12 bg-slate-900 border border-slate-700 rounded px-1 text-white font-mono text-center text-xs"
+                    />
+                    <label className="text-slate-400 text-[10px]">Monate:</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="11"
+                      value={currentExp.months || 0}
+                      onChange={e =>
+                        handleUpdateExperience(currentExp.years, parseInt(e.target.value, 10) || 0, currentExp.days || 0)
+                      }
+                      className="w-12 bg-slate-900 border border-slate-700 rounded px-1 text-white font-mono text-center text-xs"
+                    />
+                    <label className="text-slate-400 text-[10px]">Tage:</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="30"
+                      value={currentExp.days || 0}
+                      onChange={e =>
+                        handleUpdateExperience(currentExp.years, currentExp.months || 0, parseInt(e.target.value, 10) || 0)
+                      }
+                      className="w-12 bg-slate-900 border border-slate-700 rounded px-1 text-white font-mono text-center text-xs"
+                    />
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-slate-400">
+                    Akkumulierte Tätigkeitszeit in diesem Fachbereich
                   </span>
-                  <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/60">
-                    <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded bg-amber-950/50 border border-amber-500/40 font-mono text-amber-300 text-xs font-bold min-w-[3.25rem] text-center">
-                        {comp.proficiency}%
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleAdjustProficiency(comp.name, -5)}
-                        className="w-6 h-6 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 flex items-center justify-center text-xs font-bold cursor-pointer transition active:scale-95"
-                        title="Kompetenzstufe um 5% verringern"
+                )}
+              </div>
+            </div>
+
+            {/* Typische Aufgaben & Pflichten */}
+            {(() => {
+              const nodeDuties = getDetailedDutiesForJobAndTier(node.name || currentProfession || '', node.tier);
+              if (!nodeDuties || nodeDuties.length === 0) return null;
+              return (
+                <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <ClipboardList className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Typische Aufgaben & Berufspflichten</span>
+                  </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+                    {nodeDuties.map((duty, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start gap-2 text-xs py-1.5 px-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 text-slate-200"
                       >
-                        -
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleAdjustProficiency(comp.name, +5)}
-                        className="w-6 h-6 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 flex items-center justify-center text-xs font-bold cursor-pointer transition active:scale-95"
-                        title="Kompetenzstufe um 5% erhöhen"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handlePracticeComp(comp)}
-                      className="px-3 py-1 bg-amber-900/60 hover:bg-amber-800 text-amber-200 border border-amber-600/40 rounded text-[11px] font-bold transition cursor-pointer active:scale-95 whitespace-nowrap"
-                      title="35 XP durch praktische Übung"
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                        <span className="leading-relaxed break-words">{duty}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Befugnisse & Weisungsrechte */}
+            {nodeAuthorities && nodeAuthorities.length > 0 && (
+              <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Befugnisse & Weisungsrechte</span>
+                </span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
+                  {nodeAuthorities.map((auth, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-start gap-2 text-xs py-1.5 px-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 text-slate-200"
                     >
-                      Üben
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Talente */}
-          <div className="flex flex-col gap-2">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              Berufstalente & Begabungen
-            </span>
-            <div className="flex flex-col gap-2 overflow-x-hidden">
-              {talentItems.map(t => (
-                <div
-                  key={t.name}
-                  className="flex flex-col gap-2 text-xs p-3 rounded-lg bg-slate-950/70 border border-slate-800"
-                >
-                  <span className="text-slate-200 font-medium leading-relaxed break-words">
-                    {t.name}
-                  </span>
-                  <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/60">
-                    <span className="text-[11px] text-slate-400">Veranlagung:</span>
-                    <div className="flex items-center gap-1">
-                      {[1, 2, 3, 4, 5].map(starNum => (
-                        <button
-                          key={starNum}
-                          type="button"
-                          onClick={() => handleSetTalent(t.name, starNum)}
-                          className="p-1 hover:scale-110 transition cursor-pointer"
-                          title={`${starNum}/5 Sterne`}
-                        >
-                          <Star
-                            className={`w-4 h-4 ${
-                              starNum <= t.score ? 'fill-amber-400 text-amber-400' : 'text-slate-600'
-                            }`}
-                          />
-                        </button>
-                      ))}
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                      <span className="leading-relaxed break-words">{auth}</span>
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Fachkompetenzen & Talente */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Kompetenzen */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Zugeordnete Fachkompetenzen
+                </span>
+                <div className="flex flex-col gap-2 overflow-x-hidden">
+                  {compItems.map(comp => (
+                    <div
+                      key={comp.name}
+                      className="flex flex-col gap-2 text-xs p-3 rounded-lg bg-slate-950/70 border border-slate-800"
+                    >
+                      <span className="text-slate-200 font-medium leading-relaxed break-words">
+                        {comp.name}
+                      </span>
+                      <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/60">
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-amber-950/50 border border-amber-500/40 font-mono text-amber-300 text-xs font-bold min-w-[3.25rem] text-center">
+                            {comp.proficiency}%
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustProficiency(comp.name, -5)}
+                            className="w-6 h-6 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 flex items-center justify-center text-xs font-bold cursor-pointer transition active:scale-95"
+                            title="Kompetenzstufe um 5% verringern"
+                          >
+                            -
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustProficiency(comp.name, +5)}
+                            className="w-6 h-6 bg-slate-800 hover:bg-slate-700 rounded text-slate-200 flex items-center justify-center text-xs font-bold cursor-pointer transition active:scale-95"
+                            title="Kompetenzstufe um 5% erhöhen"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handlePracticeComp(comp)}
+                          className="px-3 py-1 bg-amber-900/60 hover:bg-amber-800 text-amber-200 border border-amber-600/40 rounded text-[11px] font-bold transition cursor-pointer active:scale-95 whitespace-nowrap"
+                          title="35 XP durch praktische Übung"
+                        >
+                          Üben
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Talente */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Berufstalente & Begabungen
+                </span>
+                <div className="flex flex-col gap-2 overflow-x-hidden">
+                  {talentItems.map(t => (
+                    <div
+                      key={t.name}
+                      className="flex flex-col gap-2 text-xs p-3 rounded-lg bg-slate-950/70 border border-slate-800"
+                    >
+                      <span className="text-slate-200 font-medium leading-relaxed break-words">
+                        {t.name}
+                      </span>
+                      <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/60">
+                        <span className="text-[11px] text-slate-400">Veranlagung:</span>
+                        <div className="flex items-center gap-1">
+                          {[1, 2, 3, 4, 5].map(starNum => (
+                            <button
+                              key={starNum}
+                              type="button"
+                              onClick={() => handleSetTalent(t.name, starNum)}
+                              className="p-1 hover:scale-110 transition cursor-pointer"
+                              title={`${starNum}/5 Sterne`}
+                            >
+                              <Star
+                                className={`w-4 h-4 ${
+                                  starNum <= t.score ? 'fill-amber-400 text-amber-400' : 'text-slate-600'
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   };
@@ -1369,82 +1320,29 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
                   </span>
                 </div>
 
-                {/* Vertical progression: von oben nach unten */}
-                <div className="flex flex-col items-center w-full">
-                  {activeTiers.map((tierGroup, tierIdx) => {
-                    const isLastTier = tierIdx === activeTiers.length - 1;
-                    const nextTierGroup = activeTiers[tierIdx + 1];
-                    const nextSampleName = nextTierGroup?.nodes[0]?.name;
-
-                    return (
-                      <div key={tierGroup.rankOrder} className="flex flex-col items-center w-full">
-                        {/* Tier label badge */}
-                        <div className="flex items-center gap-1.5 my-2 text-[10px] sm:text-xs font-semibold text-slate-400 tracking-wider uppercase">
-                          <span>{tierGroup.title}</span>
-                        </div>
-
-                        {/* Node cards in this tier */}
+                {/* Vertical progression: saubere Kartenliste ohne überflüssige Stufen-Header und Pfeile */}
+                <div className="flex flex-col gap-3.5 w-full">
+                  {activeTiers.map(tierGroup => (
+                    <div
+                      key={tierGroup.rankOrder}
+                      className={`grid w-full gap-3.5 ${
+                        tierGroup.nodes.length === 1
+                          ? 'max-w-xl mx-auto grid-cols-1'
+                          : 'grid-cols-1 sm:grid-cols-2'
+                      }`}
+                    >
+                      {tierGroup.nodes.map(node => (
                         <div
-                          className={`grid w-full gap-3.5 ${
-                            tierGroup.nodes.length === 1
-                              ? 'max-w-md mx-auto grid-cols-1'
-                              : tierGroup.nodes.length === 2
-                              ? 'grid-cols-1 sm:grid-cols-2 max-w-2xl mx-auto'
-                              : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                          key={node.id}
+                          className={`flex flex-col w-full min-w-0 ${
+                            tierGroup.nodes.length > 1 && inspectingNodeId === node.id ? 'sm:col-span-2' : ''
                           }`}
                         >
-                          {tierGroup.nodes.map(node => (
-                            <div key={node.id} className="flex flex-col h-full w-full min-w-0">
-                              {renderCompactNode(node, nextSampleName)}
-                            </div>
-                          ))}
+                          {renderTreeNode(node)}
                         </div>
-
-                        {/* Inline Detail-Inspektor direkt beim ausgewählten Knoten */}
-                        {tierGroup.nodes.some(n => n.id === inspectingNodeId) && (() => {
-                          const targetNode = tierGroup.nodes.find(n => n.id === inspectingNodeId);
-                          if (!targetNode) return null;
-                          return (
-                            <div className="w-full mt-3 animate-in fade-in zoom-in-95 duration-200">
-                              {renderNodeInspector(targetNode)}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Connecting downward arrow to next level */}
-                        {!isLastTier && (
-                          <div className="flex flex-col items-center w-full mt-2 mb-1">
-                            <div className="w-0.5 h-4 bg-gradient-to-b from-amber-500/50 to-amber-500/30" />
-                            
-                            {nextTierGroup && nextTierGroup.nodes.length > 1 ? (
-                              <div className="w-full flex flex-col items-center">
-                                {/* Horizontal branching line */}
-                                <div 
-                                  className="border-t border-amber-500/30 relative"
-                                  style={{
-                                    width: nextTierGroup.nodes.length === 2 ? '50%' : nextTierGroup.nodes.length === 3 ? '66%' : '80%',
-                                    maxWidth: nextTierGroup.nodes.length === 2 ? '300px' : '600px'
-                                  }}
-                                >
-                                  <div className="absolute inset-x-0 top-0 flex justify-between">
-                                    {nextTierGroup.nodes.map((_, i) => (
-                                      <div key={i} className="flex flex-col items-center w-1">
-                                        <div className="w-0.5 h-3 bg-gradient-to-b from-amber-500/30 to-amber-500/10" />
-                                        <ArrowDown className="w-3 h-3 -mt-1 text-amber-500/60" />
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                                <div className="h-4" /> {/* Spacer */}
-                              </div>
-                            ) : (
-                              <ArrowDown className="w-4 h-4 -mt-1 text-amber-500/60" />
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      ))}
+                    </div>
+                  ))}
                 </div>
               </div>
             );

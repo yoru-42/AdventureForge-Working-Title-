@@ -346,9 +346,9 @@ export const HoldingStaffTab: React.FC<HoldingStaffTabProps> = ({
 
                   {/* Authorities selector */}
                   <div className="space-y-1.5 pt-2 border-t border-slate-900">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Befugnisse & Weisungsrechte:</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Befugnisse & Weisungsrechte ({(role.authorities || []).length} aktiv):</span>
                     <div className="flex flex-wrap gap-1">
-                      {STANDARD_AUTHORITIES.slice(0, 6).map(auth => {
+                      {STANDARD_AUTHORITIES.map(auth => {
                         const has = (role.authorities || []).includes(auth);
                         return (
                           <button
