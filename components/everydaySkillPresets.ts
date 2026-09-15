@@ -8,24 +8,62 @@ export const EVERYDAY_SKILL_CATEGORIES: EverydaySkillCategory[] = [
     category: "Überleben, Natur & Orientierung",
     skills: [
       "Lagerfeuer machen",
+      "Feuerholz sammeln",
+      "Brennmaterial beurteilen",
       "Orientierung im Gelände",
+      "Kartenlesen",
+      "Navigation nach Sternen",
+      "Wegstrecken einschätzen",
       "Spurenlesen",
-      "Angeln & Fischen",
+      "Pflanzen erkennen",
+      "Tiere erkennen",
+      "Tierspuren erkennen",
+      "Wetterkunde",
+      "Unterschlupf bauen",
+      "Zelt aufbauen",
       "Fallen stellen",
+      "Angeln & Fischen",
       "Kräutersammeln",
-      "Zelt- & Unterschlupfbau",
-      "Wetterkunde"
+      "Wasser finden & sammeln",
+      "Wasser aufbereiten",
+      "Schwimmen",
+      "Flussüberquerung"
     ]
   },
   {
-    category: "Haushalt, Kochen & Proviant",
+    category: "Haushalt & Alltagsversorgung",
     skills: [
       "Kochen & Backen",
-      "Proviant haltbarmachen",
-      "Schneidern & Reparieren",
-      "Reinigung & Wäsche",
+      "Proviant haltbar machen",
+      "Lebensmittel auf Verderb prüfen",
       "Vorratsverwaltung",
+      "Wasser holen",
+      "Feuerstelle & Ofen bedienen",
+      "Abwaschen",
+      "Reinigung & Wäsche",
+      "Körperpflege & Hygiene",
+      "Bett & Lager herrichten",
+      "Haushalt organisieren",
+      "Beleuchtung & Lampen",
+      "Einfache Haushaltsreparaturen",
+      "Möbelpflege",
       "Tischkultur & Bewirtung"
+    ]
+  },
+  {
+    category: "Landwirtschaft & Lebensmittel",
+    skills: [
+      "Ackerbau",
+      "Gemüseanbau",
+      "Obstbau",
+      "Getreideverarbeitung",
+      "Tierfütterung",
+      "Melken",
+      "Tierpflege",
+      "Viehhaltung",
+      "Schlachten & Zerlegen",
+      "Fischverarbeitung",
+      "Lebensmittelverarbeitung"
     ]
   },
   {
@@ -34,50 +72,91 @@ export const EVERYDAY_SKILL_CATEGORIES: EverydaySkillCategory[] = [
       "Reiten",
       "Pferdepflege & Satteln",
       "Kutsche & Wagen fahren",
-      "Tierzucht & Viehhaltung",
-      "Lasttiere führen"
+      "Lasttiere führen",
+      "Tierzucht",
+      "Tiere beruhigen & führen",
+      "Gepäck & Lasten verstauen"
     ]
   },
   {
-    category: "Handwerk & Werkzeugpflege",
+    category: "Handwerk & Kleidung",
     skills: [
-      "Messer & Waffen schärfen",
       "Einfache Holzarbeiten",
+      "Lederarbeiten",
       "Lederflicken",
+      "Nähen",
+      "Spinnen",
+      "Weben",
+      "Kleidung flicken",
+      "Schuhe reparieren",
+      "Kleidung pflegen",
+      "Färben",
       "Seilknüpfen & Knotenkunde",
-      "Werkzeuginstandhaltung"
+      "Werkzeugpflege",
+      "Werkzeuginstandhaltung",
+      "Messer & Werkzeuge schärfen"
     ]
   },
   {
-    category: "Soziale Fertigkeiten & Zeitvertreib",
+    category: "Körperliche Alltagsfertigkeiten",
     skills: [
-      "Kartenspielen & Würfeln",
+      "Tragen & Lasten bewegen",
+      "Klettern",
+      "Balance",
+      "Körperkoordination",
+      "Hand-Auge-Koordination",
+      "Ausdauer",
+      "Geschicklichkeit",
+      "Kraft im Alltag"
+    ]
+  },
+  {
+    category: "Soziales, Kommunikation & Kultur",
+    skills: [
+      "Gesprächsführung",
+      "Höflichkeit & Etikette",
+      "Gastgeber sein",
+      "Lokale Bräuche kennen",
+      "Feiern organisieren",
+      "Geschichten erzählen",
+      "Vorlesen",
+      "Briefeschreiben",
+      "Nachrichten übermitteln",
+      "Gerüchte erkennen",
+      "Feilschen & Verhandeln",
       "Geselliges Musizieren & Singen",
       "Tanzen",
-      "Geschichten erzählen",
-      "Trinkfestigkeit",
-      "Höflichkeit & Etikette"
+      "Schauspielkunst",
+      "Kartenspielen & Würfeln",
+      "Trinkfestigkeit"
     ]
   },
   {
-    category: "Gesundheit & Erstversorgung",
+    category: "Schrift, Handel & Wissen",
     skills: [
-      "Erste Hilfe & Wundverband",
-      "Hausmittel & Kräutertees",
-      "Körperpflege & Hygiene",
-      "Pflege von Kranken"
-    ]
-  },
-  {
-    category: "Handel, Schrift & Zahlen",
-    skills: [
-      "Feilschen & Feilschen auf Märkten",
       "Lesen & Schreiben",
       "Grundrechnen & Zählen",
       "Buchführung",
-      "Warenkunde"
+      "Warenkunde",
+      "Preise einschätzen",
+      "Handelswaren erkennen",
+      "Maße & Gewichte",
+      "Fremdsprachen-Grundkenntnisse",
+      "Einfache Verwaltung"
+    ]
+  },
+  {
+    category: "Gesundheit & Versorgung",
+    skills: [
+      "Erste Hilfe & Wundverband",
+      "Hausmittel & Kräutertees",
+      "Pflege von Kranken",
+      "Pflege von Verletzten",
+      "Krankheiten & Verletzungen erkennen",
+      "Hygiene im Umgang mit Lebensmitteln"
     ]
   }
 ];
 
-export const ALL_EVERYDAY_SKILLS: string[] = EVERYDAY_SKILL_CATEGORIES.flatMap(c => c.skills);
+export const ALL_EVERYDAY_SKILLS: string[] =
+  EVERYDAY_SKILL_CATEGORIES.flatMap(c => c.skills);

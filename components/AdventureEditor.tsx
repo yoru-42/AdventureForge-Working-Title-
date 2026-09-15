@@ -5066,6 +5066,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                         powerSources={powerSources}
                         baseAbilities={baseAbilities}
                         techniques={techniques}
+                        progressionLogic={world?.techniqueProgressionLogic || 'ep'}
                         onChange={(newPs, newBa, newTech) => {
                           const updatedPlayer = syncCharacterAbilityTree(player, newPs, newBa, newTech);
                           setPlayer(updatedPlayer as Character);
@@ -5087,6 +5088,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </div>
 
                     <CompetenceProfileEditor
+                      progressionLogic={world.techniqueProgressionLogic || 'ep'}
+                      onProgressionLogicChange={val => setWorld(prev => ({ ...prev, techniqueProgressionLogic: val }))}
                       profession={player.profession || player.role || ''}
                       onProfessionChange={val => {
                         if (activeTransformation) {

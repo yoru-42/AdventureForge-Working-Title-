@@ -70,6 +70,7 @@ interface ProfessionCompetencySectionProps {
   onAdditionalDirectionsChange?: (directions: string[]) => void;
   everydaySkills?: string;
   onEverydaySkillsChange?: (skills: string) => void;
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
   activeCategoryTab?: 'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen';
   onSelectCategoryTab?: (tab: 'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen') => void;
   // Legacy sync handlers for backward compatibility
@@ -104,6 +105,7 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
   onAdditionalDirectionsChange,
   everydaySkills = '',
   onEverydaySkillsChange,
+  progressionLogic = 'ep',
   activeCategoryTab = 'hauptberuf',
   onSelectCategoryTab,
   onProficiencyScoreChange,
@@ -553,6 +555,7 @@ export const ProfessionCompetencySection: React.FC<ProfessionCompetencySectionPr
             onSocialTitlesChange={onSocialTitlesChange}
             everydaySkills={everydaySkills}
             onEverydaySkillsChange={onEverydaySkillsChange}
+            progressionLogic={progressionLogic}
             activeCategoryTab={activeCategoryTab}
             onSelectCategoryTab={onSelectCategoryTab}
             onSelectProfession={(newProf, newSpec, newField) => {

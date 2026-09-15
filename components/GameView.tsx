@@ -28,6 +28,7 @@ import { applyProfessionCompetencyActivity } from '../services/professionCompete
 import { ProfessionCompetencyActivity, StoryEntityItem, StoryInfoState } from '../types';
 import { StoryInfoModal } from './StoryInfoModal';
 import { Info } from 'lucide-react';
+import { getAllAdventureCharacters, extractDynamicStoryState } from '../utils/storyStateExtractor';
 
 
 const baseEmotions = [
@@ -2766,9 +2767,11 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     }, 0);
   };
 
-  // Sync messages if adventure changes from outside
+  // Sync messages and initialize dynamic story state if adventure changes
   useEffect(() => {
+    let currentMsgs: ChatMessage[] = [];
     if (adventure.chatHistory && adventure.chatHistory.length > 0) {
+      currentMsgs = adventure.chatHistory;
       setMessages(adventure.chatHistory);
     } else {
       const initialMsgs: ChatMessage[] = [
@@ -2785,7 +2788,20 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
           text: adventure.firstMessage
         });
       }
+      currentMsgs = initialMsgs;
       setMessages(initialMsgs);
+    }
+
+    // Auto-extract dynamic Story-Info and Temporary Story-Data at game start / initial load
+    if (!adventure.storyState || !adventure.storyState.storyEntities || adventure.storyState.storyEntities.length === 0) {
+      const { updatedStoryState, updatedNpcs, hasChanges } = extractDynamicStoryState(adventure, currentMsgs);
+      if (hasChanges) {
+        onUpdateAdventure({
+          ...adventure,
+          storyState: updatedStoryState,
+          npcs: updatedNpcs
+        });
+      }
     }
   }, [adventure.id, adventure.chatHistory, adventure.firstMessage, adventure.prologue]);
 
@@ -3327,6 +3343,28 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       });
     }
 
+    // Extract dynamic story state (Location, Territory, Situation, Goals, Relationships, Entities)
+    const { updatedStoryState: dynStoryState, updatedNpcs: dynNpcs, hasChanges: storyHasChanges, newEntitiesCount } = extractDynamicStoryState(
+      {
+        ...adventure,
+        loreDatabase: updatedLore,
+        npcs: updatedNpcs
+      },
+      messages
+    );
+
+    if (storyHasChanges) {
+      hasChanges = true;
+      if (newEntitiesCount > 0) {
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'add',
+          title: `${newEntitiesCount} neue Story-Einträge erfasst`,
+          category: 'Story & Quests'
+        });
+      }
+    }
+
     if (hasChanges) {
       if (notifications.length > 0) {
         addLoreNotifications(notifications);
@@ -3334,7 +3372,8 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       onUpdateAdventure({
         ...adventure,
         loreDatabase: updatedLore,
-        npcs: updatedNpcs
+        npcs: dynNpcs,
+        storyState: dynStoryState
       });
     }
   }, [messages, adventure.id]);
@@ -5427,15 +5466,29 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         };
       }
 
+      // Extract and sync dynamic story state & NPCs
+      const { updatedStoryState: finalStoryState, updatedNpcs: finalNpcs } = extractDynamicStoryState(
+        {
+          ...adventureRef.current,
+          player: updatedPlayer,
+          npcs: updatedNpcs,
+          world: updatedWorld,
+          loreDatabase: updatedLore,
+          storyState: updatedStoryState,
+          chatHistory: nextChatHistory
+        },
+        nextChatHistory
+      );
+
       // Update adventure state immediately
       onUpdateAdventure({ 
         ...adventureRef.current, 
         player: updatedPlayer,
-        npcs: updatedNpcs,
+        npcs: finalNpcs,
         world: updatedWorld,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
-        storyState: updatedStoryState,
+        storyState: finalStoryState,
         chatHistory: nextChatHistory,
         structuredInventory: syncedInv,
         combatState: updatedCombatState
@@ -5461,17 +5514,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
   const [dialogueTargetId, setDialogueTargetId] = useState<string>(''); // For target NPC in NPC-to-NPC (B)
   const [dialogueGroupSelectedIds, setDialogueGroupSelectedIds] = useState<string[]>([]); // For Group
 
+  // Combined available characters from NPCs, LoreDatabase, and StoryState
+  const availableDialogueNpcs = React.useMemo(() => {
+    return getAllAdventureCharacters(adventure);
+  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities]);
+
   // Set default speaker IDs when npcs change or on mount
   useEffect(() => {
-    if (adventure.npcs && adventure.npcs.length > 0) {
-      if (!dialogueSpeakerId) {
-        setDialogueSpeakerId(adventure.npcs[0].id);
+    if (availableDialogueNpcs && availableDialogueNpcs.length > 0) {
+      if (!dialogueSpeakerId || !availableDialogueNpcs.some(n => n.id === dialogueSpeakerId)) {
+        setDialogueSpeakerId(availableDialogueNpcs[0].id);
       }
-      if (adventure.npcs.length > 1 && !dialogueTargetId) {
-        setDialogueTargetId(adventure.npcs[1].id);
+      if (availableDialogueNpcs.length > 1 && (!dialogueTargetId || !availableDialogueNpcs.some(n => n.id === dialogueTargetId))) {
+        setDialogueTargetId(availableDialogueNpcs[1].id);
       }
     }
-  }, [adventure.npcs, dialogueSpeakerId, dialogueTargetId]);
+  }, [availableDialogueNpcs, dialogueSpeakerId, dialogueTargetId]);
 
   const handleSendDialogue = async (textOverride?: string | React.MouseEvent<any>) => {
     if (isLoading) return;
@@ -5479,9 +5537,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
     const text = (typeof textOverride === 'string' ? textOverride : inputText).trim();
     if (dialogueType === 'user_npc' && !text) return;
     
-    const npcList = adventure.npcs || [];
-    const speakerNpc = npcList.find(n => n.id === dialogueSpeakerId);
-    const targetNpc = npcList.find(n => n.id === dialogueTargetId);
+    const npcList = availableDialogueNpcs || [];
+    const speakerNpc = npcList.find(n => n.id === dialogueSpeakerId) || npcList[0];
+    const targetNpc = npcList.find(n => n.id === dialogueTargetId) || (npcList.length > 1 ? npcList[1] : npcList[0]);
     
     const speakerName = speakerNpc ? (speakerNpc.nickname || speakerNpc.name) : 'Charakter';
     const targetName = targetNpc ? (targetNpc.nickname || targetNpc.name) : 'Charakter';
@@ -5659,13 +5717,27 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       setMessages(prev => [...prev, newModelMsg]);
       const nextChatHistory: ChatMessage[] = [...updatedMessages, newModelMsg];
 
+      // Dynamically extract story state & relationships for dialogue turn
+      const { updatedStoryState: dynStoryState, updatedNpcs: dynNpcs } = extractDynamicStoryState(
+        {
+          ...adventureRef.current,
+          world: updatedWorld,
+          player: updatedPlayer,
+          npcs: updatedNpcs,
+          loreDatabase: updatedLore,
+          storyState: updatedStoryState,
+          chatHistory: nextChatHistory
+        },
+        nextChatHistory
+      );
+
       onUpdateAdventure({
         ...adventureRef.current,
         world: updatedWorld,
         player: updatedPlayer,
-        npcs: updatedNpcs,
+        npcs: dynNpcs,
         loreDatabase: updatedLore,
-        storyState: updatedStoryState,
+        storyState: dynStoryState,
         structuredInventory: updatedStructuredInventory,
         chatHistory: nextChatHistory
       });
@@ -7426,15 +7498,29 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         };
       }
 
+      // Extract and sync dynamic story state & NPCs
+      const { updatedStoryState: finalStoryState, updatedNpcs: finalNpcs } = extractDynamicStoryState(
+        {
+          ...adventureRef.current,
+          player: updatedPlayer,
+          npcs: updatedNpcs,
+          world: updatedWorld,
+          loreDatabase: updatedLore,
+          storyState: updatedStoryState,
+          chatHistory: finalMessages
+        },
+        finalMessages
+      );
+
       // Update adventure state immediately
       onUpdateAdventure({ 
         ...adventureRef.current, 
         player: updatedPlayer,
-        npcs: updatedNpcs,
+        npcs: finalNpcs,
         world: updatedWorld,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
-        storyState: updatedStoryState,
+        storyState: finalStoryState,
         chatHistory: finalMessages,
         structuredInventory: syncedInv,
         combatState: updatedCombatState
@@ -8421,20 +8507,20 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               {dialogueType === 'user_npc' && (
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Gesprächspartner wählen:</label>
-                  {adventure.npcs && adventure.npcs.length > 0 ? (
+                  {availableDialogueNpcs && availableDialogueNpcs.length > 0 ? (
                     <select
                       value={dialogueSpeakerId}
                       onChange={(e) => setDialogueSpeakerId(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50"
                     >
-                      {adventure.npcs.map((npc, nIdx) => (
+                      {availableDialogueNpcs.map((npc, nIdx) => (
                         <option key={npc.id ? `dlg-npc-${npc.id}-${nIdx}` : `dlg-npc-${nIdx}`} value={npc.id}>
                           {npc.nickname || npc.name} ({npc.role})
                         </option>
                       ))}
                     </select>
                   ) : (
-                    <p className="text-[10px] text-red-400 italic">Keine NPCs in dieser Welt verfügbar. Bitte erstelle zuerst einen Charakter/NPC im Codex!</p>
+                    <p className="text-[10px] text-red-400 italic">Keine NPCs oder Charaktere verfügbar.</p>
                   )}
                   <p className="text-[10px] text-slate-500 leading-normal">
                     Schreibe unten deine gesprochenen Worte. Der gewählte NPC wird im reinen Dialog antworten - ganz ohne beschreibende Erzählungen.
@@ -8452,7 +8538,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         onChange={(e) => setDialogueSpeakerId(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500/50"
                       >
-                        {adventure.npcs?.map((npc, nIdx) => (
+                        {availableDialogueNpcs?.map((npc, nIdx) => (
                           <option key={npc.id ? `spkA-${npc.id}-${nIdx}` : `spkA-${nIdx}`} value={npc.id} disabled={npc.id === dialogueTargetId}>
                             {npc.nickname || npc.name}
                           </option>
@@ -8466,7 +8552,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         onChange={(e) => setDialogueTargetId(e.target.value)}
                         className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500/50"
                       >
-                        {adventure.npcs?.map((npc, nIdx) => (
+                        {availableDialogueNpcs?.map((npc, nIdx) => (
                           <option key={npc.id ? `spkB-${npc.id}-${nIdx}` : `spkB-${nIdx}`} value={npc.id} disabled={npc.id === dialogueSpeakerId}>
                             {npc.nickname || npc.name}
                           </option>
@@ -8484,8 +8570,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Teilnehmer wählen (Mehrfachauswahl):</label>
                   <div className="space-y-1.5 max-h-32 overflow-y-auto bg-slate-950/80 p-2 rounded-xl border border-slate-850">
-                    {adventure.npcs && adventure.npcs.length > 0 ? (
-                      adventure.npcs.map((npc, nIdx) => {
+                    {availableDialogueNpcs && availableDialogueNpcs.length > 0 ? (
+                      availableDialogueNpcs.map((npc, nIdx) => {
                         const isChecked = dialogueGroupSelectedIds.includes(npc.id);
                         return (
                           <button
@@ -8729,9 +8815,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   if (!isDialogueMenuExpanded) {
                     setIsCombatMenuExpanded(false);
                     // Autofill first NPC for speech if available
-                    if (adventure.npcs && adventure.npcs.length > 0) {
-                      if (!dialogueSpeakerId) setDialogueSpeakerId(adventure.npcs[0].id);
-                      if (adventure.npcs.length > 1 && !dialogueTargetId) setDialogueTargetId(adventure.npcs[1].id);
+                    if (availableDialogueNpcs && availableDialogueNpcs.length > 0) {
+                      if (!dialogueSpeakerId || !availableDialogueNpcs.some(n => n.id === dialogueSpeakerId)) setDialogueSpeakerId(availableDialogueNpcs[0].id);
+                      if (availableDialogueNpcs.length > 1 && (!dialogueTargetId || !availableDialogueNpcs.some(n => n.id === dialogueTargetId))) setDialogueTargetId(availableDialogueNpcs[1].id);
                     }
                   }
                 }}
@@ -8986,7 +9072,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), isDialogueActive ? handleSendDialogue() : handleSend())} 
                 placeholder={
                   !isDialogueActive ? "Deine Handlung..." :
-                  dialogueType === 'user_npc' ? `Wörtliche Rede an ${(adventure.npcs?.find(n => n.id === dialogueSpeakerId)?.nickname || adventure.npcs?.find(n => n.id === dialogueSpeakerId)?.name || 'NPC')}...` :
+                  dialogueType === 'user_npc' ? `Wörtliche Rede an ${(availableDialogueNpcs?.find(n => n.id === dialogueSpeakerId)?.nickname || availableDialogueNpcs?.find(n => n.id === dialogueSpeakerId)?.name || 'Charakter')}...` :
                   dialogueType === 'npc_npc' ? "Gesprächsthema oder erster Satz..." : "Thema für die Gruppe..."
                 } 
                 className="flex-1 bg-transparent border-none px-4 py-2 text-sm text-white outline-none resize-none placeholder:text-slate-500 max-h-40" 

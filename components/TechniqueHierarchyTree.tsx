@@ -21,6 +21,7 @@ import {
 import { TechniqueSmartFillModal } from './TechniqueSmartFillModal';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { WeaponSkillTree } from './WeaponSkillTree';
+import { TechniqueCard } from './TechniqueCard';
 
 export interface TechniqueHierarchyTreeProps {
   powerSources: CharacterPowerSource[];
@@ -35,6 +36,7 @@ export interface TechniqueHierarchyTreeProps {
   characterRole?: string;
   worldTitle?: string;
   readOnly?: boolean;
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
 }
 
 export const CATEGORY_TABS = [
@@ -84,7 +86,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   characterName,
   characterRole,
   worldTitle,
-  readOnly = false
+  readOnly = false,
+  progressionLogic = 'ep'
 }) => {
   // 1. Sichere Standard-Kraftquelle falls Liste leer
   const safePowerSources = useMemo(() => {
@@ -106,6 +109,22 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
   const [activeBaseAbilityId, setActiveBaseAbilityId] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<AbilityCategoryTab>('Techniken');
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
+
+  const toggleCardExpanded = (id: string, defaultExpanded: boolean) => {
+    setExpandedMap(prev => {
+      const current = prev[id] !== undefined ? prev[id] : defaultExpanded;
+      return { ...prev, [id]: !current };
+    });
+  };
+
+  const handleToggleAll = (expand: boolean, entriesToToggle: TechniqueItem[]) => {
+    const next: Record<string, boolean> = {};
+    entriesToToggle.forEach(e => {
+      next[e.id] = expand;
+    });
+    setExpandedMap(next);
+  };
 
   // Modal State für KI Smart Fill
   const [smartFillModalState, setSmartFillModalState] = useState<{
@@ -519,6 +538,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       return ba;
     });
 
+    setExpandedMap(prev => ({ ...prev, [newId]: true }));
     onChange(safePowerSources, updatedBa, updatedTech);
   };
 
@@ -883,6 +903,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           activeBaseAbility={activeBaseAbility}
           baseAbilities={baseAbilities}
           activePowerSource={activePowerSource}
+          progressionLogic={progressionLogic}
           onUpdateEntry={handleUpdateEntry}
           onAddEntry={(newEntry) => {
             if (newEntry) {
@@ -895,7 +916,16 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 baseAbilityNames: activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name || ''] : [],
                 ...newEntry
               };
-              onChange(powerSources, baseAbilities, [...techniques, entryToAdd]);
+              const updatedBa = baseAbilities.map(ba => {
+                if (activeBaseAbility && ba.id === activeBaseAbility.id) {
+                  return {
+                    ...ba,
+                    techniqueIds: [...(ba.techniqueIds || []), entryToAdd.id]
+                  };
+                }
+                return ba;
+              });
+              onChange(powerSources, updatedBa, [...techniques, entryToAdd]);
             } else {
               handleAddEntry();
             }
@@ -924,340 +954,141 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
               </span>
             </div>
 
-            {!readOnly && activeBaseAbility && (
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Progressions-Regel Badge */}
+              {progressionLogic === 'ep' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/60 text-[11px] text-amber-300 font-medium">
+                  <LucideIcons.Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>EP-basiert (100 EP/Stufe)</span>
+                </span>
+              )}
+              {progressionLogic === 'training' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-800/60 text-[11px] text-emerald-300 font-medium">
+                  <LucideIcons.Dumbbell className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Training & Übung (4 Einheiten)</span>
+                </span>
+              )}
+              {progressionLogic === 'milestone' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/60 border border-purple-800/60 text-[11px] text-purple-300 font-medium">
+                  <LucideIcons.Award className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Story-Meilensteine</span>
+                </span>
+              )}
+              {progressionLogic === 'static' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-[11px] text-slate-300 font-medium">
+                  <LucideIcons.Lock className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Statische Talentpunkte</span>
+                </span>
+              )}
+
+              {/* Alle aufklappen / zuklappen */}
+              {activeEntries.length > 1 && (
                 <button
                   type="button"
                   onClick={() => {
-                    setSmartFillModalState({
-                      isOpen: true,
-                      powerSourceId: activePowerSource?.id,
-                      baseAbilityId: activeBaseAbility.id
+                    const anyCollapsed = activeEntries.some(e => {
+                      const defExp = activeEntries.length <= 4;
+                      return expandedMap[e.id] !== undefined ? !expandedMap[e.id] : !defExp;
                     });
+                    handleToggleAll(anyCollapsed, activeEntries);
                   }}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  title="KI-gestützte Erstellung"
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
                 >
-                  <LucideIcons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Smart Fill</span>
+                  {activeEntries.some(e => {
+                    const defExp = activeEntries.length <= 4;
+                    return expandedMap[e.id] !== undefined ? !expandedMap[e.id] : !defExp;
+                  })
+                    ? 'Alle aufklappen'
+                    : 'Alle zuklappen'}
                 </button>
+              )}
 
+              {!readOnly && activeBaseAbility && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSmartFillModalState({
+                        isOpen: true,
+                        powerSourceId: activePowerSource?.id,
+                        baseAbilityId: activeBaseAbility.id
+                      });
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    title="KI-gestützte Erstellung"
+                  >
+                    <LucideIcons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Smart Fill</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleAddEntry}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <LucideIcons.Plus className="w-3.5 h-3.5" />
+                    <span>{CATEGORY_ADD_LABELS[activeCategory]}</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Listenansicht der Einträge */}
+          {!activeBaseAbility ? (
+            <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
+              <p>Bitte wähle oben eine Grundfähigkeit aus oder erstelle eine neue.</p>
+              {!readOnly && activePowerSource && (
+                <button
+                  type="button"
+                  onClick={handleAddBaseAbility}
+                  className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <LucideIcons.Plus className="w-3.5 h-3.5" />
+                  <span>Grundfähigkeit erstellen</span>
+                </button>
+              )}
+            </div>
+          ) : activeEntries.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
+              <p>Keine Einträge für &bdquo;{activeCategory}&ldquo; in {activeBaseAbility.displayName || activeBaseAbility.name} definiert.</p>
+              {!readOnly && (
                 <button
                   type="button"
                   onClick={handleAddEntry}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <LucideIcons.Plus className="w-3.5 h-3.5" />
-                  <span>{CATEGORY_ADD_LABELS[activeCategory]}</span>
+                  <span>{CATEGORY_EMPTY_LABELS[activeCategory]}</span>
                 </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {activeEntries.map((entry, idx) => {
+                const defaultExpanded = activeEntries.length <= 4;
+                const isExpanded = expandedMap[entry.id] !== undefined ? expandedMap[entry.id] : defaultExpanded;
 
-        {/* Listenansicht der Einträge */}
-        {!activeBaseAbility ? (
-          <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-            <p>Bitte wähle oben eine Grundfähigkeit aus oder erstelle eine neue.</p>
-            {!readOnly && activePowerSource && (
-              <button
-                type="button"
-                onClick={handleAddBaseAbility}
-                className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <LucideIcons.Plus className="w-3.5 h-3.5" />
-                <span>Grundfähigkeit erstellen</span>
-              </button>
-            )}
-          </div>
-        ) : activeEntries.length === 0 ? (
-          <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-            <p>Keine Einträge für &bdquo;{activeCategory}&ldquo; in {activeBaseAbility.displayName || activeBaseAbility.name} definiert.</p>
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={handleAddEntry}
-                className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <LucideIcons.Plus className="w-3.5 h-3.5" />
-                <span>{CATEGORY_EMPTY_LABELS[activeCategory]}</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {activeEntries.map((entry, idx) => {
-              const isTechOrUlt = activeCategory === 'Techniken' || activeCategory === 'Ultimative Techniken';
-              const isTransform = activeCategory === 'Transformationen';
-              const isPassive = activeCategory === 'Passive Fähigkeiten';
-
-              return (
-                <div 
-                  key={`entry-${entry.id || 'e'}-${idx}`}
-                  className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 sm:p-3.5 flex flex-col gap-3 transition-all hover:border-slate-700/80"
-                >
-                  {/* Erste Zeile für Fähigkeiten */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-start">
-                    {/* Name */}
-                    <div className={`${isTechOrUlt ? 'sm:col-span-5' : 'sm:col-span-6'} flex flex-col gap-1`}>
-                      <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                        Name
-                      </label>
-                      <input
-                        type="text"
-                        disabled={readOnly}
-                        className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs font-bold outline-none focus:border-amber-500 h-[32px]"
-                        value={entry.name || ''}
-                        placeholder="z.B. Frostlanze, Schattensprung..."
-                        onChange={e => handleUpdateEntry(entry.id, { name: e.target.value })}
-                      />
-                    </div>
-
-                    {/* Modus (für Techniken / Ultimative Techniken) */}
-                    {isTechOrUlt && (
-                      <div className="sm:col-span-3 flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Modus
-                        </label>
-                        <div className="flex gap-1">
-                          <select
-                            disabled={readOnly}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[32px] cursor-pointer"
-                            value={TECHNIQUE_MODES.includes(entry.mode || '') ? (entry.mode || 'Normal') : '__custom__'}
-                            onChange={e => {
-                              const val = e.target.value;
-                              if (val === '__custom__') {
-                                handleUpdateEntry(entry.id, { mode: '' });
-                              } else {
-                                handleUpdateEntry(entry.id, { mode: val });
-                              }
-                            }}
-                          >
-                            {TECHNIQUE_MODES.map((m, mIdx) => (
-                              <option key={`mod-${m}-${mIdx}`} value={m}>{m}</option>
-                            ))}
-                            <option value="__custom__">Eigener Modus...</option>
-                          </select>
-                        </div>
-                        {!TECHNIQUE_MODES.includes(entry.mode || '') && (
-                          <input
-                            type="text"
-                            disabled={readOnly}
-                            className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[28px] mt-1"
-                            value={entry.mode || ''}
-                            placeholder="Modus eingeben..."
-                            onChange={e => handleUpdateEntry(entry.id, { mode: e.target.value })}
-                          />
-                        )}
-                      </div>
-                    )}
-
-                    {/* Typ / Klassifikation */}
-                    {isTechOrUlt && (
-                      <div className="sm:col-span-3 flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Typ
-                        </label>
-                        <select
-                          disabled={readOnly}
-                          className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[32px] cursor-pointer"
-                          value={entry.type || 'Angriff'}
-                          onChange={e => handleUpdateEntry(entry.id, { type: e.target.value })}
-                        >
-                          <option value="Angriff">Angriff</option>
-                          <option value="Verteidigung">Verteidigung</option>
-                          <option value="Support">Support</option>
-                          <option value="Heilung">Heilung</option>
-                          <option value="Zustandseffekt">Zustandseffekt</option>
-                          <option value="Spezial">Spezial</option>
-                          <option value="Beschwörung">Beschwörung</option>
-                          <option value="Transformation">Transformation</option>
-                        </select>
-                      </div>
-                    )}
-
-                    {/* Passive Auslöser bzw. Form */}
-                    {(isPassive || isTransform) && (
-                      <div className="sm:col-span-5 flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          {isPassive ? 'Bedingung / Auslöser' : 'Form / Gestalt'}
-                        </label>
-                        <input
-                          type="text"
-                          disabled={readOnly}
-                          className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
-                          value={isPassive ? (entry.activationCondition || '') : (entry.transformName || '')}
-                          placeholder={isPassive ? 'z.B. Permanent aktiv, Bei HP < 25%' : 'z.B. Schattenwolf-Form'}
-                          onChange={e => {
-                            if (isPassive) handleUpdateEntry(entry.id, { activationCondition: e.target.value });
-                            else handleUpdateEntry(entry.id, { transformName: e.target.value });
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Löschen Button */}
-                    <div className="sm:col-span-1 flex items-end justify-end h-full">
-                      {!readOnly && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteEntry(entry.id)}
-                          className="text-slate-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
-                          title="Eintrag löschen"
-                        >
-                          <LucideIcons.Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Zweite Zeile für Kosten und Stufe */}
-                  {(isTechOrUlt || isTransform) && (
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Kosten ({entry.costResourceName || activePowerSource?.cost || 'Mana'})
-                        </label>
-                        <div className="flex gap-1.5 items-center">
-                          <input
-                            type="number"
-                            disabled={readOnly}
-                            min={0}
-                            className="w-20 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                            value={entry.costValue !== undefined ? entry.costValue : 10}
-                            onChange={e => handleUpdateEntry(entry.id, { costValue: parseInt(e.target.value, 10) || 0 })}
-                          />
-                          <span className="text-[11px] text-slate-400">
-                            {entry.costResourceName || activePowerSource?.cost || 'Mana'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Tier / Rang
-                        </label>
-                        <select
-                          disabled={readOnly}
-                          className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                          value={entry.tier || (activeCategory === 'Ultimative Techniken' ? 'Tier 4' : 'Tier 1')}
-                          onChange={e => handleUpdateEntry(entry.id, { tier: e.target.value })}
-                        >
-                          <option value="Tier 1">Tier 1 (Grundtechnik)</option>
-                          <option value="Tier 2">Tier 2 (Fortgeschritten)</option>
-                          <option value="Tier 3">Tier 3 (Meisterhaft)</option>
-                          <option value="Tier 4">Tier 4 (Ultimativ)</option>
-                        </select>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Reichweite
-                        </label>
-                        <input
-                          type="text"
-                          disabled={readOnly}
-                          className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                          value={entry.range || ''}
-                          placeholder="z.B. Nahkampf, 15m"
-                          onChange={e => handleUpdateEntry(entry.id, { range: e.target.value })}
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Dauer
-                        </label>
-                        <input
-                          type="text"
-                          disabled={readOnly}
-                          className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                          value={entry.duration || ''}
-                          placeholder="z.B. Sofort, 3 Runden"
-                          onChange={e => handleUpdateEntry(entry.id, { duration: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Beschwörungs-Parameter (Wenn Typ Beschwörung ist) */}
-                  {entry.type === 'Beschwörung' && (
-                    <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Beschwörungen (Anzahl)
-                        </label>
-                        <input
-                          type="number"
-                          disabled={readOnly}
-                          min={1}
-                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                          value={entry.summonCount !== undefined ? entry.summonCount : 1}
-                          onChange={e => handleUpdateEntry(entry.id, { summonCount: parseInt(e.target.value, 10) || 1 })}
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                          Kosten pro weiterer Beschwörung ({entry.costResourceName || activePowerSource?.cost || 'Mana'})
-                        </label>
-                        <input
-                          type="number"
-                          disabled={readOnly}
-                          min={0}
-                          className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                          value={entry.summonCostValue !== undefined ? entry.summonCostValue : 5}
-                          onChange={e => handleUpdateEntry(entry.id, { summonCostValue: parseInt(e.target.value, 10) || 0 })}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Beschreibung / Effekt (AutoExpandingTextarea) */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[9px] font-extrabold text-slate-400 uppercase">
-                      Beschreibung & Wirkung
-                    </label>
-                    <AutoExpandingTextarea
-                      disabled={readOnly}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 min-h-[50px] leading-relaxed"
-                      placeholder="Wirkungsweise, visuelle Effekte und taktischer Nutzen..."
-                      value={entry.description || ''}
-                      onChange={e => handleUpdateEntry(entry.id, { description: e.target.value })}
-                    />
-                  </div>
-
-                  {/* Kombinationstechnik / Verknüpfte Grundfähigkeiten */}
-                  {baseAbilities.length > 1 && (
-                    <div className="pt-1 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[9px] font-extrabold text-slate-500 uppercase mr-1">
-                        Verknüpfte Grundfähigkeiten:
-                      </span>
-                      {baseAbilities.map((ba, baIdx) => {
-                        const isLinked = entry.baseAbilityIds?.includes(ba.id);
-                        return (
-                          <button
-                            key={`ba-link-${ba.id || 'ba'}-${baIdx}`}
-                            type="button"
-                            disabled={readOnly}
-                            onClick={() => handleToggleLinkedBaseAbility(entry.id, ba.id)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-all cursor-pointer border ${
-                              isLinked
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
-                                : 'bg-slate-900/50 text-slate-500 border-slate-800 hover:text-slate-300'
-                            }`}
-                          >
-                            {ba.displayName || ba.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                return (
+                  <TechniqueCard
+                    key={`tech-card-${entry.id || idx}`}
+                    entry={entry}
+                    category={activeCategory}
+                    readOnly={readOnly}
+                    isExpanded={isExpanded}
+                    onToggleExpanded={() => toggleCardExpanded(entry.id, defaultExpanded)}
+                    onUpdate={updates => handleUpdateEntry(entry.id, updates)}
+                    onDelete={() => handleDeleteEntry(entry.id)}
+                    activePowerSource={activePowerSource}
+                    baseAbilities={baseAbilities}
+                    onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
+                    progressionLogic={progressionLogic}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* ============================================================ */}

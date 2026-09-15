@@ -137,6 +137,9 @@ interface CompetenceProfileEditorProps {
 
   toolsAndEquipment: string;
   onToolsAndEquipmentChange: (val: string) => void;
+
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
+  onProgressionLogicChange?: (logic: 'ep' | 'training' | 'milestone' | 'static') => void;
 }
 
 export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = ({
@@ -197,7 +200,10 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
   onEverydaySkillsExperienceTextChange,
 
   toolsAndEquipment,
-  onToolsAndEquipmentChange
+  onToolsAndEquipmentChange,
+
+  progressionLogic = 'ep',
+  onProgressionLogicChange
 }) => {
   const [showDutiesSuggestions, setShowDutiesSuggestions] = useState<boolean>(false);
 
@@ -408,6 +414,7 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
             onSocialTitlesChange={onSocialTitlesChange}
             everydaySkills={everydaySkills}
             onEverydaySkillsChange={onEverydaySkillsChange}
+            progressionLogic={progressionLogic}
             activeCategoryTab={activeCategoryTab === 'alle' ? 'hauptberuf' : activeCategoryTab}
             onSelectCategoryTab={setActiveCategoryTab}
             onProficiencyScoreChange={onProfessionProficiencyScoreChange}
@@ -843,6 +850,8 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
             <EverydaySkillsSelect
               value={everydaySkills}
               onChange={onEverydaySkillsChange}
+              progressionLogic={progressionLogic}
+              onProgressionLogicChange={onProgressionLogicChange}
               placeholder="Alltagskompetenzen und praktische Fertigkeiten im Alltag"
               className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-sky-500 transition min-h-[55px]"
             />

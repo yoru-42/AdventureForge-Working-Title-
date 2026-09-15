@@ -298,6 +298,20 @@ export function normalizeAbilityHierarchy(char: any): {
       if (tech.costValue !== undefined && existing.costValue === undefined) existing.costValue = tech.costValue;
       if (tech.summonCount !== undefined && existing.summonCount === undefined) existing.summonCount = tech.summonCount;
       if (tech.summonCostValue !== undefined && existing.summonCostValue === undefined) existing.summonCostValue = tech.summonCostValue;
+      if (tech.trainingProgress !== undefined) existing.trainingProgress = tech.trainingProgress;
+      if (tech.trainingUnits !== undefined) existing.trainingUnits = tech.trainingUnits;
+      if (tech.milestoneNote !== undefined) existing.milestoneNote = tech.milestoneNote;
+      if (tech.points !== undefined) existing.points = tech.points;
+      if (tech.score !== undefined) existing.score = tech.score;
+      if (tech.xp !== undefined) existing.xp = tech.xp;
+      if (tech.level !== undefined) existing.level = tech.level;
+      if (tech.tier) existing.tier = tech.tier;
+      if (tech.masteryLevel) existing.masteryLevel = tech.masteryLevel;
+      if (tech.weaponType) existing.weaponType = tech.weaponType;
+      if (tech.weaponCategory) existing.weaponCategory = tech.weaponCategory;
+      if (tech.wieldingStyle) existing.wieldingStyle = tech.wieldingStyle;
+      if (tech.weaponManeuver) existing.weaponManeuver = tech.weaponManeuver;
+      if (tech.progressionLogic) existing.progressionLogic = tech.progressionLogic;
       return;
     }
 
@@ -307,6 +321,7 @@ export function normalizeAbilityHierarchy(char: any): {
     const costStr = tech.cost || (category === 'Passive Fähigkeiten' ? 'Passiv' : `${costVal} ${costResource}`);
 
     const newTech: TechniqueItem = {
+      ...tech,
       id: techId,
       name: techName,
       description: tech.description || '',
@@ -334,10 +349,27 @@ export function normalizeAbilityHierarchy(char: any): {
       summonCostFormula: tech.summonCostFormula,
       activationCondition: tech.activationCondition,
       transformName: tech.transformName,
-      level: tech.level || 1,
+      level: tech.level !== undefined ? tech.level : 1,
       maxLevel: tech.maxLevel || 10,
-      xp: tech.xp || 0,
-      xpNeeded: tech.xpNeeded || 100
+      xp: tech.xp !== undefined ? tech.xp : 0,
+      xpNeeded: tech.xpNeeded || 100,
+      trainingProgress: tech.trainingProgress !== undefined ? tech.trainingProgress : (tech.score !== undefined ? tech.score : 0),
+      trainingUnits: tech.trainingUnits !== undefined ? tech.trainingUnits : 0,
+      score: tech.score !== undefined ? tech.score : (tech.trainingProgress !== undefined ? tech.trainingProgress : 0),
+      milestoneNote: tech.milestoneNote,
+      points: tech.points,
+      weaponType: tech.weaponType,
+      weaponCategory: tech.weaponCategory,
+      masteryLevel: tech.masteryLevel,
+      wieldingStyle: tech.wieldingStyle,
+      weaponManeuver: tech.weaponManeuver,
+      progressionLogic: tech.progressionLogic,
+      xpGainPerUse: tech.xpGainPerUse,
+      trainingRequired: tech.trainingRequired,
+      milestoneRequirement: tech.milestoneRequirement,
+      staticCost: tech.staticCost,
+      metamorphosisInfluence: tech.metamorphosisInfluence,
+      scaling: tech.scaling
     };
 
     techniquesMap.set(techKey, newTech);

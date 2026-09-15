@@ -2729,6 +2729,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   powerSources={powerSources}
                   baseAbilities={baseAbilities}
                   techniques={techniques}
+                  progressionLogic={world?.techniqueProgressionLogic || 'ep'}
                   onChange={(newPs, newBa, newTech) => {
                     const updated = syncCharacterAbilityTree(editForm.details || {}, newPs, newBa, newTech);
                     updateMultipleDetails(updated);
@@ -2752,6 +2753,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
             </div>
 
             <CompetenceProfileEditor
+              progressionLogic={world?.techniqueProgressionLogic || 'ep'}
               profession={getDetail('profession', getDetail('role', ''))}
               onProfessionChange={(val, detectedField) => {
                 updateMultipleDetails({

@@ -819,6 +819,7 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
                 powerSources={powerSources}
                 baseAbilities={baseAbilities}
                 techniques={techniques}
+                progressionLogic={world?.techniqueProgressionLogic || 'ep'}
                 onChange={(newPs, newBa, newTech) => {
                   const updated = syncCharacterAbilityTree(editForm.details || {}, newPs, newBa, newTech);
                   setEditForm(prev => ({

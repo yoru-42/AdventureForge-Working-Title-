@@ -322,8 +322,12 @@ export interface TechniqueItem {
   progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
   xpGainPerUse?: number;
   trainingRequired?: number;
+  trainingUnits?: number;
   trainingProgress?: number;
+  score?: number;
   milestoneRequirement?: string;
+  milestoneNote?: string;
+  points?: number;
   staticCost?: string;
   cost?: string;
   tier?: string;

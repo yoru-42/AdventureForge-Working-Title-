@@ -930,7 +930,7 @@ ANWEISUNGEN:
         professionDescription: { type: Type.STRING, description: "Beschreibung der beruflichen Pflichten, Tätigkeiten und Arbeitsalltag." },
         craftingSkills: { type: Type.STRING, description: "Handwerk, Fertigung & Nebenberufe (z.B. Schmieden, Trankbrauen, Kochen)." },
         talents: { type: Type.STRING, description: "Spezielle Talente und Fachwissen (z.B. Schlösser knacken, Feilschen, Kartografie)." },
-        everydaySkills: { type: Type.STRING, description: "Alltagskompetenzen und praktische Fertigkeiten (z.B. Reiten, Schwimmen, Musizieren)." },
+        everydaySkills: { type: Type.STRING, description: "Alltagskompetenzen und praktische Fertigkeiten mit Beherrschungsgrad (z.B. 'Reiten (Fortgeschritten - 50%)', 'Kräutersammeln (Anfänger - 0%)' oder 'Schwimmen (Anfänger - 20%)'). Der Beherrschungsgrad kann individuell von 0% bis 100% angegeben werden." },
         toolsAndEquipment: { type: Type.STRING, description: "Berufswerkzeuge, Lizenzen und Ausrüstung." },
         techniques: { type: Type.STRING, description: "Konkrete Techniken, Attacken oder Jutsus as kommagetrennte Liste." },
         techniqueList: {

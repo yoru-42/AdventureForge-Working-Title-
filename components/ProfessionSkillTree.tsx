@@ -61,6 +61,7 @@ export interface ProfessionSkillTreeProps {
   onSocialTitlesChange?: (titles: SocialTitleState[]) => void;
   everydaySkills?: string;
   onEverydaySkillsChange?: (skills: string) => void;
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
   activeCategoryTab?: 'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen';
   onSelectCategoryTab?: (tab: 'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen') => void;
   onSelectProfession: (professionName: string, specialization?: string, fieldId?: string) => void;
@@ -127,6 +128,7 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
   onSocialTitlesChange,
   everydaySkills = '',
   onEverydaySkillsChange,
+  progressionLogic = 'ep',
   activeCategoryTab = 'hauptberuf',
   onSelectCategoryTab,
   onSelectProfession,
@@ -1711,6 +1713,7 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
               <EverydaySkillsSelect
                 value={everydaySkills}
                 onChange={onEverydaySkillsChange || (() => {})}
+                progressionLogic={progressionLogic}
                 placeholder="Alltagskompetenzen und praktische Fertigkeiten im Alltag"
                 className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-sky-500 transition min-h-[55px]"
               />

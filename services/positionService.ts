@@ -78,6 +78,58 @@ export const PRESET_OFFICES: Array<{ name: string; institution: string; descript
 ];
 
 export const PRESET_POSITIONS: Array<{ title: string; category: string; description: string }> = [
+  // 1. Stellvertreterebene (Deputy Level)
+  { title: 'Stellvertreter', category: 'Stellvertreterebene', description: 'Allgemeine stellvertretende Führung mit Vertretungsmacht bei Abwesenheit der Leitung.' },
+  { title: 'Stellvertretende Leitung', category: 'Stellvertreterebene', description: 'Zweite Leitungsperson einer Abteilung, Einrichtung oder Organisation.' },
+  { title: 'Stellvertretender Werkstattleiter', category: 'Stellvertreterebene', description: 'Stellvertreter der handwerklichen Betriebsleitung.' },
+  { title: 'Stellvertretender Hafenmeister', category: 'Stellvertreterebene', description: 'Stellvertretende Aufsicht über Hafenbecken, Liegeplätze und Kaianlagen.' },
+  { title: 'Stellvertretender Kapitän (Erster Offizier)', category: 'Stellvertreterebene', description: 'Erster Offizier und direkter Stellvertreter des Kapitäns an Bord.' },
+  { title: 'Stellvertretender Handelsleiter', category: 'Stellvertreterebene', description: 'Zweiter Verantwortlicher für Handelskontore und kaufmännische Geschäfte.' },
+  { title: 'Zweiter Verantwortlicher', category: 'Stellvertreterebene', description: 'Erster Ansprechpartner und Vertretung in Projekten oder Expeditionen.' },
+  { title: 'Souschef', category: 'Stellvertreterebene', description: 'Stellvertretender Küchenleiter in Groß- und Hofküchen.' },
+
+  // 2. Aufsicht & Mittlere Führung (Supervisory & Middle Leadership)
+  { title: 'Vorarbeiter', category: 'Aufsicht & Führung', description: 'Fachliche Anleitung und Aufsicht über ein Arbeitsteam am Einsatzort.' },
+  { title: 'Schichtleiter', category: 'Aufsicht & Führung', description: 'Verantwortlich für den reibungslosen Ablauf einer Arbeitsschicht.' },
+  { title: 'Gruppenleiter', category: 'Aufsicht & Führung', description: 'Leitung einer spezifischen Fachgruppe oder Einsatzgruppe.' },
+  { title: 'Werkstattaufseher', category: 'Aufsicht & Führung', description: 'Überwachung von Werkstattabläufen, Arbeitsschutz und Materialeinsatz.' },
+  { title: 'Baustellenleiter', category: 'Aufsicht & Führung', description: 'Koordinierung von Maurer-, Steinmetz- und Zimmererarbeiten auf der Baustelle.' },
+  { title: 'Stationsleiter', category: 'Aufsicht & Führung', description: 'Leitung einer Sanitäts-, Pflegestation oder Postenstation.' },
+  { title: 'Wachführer', category: 'Aufsicht & Führung', description: 'Kommandant der täglichen Wachschicht in Stadttoren oder Garnisonen.' },
+  { title: 'Ausbildungsleiter', category: 'Aufsicht & Führung', description: 'Verantwortlich für den Ausbildungsplan und die Betreuung von Lehrlingen.' },
+  { title: 'Lagerleiter', category: 'Aufsicht & Führung', description: 'Verantwortlicher für Lagerbestände, Inventur und Logistikabwicklung.' },
+  { title: 'Frachtmeister', category: 'Aufsicht & Führung', description: 'Aufsicht über Beladung, Verstauung und Transport von Frachtgütern.' },
+  { title: 'Bergwerksaufseher', category: 'Aufsicht & Führung', description: 'Überwachung von Stollenbau, Grubensicherheit und Erzförderung.' },
+
+  // 3. Leitung (Management Level)
+  { title: 'Leiter', category: 'Leitungsebene', description: 'Gesamtverantwortung für eine operative Einheit oder Einrichtung.' },
+  { title: 'Abteilungsleiter', category: 'Leitungsebene', description: 'Führung einer Fachabteilung in Verwaltung, Kontor oder Manufaktur.' },
+  { title: 'Werkstattleiter', category: 'Leitungsebene', description: 'Betriebsleiter einer handwerklichen Großwerkstatt oder Manufaktur.' },
+  { title: 'Küchenchef', category: 'Leitungsebene', description: 'Oberste Leitung von Brigaden, Speiseplänen und Vorratswirtschaft in Großküchen.' },
+  { title: 'Hafenmeister', category: 'Leitungsebene', description: 'Oberste Verwaltungs- und Ordnungsperson eines Hafens.' },
+  { title: 'Betriebsleiter', category: 'Leitungsebene', description: 'Gesamtkaufmännische und technische Führung eines Wirtschaftsbetriebs.' },
+  { title: 'Schulleiter', category: 'Leitungsebene', description: 'Pädagogische und organisatorische Leitung einer Schule oder Lehranstalt.' },
+  { title: 'Klinikleiter', category: 'Leitungsebene', description: 'Medizinische und administrative Führung einer Hospital- oder Kuranstalt.' },
+  { title: 'Werftmeister', category: 'Leitungsebene', description: 'Leiter des Schiffbaus und der Trockendocks auf einer Werft.' },
+  { title: 'Vorratsverwalter', category: 'Leitungsebene', description: 'Leitung der zentralen Korn- und Vorratsspeicher.' },
+  { title: 'Haushofmeister', category: 'Leitungsebene', description: 'Oberster Verwalter des adeligen oder großbürgerlichen Anwesens.' },
+  { title: 'Stadtverwalter', category: 'Leitungsebene', description: 'Administrative Führung kommunaler Verwaltungsaufgaben.' },
+
+  // 4. Höhere Leitung (Executive Level)
+  { title: 'Direktor', category: 'Höhere Leitung', description: 'Vorstand oder oberster Leiter bedeutender Institutionen.' },
+  { title: 'Generaldirektor', category: 'Höhere Leitung', description: 'Oberster Exekutivleiter handelsübergreifender Konsortien oder Gilden.' },
+  { title: 'Betriebsdirektor', category: 'Höhere Leitung', description: 'Strategische Leitung großer Produktionsstätten und Bergwerke.' },
+  { title: 'Werftdirektor', category: 'Höhere Leitung', description: 'Strategische Führung großer Kriegsschiffs- oder Handelswerften.' },
+  { title: 'Hauptverwalter', category: 'Höhere Leitung', description: 'Leiter des gesamten Verwaltungsapparates einer Provinz oder Kronlands.' },
+  { title: 'Obermeister', category: 'Höhere Leitung', description: 'Gewählter Vorsitzender des Zunftrats einer gesamten Zunft.' },
+  { title: 'Schuldirektor', category: 'Höhere Leitung', description: 'Leitung von Gymnasien, Akademien und Lehranstalten.' },
+  { title: 'Rektor', category: 'Höhere Leitung', description: 'Akademischer Oberhaupt einer Universität oder Hochschule.' },
+
+  // 5. Militär- & Marinefunktionen (Military Ranks / Roles)
+  { title: 'Unteroffizier', category: 'Militärische Ränge', description: 'Führer kleinerer Truppenteile (Trupps, Gruppen).' },
+  { title: 'Feldwebel', category: 'Militärische Ränge', description: 'Dienstältester Unteroffizier mit Aufgaben im Innendienst und der Exerzierausbildung.' },
+  { title: 'Deckoffizier', category: 'Marine & Seefahrt', description: 'Offizier mit technischem oder nautischem Spezialaufsichtsbereich an Bord.' },
+  { title: 'Erster Offizier', category: 'Marine & Seefahrt', description: 'Erster Stellvertreter des Kapitäns zur See.' },
   { title: 'General', category: 'Militär', description: 'Oberbefehlshaber von Feldheeren und Armeekorps.' },
   { title: 'Admiral', category: 'Marine', description: 'Oberbefehlshaber der Kriegs- und Hochseeflotte.' },
   { title: 'Kommandant', category: 'Militär', description: 'Führungsoffizier einer Garnison, Festung oder Einheit.' },

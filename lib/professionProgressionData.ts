@@ -480,7 +480,11 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         requiredExperienceYears: 2,
         prerequisites: [
           { type: 'profession', label: 'Koch', targetId: 'Koch', required: true },
-          { type: 'competence', label: 'Seemannschaft & Segelbedienung', targetId: 'Seemannschaft', targetFieldId: 'seefahrt', targetFieldName: 'Seefahrt', minValue: 30, required: true }
+          { type: 'competence', label: 'Vorratshaltung & Lagerverwaltung', targetId: 'Vorratshaltung', minValue: 30, required: true },
+          { type: 'competence', label: 'Lebensmittelkonservierung (Pökeln/Räuchern)', targetId: 'Konservierung', minValue: 30, required: true },
+          { type: 'competence', label: 'Seemannschaft & Segelbedienung', targetId: 'Seemannschaft', targetFieldId: 'seefahrt', targetFieldName: 'Seefahrt', minValue: 30, required: true },
+          { type: 'competence', label: 'Schiffssicherheit & Havarieschutz', targetId: 'Schiffssicherheit', targetFieldId: 'seefahrt', targetFieldName: 'Seefahrt', minValue: 30, required: true },
+          { type: 'competence', label: 'Bordpraxis & Seetauglichkeit', targetId: 'Bordpraxis', targetFieldId: 'seefahrt', targetFieldName: 'Seefahrt', minValue: 30, required: true }
         ],
         nextRankName: 'Hofküchenmeister'
       },
