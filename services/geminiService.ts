@@ -2,6 +2,7 @@ import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, Har
 import { jsonrepair } from "jsonrepair";
 import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
 import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
+import { enrichAndCompleteLoreEntry, sanitizeCharacterNameAndProfession, sanitizeRulerNameAndTitle } from "../lib/loreSanitizer";
 import {
   executeDrawingPlan,
   validateDrawingPlanAndGeometries,
@@ -106,7 +107,7 @@ export class GeminiService {
   }
 
   private static getAI() {
-    // Return a mocked ai object that proxies requests to our local full-stack server
+    // Return an ai object that proxies requests to our local full-stack server with automatic direct client SDK fallback
     return {
       models: {
         generateContent: async (reqArgs: any) => {
@@ -116,94 +117,157 @@ export class GeminiService {
                 ? reqArgs.contents.parts[0]?.text 
                 : typeof reqArgs.contents === 'string' ? reqArgs.contents : reqArgs.contents?.text;
 
-            const res = await this.fetchWithRetry('/api/gemini/generateImage', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt, isNsfw })
-            });
-            if (!res.ok) {
-              const errText = await res.text();
-              throw new Error(errText);
-            }
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
-              const bodyText = await res.text();
-              throw new Error(`Server returned unexpected non-JSON response (${res.status}): ${bodyText.slice(0, 150)}...`);
-            }
-            const data = await res.json();
-            if (data.error || !data.imageUrl) {
-              throw new Error(data.error || "Bild konnte nicht generiert werden.");
-            }
-            
-            let mimeType = 'image/png';
-            let b64 = '';
-            if (data.imageUrl && typeof data.imageUrl === 'string') {
-               const parts = data.imageUrl.split(',');
-               if (parts.length > 1) {
-                  const match = parts[0].match(/:(.*?);/);
-                  if (match) mimeType = match[1];
-                  b64 = parts[1];
-               }
-            }
+            try {
+              const res = await this.fetchWithRetry('/api/gemini/generateImage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt, isNsfw })
+              });
+              const contentType = res.headers.get('content-type') || '';
+              if (res.ok && contentType.includes('application/json')) {
+                const data = await res.json();
+                if (data.imageUrl) {
+                  let mimeType = 'image/png';
+                  let b64 = '';
+                  if (typeof data.imageUrl === 'string') {
+                    const parts = data.imageUrl.split(',');
+                    if (parts.length > 1) {
+                      const match = parts[0].match(/:(.*?);/);
+                      if (match) mimeType = match[1];
+                      b64 = parts[1];
+                    }
+                  }
+                  return {
+                    text: '',
+                    candidates: [
+                      {
+                        content: {
+                          parts: [ { inlineData: { mimeType, data: b64 } } ]
+                        }
+                      }
+                    ]
+                  };
+                }
+              }
+            } catch (_) {}
 
+            const fallbackSvg = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%"><rect width="512" height="512" fill="#1e1b4b"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#a5b4fc" font-family="sans-serif" font-size="20">Abenteuer</text></svg>')}`;
             return {
               text: '',
               candidates: [
                 {
                   content: {
-                    parts: [ { inlineData: { mimeType, data: b64 } } ]
+                    parts: [ { inlineData: { mimeType: 'image/svg+xml', data: fallbackSvg } } ]
                   }
                 }
               ]
             };
           }
 
-          // Otherwise handle standard text generation
-          const res = await this.fetchWithRetry('/api/gemini/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: reqArgs.model,
-              contents: reqArgs.contents,
-              config: reqArgs.config,
-              isNsfw: !!reqArgs.config?.safetySettings
-            })
-          });
-          if (!res.ok) {
-            const errText = await res.text();
-            let finalError = errText;
-            try {
-              const parsed = JSON.parse(errText);
-              if (parsed.error) {
-                finalError = parsed.error;
-              } else if (parsed.message) {
-                finalError = parsed.message;
+          // Handle standard text generation with robust full-stack proxy & direct client SDK fallback
+          let serverFailed = false;
+          let serverError = '';
+          try {
+            const res = await this.fetchWithRetry('/api/gemini/generate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: reqArgs.model,
+                contents: reqArgs.contents,
+                config: reqArgs.config,
+                isNsfw: !!reqArgs.config?.safetySettings
+              })
+            });
+            const contentType = res.headers.get('content-type') || '';
+            if (!res.ok) {
+              const errText = await res.text();
+              let finalError = errText;
+              try {
+                const parsed = JSON.parse(errText);
+                if (typeof parsed.error === 'string') {
+                  finalError = parsed.error;
+                } else if (parsed.error && typeof parsed.error === 'object' && parsed.error.message) {
+                  finalError = parsed.error.message;
+                } else if (parsed.message) {
+                  finalError = parsed.message;
+                }
+              } catch (_) {}
+              throw new Error(finalError);
+            }
+            if (contentType.includes('application/json')) {
+              const data = await res.json();
+              let text = '';
+              if (typeof data.text === 'string') {
+                text = data.text;
+              } else if (data.text !== undefined && data.text !== null) {
+                text = typeof data.text === 'object' ? JSON.stringify(data.text) : String(data.text);
               }
-            } catch (_) {}
-            throw new Error(finalError);
+              return {
+                text,
+                candidates: [
+                  {
+                    groundingMetadata: { groundingChunks: data.grounding || [] },
+                    content: { parts: [{ text }] }
+                  }
+                ]
+              };
+            } else {
+              // Received non-JSON (e.g. HTML index fallback in pure vite mode)
+              serverFailed = true;
+            }
+          } catch (fetchErr: any) {
+            serverError = fetchErr?.message || String(fetchErr);
+            if (
+              serverError.includes('Quota') || 
+              serverError.includes('Limit') || 
+              serverError.includes('ausgelastet') ||
+              serverError.includes('429') ||
+              serverError.includes('RESOURCE_EXHAUSTED')
+            ) {
+              throw fetchErr;
+            }
+            serverFailed = true;
           }
-          const contentType = res.headers.get('content-type') || '';
-          if (!contentType.includes('application/json')) {
-            const bodyText = await res.text();
-            throw new Error(`Server returned unexpected non-JSON response (${res.status}): ${bodyText.slice(0, 150)}...`);
-          }
-          const data = await res.json();
-          // We return exactly what the caller code expects: response.text and response.candidates
-          let text = '';
-          if (typeof data.text === 'string') {
-            text = data.text;
-          } else if (data.text !== undefined && data.text !== null) {
-            text = typeof data.text === 'object' ? JSON.stringify(data.text) : String(data.text);
-          }
-          return {
-            text,
-            candidates: [
-              {
-                groundingMetadata: { groundingChunks: data.grounding || [] },
-                content: { parts: [{ text }] }
+
+          // Direct client SDK fallback if server endpoint returned non-JSON / HTML or is unavailable
+          if (serverFailed) {
+            const apiKey = (typeof process !== 'undefined' && (process.env?.GEMINI_API_KEY || process.env?.API_KEY)) ||
+                           (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.VITE_GEMINI_API_KEY) || '';
+            if (apiKey) {
+              try {
+                const clientAi = new GoogleGenAI({ apiKey });
+                const targetModel = reqArgs.model || 'gemini-3.8-flash';
+                const directRes = await clientAi.models.generateContent({
+                  model: targetModel,
+                  contents: reqArgs.contents,
+                  config: reqArgs.config
+                });
+                let directText = '';
+                if (typeof (directRes as any).text === 'string') {
+                  directText = (directRes as any).text;
+                } else if (typeof (directRes as any).text === 'function') {
+                  directText = (directRes as any).text();
+                } else if (directRes.candidates?.[0]?.content?.parts?.[0]?.text) {
+                  directText = directRes.candidates[0].content.parts.map((p: any) => p.text || '').join('\n');
+                }
+                return {
+                  text: directText,
+                  candidates: directRes.candidates || [
+                    {
+                      groundingMetadata: { groundingChunks: [] },
+                      content: { parts: [{ text: directText }] }
+                    }
+                  ]
+                };
+              } catch (directErr: any) {
+                throw directErr;
               }
-            ]
-          };
+            } else {
+              throw new Error(serverError || "Verbindung zum KI-Server fehlgeschlagen. Bitte versuche es in wenigen Sekunden erneut.");
+            }
+          }
+
+          throw new Error("Antwort konnte nicht generiert werden.");
         }
       }
     } as any;
@@ -4104,6 +4168,11 @@ Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.
       let contextPrompt = `Leite aus dem folgenden Freitext die Charakter-Werte für ein RPG ab.
 WICHTIGSTE DIRECTIVE: Erfinde detailreich alle Details, Kräfte und Fähigkeiten, die fehlen oder nicht genau im Freitext beschrieben sind, passend für ein RPG. Jedes einzelne Feld MUSS befüllt werden!
 
+### STRIKTE REGEL: TRENNUNG VON NAME UND BERUF / TITEL / STAND:
+- Trage als Name ('name', 'callName', 'rufName') NIEMALS den Beruf oder Titel ein!
+- FALSCH: "Bauer Jochen", "Wirtin Martha", "Dorfschulze Kuno", "Schmied Heinrich"
+- RICHTIG: name: "Jochen", profession: "Bauer", role: "Bauer", callName: "Jochen"; name: "Martha", profession: "Wirtin", role: "Wirtin", callName: "Martha"!
+
 ### BEZIEHUNGEN & VERHALTEN (MANDATORISCH):
 Befülle zwingend die Felder "relationship" (Beziehungen zu anderen Charakteren oder Gilden) und "conduct" (Verhalten anderen gegenüber). Erfinde hierbei emotionale Bezüge, Kameradschaften oder Fehden, damit der Charakter lebendig wirkt!
 
@@ -5646,19 +5715,32 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
     allLoreEntries?: any[],
     powerSettings?: any,
     playerName?: string,
-    isNsfw?: boolean
+    isNsfw?: boolean,
+    playerContext?: any
   ): Promise<any[]> {
     return this.callWithRetry(async () => {
       const ai = this.getAI();
       
+      const effectivePlayerName = (
+        playerName?.trim() ||
+        playerContext?.name?.trim() ||
+        worldContext?.player?.name?.trim() ||
+        ''
+      ).trim();
+      const playerRole = (
+        playerContext?.role?.trim() ||
+        worldContext?.player?.role?.trim() ||
+        'Protagonist'
+      ).trim();
+
       const existingTitles = allLoreEntries
         ? allLoreEntries.map(e => `Kategorie: "${e.category}" | Name: "${e.title || 'Unbenannt'}"`).join('\n')
         : '';
 
       const powerInstruction = powerSettings ? `\n### KAMPAGNEN-WERTE-SYSTEM:\nNutze diese Parameter, um sinnvolle \`campaignPowerLevels\` (mit \`value\` und \`potentialMax\` 0-100) für erstellte Charaktere und Gegner in deren \`details\` zu generieren:\n${JSON.stringify(powerSettings, null, 2)}\n` : "";
 
-      const prompt = `Du bist ein hochkreativer RPG-Designer und Weltenbauer. Der Nutzer möchte ein UMFANGREICHES, REICHHALTIGES Set von MULTIPLEN, perfekt aufeinander abgestimmten Lore-Einträgen auf einmal generieren (mindestens 8 bis 15 relevante Einträge pro Nutzung des Omni-Füllers!).
-      
+      const prompt = `Du bist ein erfahrener, stilsicherer RPG-Weltenbauer. Der Nutzer möchte ein in sich stimmiges, lebendiges Set von Lore-Einträgen auf einmal für die Spielwelt erstellen.
+
 ### NUTZERPROMPT/BESCHREIBUNG:
 "${text}"
 
@@ -5669,50 +5751,177 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
 - Welten-Beschreibung/Regeln: "${worldContext?.description || ''}"
 ${powerInstruction}
 
+### WICHTIG: DER SPIELERCHARAKTER / PROTAGONIST DER WELT:
+${effectivePlayerName ? `- Name des Spielers: "${effectivePlayerName}" (Rolle: ${playerRole})` : '- Der Spieler ist der Protagonist der Spielwelt.'}
+- STRENGSTES VERBOT EINES SPIELER-NPC-EINTRAGS:
+  Erstelle UNTER KEINEN UMSTÄNDEN einen Eintrag in "Charaktere", "Gegner" oder einer anderen Kategorie für den Spieler selbst (${effectivePlayerName ? `weder mit dem Namen "${effectivePlayerName}" noch als Klon` : 'als Spielercharakter'})!
+  Der Spieler existiert bereits als eigenständige Spielfigur im System und ist KEIN NPC.
+  Alle generierten Charaktere müssen neue, eigenständige Nichtspieler-Charaktere (NPCs) sein.
+- SPIELER-BEZIEHUNGEN & VERWANDTSCHAFTEN:
+  Beziehe den Spieler oder Hauptcharakter NIEMALS unaufgefordert in willkürliche Bekanntschaften ein.
+  AUSNAHME / AUSDRÜCKLICHER WUNSCH: Wenn der Nutzer explizit nach der Familie, Verwandten, Freunden oder Bezugspersonen des Spielers fragt (z. B. "Mutter, Vater, Schwester des Spielers"), verknüpfe diese Verwandten selbstverständlich direkt mit dem Spieler (z. B. im Feld "relationship" und "family")!
+
+### GEZIELTE GENERIERUNG VON FAMILIEN & FRAKTIONS-GRUPPEN:
+1. FAMILIE (inkl. FAMILIE DES SPIELERS ODER NPC-FAMILIEN):
+   - Wenn der Nutzer eine Familie beschreibt oder verlangt (z. B. "Familie des Spielers mit Mutter, Vater und jüngerer Schwester" oder "Die Adelsfamilie von Ravensbrück"):
+     * Erstelle für jedes Familienmitglied einen eigenständigen, vollwertigen Charakter in der Kategorie 'Charaktere'.
+     * Vergib passende Vornamen und den gemeinsamen Familiennamen (z. B. Vater: "Thomas Dornbusch", Mutter: "Helena Dornbusch", Schwester: "Mara Dornbusch").
+     * Bei der Familie des Spielers: Der Spieler selbst erhält KEINEN Eintrag, aber jedes Familienmitglied verweist in seiner Biografie, seinem "relationship"-Feld (z. B. "Mutter von ${effectivePlayerName || 'Spieler'}") und seinem "family"-Feld auf die Verwandtschaft.
+     * Vernetze die Familienmitglieder untereinander logisch in ihren "relationships"-Details (z. B. wer mit wem verheiratet ist, Geschwisterdynamiken, Zuneigung, Sorgen).
+     * Optional kann bei Bedarf ein passender Ort erstellt werden (z. B. der "Bauernhof der Dornbuschs" oder das "Herrenhaus"), falls passend.
+2. FRAKTIONEN & GRUPPEN-ENSEMBLES:
+   - Wenn der Nutzer eine Fraktion, eine Gilde, eine Bande, eine Schiffsbesatzung oder ein Gremium nennt:
+     * Erstelle die Fraktion selbst ('Fraktionen') und 3 bis 6 markante Mitglieder in 'Charaktere' mit klarer interner Hierarchie (z. B. Anführer, Ratsherr, Quartiermeister, Leibwächter, Novize).
+     * Setze bei jedem Mitglied das Feld "faction" exakt auf den Fraktionsnamen und verknüpfe ihre gegenseitigen Beziehungen (Loyalität, Rivalität, Vertrauen).
+3. THEMATISCHER FOKUS STATT KÜNSTLICHER KATEGORIEN-ZWANG:
+   - Wenn der Nutzer gezielt nur nach Charakteren fragt (z. B. "Erstelle die 4 Ratsmitglieder" oder "Erstelle die Familie"), generiere vorrangig diese Charaktere in hoher Ausarbeitung, anstatt krampfhaft irrelevante Gegenstände oder Weltenkarten-Orte zu erzwingen!
+
+### HAUPTPRINZIP: BODENSTÄNDIGES, REALISTISCHES & VERHÄLTNISMÄSSIGES WORLDBUILDING (KEINE KÜNSTLICHEN ÜBERTREIBUNGEN):
+1. KEINE KÜNSTLICHE HYPERDRAMATIK ODER EXZESSIVE KLISCHEES:
+   - Ein normales Dorf ist ein normales Dorf! Wenn der Nutzer ein Dorf, einen Weiler, einen Bauernhof, eine Mühle oder eine Handwerkersiedlung beschreibt, gestalte es glaubwürdig, lebensecht und geerdet.
+   - Es braucht NICHT an jeder Ecke uralte finstere Kulte, geheime Dämonenaltäre, vergessene Göttergräber, verfluchte Relikte oder weltzerstörende Prophezeiungen!
+   - Ein typisches Dorf hat alltägliche Dinge: Ackerbau, Viehzucht, Handwerker (Schmied, Müller, Schreiner), eine gemütliche Schänke, einen Dorfschulzen oder Vorsteher, kleine Reibereien um Pacht, Weiderechte, schlechte Ernten oder herumstreunende Wölfe im Dickicht.
+2. VERHÄLTNISMÄSSIGE & ALLTÄGLICHE GEHEIMNISSE (secretsStage1, secretsStage2, secretsStage3):
+   - Nicht jeder Ort, Gegenstand oder NPC benötigt ein kosmisches, finsteres oder heiliges Mysterium!
+   - Für gewöhnliche, ländliche oder bürgerliche Orte und Bewohner sind die drei Geheimnis-Stufen bodenständig und menschlich:
+     * Stufe 1 (Öffentliches Wissen / Lokaler Ruf): Das, wofür der Ort oder die Person in der Nachbarschaft bekannt ist (z. B. "Gilt als fleißiges Bauerndorf mit gutem Roggenbrot" oder "Der Schmied ist wortkarg, aber leistet saubere Arbeit").
+     * Stufe 2 (Gerüchte / Dorfgeplauder): Alltägliche Gerüchte oder kleine Zwistigkeiten (z. B. "Man munkelt, dass der Müller beim Mahllohn schummelt" oder "Man tuschelt über einen Erbstreit zweier Höfe").
+     * Stufe 3 (Persönliches Geheimnis / Privates): Menschliche, profane Geheimnisse (z. B. "Der Wirt hat seine Ersparnisse unter den Dielen versteckt, um seiner Tochter eine Mitgift zu sichern" oder "Der Vorsteher leidet heimlich unter Gicht und sucht nach einem Nachfolger").
+   - NIEMALS krampfhaft "Geheime Menschenopfer", "Blutkulte", "Dämonenbünde" oder "Heilige Artefakte" in friedliche, normale Orte oder Personen hineindichten!
+3. ORGANISCHE MENGE STATT KÜNSTLICHEM OVERKILL:
+   - Generiere eine der Anfrage angemessene, stimmige Menge an Einträgen (z. B. 4 bis 8 fokussierte, hochwertige Einträge für ein Dorf, eine Gruppe oder ein Thema), passend zum Nutzer-Prompt.
+   - Wenn der Nutzer nach einem Dorf fragt, erstelle z. B. das Dorf selbst (Kategorie 'Orte'), 1-2 markante Gebäude (Schänke, Mühle), 2-3 lebendige Dorfbewohner (Schulze, Wirt, Schmied) und ggf. die Dorfgemeinschaft ('Fraktionen'). Zwinge nicht künstlich 15 Einträge mit Füllmaterial herbei!
+4. GEGENSTÄNDE & VERBOTENES WISSEN NUR BEI ECHTEM BEDARF:
+   - Erstelle Gegenstände nur, wenn es handfeste Dinge gibt (z. B. das alte Schmiedebuch, eine besondere Pflugschar, das Dorfbuch).
+   - Die Kategorie "Verbotenes Wissen" wird NUR erstellt, wenn der Nutzer ausdrücklich nach verbotenem Wissen oder finsteren Mysterien gefragt hat. Bei normalen Dörfern oder alltäglichen Themen bleibt diese Kategorie leer.
+
 ### BEREITS IM CODEX EXISTIERENDE EINTRÄGE (WICHTIG FÜR REVISION & NARRATIVE KONSISTENZ):
 ${existingTitles || '(Keine bisherigen Einträge vorhanden)'}
 
-### DESIGN-AUFTRAG & ANWEISUNGEN:
-1. Analysiere den Nutzerprompt gründlich. Generiere NICHT NUR 3 oder 4 Einträge, sondern ein VOLLSTÄNDIGES und UMFANGREICHES Set von ca. 8 bis 15 tiefgründigen, zusammenhängenden Codex-Einträgen!
-2. Wenn der Nutzer beispielsweise eine Fraktion, eine Insel oder ein Ereignis beschreibt, erstelle:
-   - Die primäre Entität (z. B. Fraktion oder Hauptort)
-   - Mehrere Schlüssel-Charaktere (Anführer, Vize, Händler, Rivalen, Geheimnisvoller NPC)
-   - Wichtige Orte (Übergeordnete Insel/Region, Hauptquartier, Hafen, Taverne, geheimer Unterschlupf)
-   - Besondere Gegenstände (Relikte, Waffen, Verträge, Kaperbriefe)
-   - Verbotenes Wissen / Geheimnisse
-   - Relevante Zeitlinien-Ereignisse (Historische Vorgeschichte)
-3. WICHTIGSTE REGELEINHALTUNG FÜR DIE KATEGORIE "Orte":
+### WEITERE DESIGN-ANWEISUNGEN:
+1. Analysiere den Nutzerprompt gründlich. Generiere ein harmonisches Set von 4 bis 8 passenden, in sich stimmigen Codex-Einträgen.
+2. WICHTIGSTE REGELEINHALTUNG FÜR DIE KATEGORIE "Orte":
    - Wenn Orte (z. B. Hafen, Stadt, Dorf, Burg, Taverne, Festung, Tempel) auf einer Insel, Küste oder Region liegen, erstelle ZWINGEND auch den dazugehörigen übergeordneten Landmassen- bzw. Insel-Eintrag (z. B. Kategorie 'Orte', title: 'Insel Ouka' oder 'Provinz Eldoria', type: 'insel' oder 'region')!
    - Verknüpfe alle Unterorte/Siedlungen über ihr detail-Feld "parentPlaceId" exakt mit dem Namen des übergeordneten Landmassen-Eintrags (z. B. "parentPlaceId": "Insel Ouka").
    - Vergib für jeden Ort konkrete X/Y-Koordinaten (coordinates: { x: number, y: number }), die logisch und verteilt auf der Weltkarte liegen (x zwischen 15 und 85, y zwischen 15 und 85), sodass sich Punkte nahe der Insel/Region befinden und sich nicht alle am selben Fleck stapeln.
-4. Fülle die 'details' für JEDE Kategorie EXAKT, LÜCKENLOS und VOLLSTÄNDIG aus! Fehlen Angaben im Text, erfinde fantastische, kreative RPG-Details (vollständige Techniken, Körpermaße, Machtwerte, Geheimnisse, verknüpfte Beziehungen)!
-5. Verknüpfe alle Einträge intelligent! Zum Beispiel:
-   - Wenn du eine Fraktion namens "Klingen der Nacht" erstellst und einen Charakter namens "Garrick", setze im detail-Feld "faction" des Charakters exakt "Klingen der Nacht".
-   - Wenn du einen Ort namens "Turm der Schatten" erstellst, der das Hauptquartier dieser Fraktion ist, setze im detail-Feld "ruler" des Ortes "Klingen der Nacht".
-   - Wenn du einen Charakter erstellst, der eine Spezialwaffe "Schattenklinge" trägt, erwähne diese Waffe in den Details/Kräften des Charakters und erstelle gleichzeitig den passenden Gegenstands-Eintrag.
-6. Alle Beschreibungen müssen hochgradig atmosphärisch, packend und auf Deutsch geschrieben sein. Jede Beschreibung sollte mindestens 1-2 Absätze lang sein.
-7. Generiere für jeden Eintrag die drei Geheimnis-Stufen ('secretsStage1', 'secretsStage2', 'secretsStage3') auf Deutsch aus Sicht der historischen Vorgeschichte. WICHTIG: Die Geheimnisse MÜSSEN zwingend zur Rolle und dem Hauptziel ('goal') der Figur/des Eintrags passen! Wandle beschützende, edle oder neutrale Figuren NIEMALS in böse Schurken, Opfersulte oder Ausbeuter um. Stufe 3 muss ihre wahre tiefe Motivation widerspiegeln (z.B. ein geheimes Schutznetzwerk oder verdecktes Asyl).
-8. ABSOLUTES VERBOT VON ZUKÜNFTIGEN EREIGNISSEN / KEIN VORGRIFF: Generiere NIEMALS Einträge (insbesondere unter 'Zeitlinie' oder 'Story & Quests'), die in der Zukunft liegen, zukünftige Handlungen vorwegnehmen oder noch gar nicht passiert sind! Der Spielstart/Prolog stellt die absolute Gegenwart dar.
-9. KEINE UNERLAUBTE SPIELER-BEZIEHUNG / DISTANZ HALTEN: Beziehe den Spieler oder Hauptcharakter (z. B. "${playerName || 'Spieler'}") NIEMALS eigenmächtig in Beziehungen, Treffen, Bekanntschaften oder Ereignisse ein, es sei denn, der Nutzer-Text verlangt dies explizit! Nutze stattdessen Beziehungen zwischen NPCs untereinander.
-10. ZEITLINIE IST REINE VERGANGENHEIT: Einträge in der Kategorie "Zeitlinie" müssen historische Ereignisse sein, die vor Spielbeginn stattfanden.
+3. Fülle die 'details' für JEDE Kategorie EXAKT, LÜCKENLOS und VOLLSTÄNDIG aus! Fehlen Angaben im Text, ergänze stimmige, plausible und geerdete RPG-Details (Alltagskompetenzen, Aussehen, bürgerliche Berufe, verknüpfte Beziehungen). Verleihe normalen Bürgern KEINE übertriebenen Götter-Kräfte!
+4. Verknüpfe alle Einträge intelligent (z. B. Fraktion, Herrscher, Arbeitsort).
+5. Alle Beschreibungen müssen atmosphärisch, geerdet und auf Deutsch geschrieben sein (1-2 Absätze).
+6. ABSOLUTES VERBOT VON ZUKÜNFTIGEN EREIGNISSEN / KEIN VORGRIFF: Generiere NIEMALS Einträge (insbesondere unter 'Zeitlinie' oder 'Story & Quests'), die in der Zukunft liegen. Der Spielstart/Prolog stellt die absolute Gegenwart dar.
+7. ZEITLINIE IST REINE VERGANGENHEIT: Einträge in der Kategorie "Zeitlinie" müssen historische Ereignisse sein, die vor Spielbeginn stattfanden.
 
 ### SPEZIFIKATION DER CATEGORIES & DEREN DETAILS-STRUKTUR:
 
+### STRENGSTE REGEL: TRENNUNG VON NAME UND BERUF / TITEL / STAND:
+1. CHARAKTER-NAMEN DÜRFEN NIEMALS DEN BERUF ODER TITEL ENTHALTEN:
+   * FALSCH: "Bauer Jochen", "Wirtin Martha", "Dorfschulze Kuno", "Schmied Heinrich", "Jäger Anton"
+   * RICHTIG:
+     - title: "Jochen" (oder z.B. "Jochen Lindner")
+     - details.callName: "Jochen"
+     - details.rufName: "Jochen"
+     - details.profession: "Bauer"
+     - details.role: "Bauer"
+     - details.jobTitle: "Bauer"
+     - details.craftingSkills: "Feldbestellung, Zaunreparatur, Pfluginstandhaltung"
+     - details.everydaySkills: "Ackerbau, Saat und Ernte, Viehzucht, Wetterkunde"
+   * FALSCH: "Wirtin Martha"
+   * RICHTIG:
+     - title: "Martha"
+     - details.callName: "Martha"
+     - details.profession: "Wirtin"
+     - details.role: "Wirtin"
+     - details.jobTitle: "Wirtin"
+     - details.craftingSkills: "Bierbrauen, Vorratshaltung, Fleischpökeln"
+     - details.everydaySkills: "Schankwirtschaft, Kochen, Rechnen, Schlichtung von Wirtshausstreit"
+2. SIEDLUNGS-VORSTEHER & HERRSCHER-FELDER BEI ORTEN:
+   * FALSCH: ruler: "Dorfschulze Kuno"
+   * RICHTIG: ruler: "Kuno", rulingTitle: "Dorfschulze"
+3. KEINE KÜNSTLICHEN EIGENEN FRAKTIONEN FÜR EINZELNE BERUFE:
+   * Erstelle NIEMALS Splitterfraktionen wie "Die Wirtegilde" oder "Die Dorfjugend" für einfache Dorfbewohner!
+   * Einfache Dorfbewohner gehören zur gemeinsamen Gemeinde / Dorfgemeinschaft (z. B. "Gemeinde Eichengrund" oder "Dorfgemeinschaft").
+4. VOLLSTÄNDIGES AUSFÜLLEN ALLER FORMULARFELDER IM HINTERGRUND:
+   * Fülle für JEDEN Eintrag lückenlos alle Formularfelder im details-Objekt aus!
+
 #### 1. Kategorie "Charaktere"
-- title: Kurzer Name (z.B. "Garrick")
-- description: Biografie und Geschichte (Deutsch, detailreich). Beantworte zwingend die 8 Kernfragen mit jeweils 2 bis 3 Sätzen (Wo und in welchen Verhältnissen aufgewachsen? Kindheit beschreiben? Wichtige Menschen? Wichtigstes prägendes Ereignis? Weg zum heutigen Leben/Beruf/Rolle? Prägende Erfahrungen? Bereuen/Verlieren/Änderungswunsch? Verschwiegenes Geheimnis?)
-- details-Objekt mit allen Pflichtfeldern: "rufName", "role", "nickname", "personality", "currentSituation", "gender", "age", "build", "hairColor", "eyeColor", "outfit", "height", "measurements", "cupSize", "race", "raceFeatures", "origin", "family", "faction", "goal", "skills", "powerSource", "powerCost", "techniques", "techniqueList", "relationship", "conduct", "relationships", "campaignPowerLevels"
+- title: Kurzer bürgerlicher Vor- oder Vor- und Nachname OHNE Berufsbezeichnung (z.B. "Jochen", "Martha", "Kuno", "Heinrich", "Elias")
+- description: Ausführliche Biografie und Lebensgeschichte auf Deutsch (mindestens 2 bis 3 reichhaltige Absätze mit insgesamt 12–20 Sätzen). Formuliere einen zusammenhängenden, packenden Text, der zwingend alle 8 Fragen beantwortet (jeweils 2–3 Sätze):
+  1. Wo und in welchen Verhältnissen aufgewachsen? (Herkunft, Familie, soziale Verhältnisse)
+  2. Kindheit (glücklich, behütet, arbeitsreich oder entbehrungsreich)
+  3. Wichtige Menschen in Kindheit und Jugend (Eltern, Geschwister, Freunde, Vorbilder, Meister)
+  4. Wichtiges prägendes Ereignis aus der Vergangenheit
+  5. Wie er/sie zum heutigen Beruf, Stand oder Rolle gekommen ist
+  6. Prägende Erfahrungen, die den Charakter geformt haben
+  7. Dinge, die bereut werden, Verluste oder Wünsche nach Veränderung
+  8. Verschwiegenes Geheimnis oder ein unaufgeregter, bodenständiger Aspekt des Alltags
+- details-Objekt mit ALLEN Formularfeldern vollständig ausgefüllt:
+  * "bio": Exakt identisch zur obigen reichhaltigen Biografie aus 'description' (muss alle 8 Fragen beantworten)!
+  * "currentSituation": Ausführliche Schilderung der aktuellen Lebenslage (2 bis 4 volle Sätze, NIEMALS nur 2-3 Wörter wie "Arbeitet auf dem Feld"!). Beschreibe den täglichen Arbeitsalltag, Routinen, Pflichten, Sorgen um die Familie/Ernte und den derzeitigen Gemütszustand.
+  * "rufName", "callName", "nickname": Reiner Vorname/Name OHNE Beruf!
+  * "profession", "role", "jobTitle": Konkreter Beruf (z.B. "Bauer", "Wirtin", "Dorfschulze", "Schmied")
+  * "professionLevel": Stufe (z.B. "Erfahren", "Meister", "Gehilfe")
+  * "professionDescription": Tätigkeitsbeschreibung (1-2 Sätze)
+  * "craftingSkills": Handwerkliche Fähigkeiten passend zum Beruf (z.B. bei Bauer: "Feldbestellung, Zaunreparatur, Pfluginstandhaltung, Holzbearbeitung")
+  * "everydaySkills": Alltägliche Fähigkeiten (z.B. bei Bauer: "Ackerbau, Saat und Ernte, Tierhege, Wetterkunde, einfache Wundversorgung")
+  * "talents": Besondere Begabungen (z.B. "Ausgeprägter Sinn für Bodenbeschaffenheit und Pflanzenkunde, physische Zähigkeit")
+  * "gender", "age", "build", "hairColor", "eyeColor", "outfit", "looks", "height", "measurements", "cupSize", "race", "raceFeatures"
+  * "looks": Detailliertes Aussehen des Gesichts, Mimik, Statur und Auffälligkeiten (2-3 Sätze)
+  * "outfit": Detailreiche Beschreibung der alltäglichen Kleidung, Stoffe und Schuhe (1-2 Sätze)
+  * "origin", "family", "faction" (z.B. Dorfgemeinschaft / Gemeinde)
+  * "personality": Ausführliche Beschreibung von Wesen, Verhalten und Werten (2-3 Sätze)
+  * "personalityArchetype": z.B. "Beschützer", "Pragmatiker", "Arbeiter", "Loyaler Gefährte"
+  * "personalityTraits": { "Zuverlässigkeit": 85, "Fleiß": 90, "Besonnenheit": 75, "Loyalität": 90, "Geduld": 80 }
+  * "goal": Klares Hauptziel des Charakters in 1-2 Sätzen
+  * "motivationCore": {
+      "mainGoal": "Hauptziel des Charakters (z.B. Die Familie versorgen und die Ernte sichern)",
+      "whyGoal": "Hintergrund / Warum dieses Ziel wichtig ist (z.B. Tiefes Pflichtbewusstsein als Familienoberhaupt)",
+      "currentPriorities": "Aktuelle Prioritäten im Alltag (z.B. Den Hof winterfest machen und Vorräte anlegen)",
+      "needs": "Bedürfnisse des Charakters (z.B. Stabilität, Schutz vor Überfällen, gutes Wetter)",
+      "fears": "Ängste des Charakters (z.B. Missernten, Krankheit in der Familie, Bedrohung des Friedens)"
+    }
+  * "goals": [
+      { "id": "g1", "category": "Persönlich", "goal": "Schutz und Wohlstand der Familie garantieren", "urgency": "Hoch", "status": "Aktiv" },
+      { "id": "g2", "category": "Beruflich", "goal": "Die Erträge der diesjährigen Ernte steigern", "urgency": "Mittel", "status": "Aktiv" }
+    ]
+  * "relationship": Respektvoller / familiärer Beziehungsstatus
+  * "conduct": Verhalten gegenüber Fremden und Vertrauten (1-2 Sätze)
+  * "relationships": Logisch verknüpfte Beziehungen zu anderen Charakteren (Name, Typ, Beschreibung, Stärke)
+  * "skills", "powerSource", "powerCost", "techniques", "techniqueList", "campaignPowerLevels"
 
 #### 2. Kategorie "Orte"
-- title: Name des Ortes (z.B. "Insel Ouka", "Der Hafen von Ouka" oder "Die Obsidian-Höhlen")
+- title: Name des Ortes (z.B. "Dorf Eichengrund", "Der Hafen von Ouka" oder "Die Obsidian-Höhlen")
 - description: Packende Geschichte und Aussehen des Ortes (Deutsch, detailreich)
-- details-Objekt mit ALLEN Feldern des Weltkarte-Eintrags:
+- details-Objekt mit ALLEN Feldern des Weltkarte-Eintrags und Siedlungsformulars vollständig ausgefüllt:
   * "type": 'insel' | 'kontinent' | 'region' | 'land' | 'stadt' | 'hafen' | 'dorf' | 'festung' | 'ort' | 'gebäude' | 'taverne'
   * "mapLevel": 'macro' (Kontinent/Ozean) | 'meso' (Insel/Region/Stadt) | 'micro' (POI/Hafen/Höhle/Taverne)
   * "parentPlaceId": Name des übergeordneten Ortes/Landmasse (z.B. "Insel Ouka" bei Hafen, Stadt oder Höhle)
   * "terrainTile": 'flüssigkeit' | 'hitze' | 'kälte' | 'natur_dicht' | 'natur_offen' | 'trockenheit' | 'fels' | 'struktur' | 'untergrund' | 'ungewissheit'
-  * "population": Einwohnerzahl (z.B. "12.500" oder "Unbewohnt")
-  * "ruler": Herrscher / Gouverneur / Kommandant (z.B. "Kapitän Vane")
+  * "population": Einwohnerzahl (z.B. "250" oder "12.500")
+  * "ruler": Vorname/Name des Vorstehers OHNE Titel (z.B. "Kuno" oder "Müller")
+  * "rulingTitle": Amtstitel (z.B. "Dorfschulze", "Bürgermeister", "Stadtvogt")
+  * "overlord": Übergeordneter Lehnsherr (z.B. "Baronie von Weißstein")
+  * "feudalRank": Feudalstatus (z.B. "Dorf unter Lehnsherrschaft")
+  * "lawEnforcement": Gesetzeshüter (z.B. "Dorf-Büttel, Nachtwächter, Ältestenrat")
+  * "combatReadyPopulation": Wehrfähige Einwohner (z.B. "ca. 50 Bauernwehr")
+  * "standingArmy": Stehende Truppen (z.B. "Keine, 2 Nachtwächter")
+  * "militiaAndConscripts": Milizausrüstung (z.B. "Heugabeln, Äxte, Jagdbögen")
+  * "defenseStructures": Wehranlagen (z.B. "Holzpalisade, Erdwall, verstärktes Wehrtor")
+  * "armamentAndSupply": Zeughaus / Vorräte (z.B. "Einfache Waffen, Jagdbögen, Knüppel")
+  * "dangerLevel": Gefahrenstufe (z.B. "Niedrig (wilde Tiere im Forst)")
+  * "dailyJobs": Prozentuale Berufsverteilung (z.B. "65% Ackerbau und Viehzucht, 20% Waldarbeit, 15% Handwerk und Schank")
+  * "localTasks": Alltägliche Aufgaben (z.B. "Feldbestellung, Holzschlag, Wehrtordienst, Brunnenpflege")
+  * "tradeGoods": Lokale Waren (z.B. "Getreide, Wolle, Honig, Schnittholz")
+  * "tradeDemands": Gesuchte Waren (z.B. "Eisenwerkzeuge, Salz, Arznei")
+  * "merchantsAndFairs": Märkte & Händler (z.B. "Wöchentlicher Markttag, reisende Händler")
+  * "tradeContracts": Verträge & Zehnt (z.B. "Zehnt an die Baronie")
+  * "accessRoutes": Straßen & Zuwege (z.B. "Befestigte Landstraße, Forstweg")
+  * "travelDangers": Gefahren der Wege (z.B. "Morastige Abschnitte bei Regen")
+  * "landmarks": Wahrzeichen (z.B. "Dorfplatz mit Ziehbrunnen, Dorfschänke, alte Dorfeiche")
+  * "pointsOfInterest": Interessante Orte (z.B. "Dorfschmiede, Backhaus, Mühle am Bach")
+  * "climate": Klima & Atmosphäre
+  * "culture": Kultur & Lebensart
+  * "terrain": Landschaftsbeschreibung
+  * "faction": Herrschende Fraktion / Gemeinde
+  * "coordinates": { "x": number (15-85), "y": number (15-85) }
   * "climate": Klima & Atmosphäre (z.B. "Tropisch maritim, stürmische Monsunwinde")
   * "culture": Kultur & Lebensart (z.B. "Seefahrer-Traditionen und Piratenkodex")
   * "terrain": Landschaftsbeschreibung (z.B. "Schwarzer Basalt, schroffe Klippen und tiefe Mangroven")
@@ -5804,18 +6013,18 @@ ${existingTitles || '(Keine bisherigen Einträge vorhanden)'}
 - details-Objekt: "timeOfEvent", "location", "involvedCharacters"
 
 ### AUSGABEFORMAT:
-Du MUSST ein valides JSON-Objekt zurückgeben mit genau einem Feld "entries", welches ein Array von 8 bis 15 dieser vollkommen ausgearbeiteten Lore-Objekte ist:
+Du MUSST ein valides JSON-Objekt zurückgeben mit genau einem Feld "entries", welches ein stimmiges Array von ca. 4 bis 8 dieser ausgearbeiteten Lore-Objekte ist:
 {
   "entries": [
     {
       "category": "Charaktere" | "Rassen" | "Orte" | "Fraktionen" | "Gegenstände" | "Verbotenes Wissen" | "Weltregeln" | "Gegner" | "Zeitlinie",
       "title": "Titel des Eintrags",
-      "description": "Atmosphärische und detailreiche Beschreibung auf Deutsch",
+      "description": "Atmosphärische, geerdete Beschreibung auf Deutsch",
       "isUnlocked": true,
       "details": { ... passend zur Kategorie ... },
-      "secretsStage1": "Öffentliches Wissen / Legenden",
+      "secretsStage1": "Öffentliches Wissen / Legenden / Ruf",
       "secretsStage2": "Verdachtsmomente / Gerüchte",
-      "secretsStage3": "Absolutes Geheimnis / Blackbox"
+      "secretsStage3": "Persönliches / Profanes / Wahres Geheimnis"
     }
   ]
 }
@@ -5834,7 +6043,25 @@ Antworte AUSSCHLIESSLICH mit diesem validen JSON-Objekt. Keine Einleitung, kein 
       const textResult = (response.text || '').trim();
       try {
         const parsed = this.parseJSONSafely(textResult, { entries: [] });
-        return parsed.entries || [];
+        const rawEntries: any[] = parsed.entries || [];
+        // Strikt filtern: Der Spielercharakter darf niemals als NPC dupliziert werden
+        const nonPlayerEntries = rawEntries.filter((entry: any) => {
+          if (!entry || !entry.title) return false;
+          if (effectivePlayerName && (entry.category === 'Charaktere' || entry.category === 'Gegner')) {
+            const entryTitle = String(entry.title).trim().toLowerCase();
+            const pName = effectivePlayerName.toLowerCase();
+            if (entryTitle === pName || entryTitle === 'spieler' || entryTitle === 'spielercharakter' || entryTitle.startsWith(`${pName} (`)) {
+              return false;
+            }
+          }
+          return true;
+        });
+
+        // Bereinigt und vervollständigt jeden Eintrag im Hintergrund:
+        // - Trennt Berufe und Titel strikt vom Namen (Bauer Jochen -> Jochen, Beruf: Bauer)
+        // - Trennt Herrschertitel vom Namen (Dorfschulze Kuno -> Kuno, Amt: Dorfschulze)
+        // - Füllt alle Formularfelder (Alltagskompetenzen, Handwerk, Siedlungsdaten) vollständig aus
+        return nonPlayerEntries.map(entry => enrichAndCompleteLoreEntry(entry, worldContext));
       } catch (e) {
         console.error("Fehler beim Parsen der Multi-Lore-Generierung:", e);
         return [];
@@ -6033,7 +6260,13 @@ ${entriesToUse.slice(0, 35).map((l: any) => `- [${l.category || 'Codex'}] ${l.ti
         }
       });
 
-      return this.parseJSONSafely(response.text || '{}', {});
+      const parsed = this.parseJSONSafely(response.text || '{}', {});
+      if (parsed && parsed.ruler) {
+        const { cleanRuler, rulingTitle } = sanitizeRulerNameAndTitle(parsed.ruler, parsed.rulingTitle);
+        parsed.ruler = cleanRuler;
+        if (rulingTitle) parsed.rulingTitle = rulingTitle;
+      }
+      return parsed;
     });
   }
 
@@ -6736,6 +6969,11 @@ F. FRAKTIONEN-SYNCHRONISATION (WICHTIG!):
      1. CODEX (upsertLoreEntries): Erstelle/Update einen Eintrag mit category 'Fraktionen'. Setze in "details" Felder wie "currentGoal", "headquarters", "members" (Array von Mitgliedern).
      2. WELTKARTE (upsertTerritories): Setze bei zugehörigen Gebieten unbedingt "controlledByFactionId" auf die Fraktions-ID und "faction" auf den Fraktionsnamen.
      3. WIRTSCHAFT & MANAGEMENT (upsertHoldings): Setze bei fraktionseigenen Betrieben "ownerType" auf "faction", "ownerFactionId" auf die Fraktions-ID und "ownerFactionName" auf den Fraktionsnamen. Setze "controlledByFactionId" und "controlledByFactionName", falls eine andere Fraktion die Kontrolle ausübt.
+
+G. SPIELERCHARAKTER-SCHUTZ & REALISTISCHE TONALITÄT (STRENG EINHALTEN):
+   - Der Spielercharakter heißt "${world?.player?.name || 'Spieler'}". Erstelle UNTER KEINEN UMSTÄNDEN einen LoreEntry für den Spieler selbst! Der Spieler ist kein NPC.
+   - BODENSTÄNDIGES WORLDBUILDING: Ein normales Dorf bleibt ein normales Dorf! Keine erzwungenen finsteren Kulte, keine uralten Dämonenaltäre oder heiligen Geheimnisse in friedlichen Siedlungen.
+   - Geheimnisse und Gerüchte für gewöhnliche Orte/NPCs müssen menschlich und alltäglich sein (z.B. Dorfgeplauder, kleine Sorgen, Ernteprobleme, heimliche Ersparnisse).
 
 NUTZER-ANWEISUNG / PROMPT:
 "${params.userPrompt}"

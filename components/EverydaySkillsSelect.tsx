@@ -17,7 +17,16 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { EVERYDAY_SKILL_CATEGORIES, ALL_EVERYDAY_SKILLS } from './everydaySkillPresets';
+import {
+  EVERYDAY_SKILL_CATEGORIES,
+  ALL_EVERYDAY_SKILLS,
+  CENTRAL_EVERYDAY_SKILLS,
+  getCentralSkill,
+  getSkillAspects,
+  getSkillDescription,
+  mapLegacySkillToCentralSkill,
+  LEGACY_SKILL_MAPPING
+} from './everydaySkillPresets';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 
 export type EverydayProgressionRule = 'ep' | 'training' | 'milestone' | 'static';
@@ -32,6 +41,7 @@ interface EverydaySkillsSelectProps {
 }
 
 export interface EverydaySkillItem {
+  id?: string;
   name: string;
   score: number; // 0 - 100
   label: string; // 'Anfänger', 'Fortgeschritten', 'Erfahren', 'Meisterhaft'
@@ -50,8 +60,11 @@ export function getSkillLabel(score: number): string {
 }
 
 export function getCategoryForSkill(skillName: string): string {
-  const found = EVERYDAY_SKILL_CATEGORIES.find(c => c.skills.includes(skillName));
-  return found ? found.category : 'Eigene Fertigkeiten';
+  const direct = EVERYDAY_SKILL_CATEGORIES.find(c => c.skills.includes(skillName));
+  if (direct) return direct.category;
+  const mapped = mapLegacySkillToCentralSkill(skillName);
+  const fromMapped = EVERYDAY_SKILL_CATEGORIES.find(c => c.skills.includes(mapped));
+  return fromMapped ? fromMapped.category : 'Eigene Fertigkeiten';
 }
 
 export function parseEverydaySkills(text: string): EverydaySkillItem[] {
@@ -74,10 +87,11 @@ export function parseEverydaySkills(text: string): EverydaySkillItem[] {
   }
   if (current.trim()) parts.push(current.trim());
 
-  return parts.map(part => {
+  const parsedItems: EverydaySkillItem[] = parts.map(part => {
     const match = part.match(/^([^(]+)(?:\(([^)]+)\))?/);
     if (!match) {
-      return { name: part.trim(), score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0 };
+      const trimmedName = part.trim();
+      return { name: trimmedName, score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0 };
     }
     const name = match[1].trim();
     const details = match[2] ? match[2].trim() : '';
@@ -136,6 +150,39 @@ export function parseEverydaySkills(text: string): EverydaySkillItem[] {
     const label = getSkillLabel(score);
     return { name, score, label, note, xp, trainingUnits, milestoneNote, points };
   });
+
+  // Deduplizieren: Gleiche Fertigkeiten zusammenführen (höchster Wert gewinnt, Notizen/Punkte kombinieren)
+  const deduplicatedItems: EverydaySkillItem[] = [];
+  const seenIndices = new Map<string, number>();
+
+  for (const item of parsedItems) {
+    const key = item.name.trim().toLowerCase();
+    if (!key) continue;
+
+    if (seenIndices.has(key)) {
+      const existingIdx = seenIndices.get(key)!;
+      const existing = deduplicatedItems[existingIdx];
+      const bestScore = Math.max(existing.score, item.score);
+      deduplicatedItems[existingIdx] = {
+        ...existing,
+        score: bestScore,
+        label: getSkillLabel(bestScore),
+        xp: Math.max(existing.xp || 0, item.xp || 0),
+        trainingUnits: Math.max(existing.trainingUnits || 0, item.trainingUnits || 0),
+        points: Math.max(existing.points || 0, item.points || 0),
+        note: [existing.note, item.note].filter(Boolean).join(' | ') || undefined,
+        milestoneNote: [existing.milestoneNote, item.milestoneNote].filter(Boolean).join(' | ') || undefined
+      };
+    } else {
+      seenIndices.set(key, deduplicatedItems.length);
+      deduplicatedItems.push({
+        ...item,
+        id: `eskill_${key.replace(/[^a-z0-9]/g, '_')}_${deduplicatedItems.length}`
+      });
+    }
+  }
+
+  return deduplicatedItems;
 }
 
 export function serializeEverydaySkills(items: EverydaySkillItem[]): string {
@@ -213,6 +260,11 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
   const [customSkillInput, setCustomSkillInput] = useState<string>('');
   const [viewMode, setViewMode] = useState<'visual' | 'raw'>('visual');
   const [expandedSkillsMap, setExpandedSkillsMap] = useState<Record<string, boolean>>({});
+  const [showCategoryDetails, setShowCategoryDetails] = useState<Record<string, boolean>>({});
+
+  const toggleCategoryDetails = (catName: string) => {
+    setShowCategoryDetails(prev => ({ ...prev, [catName]: !prev[catName] }));
+  };
 
   // Active progression logic (governed by Step 2)
   const activeLogic: EverydayProgressionRule = progressionLogic || 'ep';
@@ -239,9 +291,18 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
         return next;
       });
     } else {
+      // Vorbeugung: Falls Fertigkeit schon unter anderem Namen oder Legacy vorhanden ist
+      const isAlreadyActive = skillItems.some(
+        item => item.name.toLowerCase() === skillName.toLowerCase() || mapLegacySkillToCentralSkill(item.name).toLowerCase() === skillName.toLowerCase()
+      );
+      if (isAlreadyActive) {
+        return;
+      }
+      const safeId = `eskill_${skillName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`;
       const updated = [
         ...skillItems,
         {
+          id: safeId,
           name: skillName,
           score: 0,
           label: 'Anfänger',
@@ -263,9 +324,11 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
       setCustomSkillInput('');
       return;
     }
+    const safeId = `eskill_custom_${trimmed.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now()}`;
     const updated = [
       ...skillItems,
       {
+        id: safeId,
         name: trimmed,
         score: 0,
         label: 'Anfänger',
@@ -430,11 +493,19 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
 
       let skills = cat.skills;
       if (selectedCategory === 'ausgewaehlt') {
-        skills = skills.filter(s => activeSkillNames.includes(s));
+        skills = skills.filter(s => activeSkillNames.includes(s) || skillItems.some(item => mapLegacySkillToCentralSkill(item.name) === s));
       }
 
       if (query) {
-        skills = skills.filter(s => s.toLowerCase().includes(query));
+        skills = skills.filter(s => {
+          if (s.toLowerCase().includes(query)) return true;
+          const cs = getCentralSkill(s);
+          if (cs) {
+            if (cs.description.toLowerCase().includes(query)) return true;
+            if (cs.aspects.some(asp => asp.toLowerCase().includes(query))) return true;
+          }
+          return false;
+        });
       }
 
       if (skills.length === 0) return null;
@@ -444,24 +515,63 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
         skills
       };
     }).filter(Boolean) as typeof EVERYDAY_SKILL_CATEGORIES;
-  }, [selectedCategory, searchQuery, activeSkillNames]);
+  }, [selectedCategory, searchQuery, activeSkillNames, skillItems]);
 
   // Total custom skills not in presets
   const customActiveSkills = useMemo(() => {
-    return skillItems.filter(item => !ALL_EVERYDAY_SKILLS.includes(item.name));
+    return skillItems.filter(item => {
+      if (ALL_EVERYDAY_SKILLS.includes(item.name)) return false;
+      const mapped = mapLegacySkillToCentralSkill(item.name);
+      return !ALL_EVERYDAY_SKILLS.includes(mapped);
+    });
   }, [skillItems]);
 
   // Helper to render an active skill card with progression controls
-  const renderActiveSkillCard = (item: EverydaySkillItem) => {
-    const realIndex = skillItems.findIndex(s => s.name === item.name);
+  const renderActiveSkillCard = (item: EverydaySkillItem, listIdx: number = 0, keyPrefix: string = 'active') => {
+    const realIndex = skillItems.findIndex(s => (item.id && s.id === item.id) || s.name.toLowerCase() === item.name.toLowerCase());
     if (realIndex === -1) return null;
 
     const isExpanded = !!expandedSkillsMap[item.name];
     const categoryName = getCategoryForSkill(item.name);
+    const centralSkill = getCentralSkill(item.name);
+    const isLegacy = !ALL_EVERYDAY_SKILLS.includes(item.name) && !!LEGACY_SKILL_MAPPING[item.name];
+    const targetCentralName = isLegacy ? LEGACY_SKILL_MAPPING[item.name] : null;
+
+    const handleMigrateToCentral = () => {
+      if (!targetCentralName) return;
+      const updated = [...skillItems];
+      const targetLower = targetCentralName.toLowerCase();
+      const existingIdx = updated.findIndex((s, idx) => idx !== realIndex && s.name.toLowerCase() === targetLower);
+
+      if (existingIdx !== -1) {
+        // Falls bereits vorhanden: verlustfrei zusammenführen
+        const existing = updated[existingIdx];
+        const bestScore = Math.max(existing.score, item.score);
+        updated[existingIdx] = {
+          ...existing,
+          score: bestScore,
+          label: getSkillLabel(bestScore),
+          xp: Math.max(existing.xp || 0, item.xp || 0),
+          trainingUnits: Math.max(existing.trainingUnits || 0, item.trainingUnits || 0),
+          points: Math.max(existing.points || 0, item.points || 0),
+          note: [existing.note, item.note].filter(Boolean).join(' | ') || undefined,
+          milestoneNote: [existing.milestoneNote, item.milestoneNote].filter(Boolean).join(' | ') || undefined
+        };
+        updated.splice(realIndex, 1);
+      } else {
+        updated[realIndex] = {
+          ...updated[realIndex],
+          name: targetCentralName
+        };
+      }
+      onChange(serializeEverydaySkills(updated));
+    };
+
+    const cardKey = `${keyPrefix}-${item.id || item.name.replace(/\s+/g, '_')}-${realIndex}-${listIdx}`;
 
     return (
       <div
-        key={item.name}
+        key={cardKey}
         className={`bg-slate-950 border rounded-xl transition duration-150 flex flex-col ${
           isExpanded ? 'border-sky-500/50 shadow-sm' : 'border-slate-800 hover:border-slate-700'
         }`}
@@ -538,9 +648,58 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
           </div>
         </div>
 
+        {/* Hinweis bei historischem/überholtem Namen mit One-Click Migration */}
+        {targetCentralName && (
+          <div className="mx-3 mb-2 p-2 rounded-lg bg-slate-900 border border-amber-500/40 flex items-center justify-between gap-2 text-xs">
+            <span className="text-amber-200">
+              Historischer Eintrag – entspricht der zentralen Alltagskompetenz <strong>{targetCentralName}</strong>.
+            </span>
+            <button
+              type="button"
+              onClick={handleMigrateToCentral}
+              className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-medium text-[11px] whitespace-nowrap transition cursor-pointer"
+            >
+              Auf {targetCentralName} umstellen
+            </button>
+          </div>
+        )}
+
         {/* Aufgeklappter Bereich: Progression, Feinjustierung & Notiz */}
         {isExpanded && (
           <div className="p-3.5 border-t border-slate-800/80 bg-slate-900/40 flex flex-col gap-3">
+            {/* BESCHREIBUNG & UNTERASPEKTE DER ZENTRALEN ALLTAGSKOMPETENZ */}
+            {centralSkill && (
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3 flex flex-col gap-2">
+                {centralSkill.description && (
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {centralSkill.description}
+                  </p>
+                )}
+                {centralSkill.aspects && centralSkill.aspects.length > 0 && (
+                  <div className="flex flex-col gap-1.5 pt-1.5 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                      <span className="font-semibold uppercase tracking-wider text-slate-300">
+                        Unteraspekte & Anwendungsbereiche:
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        (im Beherrschungsgrad enthalten)
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {centralSkill.aspects.map(aspect => (
+                        <span
+                          key={aspect}
+                          className="text-[11px] px-2 py-0.5 rounded-md bg-slate-950 border border-slate-800 text-slate-200"
+                        >
+                          {aspect}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* SPEZIFISCHER PROGRESSIONS-STEIGERUNGSBEREICH */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-3 flex flex-col gap-2.5">
               {/* FALL A: EP-BASIERT */}
@@ -1062,7 +1221,7 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-2.5">
-                    {skillItems.map(item => renderActiveSkillCard(item))}
+                    {skillItems.map((item, idx) => renderActiveSkillCard(item, idx, 'ausgewaehlt'))}
                   </div>
                 )}
               </div>
@@ -1081,7 +1240,7 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
                       </span>
                     </div>
                     <div className="grid grid-cols-1 gap-2.5">
-                      {customActiveSkills.map(item => renderActiveSkillCard(item))}
+                      {customActiveSkills.map((item, idx) => renderActiveSkillCard(item, idx, 'custom'))}
                     </div>
                   </div>
                 )}
@@ -1092,8 +1251,16 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
                   </div>
                 ) : (
                   filteredCategories.map(cat => {
-                    const activeInCategory = skillItems.filter(item => cat.skills.includes(item.name));
-                    const availableInCategory = cat.skills.filter(s => !activeSkillNames.includes(s));
+                    const activeInCategory = skillItems.filter(item => {
+                      if (cat.skills.includes(item.name)) return true;
+                      const mapped = mapLegacySkillToCentralSkill(item.name);
+                      return cat.skills.includes(mapped);
+                    });
+                    const availableInCategory = cat.skills.filter(s => {
+                      const isDirect = activeSkillNames.includes(s);
+                      const isMapped = skillItems.some(item => mapLegacySkillToCentralSkill(item.name) === s);
+                      return !isDirect && !isMapped;
+                    });
 
                     return (
                       <div
@@ -1105,13 +1272,25 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
                           <span className="text-xs font-bold text-slate-200">
                             {cat.category}
                           </span>
-                          <span className="text-[10px] text-slate-400">
-                            {activeInCategory.length > 0 ? (
-                              <span className="text-sky-300 font-semibold">{activeInCategory.length} ausgewählt / {cat.skills.length} gesamt</span>
-                            ) : (
-                              <span>{cat.skills.length} Fertigkeiten</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] text-slate-400">
+                              {activeInCategory.length > 0 ? (
+                                <span className="text-sky-300 font-semibold">{activeInCategory.length} aktiv / {cat.skills.length} gesamt</span>
+                              ) : (
+                                <span>{cat.skills.length} Fertigkeiten</span>
+                              )}
+                            </span>
+                            {availableInCategory.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => toggleCategoryDetails(cat.category)}
+                                className="text-[11px] text-slate-400 hover:text-sky-300 transition cursor-pointer flex items-center gap-1"
+                              >
+                                <span>{showCategoryDetails[cat.category] ? 'Kompakt' : 'Details'}</span>
+                                {showCategoryDetails[cat.category] ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
                             )}
-                          </span>
+                          </div>
                         </div>
 
                         {/* Aktive Fertigkeiten in dieser Kategorie */}
@@ -1121,7 +1300,7 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
                               Aktive Fertigkeiten ({activeInCategory.length}):
                             </span>
                             <div className="grid grid-cols-1 gap-2.5">
-                              {activeInCategory.map(item => renderActiveSkillCard(item))}
+                              {activeInCategory.map((item, idx) => renderActiveSkillCard(item, idx, `cat-${cat.category}`))}
                             </div>
                           </div>
                         )}
@@ -1134,19 +1313,68 @@ export const EverydaySkillsSelect: React.FC<EverydaySkillsSelectProps> = ({
                                 Verfügbar zum Hinzufügen ({availableInCategory.length}):
                               </span>
                             )}
-                            <div className="flex flex-wrap gap-1.5">
-                              {availableInCategory.map(skill => (
-                                <button
-                                  key={skill}
-                                  type="button"
-                                  onClick={() => handleToggleSkill(skill)}
-                                  className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-950 text-slate-300 border border-slate-800/90 hover:border-sky-500/60 hover:text-white transition flex items-center gap-1.5 cursor-pointer group"
-                                >
-                                  <Plus className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400 shrink-0" />
-                                  <span>{skill}</span>
-                                </button>
-                              ))}
-                            </div>
+                            {showCategoryDetails[cat.category] ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {availableInCategory.map(skill => {
+                                  const cs = getCentralSkill(skill);
+                                  return (
+                                    <div
+                                      key={`avail-detail-${cat.category}-${skill}`}
+                                      className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/90 flex flex-col justify-between gap-2"
+                                    >
+                                      <div className="flex flex-col gap-1">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-xs font-semibold text-slate-200">{skill}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleToggleSkill(skill)}
+                                            className="px-2 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white text-[11px] font-medium flex items-center gap-1 transition cursor-pointer"
+                                          >
+                                            <Plus className="w-3 h-3" />
+                                            <span>Hinzufügen</span>
+                                          </button>
+                                        </div>
+                                        {cs?.description && (
+                                          <p className="text-[11px] text-slate-400 leading-snug">
+                                            {cs.description}
+                                          </p>
+                                        )}
+                                      </div>
+                                      {cs && cs.aspects.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-900">
+                                          {cs.aspects.map(asp => (
+                                            <span key={`aspect-${cat.category}-${skill}-${asp}`} className="text-[10px] px-1.5 py-0.5 bg-slate-900 text-slate-300 rounded border border-slate-800/60">
+                                              {asp}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-1.5">
+                                {availableInCategory.map(skill => {
+                                  const cs = getCentralSkill(skill);
+                                  const tooltip = cs
+                                    ? `${cs.description}\n\nUnteraspekte: ${cs.aspects.join(', ')}`
+                                    : '';
+                                  return (
+                                    <button
+                                      key={`avail-btn-${cat.category}-${skill}`}
+                                      type="button"
+                                      onClick={() => handleToggleSkill(skill)}
+                                      title={tooltip}
+                                      className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-950 text-slate-300 border border-slate-800/90 hover:border-sky-500/60 hover:text-white transition flex items-center gap-1.5 cursor-pointer group"
+                                    >
+                                      <Plus className="w-3.5 h-3.5 text-slate-500 group-hover:text-sky-400 shrink-0" />
+                                      <span>{skill}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

@@ -22,7 +22,8 @@ import { CharacterMotivationPanel } from './CharacterMotivationPanel';
 import { CharacterGoalsPanel } from './CharacterGoalsPanel';
 import { GeminiService } from '../services/geminiService';
 import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArchetypesData';
-import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore } from '../lib/relationshipHelper';
+import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore, normalizeRelationships } from '../lib/relationshipHelper';
+import { sanitizeCharacterNameAndProfession } from '../lib/loreSanitizer';
 import { migrateLegacyProfessionData } from '../services/professionCompetencyService';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
@@ -399,7 +400,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
   // Relationships
   const getRelationships = (): CharacterRelationship[] => {
-    return editForm.details?.relationships || [];
+    return normalizeRelationships(editForm.details?.relationships);
   };
 
   const updateRelationships = (rels: CharacterRelationship[]) => {
@@ -576,12 +577,19 @@ export const CharacterLoreForm: React.FC<Props> = ({
         setEditForm(prev => {
           const currentDetails = prev.details || {};
           const generatedName = (data.name?.trim()) || (data.callName?.trim()) || (data.rufName?.trim()) || '';
-          let finalTitle = prev.title || 'Neuer Charakter';
+          let rawTitle = prev.title || 'Neuer Charakter';
           if (smartFillSelectedChar === 'new') {
-            finalTitle = smartFillNewCharName.trim() || generatedName || (prev.title && prev.title.length < 50 ? prev.title : 'Neuer Charakter');
+            rawTitle = smartFillNewCharName.trim() || generatedName || (prev.title && prev.title.length < 50 ? prev.title : 'Neuer Charakter');
           } else if (!keepExistingDetails && generatedName && smartFillTargetSection === 'all') {
-            finalTitle = generatedName;
+            rawTitle = generatedName;
           }
+
+          const { cleanName, extractedProfession, callName } = sanitizeCharacterNameAndProfession(
+            rawTitle,
+            data.profession || currentDetails.profession,
+            data.role || currentDetails.role
+          );
+          const finalTitle = cleanName || rawTitle;
 
           const finalBio = (keepExistingDetails || smartFillTargetSection !== 'all') && prev.description ? prev.description : (data.bio || '');
           const finalArchetype = data.personalityArchetype || data.archetype || (keepExistingDetails ? (currentDetails.personalityArchetype || currentDetails.archetype || '') : '');
@@ -651,8 +659,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
           const nextSecrets3 = data.secretsStage3 !== undefined ? data.secretsStage3 : (keepExistingDetails ? (prev.secretsStage3 || currentDetails.secretsStage3 || '') : '');
           const nextKnowledge = data.knowledge !== undefined ? data.knowledge : (keepExistingDetails ? (prev.knowledge || currentDetails.knowledge || '') : '');
 
-          const finalRole = data.role || data.profession || currentDetails.role || currentDetails.profession || '';
-          const finalProfession = data.profession || data.role || currentDetails.profession || currentDetails.role || '';
+          const finalRole = data.role || data.profession || extractedProfession || currentDetails.role || currentDetails.profession || '';
+          const finalProfession = data.profession || data.role || extractedProfession || currentDetails.profession || currentDetails.role || '';
 
           let newDetails: any = { ...currentDetails };
 
@@ -781,7 +789,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               ...currentDetails,
               relationship: data.relationship || currentDetails.relationship || '',
               conduct: data.conduct || currentDetails.conduct || '',
-              relationships: data.relationships || currentDetails.relationships || []
+              relationships: normalizeRelationships(data.relationships || currentDetails.relationships)
             };
             setCharTab('beziehungen');
           } else if (smartFillTargetSection === 'combat') {
@@ -868,7 +876,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               powerCost: data.powerCost || currentDetails.powerCost || '',
               techniques: data.techniques || currentDetails.techniques || '',
               abilities: generatedAbilities,
-              relationships: data.relationships || currentDetails.relationships || [],
+              relationships: normalizeRelationships(data.relationships || currentDetails.relationships),
               campaignPowerLevels: data.campaignPowerLevels || currentDetails.campaignPowerLevels || {},
               secretsStage1: nextSecrets1,
               secretsStage2: nextSecrets2,
@@ -918,7 +926,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               powerCost: data.powerCost || '',
               techniques: data.techniques || '',
               abilities: generatedAbilities,
-              relationships: data.relationships || [],
+              relationships: normalizeRelationships(data.relationships),
               campaignPowerLevels: data.campaignPowerLevels || {},
               powerSources: (data.powerSource || data.powerCost)
                 ? [{ id: `${Date.now()}-ps-0`, name: data.powerSource || 'Hauptkraft', source: data.powerSource || '', cost: data.powerCost || '', powerName: data.powerSource || '' }]

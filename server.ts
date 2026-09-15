@@ -114,7 +114,6 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   const defaultModels = [
     'gemini-3.8-flash',
     'gemini-flash-latest',
-    'gemini-3.1-pro-preview',
     'gemini-3.1-flash-lite'
   ];
   
@@ -122,7 +121,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   let targetModel = 'gemini-3.8-flash';
   if (requestedModel) {
     if (requestedModel.includes('3.1-pro') || requestedModel.includes('gemini-3.1-pro-preview') || requestedModel.includes('2.5-pro') || requestedModel.includes('pro')) {
-      targetModel = 'gemini-3.1-pro-preview';
+      targetModel = 'gemini-3.8-flash'; // Default to 3.8-flash for high reliability on free tier
     } else if (requestedModel.includes('image')) {
       targetModel = 'gemini-3.1-flash-lite-image';
     } else if (requestedModel.includes('flash-lite') || requestedModel.includes('lite')) {
@@ -197,6 +196,11 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
         }
       }
 
+      const isPermissionDenied = rawMsg.includes('PERMISSION_DENIED') ||
+                                  rawMsg.includes('403') ||
+                                  rawMsg.toLowerCase().includes('permission') ||
+                                  rawMsg.toLowerCase().includes('caller does not have permission');
+
       const isQuotaOrRateLimit = rawMsg.includes('429') || 
                                 rawMsg.toLowerCase().includes('quota') || 
                                 rawMsg.toLowerCase().includes('rate limit') ||
@@ -210,7 +214,10 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
                                      rawMsg.toLowerCase().includes('overloaded') ||
                                      rawMsg.includes('UNAVAILABLE');
 
-      if (isQuotaOrRateLimit) {
+      if (isPermissionDenied) {
+        console.log(`[Gemini Server] Note: ${currentModel} permission limitation (403). Switching immediately to flash candidate...`);
+        await delay(100);
+      } else if (isQuotaOrRateLimit) {
         console.log(`[Gemini Server] Note: ${currentModel} reached rate/quota limit. Switching to alternative candidate...`);
         await delay(250);
       } else if (isTransientServerError) {
@@ -308,6 +315,16 @@ async function startServer() {
       } catch (_) {}
 
       let userFriendlyError = errorMsg;
+      if (
+        errorMsg.includes('PERMISSION_DENIED') ||
+        errorMsg.includes('403') ||
+        errorMsg.toLowerCase().includes('permission') ||
+        errorMsg.toLowerCase().includes('caller does not have permission')
+      ) {
+        userFriendlyError = 'Für dieses Modell oder diese Funktion sind erweiterte API-Berechtigungen erforderlich. Es wird automatisch auf das Standard-Flash-Modell zurückgegriffen.';
+        return res.status(403).json({ error: userFriendlyError });
+      }
+
       if (
         errorMsg.includes('429') ||
         errorMsg.toLowerCase().includes('quota') ||
@@ -572,6 +589,9 @@ async function startServer() {
     app.use(vite.middlewares);
 
     app.use(async (req, res, next) => {
+      if (req.originalUrl.startsWith('/api/') || req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: `API route not found: ${req.originalUrl}` });
+      }
       const url = req.originalUrl;
       try {
         let template = fs.readFileSync(path.resolve(process.cwd(), 'index.html'), 'utf-8');
@@ -586,6 +606,9 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*all', (req, res) => {
+      if (req.originalUrl.startsWith('/api/') || req.path.startsWith('/api/')) {
+        return res.status(404).json({ error: `API route not found: ${req.originalUrl}` });
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

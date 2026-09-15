@@ -13,6 +13,8 @@ import { RaceLoreForm } from './RaceLoreForm';
 import TerritorySpecificFields from './TerritorySpecificFields';
 import WorldKnowledgeManager from './WorldKnowledgeManager';
 import { syncEconomyWithWorld } from '../lib/economySync';
+import { normalizeRelationships } from '../lib/relationshipHelper';
+import { enrichAndCompleteLoreEntry, sanitizeCharacterNameAndProfession, sanitizeRulerNameAndTitle } from '../lib/loreSanitizer';
 
 interface Props {
   lore: LoreEntry[];
@@ -293,18 +295,19 @@ const LoreDatabaseView: React.FC<Props> = ({
           if (!alreadyExists) {
             const d = entry.details || {};
             const newTerritory: Territory = {
+              ...d,
               id: entry.id || `terr-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
               name: entry.title || 'Unbenannter Ort',
               type: d.type || d.terrainType || 'ort',
               description: entry.description || '',
-              parentId: d.parentId ?? null,
-              x: d.x ?? (d.center?.x ?? 50),
-              y: d.y ?? (d.center?.y ?? 50),
+              parentId: d.parentId ?? d.parentPlaceId ?? null,
+              x: d.x ?? (d.center?.x ?? (d.coordinates?.x ?? 50)),
+              y: d.y ?? (d.center?.y ?? (d.coordinates?.y ?? 50)),
               radius: 12.0,
               shapeType: 'circle',
               color: '#3b82f6',
               faction: d.faction || 'Neutral',
-              dangerLevel: 'Normal',
+              dangerLevel: d.dangerLevel || 'Normal',
               isUnlocked: true,
               ownerFactionId: d.ownerFactionId || d.faction,
               ownerCharacterId: d.ownerCharacterId,
@@ -327,6 +330,42 @@ const LoreDatabaseView: React.FC<Props> = ({
       onUpdateLore(cleanedLore);
     }
   }, [rawLore, world, onUpdateWorld, onUpdateLore]);
+
+  // Auto-clean character names in rawLore if they mistakenly contain profession/title prefixes
+  // e.g. "Bauer Jochen" -> title: "Jochen", profession: "Bauer"
+  useEffect(() => {
+    if (!rawLore || rawLore.length === 0) return;
+    let hasNameChange = false;
+    const sanitizedLore = rawLore.map(entry => {
+      if (entry.category === 'Charaktere' && entry.title) {
+        const { cleanName, extractedProfession, callName } = sanitizeCharacterNameAndProfession(
+          entry.title,
+          entry.details?.profession,
+          entry.details?.role
+        );
+        if (cleanName && cleanName !== entry.title) {
+          hasNameChange = true;
+          return {
+            ...entry,
+            title: cleanName,
+            details: {
+              ...(entry.details || {}),
+              profession: entry.details?.profession || extractedProfession,
+              role: entry.details?.role || extractedProfession,
+              jobTitle: entry.details?.jobTitle || extractedProfession,
+              callName: entry.details?.callName || callName,
+              rufName: entry.details?.rufName || callName
+            }
+          };
+        }
+      }
+      return entry;
+    });
+
+    if (hasNameChange) {
+      onUpdateLore(sanitizedLore);
+    }
+  }, [rawLore, onUpdateLore]);
 
   const visibleCategories = useMemo(() => {
     const raw = [
@@ -2024,17 +2063,10 @@ const LoreDatabaseView: React.FC<Props> = ({
         processedDetails.physicalHeight = (height && height > 0) ? height : defaultHeight;
       }
       
-      let mergedRelationships = (processedDetails.relationships || []).map((rel: any, idx: number) => ({
-        id: rel.id || `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`,
-        targetCharacter: rel.targetCharacter || '',
-        type: rel.type || '',
-        behavior: rel.behavior || '',
-        sharedPast: rel.sharedPast || '',
-        _isCustom: rel._isCustom || false
-      }));
-      if (keepExistingLoreDetails && prev.details?.relationships && prev.details.relationships.length > 0) {
-        const currentRels = [...prev.details.relationships];
-        if (Array.isArray(mergedRelationships)) {
+      let mergedRelationships = normalizeRelationships(processedDetails.relationships);
+      if (keepExistingLoreDetails && prev.details?.relationships) {
+        const currentRels = normalizeRelationships(prev.details.relationships);
+        if (currentRels.length > 0) {
           mergedRelationships.forEach((newRel: any) => {
             const existingIdx = currentRels.findIndex((r: any) => r.targetCharacter?.toLowerCase() === newRel.targetCharacter?.toLowerCase());
             if (existingIdx >= 0) {
@@ -2043,8 +2075,8 @@ const LoreDatabaseView: React.FC<Props> = ({
               currentRels.push(newRel);
             }
           });
+          mergedRelationships = currentRels;
         }
-        mergedRelationships = currentRels;
       }
 
       let finalTitle = (keepExistingLoreDetails && prev.title && prev.title.trim())
@@ -2179,16 +2211,38 @@ const LoreDatabaseView: React.FC<Props> = ({
     setIsOmniGenerating(true);
     setOmniSuccessMessage(null);
     try {
+      const resolvedPlayerName = (
+        playerName?.trim() ||
+        player?.name?.trim() ||
+        world?.player?.name?.trim() ||
+        'Spieler'
+      ).trim();
+
       const results = await GeminiService.autofillMultipleLoreEntries(
         omniSmartFillPrompt,
         world,
         lore,
         worldPowerSettings,
-        playerName,
-        isNsfw
+        resolvedPlayerName,
+        isNsfw,
+        player || world?.player
       );
 
-      const mappedResults = results.map((entry: any, index: number) => {
+      // Strikt filtern: Der Spielercharakter darf niemals als NPC dupliziert werden
+      const filteredResults = (results || []).filter((entry: any) => {
+        if (!entry || !entry.title) return false;
+        if (resolvedPlayerName && (entry.category === 'Charaktere' || entry.category === 'Gegner')) {
+          const entryTitle = String(entry.title).trim().toLowerCase();
+          const pName = resolvedPlayerName.toLowerCase();
+          if (entryTitle === pName || entryTitle === 'spieler' || entryTitle === 'spielercharakter' || entryTitle.startsWith(`${pName} (`)) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      const mappedResults = filteredResults.map((rawEntry: any, index: number) => {
+        const entry = enrichAndCompleteLoreEntry(rawEntry, world);
         const tempId = `omni-temp-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`;
         const details = entry.details || {};
         
@@ -2216,12 +2270,17 @@ const LoreDatabaseView: React.FC<Props> = ({
           }];
         }
 
+        const normalizedRels = details.relationships !== undefined
+          ? normalizeRelationships(details.relationships)
+          : undefined;
+
         return {
           ...entry,
           tempId,
           details: {
             ...details,
-            abilities
+            abilities,
+            ...(normalizedRels !== undefined ? { relationships: normalizedRels } : {})
           }
         };
       });
@@ -2261,22 +2320,48 @@ const LoreDatabaseView: React.FC<Props> = ({
       updatedLore.push(loreEntry);
 
       if (entry.category === 'Orte') {
-        const coords = entry.details?.coordinates || { x: 50, y: 50 };
+        const d = entry.details || {};
+        const coords = d.coordinates || { x: 50, y: 50 };
         const newTerritory = {
+          ...d,
           id: `territory-${id}`,
           name: entry.title || 'Unbenannt',
-          type: entry.details?.type || 'stadt',
+          type: d.type || 'dorf',
           description: entry.description || '',
-          parentId: entry.details?.parentPlaceId || null,
+          parentId: d.parentPlaceId || d.parentId || null,
           x: coords.x !== undefined ? Number(coords.x) : 50,
           y: coords.y !== undefined ? Number(coords.y) : 50,
-          population: entry.details?.population || '',
-          ruler: entry.details?.ruler || '',
-          climate: entry.details?.climate || '',
-          culture: entry.details?.culture || '',
-          terrain: entry.details?.terrainTile || '',
-          faction: entry.details?.faction || '',
-          isUnlocked: true
+          radius: d.radius || 12.0,
+          shapeType: d.shapeType || 'circle',
+          color: d.color || '#3b82f6',
+          population: d.population || '',
+          ruler: d.ruler || '',
+          rulingTitle: d.rulingTitle || '',
+          overlord: d.overlord || '',
+          feudalRank: d.feudalRank || '',
+          lawEnforcement: d.lawEnforcement || '',
+          combatReadyPopulation: d.combatReadyPopulation || '',
+          standingArmy: d.standingArmy || '',
+          militiaAndConscripts: d.militiaAndConscripts || '',
+          defenseStructures: d.defenseStructures || '',
+          armamentAndSupply: d.armamentAndSupply || '',
+          dangerLevel: d.dangerLevel || 'Normal',
+          dailyJobs: d.dailyJobs || '',
+          localTasks: d.localTasks || '',
+          tradeGoods: d.tradeGoods || '',
+          tradeDemands: d.tradeDemands || '',
+          merchantsAndFairs: d.merchantsAndFairs || '',
+          tradeContracts: d.tradeContracts || '',
+          accessRoutes: d.accessRoutes || '',
+          travelDangers: d.travelDangers || '',
+          landmarks: d.landmarks || '',
+          pointsOfInterest: d.pointsOfInterest || '',
+          climate: d.climate || '',
+          culture: d.culture || '',
+          terrain: d.terrainTile || d.terrain || '',
+          faction: d.faction || 'Neutral',
+          isUnlocked: true,
+          loreEntryId: id
         };
         addedTerritories.push(newTerritory);
       }
@@ -3351,11 +3436,12 @@ const LoreDatabaseView: React.FC<Props> = ({
 
         if (charIdx >= 0) {
           const currentChar = updatedLore[charIdx];
-          const existingRels = currentChar.details?.relationships || [];
+          const existingRels = normalizeRelationships(currentChar.details?.relationships);
           
           // Merge relationships: replace matching targets, append new
           const mergedRels = [...existingRels];
-          for (const newRel of update.relationships) {
+          const incomingRels = normalizeRelationships(update.relationships);
+          for (const newRel of incomingRels) {
             const relTargetLower = newRel.targetCharacter?.trim().toLowerCase();
             const existingRelIdx = mergedRels.findIndex(r => r.targetCharacter?.trim().toLowerCase() === relTargetLower);
             if (existingRelIdx >= 0) {
@@ -3383,9 +3469,10 @@ const LoreDatabaseView: React.FC<Props> = ({
 
         // Check if player
         if (targetNameLower === effectivePlayerName.toLowerCase() && onUpdateWorld && world) {
-          const existingPlayerRels = world.player?.relationships || player?.relationships || [];
+          const existingPlayerRels = normalizeRelationships(world.player?.relationships || player?.relationships);
           const mergedPlayerRels = [...existingPlayerRels];
-          for (const newRel of update.relationships) {
+          const incomingPlayerRels = normalizeRelationships(update.relationships);
+          for (const newRel of incomingPlayerRels) {
             const relTargetLower = newRel.targetCharacter?.trim().toLowerCase();
             const existingRelIdx = mergedPlayerRels.findIndex(r => r.targetCharacter?.trim().toLowerCase() === relTargetLower);
             if (existingRelIdx >= 0) {
@@ -3580,34 +3667,41 @@ const LoreDatabaseView: React.FC<Props> = ({
             <div className="bg-slate-900/80 border border-indigo-500/30 p-6 rounded-2xl flex flex-col gap-4 shadow-xl relative overflow-hidden">
               <div className="absolute top-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-amber-500 left-0"></div>
               
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                     <i className="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
                     <span>Multi-Smart-Fill: Mehrere Einträge gleichzeitig generieren</span>
                   </h4>
                   <p className="text-xs text-slate-400 mt-1">
-                    Beschreibe ein Konzept, eine Fraktion oder ein Ereignis. Es werden automatisch verknüpfte Charaktere, Orte, Gegenstände und Geheimnisse erstellt.
+                    Beschreibe ein Thema, eine Fraktion, eine Familie oder eine Siedlung. Es werden passende, untereinander verknüpfte Einträge erstellt.
                   </p>
                 </div>
+                {effectivePlayerName && effectivePlayerName !== 'Spieler' && (
+                  <div className="text-[11px] text-indigo-300 bg-indigo-950/60 border border-indigo-800/40 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                    <span className="text-slate-400">Aktiver Spieler:</span>
+                    <span className="font-semibold text-indigo-200">{effectivePlayerName}</span>
+                    <span className="text-[10px] text-slate-400">(wird geschützt, kein NPC-Eintrag)</span>
+                  </div>
+                )}
               </div>
 
               <AutoExpandingTextarea 
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg p-4 text-slate-300 text-sm min-h-[120px] outline-none focus:border-indigo-500 transition-all" 
-                placeholder="Beschreibung für die Multi-Generierung eingeben..."
+                placeholder="Beschreibung eingeben (z. B. 'Die Familie des Spielers mit Mutter, Vater und jüngerer Schwester' oder 'Die Anführer der Diebesgilde')..."
                 value={omniSmartFillPrompt} 
                 onChange={e => setOmniSmartFillPrompt(e.target.value)} 
                 disabled={isOmniGenerating}
               />
 
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-[10px] text-slate-500">
-                  Erstellt automatische Verknüpfungen zwischen Fraktionen, Charakteren und Standorten.
+              <div className="flex flex-wrap justify-between items-center gap-2 mt-2">
+                <span className="text-[10px] text-slate-400">
+                  Erstellt abgestimmte Einträge. Bei Familien oder Gruppen werden die Charaktere untereinander und bei Bedarf mit dem Spieler verknüpft, ohne den Spieler als NPC zu duplizieren.
                 </span>
                 <button 
                   onClick={handleOmniGenerate}
                   disabled={isOmniGenerating || !omniSmartFillPrompt.trim()}
-                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-950/40 cursor-pointer"
+                  className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-950/40 cursor-pointer ml-auto"
                 >
                   {isOmniGenerating ? (
                     <>

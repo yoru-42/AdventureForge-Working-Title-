@@ -224,6 +224,92 @@ export function createCounterpartRelationship(
 }
 
 /**
+ * Normalizes any raw relationship data (arrays, objects, strings, legacy formats)
+ * into a valid, safe CharacterRelationship[] array.
+ */
+export function normalizeRelationships(raw: any): CharacterRelationship[] {
+  if (!raw) return [];
+  
+  if (Array.isArray(raw)) {
+    return raw.map((item, idx) => {
+      if (typeof item === 'string') {
+        const parts = item.split(/[:\-–—]/);
+        const target = parts[0]?.trim() || `Charakter ${idx + 1}`;
+        const type = parts.slice(1).join(':').trim() || 'Bekannt';
+        return {
+          id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          targetCharacter: target,
+          type: type,
+        };
+      }
+      if (item && typeof item === 'object') {
+        return {
+          ...item,
+          id: item.id || `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          targetCharacter: item.targetCharacter || item.target || item.name || item.character || '',
+          type: item.type || item.relationship || item.role || 'Bekannt',
+        };
+      }
+      return {
+        id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        targetCharacter: '',
+        type: 'Bekannt',
+      };
+    }).filter(r => r && typeof r === 'object');
+  }
+
+  if (typeof raw === 'object') {
+    return Object.entries(raw).map(([key, val], idx) => {
+      if (typeof val === 'string') {
+        return {
+          id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          targetCharacter: key,
+          type: val,
+        };
+      }
+      if (val && typeof val === 'object') {
+        const item = val as any;
+        return {
+          ...item,
+          id: item.id || `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          targetCharacter: item.targetCharacter || item.target || item.name || key,
+          type: item.type || item.relationship || item.role || 'Bekannt',
+        };
+      }
+      return {
+        id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        targetCharacter: key,
+        type: 'Bekannt',
+      };
+    }).filter(r => r && typeof r === 'object');
+  }
+
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && (Array.isArray(parsed) || typeof parsed === 'object')) {
+        return normalizeRelationships(parsed);
+      }
+    } catch {
+      // Not JSON, parse text lines
+    }
+    const lines = raw.split(/[\n,;]+/);
+    return lines.map((line, idx) => {
+      const parts = line.split(/[:\-–—]/);
+      const target = parts[0]?.trim() || '';
+      const type = parts.slice(1).join(':').trim() || 'Bekannt';
+      return {
+        id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        targetCharacter: target,
+        type: type,
+      };
+    }).filter(r => r.targetCharacter);
+  }
+
+  return [];
+}
+
+/**
  * Synchronisiert alle Beziehungen eines Quellcharakters wechselseitig mit den Zielcharakteren im Codex.
  */
 export function syncLoreWithReciprocalRelationships(
@@ -238,6 +324,8 @@ export function syncLoreWithReciprocalRelationships(
   const cleanSourceTitle = sourceEntryTitle.trim().toLowerCase();
   let updatedLore = [...loreList];
 
+  const safeSourceRelationships = normalizeRelationships(sourceRelationships);
+
   // 1. Quell-Eintrag selbst im Codex aktualisieren, falls vorhanden
   const sourceIdx = updatedLore.findIndex(entry => {
     const matchTitle = entry.title?.trim().toLowerCase() === cleanSourceTitle;
@@ -250,13 +338,13 @@ export function syncLoreWithReciprocalRelationships(
       ...updatedLore[sourceIdx],
       details: {
         ...(updatedLore[sourceIdx].details || {}),
-        relationships: sourceRelationships
+        relationships: safeSourceRelationships
       }
     };
   }
 
   // 2. Wechselseitige Gegenbeziehungen bei allen Zielcharakteren aktualisieren
-  (sourceRelationships || []).forEach(rel => {
+  safeSourceRelationships.forEach(rel => {
     const targetName = rel.targetCharacter?.trim();
     if (!targetName) return;
 
@@ -272,9 +360,7 @@ export function syncLoreWithReciprocalRelationships(
 
     if (targetIdx >= 0) {
       const targetEntry = updatedLore[targetIdx];
-      const existingRels: CharacterRelationship[] = [
-        ...(targetEntry.details?.relationships || [])
-      ];
+      const existingRels: CharacterRelationship[] = normalizeRelationships(targetEntry.details?.relationships);
 
       // Suche nach einer bestehenden Beziehung zum Quellcharakter
       const existingRelIdx = existingRels.findIndex(r => {
@@ -322,7 +408,7 @@ export function removeCounterpartRelationshipFromLore(
                      entry.details?.rufName?.trim().toLowerCase() === cleanTarget;
     if (!isTarget) return entry;
 
-    const currentRels: CharacterRelationship[] = entry.details?.relationships || [];
+    const currentRels: CharacterRelationship[] = normalizeRelationships(entry.details?.relationships);
     const filteredRels = currentRels.filter(r => r.targetCharacter?.trim().toLowerCase() !== cleanSource);
 
     return {

@@ -8,7 +8,7 @@ import CompetenceProfileEditor from './CompetenceProfileEditor';
 import { migrateLegacyProfessionData } from '../services/professionCompetencyService';
 import * as LucideIcons from 'lucide-react';
 import RelationshipDetailEditor from './RelationshipDetailEditor';
-import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore } from '../lib/relationshipHelper';
+import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore, normalizeRelationships } from '../lib/relationshipHelper';
 import LoreDatabaseView, { TRANSPORTS, TERRAIN_PRESETS } from './LoreDatabaseView';
 import { NauticalMapBackground } from './NauticalMapBackground';
 import { autoCalculateAppearance } from '../utils/appearance';
@@ -2331,10 +2331,10 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   const getPlayerRelationships = (): CharacterRelationship[] => {
     if (activeTransformation) {
       return activeTransformation.transformRelationships !== undefined 
-        ? activeTransformation.transformRelationships 
-        : (player.relationships || []);
+        ? normalizeRelationships(activeTransformation.transformRelationships) 
+        : normalizeRelationships(player.relationships);
     }
-    return player.relationships || [];
+    return normalizeRelationships(player.relationships);
   };
 
   const updatePlayerRelationships = (newList: CharacterRelationship[]) => {
