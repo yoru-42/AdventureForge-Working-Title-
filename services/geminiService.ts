@@ -5319,13 +5319,19 @@ ${existingEntry.details.eventSteps.map((s: any, idx: number) => `    ${idx + 1}.
   * KEINE EINSEITIGE SPIELER-ZENTRIERUNG: Das verborgene Wissen darf sich NICHT immer um den Spieler/Nutzer drehen (z.B. nicht immer "Der Spieler ist der Auserwählte" oder "Der Spieler hat magisches Blut"). Nutze stattdessen abwechslungsreiche Geheimnisse über die Welt, politische Intrigen anderer Fraktionen, geheime Machenschaften oder verdeckte Vergangenheiten von NPCs, versteckte Eigenschaften oder Flüche von Gegenständen, oder verborgene geographische Anomalien. Sorge dafür, dass die Welt lebendig, eigenständig und unabhängig vom Spieler wirkt!`;
       } else if (category === 'Gegenstände') {
         contextPrompt += `
-Für Gegenstände / Items (STRENGSTE DIRECTIVE):
+Für Gegenstände / Items (STRENGSTE DIRECTIVE & HIERARCHIE):
+- HIERARCHISCHE KATEGORISIERUNG:
+  Weise dem Gegenstand zwingend eine passende Hauptkategorie ('mainCategory') und ggf. Unterkategorie ('subCategory') zu:
+  1. 'Rohstoffe' (Unterkategorien: 'Erz', 'Holz', 'Stein', 'Pflanzen', 'Tierische Rohstoffe')
+  2. 'Materialien & Zwischenprodukte' (Unterkategorien: 'Barren', 'Bretter', 'Stoff', 'Leder', 'Verarbeitete Materialien')
+  3. 'Produkte' (Unterkategorien: 'Lebensmittel', 'Werkzeuge', 'Möbel', 'Handwerksprodukte')
+  4. 'Nahrung', 'Kleidung & Textilien', 'Waffen', 'Rüstung & Schutzausrüstung', 'Werkzeuge', 'Landwirtschaft', 'Tiere', 'Transportmittel', 'Militärbedarf', 'Medizin', 'Handelswaren', 'Magische Gegenstände', 'Quest-/Story-Gegenstände'
+- WIRTSCHAFTS- & MARKT-DATEN:
+  Befülle Standard-Einheit ('unit', z.B. 'Stück', 'kg', 'Portionen'), Richtpreis ('pricePerUnit' in Gold), Zustand ('condition') und Lagermenge ('stockAmount').
 - FOKUS AUF DEN GEGENSTAND SELBST: Der Fokus muss vollkommen auf dem Gegenstand selbst liegen (Form, Beschaffenheit, Funktionsweise, Material, historische Herkunft).
-- EINZIGARTIGKEIT & AUFENTHALTSORT (isUnique & currentLocation): Bestimme zwingend, ob der Gegenstand ein einzigartiges Unikat (existiert nur 1x auf der Welt), ein seltenes Einzelstück oder Massenware ist, sowie seinen aktuellen Aufenthaltsort/Verbleib (z.B. im Besitz eines Charakters, an einem Ort versteckt, gestohlen oder verschollen). Dies dient der KI als Ankerpunkt für Spurensuche, Quests und die Einwebung in die Kampagnen-Storyline.
-- ABSOLUT KEINE ZUKÜNFTIGEN INHALTE: Es dürfen keinerlei Inhalte über Dinge eingebaut werden, die noch gar nicht passiert sind! Schließe alles aus, was in der Geschichte & dem Roten Faden der Kampagne steht oder sonst wo im Codex (z.B. geplante Quests, zukünftige Abenteuer des Spielers). Einzige Ausnahme: Wer den Gegenstand in der Vergangenheit hergestellt oder geschmiedet hat.
-- STRENG NACH WELT-BESCHREIBUNG, TAGS & GENRE: Erstelle den Gegenstand und seine Wirkungsweise streng nach der Welten-Beschreibung (worldContext), den Tags und dem Genre der Welt.
-- BEISPIEL TEUFELSKRÄFTE (KEINE AUTOMATISCHE ÜBERTRAGUNG): Wenn ein Charakter mit besonderen Kräften (wie z. B. Teufelskräften oder Magie) einen Gegenstand herstellt, ist dies trotzdem nur ein völlig normaler Gegenstand ohne Teufelskräfte oder automatische Magie, es sei denn, ein explizit magischer Schmiedeprozess wurde beschrieben. Ein Schwert, das von einem Teufelskraft-Nutzer geschmiedet wurde, ist standardmäßig nur eine ganz normale Waffe ohne magische Teufelskräfte!
-- WELTREGEL-KOPPLUNG: Falls nötig, beziehe dich auf die Weltregeln ("Weltregeln" im Codex) bezüglich der Funktionsweise von Technologie und Magie in dieser Welt, um logische Inkonsistenzen zu vermeiden.`;
+- EINZIGARTIGKEIT & AUFENTHALTSORT (isUnique & currentLocation): Bestimme zwingend, ob der Gegenstand ein einzigartiges Unikat, ein seltenes Einzelstück oder Massenware ist, sowie seinen aktuellen Aufenthaltsort/Verbleib.
+- ABSOLUT KEINE ZUKÜNFTIGEN INHALTE: Es dürfen keinerlei zukünftige Quests oder Story-Ereignisse vorweggenommen werden.
+- STRENG NACH WELT-BESCHREIBUNG, TAGS & GENRE: Erstelle den Gegenstand passend zu Genre und Zeitalter der Spielwelt.`;
       } else if (category === 'Orte') {
         contextPrompt += `
 Für Orte / Places:
@@ -5652,21 +5658,21 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
         requiredFields.push("originHabitat", "distinctiveFeatures", "socialStructure");
       } else if (category === 'Gegenstände') {
         Object.assign(detailsProperties, {
-          itemType: { type: Type.STRING, description: "Gegenstandsklasse (z. B. 'Waffen', 'Schiff / Fahrzeug / Transportmittel', 'Gebäude / Festung / Bauwerk', 'Belagerungsgerät / Geschütz', 'Artefakte / Zubehör', 'Verbrauchsgüter')." },
-          isUnique: { type: Type.STRING, description: "Einzigartigkeit (z. B. 'Unikat (Existiert nur 1x auf der Welt)', 'Seltenes Einzelstück' oder 'Massenware / Gewöhnlich')." },
-          currentLocation: { type: Type.STRING, description: "Aktueller Aufenthaltsort / Verbleib in der Welt (z. B. 'Im Besitz des Spielers', 'Gestohlen von den Schattendieben in Tiefwasser', 'Verschollen in den Ruinen')." },
-          rarity: { type: Type.STRING, description: "Seltenheitswert (z. B. 'Legendär', 'Episch', 'Gewöhnlich')." },
-          effects: { type: Type.STRING, description: "Wirkungen / Magische Effekte (z. B. '+12 Angriff, Lichtaura')." },
-          owner: { type: Type.STRING, description: "Besitzer oder Verwalter dieses Gegenstands, Schiffs oder Gebäudes." },
-          shipSize: { type: Type.STRING, description: "Größe bei Fahrzeugen/Schiffen/Gebäuden ('klein', 'mittel' oder 'groß')." },
-          minCrew: { type: Type.INTEGER, description: "Minimale benötigte Besatzung." },
-          maxCapacity: { type: Type.INTEGER, description: "Maximale Belegung / Transport-Kapazität." },
-          population: { type: Type.INTEGER, description: "An Bord oder im Gebäude befindliche Personen/Besatzung." },
-          defense: { type: Type.INTEGER, description: "Verteidigungswert / Panzerung." },
-          attack: { type: Type.INTEGER, description: "Angriffskraft / Kanonen / Feuerkraft." },
-          durability: { type: Type.INTEGER, description: "Haltbarkeit / Strukturpunkte / HP." }
+          mainCategory: { type: Type.STRING, description: "Hauptkategorie (z.B. 'Rohstoffe', 'Materialien & Zwischenprodukte', 'Produkte', 'Nahrung', 'Kleidung & Textilien', 'Waffen', 'Rüstung & Schutzausrüstung', 'Werkzeuge', 'Landwirtschaft', 'Tiere', 'Transportmittel', 'Militärbedarf', 'Medizin', 'Handelswaren', 'Magische Gegenstände', 'Quest-/Story-Gegenstände')." },
+          subCategory: { type: Type.STRING, description: "Unterkategorie (z.B. 'Erz', 'Holz', 'Stein', 'Barren', 'Bretter', 'Stoff', 'Leder', 'Lebensmittel', 'Werkzeuge', 'Möbel')." },
+          itemType: { type: Type.STRING, description: "Gegenstandsart oder Typbezeichnung." },
+          isUnique: { type: Type.STRING, description: "Einzigartigkeit (z. B. 'Unikat / Legendär', 'Seltenes Einzelstück', 'Regionale Spezialität' oder 'Massenware / Standard')." },
+          currentLocation: { type: Type.STRING, description: "Aktueller Aufenthaltsort / Verbleib in der Welt." },
+          rarity: { type: Type.STRING, description: "Seltenheitswert (z. B. 'Gewöhnlich / Alltäglich', 'Solide / Gehoben', 'Selten / Hochwertig', 'Meisterlich / Kostbar', 'Legendär / Einzigartig')." },
+          unit: { type: Type.STRING, description: "Standard-Mengeneinheit (z.B. 'Stück', 'kg', 'Portionen', 'Flaschen', 'Säcke')." },
+          pricePerUnit: { type: Type.NUMBER, description: "Richtpreis / Handelswert in Goldmünzen." },
+          stockAmount: { type: Type.NUMBER, description: "Standard-Lagermenge in Betrieben." },
+          maxCapacity: { type: Type.NUMBER, description: "Maximale Lagerkapazität oder Transportkapazität." },
+          condition: { type: Type.STRING, description: "Zustand (z.B. 'exzellent', 'gut', 'knapp', 'beschaedigt')." },
+          effects: { type: Type.STRING, description: "Wirkungen / Magische Effekte / Kampfeigenschaften." },
+          producingHoldingName: { type: Type.STRING, description: "Produzierender oder lagernder Betrieb in der Welt." }
         });
-        requiredFields.push("itemType", "isUnique", "currentLocation", "rarity");
+        requiredFields.push("mainCategory", "itemType", "isUnique", "rarity");
       } else if (category === 'Verbotenes Wissen') {
         Object.assign(detailsProperties, {
           confidentiality: { type: Type.STRING, description: "Geheimhaltungsstufe (z. B. 'Absolut Geheim', 'Bedingt Geheim')." },

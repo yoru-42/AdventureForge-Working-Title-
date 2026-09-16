@@ -3,9 +3,10 @@ import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react
 
 interface Props extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   value: string;
+  minRows?: number;
 }
 
-const AutoExpandingTextarea = forwardRef<HTMLTextAreaElement, Props>(({ value, className, style, ...props }, ref) => {
+const AutoExpandingTextarea = forwardRef<HTMLTextAreaElement, Props>(({ value, minRows, className, style, ...props }, ref) => {
   const innerRef = useRef<HTMLTextAreaElement>(null);
 
   useImperativeHandle(ref, () => innerRef.current as HTMLTextAreaElement);
@@ -29,6 +30,7 @@ const AutoExpandingTextarea = forwardRef<HTMLTextAreaElement, Props>(({ value, c
     <textarea
       ref={innerRef}
       value={value}
+      rows={minRows}
       className={`${className} overflow-hidden resize-none`}
       style={style}
       {...props}

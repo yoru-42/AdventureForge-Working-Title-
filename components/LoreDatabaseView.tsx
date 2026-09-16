@@ -10,9 +10,11 @@ import { NauticalMapBackground } from './NauticalMapBackground';
 import { CharacterLoreForm } from './CharacterLoreForm';
 import { EnemyLoreForm } from './EnemyLoreForm';
 import { RaceLoreForm } from './RaceLoreForm';
+import { ItemLoreForm } from './ItemLoreForm';
+import { ITEM_MAIN_CATEGORIES } from '../lib/itemCategoriesData';
 import TerritorySpecificFields from './TerritorySpecificFields';
 import WorldKnowledgeManager from './WorldKnowledgeManager';
-import { syncEconomyWithWorld } from '../lib/economySync';
+import { syncEconomyWithWorld, syncCodexItemsToEconomy } from '../lib/economySync';
 import { normalizeRelationships } from '../lib/relationshipHelper';
 import { enrichAndCompleteLoreEntry, sanitizeCharacterNameAndProfession, sanitizeRulerNameAndTitle } from '../lib/loreSanitizer';
 
@@ -2935,6 +2937,8 @@ const LoreDatabaseView: React.FC<Props> = ({
         rawFaction = item.details?.originHabitat || item.details?.rarity || 'Völker & Rassen';
       } else if (activeCategory === 'Gegner') {
         rawFaction = item.details?.enemyType || item.details?.species || item.details?.faction || 'Gegner & Monster';
+      } else if (activeCategory === 'Gegenstände') {
+        rawFaction = item.details?.mainCategory || item.details?.itemType || 'Rohstoffe';
       }
       const f = rawFaction ? rawFaction : (activeCategory === 'Rassen' ? 'Völker & Rassen' : activeCategory === 'Gegner' ? 'Gegner & Monster' : 'Ohne Fraktion');
       if (!groups[f]) groups[f] = [];
@@ -3607,12 +3611,12 @@ const LoreDatabaseView: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="w-full flex gap-2 overflow-x-auto pb-2 shrink-0 hide-scrollbar">
+      <div className="w-full flex flex-wrap gap-2 pb-2 shrink-0">
         {visibleCategories.map(c => (
           <button
             key={c}
             onClick={() => setActiveCategory(c)}
-            className={`text-left px-4 py-2 text-sm rounded-xl transition-all whitespace-nowrap font-medium ${
+            className={`text-left px-3.5 py-2 text-xs sm:text-sm rounded-xl transition-all font-medium flex items-center shrink-0 ${
               activeCategory === c 
               ? 'bg-amber-600 shadow-md shadow-amber-900/20 text-white'
               : c === 'Omni-Smart-Fill'
@@ -5260,6 +5264,135 @@ const LoreDatabaseView: React.FC<Props> = ({
               )}
             </div>
           </div>
+        ) : currentCategory === 'Gegenstände' ? (
+          <div className="flex flex-col gap-6">
+            <ItemLoreForm
+              editForm={editForm}
+              setEditForm={setEditForm}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+              onSave={handleSave}
+              onDelete={handleDelete}
+              onCancel={() => {
+                setIsEditing(null);
+                setEditForm({ category: 'Gegenstände' });
+              }}
+              lore={lore}
+              onUpdateLore={onUpdateLore}
+              worldTitle={worldTitle}
+              isNsfw={isNsfw}
+              world={world}
+            />
+
+            {/* List of Existing Items in Codex */}
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Gespeicherte Gegenstände &amp; Waren ({filteredLore.length})
+                </span>
+
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder="Gegenstände filtern..."
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 w-36 sm:w-48"
+                />
+              </div>
+
+              {filteredLore.length === 0 ? (
+                <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
+                  Keine Gegenstände im Codex angelegt.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {groupedLore.map(([groupName, items], gIdx) => (
+                    <div key={`items-group-${groupName}-${gIdx}`} className="flex flex-col gap-2">
+                      <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
+                        <span>{groupName}</span>
+                        <span className="text-slate-500 text-[10px]">({items.length})</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        {items.map((item, itemIdx) => {
+                          const d = item.details || {};
+                          return (
+                            <div
+                              key={`gegenstand-${item.id || 'item'}-${itemIdx}`}
+                              onClick={() => handleEdit(item)}
+                              className={`bg-slate-900 border px-4 py-3 rounded-xl flex flex-col gap-2 transition-all cursor-pointer ${
+                                isEditing === item.id 
+                                  ? 'border-amber-500 bg-amber-950/30 text-amber-300 font-bold shadow-md' 
+                                  : 'border-slate-800 hover:border-slate-700 hover:bg-slate-850 text-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                  <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700/60 flex items-center justify-center shrink-0 text-amber-400 text-xs font-bold">
+                                    <i className="fa-solid fa-box"></i>
+                                  </div>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-xs font-semibold truncate text-slate-100">
+                                      {item.title || 'Unbenannter Gegenstand'}
+                                    </span>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {d.subCategory && (
+                                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/40">
+                                          {d.subCategory}
+                                        </span>
+                                      )}
+                                      {d.rarity && (
+                                        <span className="text-[9px] text-slate-400 truncate">
+                                          {d.rarity}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDelete(item.id);
+                                    }}
+                                    className="text-slate-500 hover:text-rose-400 text-xs p-1 transition-colors cursor-pointer"
+                                    title="Gegenstand löschen"
+                                  >
+                                    <i className="fa-solid fa-trash"></i>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Economic quick info */}
+                              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60 text-[10px] text-slate-400">
+                                <div className="flex items-center gap-2 truncate">
+                                  {d.pricePerUnit !== undefined && (
+                                    <span className="text-amber-400 font-semibold">
+                                      {d.pricePerUnit} Gold / {d.unit || 'Stück'}
+                                    </span>
+                                  )}
+                                  {d.producingHoldingName && (
+                                    <span className="text-emerald-400 truncate">
+                                      | {d.producingHoldingName}
+                                    </span>
+                                  )}
+                                </div>
+                                {d.stockAmount !== undefined && (
+                                  <span className="text-slate-400 shrink-0">
+                                    Lager: {d.stockAmount} {d.unit || ''}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="flex flex-col gap-6">
             {/* Standard Lore Form */}
@@ -6028,45 +6161,6 @@ const LoreDatabaseView: React.FC<Props> = ({
                         />
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
-
-              {currentCategory === 'Gegenstände' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Gegenstandstyp</label>
-                    <select
-                      value={editForm.details?.itemType || ITEM_TYPE_OPTIONS[0]}
-                      onChange={e => updateDetail('itemType', e.target.value)}
-                      className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
-                    >
-                      {ITEM_TYPE_OPTIONS.map(it => (
-                        <option key={it} value={it}>{it}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Seltenheit</label>
-                    <input
-                      type="text"
-                      value={editForm.details?.rarity || ''}
-                      onChange={e => updateDetail('rarity', e.target.value)}
-                      placeholder="z.B. Legendär, Selten"
-                      className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Besonderer Effekt / Wert</label>
-                    <input
-                      type="text"
-                      value={editForm.details?.effect || ''}
-                      onChange={e => updateDetail('effect', e.target.value)}
-                      placeholder="Wirkung oder Goldwert"
-                      className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
-                    />
                   </div>
                 </div>
               )}

@@ -1046,3 +1046,112 @@ export const syncCharacterAndHoldingRoles = (
     changed
   };
 };
+
+/**
+ * Synchronizes all Codex items (Gegenstände) with the economy holdings and markets.
+ */
+export const syncCodexItemsToEconomy = (
+  loreDatabase: LoreEntry[],
+  economy: EconomyConfig
+): { updatedEconomy: EconomyConfig; changed: boolean } => {
+  if (!economy || !economy.holdings || !Array.isArray(economy.holdings)) {
+    return { updatedEconomy: economy, changed: false };
+  }
+
+  let changed = false;
+  const updatedHoldings = economy.holdings.map(h => ({ ...h }));
+
+  const itemEntries = loreDatabase.filter(e => e.category === 'Gegenstände');
+
+  itemEntries.forEach(item => {
+    const d = item.details || {};
+    const targetHoldingId = d.producingHoldingId || d.holdingId;
+    const itemName = item.title?.trim();
+    if (!itemName) return;
+
+    if (targetHoldingId) {
+      const holding = updatedHoldings.find(h => h.id === targetHoldingId || h.name.toLowerCase() === d.producingHoldingName?.toLowerCase());
+      if (holding) {
+        const resources = holding.resources ? [...holding.resources] : [];
+        const existingIdx = resources.findIndex(r => r.name.toLowerCase() === itemName.toLowerCase());
+        
+        const amount = d.stockAmount !== undefined ? Number(d.stockAmount) : 20;
+        const maxCapacity = d.maxCapacity !== undefined ? Number(d.maxCapacity) : 100;
+        const unit = d.unit || 'Stück';
+        const pricePerUnit = d.pricePerUnit !== undefined ? Number(d.pricePerUnit) : 10;
+        const condition = d.condition || 'gut';
+
+        if (existingIdx >= 0) {
+          const existing = resources[existingIdx];
+          if (
+            existing.amount !== amount ||
+            existing.maxCapacity !== maxCapacity ||
+            existing.pricePerUnit !== pricePerUnit ||
+            existing.unit !== unit ||
+            existing.condition !== condition
+          ) {
+            resources[existingIdx] = {
+              ...existing,
+              amount,
+              maxCapacity,
+              unit,
+              pricePerUnit,
+              condition,
+              notes: item.description || existing.notes
+            };
+            holding.resources = resources;
+            changed = true;
+          }
+        } else {
+          resources.push({
+            id: `res-${holding.id}-${item.id || Date.now()}`,
+            name: itemName,
+            category: 'goods',
+            amount,
+            maxCapacity,
+            unit,
+            pricePerUnit,
+            condition,
+            notes: item.description || ''
+          });
+          holding.resources = resources;
+          changed = true;
+        }
+      }
+    }
+  });
+
+  return {
+    updatedEconomy: changed ? { ...economy, holdings: updatedHoldings } : economy,
+    changed
+  };
+};
+
+/**
+ * Returns a unified trade catalog combining Codex items and world resources.
+ */
+export const getCodexItemsCatalog = (loreDatabase: LoreEntry[]) => {
+  return loreDatabase
+    .filter(e => e.category === 'Gegenstände')
+    .map(e => {
+      const d = e.details || {};
+      return {
+        id: e.id,
+        name: e.title,
+        mainCategory: d.mainCategory || 'Rohstoffe',
+        subCategory: d.subCategory || '',
+        description: e.description,
+        price: d.pricePerUnit !== undefined ? Number(d.pricePerUnit) : 10,
+        unit: d.unit || 'Stück',
+        rarity: d.rarity || 'Gewöhnlich',
+        isUnique: d.isUnique || 'Massenware',
+        producingHoldingId: d.producingHoldingId,
+        producingHoldingName: d.producingHoldingName,
+        consumingHoldingId: d.consumingHoldingId,
+        consumingHoldingName: d.consumingHoldingName,
+        effects: d.effects || d.effect || '',
+        condition: d.condition || 'gut'
+      };
+    });
+};
+

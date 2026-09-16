@@ -1175,6 +1175,24 @@ export interface EconomyDuty {
   consequences?: string;
 }
 
+export interface TradeContract {
+  id: string;
+  holdingId?: string;
+  holdingName?: string;
+  partnerName: string;
+  partnerId?: string;
+  partnerType?: 'npc' | 'holding' | 'faction' | 'merchant' | string;
+  contractType: 'Handelsabkommen' | 'Liefervertrag' | 'Schutzvertrag' | 'Pachtvertrag' | 'Dienstleistung' | string;
+  resourceName?: string;
+  quantityPerInterval?: number;
+  pricePerInterval?: number;
+  interval?: 'täglich' | 'wöchentlich' | 'monatlich' | 'einmalig' | string;
+  status: 'aktiv' | 'ausstehend' | 'erfüllt' | 'gekündigt' | 'gebrochen' | string;
+  startDate?: string;
+  terms?: string;
+  notes?: string;
+}
+
 export interface EconomyOrder {
   id: string;
   title: string;
@@ -1309,6 +1327,7 @@ export interface EconomyHolding {
   roles?: EconomyRole[];
   staffGroups?: EconomyStaffGroup[]; // Namenlose NPC-Gruppen (z.B. 12 Mägde, 8 Wachen, etc.)
   orders?: EconomyOrder[]; // Aufträge / Direktiven
+  contracts?: TradeContract[]; // Handels- & Lieferverträge
   decisions?: EconomyDecision[]; // Management-Entscheidungen & Vorfälle
   activityLogs?: EconomyLogEntry[]; // Lebendige Hintergrundaktivität & Betriebs-Log
   temporaryAuthorities?: TemporaryAuthority[]; // Vergebene Sonderrechte & temporäre Befugnisse
