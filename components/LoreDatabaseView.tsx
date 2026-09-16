@@ -3214,7 +3214,7 @@ const LoreDatabaseView: React.FC<Props> = ({
           ownerFactionName: undefined,
           controlledByFactionId: undefined,
           controlledByFactionName: undefined,
-          ownerType: 'user'
+          ownerType: 'character'
         };
       }
       return h;

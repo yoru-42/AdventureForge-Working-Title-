@@ -10,6 +10,7 @@ import {
   DrawingAction,
   DrawingExecutionResult
 } from "../components/worldmap/worldMapDrawingEngine";
+import { HOLDING_TYPES, getHoldingPresets } from "../components/economy/EconomyPresets";
 
 export const audioUtils = {
   encode: (bytes: Uint8Array): string => {
@@ -69,19 +70,93 @@ STRENGSTE REGELN FÜR DIE BIOGRAFIE & CHARAKTERERSTELLUNG:
 
 export const CHARACTER_BIO_7_QUESTIONS_PROMPT = CHARACTER_BIO_8_QUESTIONS_PROMPT;
 
+export const SMART_FILL_NAMING_RULES_PROMPT = `
+### 3. DYNAMISCHE NAMENSGEBUNG (KULTUR, SPRACHE, GESCHICHTE & GEOGRAPHIE):
+Für alle Charaktere, Orte, Fraktionen, Ereignisse, Rassen und Lore-Elemente bei Smart-Fill und Multi-Smart-Fill gelten folgende verbindliche Prinzipien:
+1. **URSPRUNG AUS KULTUR, SPRACHE, GESCHICHTE & GEOGRAPHIE**:
+   - Namen entstehen organisch aus Kultur, Sprache, Geschichte, Geographie und gesellschaftlicher Entwicklung der jeweiligen Region, Siedlung oder Rasse.
+   - Jeder Name kann eine nachvollziehbare Herkunft besitzen, deren ursprüngliche Bedeutung sich im Laufe der Generationen gewandelt hat und von der heutigen Bedeutung abweichen darf.
+2. **PLASTISCHE & VIELFÄLTIGE NAMENSSYSTEME**:
+   - Die Namensgenerierung darf verschiedene reale Sprachinspirationen, Fantasy-Sprachen und kulturelle Namenssysteme kombinieren, sofern dies innerhalb der Spielwelt und des regionalen Rahmens plausibel und harmonisch ist.
+3. **SCHRITTWEISE ENTHÜLLUNG & BEDEUTUNGSTIEFE**:
+   - Bedeutungen und Geschichten von Namen werden abhängig von der Bedeutung des Ortes, Charakters oder Eintrags und den verfügbaren Informationen schrittweise enthüllt.
+   - Nicht jeder Name benötigt eine tiefere oder dramatische Geschichte. Bodenständige, natürliche und alltagsnahe Namen (nach Handwerk, Gründer, Lage oder Fluss) sind genauso wertvoll wie historische oder legendäre Bezeichnungen.
+4. **STRIKTE ISOLATION VOM SPIELERNAMEN**:
+   - Der Spielername und andere vom Spieler gewählte persönliche Namen dürfen KEINEN unbeabsichtigten Einfluss auf die Namensgenerierung haben. Sie dürfen weder kopiert, abgewandelt noch als Namensstamm für unbeteiligte NPCs, Orte oder Fraktionen verwendet werden.`;
+
 export const FAMILY_HEREDITY_RULES_PROMPT = `
-### GENETISCHE VERERBUNG & FAMILIENÄHNLICHKEIT BEI AUSSEHEN (STRENGSTE DIRECTIVE):
-Das Aussehen von Familienmitgliedern (Eltern, Kinder, Geschwister, Vorfahren) MUSS zwingend optisch und genetisch zueinander passen:
-1. KINDER & ELTERN (Das Aussehen der Kinder wird von den Eltern bestimmt):
-   - Wenn Kinder (Sohn, Tochter) erstellt werden, MUSS ihr Aussehen (Haarfarbe, Augenfarbe, Rasse, Rassemerkmale, Statur, Hautton, Gesichtszüge) von den Eltern abstammen und ihnen sichtlich ähneln!
-   - Kinder erben typischerweise die Haarfarbe oder Augenfarbe eines Elternteils oder eine stimmige Kombination beider Eltern (z. B. dunkle Haare des Vaters, blaue Augen der Mutter).
-   - Besondere Rassemerkmale (z.B. Elfenohren, Hörner, Schuppen, Tiermerkmale, Hautfärbung) werden direkt von den Eltern vererbt.
-2. ELTERN VON CHARAKTEREN (Vorfahren):
-   - Wenn die Eltern (Vater, Mutter) eines bereits bekannten Charakters oder des Spielers erstellt werden, MÜSSEN sie als biologische Quelle für dessen Merkmale dienen.
-   - Mindestens ein Elternteil muss die Haarfarbe, Augenfarbe oder markante Gesichtszüge des Kindes/Spielers teilen oder logisch begründen.
-3. GESCHWISTER:
-   - Geschwister (Bruder, Schwester) teilen dieselbe Rasse, dieselben Rassemerkmale und harmonische Aussehensmerkmale (gleiche oder eng verwandte Haar- und Augenfarben aus dem elterlichen Genpool).
-4. DIESE VERERBUNGSREGEL GILT GLEICHERMASSEN FÜR DIE FAMILIE DES SPIELERS/NUTZERS WIE AUCH FÜR ALLE NPC-FAMILIEN!`;
+### 1. ADVENTUREFORGE SYSTEM-BERUFSZWEIGE & BERUFSKATALOG (VERBINDLICHKEIT):
+Alle Berufsangaben ('profession', 'jobTitle', 'role', 'professionLevel', 'professionDescription', 'craftingSkills', 'positionTitle', 'authorities') MÜSSEN verbindlich aus den 16 offiziellen AdventureForge-Berufszweigen abgeleitet und gewählt werden:
+
+1. **Lebensmittel & Versorgung**:
+   - Berufe: Koch, Küchenhilfe, Bäcker, Konditor, Metzger, Brauer, Brenner, Müller, Gastwirt, Schankwirt, Tavernenkoch, Hofkoch, Käser, Vorkoster, Vorratshalter
+   - Stufen/Progression: Küchenhilfe (Lehrling) → Koch/Bäcker/Brauer (Geselle/Fachberuf) → Tavernenkoch/Gourmet/Braumeister (Spezialisierung) → Hofkoch/Küchenmeister (Meister)
+2. **Bau & Handwerk**:
+   - Berufe: Schreiner, Zimmermann, Tischler, Maurer, Steinmetz, Dachdecker, Töpfer, Gerber, Schuhmacher, Schneider, Glaser, Seiler, Böttcher, Handwerkergehilfe
+3. **Metall & Feinhandwerk**:
+   - Berufe: Schmied (Schmiedejunge & Essegehilfe → Schmied → Waffenschmied/Rüstungsschmied/Plattner → Meisterschmied/Runenschmied), Grobschmied, Feinschmied, Goldschmied, Juwelier, Schlosser, Gießer, Feinmechaniker, Uhrmacher, Werkzeugmacher
+4. **Natur & Landwirtschaft**:
+   - Berufe: Bauer (Knecht & Feldarbeiter → Bauer/Ackerbauer → Gutsbauer/Pächter → Gutsverwalter), Getreidebauer, Gemüsebauer, Gärtner, Winzer, Imker, Viehzüchter, Hirte, Schäfer, Tierpfleger, Jäger, Förster, Holzfäller, Köhler, Fischer
+5. **Bergbau & Rohstoffe**:
+   - Berufe: Bergmann, Knappe, Hauer, Steiger, Erzgräber, Schürfer, Edelsteinsucher, Steinbrecher, Grubenaufseher
+6. **Handel, Logistik & Seefahrt**:
+   - Berufe: Kaufmann, Händler, Krämer, Hausierer, Geldwechsler, Karawanenführer, Kutscher, Fuhrmann, Seemann (Schiffsjunge → Matrose → Bootsmann/Steuermann → Kapitän), Lotse, Hafenarbeiter, Quartiermeister
+7. **Textil, Mode & Leder**:
+   - Berufe: Schneider, Gewandmacher, Kürschner, Gerber, Schuhmacher, Weber, Spinner, Färber, Stickerei-Künstler, Tuchmacher
+8. **Schutz, Wache & Militär**:
+   - Berufe: Soldat (Rekrut → Gardist/Stadtwache/Milizionär → Schildknappe/Ritter/Feldwebel → Hauptmann/Kommandant), Söldner, Schütze, Bogenschütze, Späher, Leibwächter, Waffenmeister
+9. **Magie, Arkana & Mystik**:
+   - Berufe: Magielehrling/Akolyth → Magier/Arkanist/Elementarmagier → Ritualist/Astrologe/Beschwörer → Meistermagier/Erzmagier
+10. **Glaube, Religion & Kult**:
+    - Berufe: Novize, Tempeldiener, Priester, Kleriker, Kaplan, Mönch, Ordensritter, Seelsorger, Hohepriester, Inquisitor
+11. **Heilkunde, Alchemie & Pflege**:
+    - Berufe: Kräutersammler & Gehilfe → Heiler/Feldscher/Wundarzt → Arzt/Chirurg/Apotheker → Alchemist/Meisterheiler
+12. **Recht, Verwaltung & Diplomatie**:
+    - Berufe: Schreiber, Schreibstuben-Gehilfe, Notar, Richter, Vogt, Dorfschulze, Ratsherr, Kanzler, Diplomat, Herold, Rentmeister
+13. **Dienstleistung, Haushalt & Gastgewerbe**:
+    - Berufe: Diener (Laufbursche & Hauspage → Diener → Kammerdiener/Tafeldiener → Haushofmeister/Majordomus), Zofe, Butler, Schankbursche, Stallknecht, Wäscherin, Hauswirtschafter
+14. **Kunst, Musik & Schaustellerei**:
+    - Berufe: Barde, Minnesänger, Spielmann, Lautenspieler, Gaukler, Akrobat, Maler, Bildhauer, Poet, Geschichtenerzähler
+15. **Wissenschaft, Gelehrsamkeit & Forschung**:
+    - Berufe: Student, Gelehrter, Philosoph, Historiker, Kartograf, Astronom, Naturforscher, Bibliothekar, Archivar
+16. **Schattenhandwerk & Unterwelt**:
+    - Berufe: Taschendieb, Beutelschneider, Einbrecher, Hehler, Schmuggler, Spion, Informant, Bandenmitglied, Schattenläufer
+
+### 2. FAMILIEN-VERERBUNG: BERUFE, TALENTE & ALLTAGSKOMPETENZEN BEI ELTERN & KINDERN:
+Wenn Eltern und Kinder (oder der Spieler und seine Verwandten) erstellt werden, MÜSSEN Berufe, Talente und Alltagskompetenzen der Kinder harmonisch von den Eltern geerbt und darauf aufgebaut werden:
+
+1. **TRADITION & BERUFSZWEIG-VERERBUNG**:
+   - Kinder steigen traditionell im Berufszweig ihrer Eltern ein oder erlernen das Handwerk der Familie von klein auf!
+   - Ein Kind/Jugendlicher beginnt auf der Einstiegsstufe ('professionLevel': 'Lehrling' / 'Gehilfe' / 'Auszubildender' / 'Anfänger'), während die Eltern als 'Geselle', 'Meister', 'Erfahren' oder 'Vorsteher' fungieren:
+     * **Vater/Mutter ist Schmied**: Sohn/Tochter ist 'Schmiedejunge & Essegehilfe' oder 'Lehrling' im Metallhandwerk (hilft an der Esse, reinigt Werkzeuge, zuschlagen).
+     * **Eltern sind Bauern**: Kind ist 'Knecht & Erntehelfer' oder 'Jungbauer' (hilft bei Feldarbeit, Aussaat, Ernte und Viehfütterung).
+     * **Mutter/Vater ist Wirtin/Wirt**: Kind ist 'Küchenhilfe & Schankgehilfin' oder 'Schankbursche' (hilft beim Ausschenken, Tische abwischen, Kochen).
+     * **Vater/Mutter ist Diener/Hausdame**: Kind ist 'Laufbursche & Hauspage' oder 'Zofe' (erledigt Botengänge, Stiefelputzen, Kaminfeuer entfachen).
+     * **Eltern sind Heiler/Alchemisten**: Kind ist 'Kräutersammler & Gehilfe' (sammelt Pflanzen, wäscht Phiolen, rührt einfache Salben).
+     * **Eltern sind Fischer/Seeleute**: Kind ist 'Schiffsjunge' oder 'Fischergehilfe'.
+     * **Eltern sind Händler/Kaufleute**: Kind ist 'Kontor-Gehilfe' oder 'Krämergehilfe' (lernt Rechnen, Wiegen und Warenannahme).
+   - Falls ein Kind ausnahmsweise einen anderen Berufszweig wählt (z.B. der Bauernsohn will zur Stadtwache), MUSS dies in der Biografie/Motivation begründet sein – aber seine kindlich erlernten Alltagskompetenzen bleiben vom elterlichen Hof geprägt!
+
+2. **VERERBUNG VON TALENTEN & BEGABUNGEN ('talents')**:
+   - Kinder erben die natürlichen Begabungen und Veranlagungen ihrer Eltern:
+     * Bei Schmiedefamilien: Physische Zähigkeit, Gespür für Metalle und Hitze, geschickte Hände.
+     * Bei Bauernfamilien: Wettergespür, tiefe Verbundenheit mit Tieren und Natur, Ausdauer.
+     * Bei Gelehrten/Schreibern: Schnelle Auffassungsgabe, scharfer Verstand, feines Gehör für Sprachen.
+     * Bei Heilern/Kräuterkundigen: Ausgeprägter Geruchssinn, botanisches Gedächtnis, ruhige Hände.
+     * Bei Händlern/Wirten: Menschenkenntnis, Redegewandtheit, wacher Blick für Zahlen.
+
+3. **VERERBUNG VON ALLTAGSKOMPETENZEN ('everydaySkills')**:
+   - Kinder wachsen im Alltag des elterlichen Betriebs auf und beherrschen die alltäglichen Fertigkeiten von klein auf:
+     * Das Kind erhält die relevanten Alltagskompetenzen der Eltern auf passendem Einstiegs-/Lehrlingsniveau (z. B. 'Tierhege (Anfänger - 20%)', 'Feuer entfachen (Lehrling - 35%)', 'Kräutersammeln (Anfänger - 25%)', 'Rechnen & Wiegen (Anfänger - 20%)', 'Kochen & Hauswirtschaft (Anfänger - 30%)').
+     * Die Eltern beherrschen dieselben Kompetenzen auf fortgeschrittenem oder meisterhaftem Niveau (z. B. 'Ackerbau (Meister - 85%)', 'Wetterkunde (Fortgeschritten - 70%)', 'Schmiedekunst (Fortgeschritten - 80%)').
+
+4. **GENETISCHE VERERBUNG & FAMILIENÄHNLICHKEIT BEI AUSSEHEN (STRENGSTE DIRECTIVE)**:
+   - Das Aussehen der Kinder wird von den Eltern bestimmt!
+   - Kinder erben Haarfarbe, Augenfarbe, Hautton, Statur, Rasse und Rassemerkmale (z.B. Elfenohren, Hörner, Schuppen, Tiermerkmale) von Vater und Mutter.
+   - Geschwister teilen denselben genetischen Ursprung und harmonieren im Aussehen.
+   - Diese Regeln gelten für die Familie des Spielers genauso wie für alle NPC-Familien!
+
+${SMART_FILL_NAMING_RULES_PROMPT}`;
 
 export class GeminiService {
   private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 5, initialDelay = 1500): Promise<Response> {
@@ -990,6 +1065,8 @@ ANWEISUNGEN:
         powerCost: { type: Type.STRING, description: "Kosten oder Limitierungen der Kraft, z.B. Ausdauer, MP, Lebensenergie, Nebenwirkungen." },
         skills: { type: Type.STRING, description: "Die eigentliche Spezialfähigkeit oder Kraft detailliert beschrieben." },
         profession: { type: Type.STRING, description: "Hauptberuf oder Spezialisierung des Charakters." },
+        professionField: { type: Type.STRING, description: "WICHTIG: Der exakte Bezeichner für den Berufszweig aus den 16 AdventureForge Kernbereichen (z.B. 'lebensmittel_ernaehrung', 'bau_handwerk', 'militaer_sicherheit', 'seefahrt', 'natur_landwirtschaft', 'magie_arkana', 'religion_klerus', 'verwaltung_recht', 'abenteuer_sondergewerbe', 'wissenschaft_forschung', 'luxus_spezial', 'metall_waffen', 'materialverarbeitung', 'staatsdienst_diplomatie', 'kriminalitaet_unterwelt'). Muss zwingend gesetzt werden, wenn ein Beruf vergeben wird." },
+        professionSpecialization: { type: Type.STRING, description: "Spezialisierung oder Fachpfad innerhalb des Berufs (z.B. bei Kräuterfrau -> Tränke oder Arznei)." },
         professionLevel: { type: Type.STRING, description: "Berufslevel oder Rang (z.B. Lehrling, Geselle, Experte, Meister, Großmeister, Autodidakt)." },
         secondaryProfessions: {
           type: Type.ARRAY,
@@ -4202,6 +4279,11 @@ WICHTIGSTE DIRECTIVE: Erfinde detailreich alle Details, Kräfte und Fähigkeiten
 - FALSCH: "Bauer Jochen", "Wirtin Martha", "Dorfschulze Kuno", "Schmied Heinrich"
 - RICHTIG: name: "Jochen", profession: "Bauer", role: "Bauer", callName: "Jochen"; name: "Martha", profession: "Wirtin", role: "Wirtin", callName: "Martha"!
 
+### STRIKTE REGEL: ROLLEN- & BERUFSZUWEISUNG (KEIN AUTOMATISCHER WIRT/BESITZER):
+- Weise einem Charakter oder dem Spieler NIEMALS standardmäßig oder automatisch die Rolle oder den Beruf "Besitzer / Wirt" oder "Wirt" zu!
+- "Besitzer / Wirt" oder Wirtsberufe dürfen AUSSCHLIESSLICH dann vergeben werden, wenn dies in der Benutzereingabe oder dem Konzept explizit und unmissverständlich genannt wird.
+- Wenn kein Beruf explizit angegeben ist, wähle eine authentische Rolle, die zur Klasse, Herkunft oder Fähigkeiten des Charakters passt (z.B. Krieger, Magier, Jäger, Schneider, Gelehrter, Abenteurer, etc.).
+
 ${FAMILY_HEREDITY_RULES_PROMPT}
 ${playerContextText}
 
@@ -5816,11 +5898,19 @@ ${effectivePlayerName ? `- Name des Spielers: "${effectivePlayerName}" (Rolle: $
 
 ### GEZIELTE GENERIERUNG VON FAMILIEN & FRAKTIONS-GRUPPEN:
 1. FAMILIE (inkl. FAMILIE DES SPIELERS ODER NPC-FAMILIEN):
-   - Wenn der Nutzer eine Familie beschreibt oder verlangt (z. B. "Familie des Spielers mit Mutter, Vater und jüngerer Schwester" oder "Die Adelsfamilie von Ravensbrück"):
+   - Wenn der Nutzer eine Familie beschreibt oder verlangt (z. B. "Familie des Spielers mit Mutter, Vater und jüngerer Schwester" oder "Die Familie des Dorfschmieds"):
      * Erstelle für jedes Familienmitglied einen eigenständigen, vollwertigen Charakter in der Kategorie 'Charaktere'.
-     * Vergib passende Vornamen und den gemeinsamen Familiennamen (z. B. Vater: "Thomas Dornbusch", Mutter: "Helena Dornbusch", Schwester: "Mara Dornbusch").
+     * Vergib passende Vornamen und den gemeinsamen Familiennamen (z. B. Vater: "Thomas Dornbusch", Mutter: "Helena Dornbusch", Sohn: "Lukas Dornbusch", Tochter: "Mara Dornbusch").
      * Bei der Familie des Spielers: Der Spieler selbst erhält KEINEN Eintrag, aber jedes Familienmitglied verweist in seiner Biografie, seinem "relationship"-Feld (z. B. "Mutter von ${effectivePlayerName || 'Spieler'}") und seinem "family"-Feld auf die Verwandtschaft.
      * Vernetze die Familienmitglieder untereinander logisch in ihren "relationships"-Details (z. B. wer mit wem verheiratet ist, Geschwisterdynamiken, Zuneigung, Sorgen).
+     * BERUFSZWEIG- & HANDWERKSVERERBUNG (MANDATORISCH):
+       - Alle Berufe müssen aus den 16 offiziellen System-Berufszweigen stammen!
+       - Kinder erben die Handwerkstradition ihrer Eltern: Sohn/Tochter eines Schmieds ist 'Schmiedejunge & Essegehilfe' oder 'Lehrling', Kind von Bauern ist 'Knecht & Erntehelfer' oder 'Jungbauer', Kind von Wirten ist 'Küchenhilfe & Schankgehilfin'.
+       - Eltern besitzen erfahrene Ränge (Geselle, Meister, Erfahren, Vorsteher), Kinder beginnen altersgemäß auf der Stufe 'Lehrling' / 'Gehilfe' / 'Anfänger'.
+     * TALENTE- & ALLTAGSKOMPETENZEN-VERERBUNG:
+       - Kinder erben die Begabungen ('talents') ihrer Eltern (z. B. Gespür für Metalle, Wettergespür, Tierverbundenheit, handwerkliche Zähigkeit, Redegewandtheit).
+       - Kinder erhalten die im elterlichen Betrieb erlernten Alltagskompetenzen ('everydaySkills') auf Einstiegsniveau mit Prozentwerten (z. B. "Tierhege (Anfänger - 20%)", "Feuer entfachen (Lehrling - 35%)", "Kochen & Hauswirtschaft (Anfänger - 30%)", "Kräutersammeln (Anfänger - 25%)").
+       - Eltern beherrschen dieselben Kompetenzen auf fortgeschrittenem oder meisterhaftem Niveau (z. B. "Ackerbau (Meister - 85%)", "Wetterkunde (Fortgeschritten - 70%)").
      * GENETISCHE VERERBUNG & FAMILIENÄHNLICHKEIT BEI AUSSEHEN (STRENGSTE DIRECTIVE):
        - Das Aussehen der Kinder wird von den Eltern bestimmt!
        - Bei der Familie des Spielers: Das Aussehen der Eltern, Geschwister und Kinder MUSS dem Aussehen des Spielers genetisch gleichen bzw. die Quelle dafür sein (gleiche/verwandte Haarfarbe, Augenfarbe, Rasse, Rassemerkmale wie Tierohren/Elfenohren/Hörner/Schuppen, Hauttyp und Statur).
@@ -7008,18 +7098,25 @@ C. LANDMARKEN & POIs (Territory.type: 'ort', 'festung', 'gebäude'):
    - 'poiType': Eines aus ['festung', 'burg', 'ruine', 'turm', 'tempel', 'hoehle', 'leuchtturm', 'bruecke', 'tor', 'mine', 'ort', 'gebaeude'].
    - 'parentId': ID der Siedlung, Region oder Insel, in der dieser POI liegt.
 
-D. WIRTSCHAFTSBETRIEBE (EconomyHoldings - ZWINGEND in 'upsertHoldings', NIEMALS als Territory!):
-   - Tavernen, Schmieden, Bäckereien, Märkte, Händlerläden, Gasthäuser, Sägewerke, Werften, Hafenbetriebe, Manufakturen, Alchemieläden, Mühlen, Werkstätten etc. SIND KEINE GEOGRAPHISCHEN TERRITORIES!
-   - Erstelle für solche Betriebe IMMER ein Element in 'upsertHoldings'.
-   - Setze 'territoryId' auf die ID der Stadt/des Ortes, in der der Betrieb steht.
-   - Setze 'assignedCharacterId' auf die ID des NPCs, der den Betrieb führt (falls vorhanden).
+D. WIRTSCHAFTSBETRIEBE, GEBÄUDE & ANWESEN (EconomyHoldings - ZWINGEND in 'upsertHoldings', NIEMALS als Siedlungs-Territory!):
+   - KERNREGEL: Ein Ort ist kein Betrieb. Ein Dorf ist kein Laden. Ein Königreich ist kein Betrieb. Ein Gebäude ist nicht automatisch ein Betrieb.
+   - Ein Ort (Territory: Stadt, Dorf, Region) kann Betriebe, Gebäude und eine aggregierte Wirtschaft besitzen, ist aber selbst NIEMALS eine Holding!
+   - Kategorisierung ('category'):
+     * 'betrieb': Taverne, Gasthaus, Schmiede, Bäckerei, Werkstatt, Manufaktur, Magierladen
+     * 'produktion': Bauernhof, Mine, Sägewerk, Fischerei
+     * 'handel': Markt, Händler, Herberge, Werft, Hafenbetrieb, Schiff, Gilde
+     * 'gebaeude_anwesen': Rathaus, Gutshof, Herrenhaus, Burg, Schloss, Lagerhaus, Wohnhaus, Adelssitz, Anwesen, Fraktionsgebäude
+   - Setze 'category' passend zum gewählten 'type'.
+   - Setze 'territoryId' auf die ID des Ortes (Dorf, Stadt), in dem der Betrieb oder das Gebäude steht.
+   - Setze 'buildingId' und 'buildingName', falls ein Betrieb innerhalb eines bestimmten Anwesens oder Gebäudes angesiedelt ist (z.B. Schmiede im Gutshof).
+   - Weise den Betrieb oder die Besitzer-Position ('Besitzer / Wirt') NICHT automatisch dem Spieler zu! Setze ownerType standardmäßig auf 'character' oder 'faction' und vergebe einen passenden NPC-Namen als Besitzer/Wirt.
 
 E. ENTITY RESOLUTION & VERKNÜPFUNG:
    - Erkenne bestehende Entitäten per ID und erfinde keine Duplikate.
    - Wenn der Nutzer z.B. sagt "In Silberhafen betreibt Karin die Taverne Zum Seebären":
      * Silberhafen = Territory (type: 'stadt', settlementType: 'hafenstadt')
      * Karin = LoreEntry (category: 'Charaktere', role: 'Wirtin')
-     * Zum Seebären = EconomyHolding (type: 'taverne', territoryId: [Silberhafen-ID], assignedCharacterId: [Karin-ID], locationName: 'Silberhafen')
+     * Zum Seebären = EconomyHolding (type: 'taverne', category: 'betrieb', territoryId: [Silberhafen-ID], assignedCharacterId: [Karin-ID], locationName: 'Silberhafen', ownerType: 'character', assignedCharacterName: 'Karin')
 
 F. FRAKTIONEN-SYNCHRONISATION (WICHTIG!):
    - Wenn eine Fraktion (z.B. Gilde, Kult, Königreich) involviert ist, MUSS sie über alle 3 Systeme synchron sein:
@@ -7031,6 +7128,8 @@ G. SPIELERCHARAKTER-SCHUTZ & REALISTISCHE TONALITÄT (STRENG EINHALTEN):
    - Der Spielercharakter heißt "${world?.player?.name || 'Spieler'}". Erstelle UNTER KEINEN UMSTÄNDEN einen LoreEntry für den Spieler selbst! Der Spieler ist kein NPC.
    - BODENSTÄNDIGES WORLDBUILDING: Ein normales Dorf bleibt ein normales Dorf! Keine erzwungenen finsteren Kulte, keine uralten Dämonenaltäre oder heiligen Geheimnisse in friedlichen Siedlungen.
    - Geheimnisse und Gerüchte für gewöhnliche Orte/NPCs müssen menschlich und alltäglich sein (z.B. Dorfgeplauder, kleine Sorgen, Ernteprobleme, heimliche Ersparnisse).
+
+${SMART_FILL_NAMING_RULES_PROMPT}
 
 NUTZER-ANWEISUNG / PROMPT:
 "${params.userPrompt}"
@@ -7119,27 +7218,30 @@ Gib ausschließlich valides JSON mit folgenden vier Listen zurück:
      "secretsStage3": "Geheimnis Stufe 3"
    }
 
-3. "upsertHoldings": Liste von Wirtschaftsbetrieben, die neu erstellt oder aktualisiert werden sollen.
+3. "upsertHoldings": Liste von Wirtschaftsbetrieben, Gebäuden & Anwesen, die neu erstellt oder aktualisiert werden sollen.
    Jedes Element MUSS folgende Struktur haben:
    {
      "id": "bestehende-ID-oder-temp-ID",
-     "name": "Name des Betriebs (z.B. 'Taverne Zum Seebären', 'Waffenschmiede Eisenfaust')",
-     "type": "Eines aus: ['taverne', 'schmiede', 'baeckerei', 'markt', 'haendler', 'gasthaus', 'mine', 'bauernhof', 'saegewerk', 'werft', 'hafenbetrieb', 'manufaktur', 'magierladen', 'anwesen', 'schloss', 'koenigreich', 'schiff', 'werkstatt', 'gilde', 'custom']",
-     "icon": "Passendes Icon-Symbol",
-     "description": "Kurze Beschreibung des Betriebs (20-40 Wörter)...",
+     "name": "Name des Betriebs/Gebäudes (z.B. 'Taverne Zum Seebären', 'Waffenschmiede Eisenfaust', 'Gutshof Eichengrund')",
+     "type": "Eines aus: ['taverne', 'gasthaus', 'schmiede', 'baeckerei', 'werkstatt', 'manufaktur', 'magierladen', 'bauernhof', 'mine', 'saegewerk', 'fischerei', 'markt', 'haendler', 'herberge', 'werft', 'hafenbetrieb', 'schiff', 'gilde', 'rathaus', 'gutshof', 'herrenhaus', 'burg', 'schloss', 'lagerhaus', 'wohnhaus', 'adelssitz', 'anwesen', 'fraktionsgebaeude', 'custom']",
+     "category": "Eines aus: ['betrieb', 'produktion', 'handel', 'gebaeude_anwesen']",
+     "icon": "Passendes Icon-Symbol (Lucide Name)",
+     "description": "Kurze Beschreibung (20-40 Wörter)...",
      "level": 1,
-     "ownerType": "Eines aus: ['user', 'character', 'faction']",
+     "ownerType": "Eines aus: ['character', 'faction', 'user'] (Standard: 'character' oder 'faction', NICHT automatisch 'user')",
      "ownerFactionId": "Fraktions-ID (falls ownerType = faction)",
      "ownerFactionName": "Fraktionsname (falls ownerType = faction)",
      "controlledByFactionId": "ID der kontrollierenden Fraktion",
      "controlledByFactionName": "Name der kontrollierenden Fraktion",
-     "assignedCharacterName": "Name des Verwalters/Besitzers",
+     "assignedCharacterName": "Name des Verwalters/Besitzers (z.B. ein passender NPC)",
      "assignedCharacterId": "Zugehörige NPC ID oder temp-ID",
      "incomePerInterval": 250,
      "upkeepPerInterval": 50,
      "staffCount": 4,
-     "locationName": "Name des Ortes/der Stadt",
-     "territoryId": "Zugehörige Gebiets ID oder temp-ID"
+     "locationName": "Name des Ortes/der Stadt (Territory)",
+     "territoryId": "Zugehörige Gebiets ID oder temp-ID",
+     "buildingId": "ID des übergeordneten Gebäudes/Anwesens (optional, falls Betrieb innerhalb eines Gebäudes)",
+     "buildingName": "Name des übergeordneten Gebäudes (optional)"
    }
 
 4. "obsoleteIds": Liste von IDs, die aus der Datenbank entfernt werden sollen (falls veraltet oder ersetzt).
@@ -7333,13 +7435,18 @@ GIB NUR DAS REINE JSON-OBJEKT ZURÜCK, KEINE TEXTERKLÄRUNGEN DRUMHERUM!`;
       let nextHoldings = (economy.holdings || []).filter((h: any) => !obsoleteSet.has(h.id));
       upsertHoldings.forEach((newH: any) => {
         const idx = nextHoldings.findIndex((h: any) => h.id === newH.id);
+        const preset = HOLDING_TYPES.find(t => t.type === newH.type) || HOLDING_TYPES[0];
+        const category = newH.category || preset?.category || 'betrieb';
+        const defaultAssets = getHoldingPresets(newH.type || 'taverne');
         const mappedHolding = {
+          category,
           reputation: 60,
           status: 'active',
           upgrades: [
             { id: `upg-${newH.id}-1`, name: 'Renovierung', cost: 150, levelRequired: 1, unlocked: false, description: 'Erhöht die Einnahmen um 15%' },
             { id: `upg-${newH.id}-2`, name: 'Sicherheit', cost: 300, levelRequired: 2, unlocked: false, description: 'Reduziert das Risiko für negative Vorfälle' }
           ],
+          ...defaultAssets,
           ...newH
         };
         if (idx >= 0) {
@@ -7399,8 +7506,9 @@ Generiere ein detailliertes JSON Array von Objekten mit folgenden Feldern:
 - icon: Ein passendes Symbol (z.B. 🍺, 🏡, 🏰, 👑, ⛵, 🔨, ⛏️, 🪙, 🌾, 🪓, ⚓, 🚢, 🧵, 🧪, 🔧, ⚖️)
 - description: Lebendige Beschreibung des Betriebs und seiner Funktion (30-60 Wörter)
 - level: Zahl zwischen 1 und 4
-- ownerType: "user" (vom Spieler geführt) ODER "character" (einem NPC zugewiesen) ODER "faction"
-- assignedCharacterName: Name des Besitzers oder Wirts
+- ownerType: "character" (einem NPC zugewiesen) ODER "faction" (einer Fraktion gehörig) ODER "user" (NUR falls im Kontext explizit als Spielerbetrieb gefordert)
+WICHTIG: Weise den Betrieb oder die Besitzer-Position ("Besitzer / Wirt") NICHT automatisch dem Spieler zu! Setze ownerType standardmäßig auf "character" oder "faction" und vergebe einen passenden NPC-Namen als Besitzer/Wirt.
+- assignedCharacterName: Name des Besitzers oder Wirts (z.B. NPC Wirt, Gutsherr, Schmiedemeister)
 - assignedManagerName: Name des Verwalters / Butlers / Meisters
 - incomePerInterval: Wöchentliche Einnahmen (z.B. 120 bis 1000)
 - upkeepPerInterval: Unterhaltskosten (z.B. 25 bis 250)
@@ -7437,7 +7545,7 @@ Generiere ein detailliertes JSON Array von Objekten mit folgenden Feldern:
         icon: item.icon || '🏠',
         description: item.description || '',
         level: item.level || 1,
-        ownerType: item.ownerType === 'character' ? 'character' : item.ownerType === 'faction' ? 'faction' : 'user',
+        ownerType: item.ownerType === 'user' ? 'user' : item.ownerType === 'faction' ? 'faction' : 'character',
         assignedCharacterName: item.assignedCharacterName || '',
         assignedManagerName: item.assignedManagerName || '',
         incomePerInterval: item.incomePerInterval || 150,
@@ -7579,11 +7687,15 @@ Der Nutzer möchte den Betrieb basierend auf der Vorgabe neu generieren. Du kann
 
 Erstelle oder aktualisiere:
 - name: Aussagekräftiger Name (KEINE EMOJIS)
-- type: Einer der unterstützten Typen (taverne, handelshaus, mine, bauernhof, werkstatt, gilde, hafen, festung, anwesen, bank, kirche, schule, kaserne, hospital, labor, theater, magieturm, lagerhaus, stallung, jagdhuette, muenze, bibliothek, schmiede, saegewerk, steinbruch, weberei, gerberei, brauerei, weingut, imkerei, fischerei, saline, plantage, herrenhaus, kloster, tempel, schrein, grabmal, palast, rathaus, marktplatz, kaufhaus, kontor, wehranlage, wachtturm, gefaengnis, arsenal, werft, trockenbecken, aquarium, observatorium, menagerie, botanischer_garten, park, badehaus, arena, spielhalle, bordell, asyl, waisenhaus, hospiz, friedhof, krematorium, katakomben, kanalisation, bruecke, tunnel, monument, ruine, ausgrabung, portal, schiff)
+- category: Eines aus ('betrieb', 'produktion', 'handel', 'dienstleistung', 'gebaeude_anwesen')
+- type: Einer der unterstützten Typen (taverne, gasthaus, herberge, haendler, markt, bauernhof, mine, saegewerk, werkstatt, schmiede, baeckerei, werft, fischerei, manufaktur, magierladen, brauerei, gilde, hafenbetrieb, custom)
 - icon: NUR Lucide Icon Name (z.B. 'Beer', 'Hotel', 'Hammer', 'Wheat', 'Castle', 'Shield', 'Home', 'Anchor', 'Ship', 'Cross', 'Book', 'Swords', 'Tent'). ABSOLUT KEINE EMOJIS!
 - description: Detaillierte, stimmungsvolle Beschreibung (40-80 Wörter) (KEINE EMOJIS)
 - level: 1-5
-- locationName: Ort / Bezirk
+- locationName: Ort / Bezirk / Siedlung
+- buildingName: Name des übergeordneten Gebäudes/Anwesens (falls dieser Betrieb in einem Gebäude/Anwesen liegt)
+- ownerType: 'character' oder 'faction' (Standard) oder 'user' (nur falls vom Spieler ausdrücklich erworben)
+- assignedCharacterName: Name des Besitzers / Wirts (passender NSC, NICHT automatisch der Spieler)
 - incomePerInterval: Ertrag pro Woche/Intervall
 - upkeepPerInterval: Unterhalt pro Woche/Intervall
 - staffCount: Gesamtpersonal (Summe aller Gruppen)
@@ -7602,7 +7714,7 @@ Erstelle oder aktualisiere:
 - activityLogs: Liste von 3-5 lebendigen Hintergrund-Meldungen (mit id, timestamp, type, title, message)
 
 WICHTIG:
-- Falls isSupplementMode=true: Ändere bestehende Namen/Typen nur wenn unbedingt nötig für Konsistenz.
+- Falls isSupplementMode=true: Ändere bestehende Namen/Typen nur wenn unbedingt nötig für Konsistenz. Bestehende Werte für Finanzen, Ressourcen und Personal beibehalten und nur leere/unvollständige Felder ergänzen.
 - Falls isSupplementMode=false: Erfinde alles passend zur Vorgabe neu.
 - Antworte immer auf DEUTSCH.
 - Gib ein valides JSON-Objekt zurück.`;
@@ -7616,6 +7728,27 @@ WICHTIG:
       });
 
       const parsed = JSON.parse(response.text || '{}');
+      if (isSupplementMode) {
+        return {
+          ...existingHolding,
+          ...parsed,
+          incomePerInterval: existingHolding.incomePerInterval !== undefined && existingHolding.incomePerInterval > 0 ? existingHolding.incomePerInterval : parsed.incomePerInterval,
+          upkeepPerInterval: existingHolding.upkeepPerInterval !== undefined && existingHolding.upkeepPerInterval > 0 ? existingHolding.upkeepPerInterval : parsed.upkeepPerInterval,
+          resources: (existingHolding.resources && existingHolding.resources.length > 0) ? existingHolding.resources : parsed.resources,
+          roles: (existingHolding.roles && existingHolding.roles.length > 0) ? existingHolding.roles : parsed.roles,
+          staffGroups: (existingHolding.staffGroups && existingHolding.staffGroups.length > 0) ? existingHolding.staffGroups : parsed.staffGroups,
+          tasks: (existingHolding.tasks && existingHolding.tasks.length > 0) ? existingHolding.tasks : parsed.tasks,
+          duties: (existingHolding.duties && existingHolding.duties.length > 0) ? existingHolding.duties : parsed.duties,
+          orders: (existingHolding.orders && existingHolding.orders.length > 0) ? existingHolding.orders : parsed.orders,
+          decisions: (existingHolding.decisions && existingHolding.decisions.length > 0) ? existingHolding.decisions : parsed.decisions,
+          activityLogs: (existingHolding.activityLogs && existingHolding.activityLogs.length > 0) ? existingHolding.activityLogs : parsed.activityLogs,
+          locationId: existingHolding.locationId || parsed.locationId,
+          locationName: existingHolding.locationName || parsed.locationName,
+          territoryId: existingHolding.territoryId || parsed.territoryId,
+          buildingId: existingHolding.buildingId || parsed.buildingId,
+          buildingName: existingHolding.buildingName || parsed.buildingName,
+        };
+      }
       return parsed;
     });
   }
@@ -8124,6 +8257,8 @@ Deine Aufgabe ist es, einen präzisen, strukturierten ZEICHENPLAN ('DrawingPlan'
    Seerouten und Handelsstraßen ('create_route') verbinden stets existierende oder neu gezeichnete Häfen/Orte.
 8. **BESTEHENDE GEOMETRIE SCHÜTZEN**:
    Bereits existierende Gebiete (z.B. "Insel Ouka") dürfen niemals überschrieben werden! Nutze sie als 'relativeTo' Anker.
+
+${SMART_FILL_NAMING_RULES_PROMPT}
 
 ### VERFÜGBARE ZEICHEN-TOOLS ('tool'):
 - **'create_landmass'** / **'draw_landmass'**: Landmasse frei zeichnen ('name', 'type': 'insel'|'koenigreich'|'kontinent', 'relativeTo', 'direction', 'distanceKm', 'points', 'coastlineRoughness', 'shapeDescription', 'climate', 'terrain', 'faction', 'ruler', 'population', 'description', 'color')

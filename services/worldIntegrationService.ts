@@ -24,7 +24,10 @@ import {
   TacticalSpawnSource,
   ResolutionResult,
   WorldEventIntent,
-  BattleParticipantRelation
+  BattleParticipantRelation,
+  EconomyHolding,
+  EconomyHoldingType,
+  EconomicUnitCategory
 } from '../types';
 import { 
   spawnTacticalGroup,
@@ -2362,4 +2365,561 @@ export class WorldIntegrationService {
       newFacts
     };
   }
+
+  // -------------------------------------------------------------
+  // Automatic World Relationship Resolution:
+  // Characters, Professions, Economy Holdings & Locations
+  // -------------------------------------------------------------
+
+  /**
+   * Maps a profession string to a logical EconomyHoldingType, Category, and Workplace parameters.
+   */
+  static getProfessionHoldingMapping(professionStr?: string): {
+    holdingType: EconomyHoldingType;
+    category: EconomicUnitCategory;
+    roleName: string;
+    defaultHoldingName: string;
+    workplaceType: 'economy' | 'administration' | 'military' | 'other';
+    allowsPersonalHolding: boolean;
+  } {
+    const prof = (professionStr || '').toLowerCase().trim();
+
+    if (prof.includes('schmied') || prof.includes('smith') || prof.includes('waffenschmied') || prof.includes('hufschmied')) {
+      return {
+        holdingType: 'schmiede',
+        category: 'betrieb',
+        roleName: 'Schmied',
+        defaultHoldingName: 'Schmiede',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('bäcker') || prof.includes('baecker') || prof.includes('brot')) {
+      return {
+        holdingType: 'baeckerei',
+        category: 'betrieb',
+        roleName: 'Bäcker',
+        defaultHoldingName: 'Bäckerei',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('wirt') || prof.includes('schankwirt') || prof.includes('tavernenbesitzer')) {
+      return {
+        holdingType: 'gasthaus',
+        category: 'dienstleistung',
+        roleName: 'Wirt',
+        defaultHoldingName: 'Gasthaus',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('koch') || prof.includes('köchin') || prof.includes('küchenchef')) {
+      return {
+        holdingType: 'gasthaus',
+        category: 'dienstleistung',
+        roleName: 'Koch',
+        defaultHoldingName: 'Küche / Gasthaus',
+        workplaceType: 'economy',
+        allowsPersonalHolding: false
+      };
+    }
+    if (prof.includes('fischer') || prof.includes('fischfang')) {
+      return {
+        holdingType: 'fischerei',
+        category: 'produktion',
+        roleName: 'Fischer',
+        defaultHoldingName: 'Fischerbetrieb',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('landwirt') || prof.includes('bauer') || prof.includes('akkerbauer') || prof.includes('viehzüchter')) {
+      return {
+        holdingType: 'bauernhof',
+        category: 'produktion',
+        roleName: 'Landwirt',
+        defaultHoldingName: 'Bauernhof',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('jäger') || prof.includes('jaeger') || prof.includes('forstwart')) {
+      return {
+        holdingType: 'bauernhof',
+        category: 'produktion',
+        roleName: 'Jäger',
+        defaultHoldingName: 'Jagdbetrieb',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('händler') || prof.includes('haendler') || prof.includes('kaufmann') || prof.includes('krämer')) {
+      return {
+        holdingType: 'haendler',
+        category: 'handel',
+        roleName: 'Händler',
+        defaultHoldingName: 'Handelsgeschäft',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('müller') || prof.includes('mueller') || prof.includes('mühle')) {
+      return {
+        holdingType: 'werkstatt',
+        category: 'betrieb',
+        roleName: 'Müller',
+        defaultHoldingName: 'Mühle',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('schneider') || prof.includes('schuster') || prof.includes('tischler') || prof.includes('zimmermann') || prof.includes('töpfer') || prof.includes('handwerker')) {
+      return {
+        holdingType: 'werkstatt',
+        category: 'betrieb',
+        roleName: 'Handwerker',
+        defaultHoldingName: 'Werkstatt',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('alchemist') || prof.includes('apotheker') || prof.includes('heiler') || prof.includes('kräuterkundiger')) {
+      return {
+        holdingType: 'magierladen',
+        category: 'betrieb',
+        roleName: 'Alchemist / Heiler',
+        defaultHoldingName: 'Alchemielabor / Praxis',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('brauer') || prof.includes('braumeister')) {
+      return {
+        holdingType: 'manufaktur',
+        category: 'betrieb',
+        roleName: 'Brauer',
+        defaultHoldingName: 'Brauerei',
+        workplaceType: 'economy',
+        allowsPersonalHolding: true
+      };
+    }
+    if (prof.includes('bergmann') || prof.includes('bergarbeiter') || prof.includes('miner')) {
+      return {
+        holdingType: 'mine',
+        category: 'produktion',
+        roleName: 'Bergarbeiter',
+        defaultHoldingName: 'Mine',
+        workplaceType: 'economy',
+        allowsPersonalHolding: false
+      };
+    }
+    if (prof.includes('soldat') || prof.includes('wache') || prof.includes('gardist') || prof.includes('krieger') || prof.includes('reiter')) {
+      return {
+        holdingType: 'custom',
+        category: 'gebaeude_anwesen',
+        roleName: 'Soldat / Wache',
+        defaultHoldingName: 'Garnison / Wachstation',
+        workplaceType: 'military',
+        allowsPersonalHolding: false
+      };
+    }
+    if (prof.includes('schreiber') || prof.includes('verwalter') || prof.includes('richter') || prof.includes('vogt') || prof.includes('bürgermeister')) {
+      return {
+        holdingType: 'rathaus',
+        category: 'gebaeude_anwesen',
+        roleName: 'Bürokrat / Verwalter',
+        defaultHoldingName: 'Rathaus / Verwaltung',
+        workplaceType: 'administration',
+        allowsPersonalHolding: false
+      };
+    }
+    if (prof.includes('priester') || prof.includes('kleriker') || prof.includes('mönch') || prof.includes('schaman')) {
+      return {
+        holdingType: 'custom',
+        category: 'gebaeude_anwesen',
+        roleName: 'Priester',
+        defaultHoldingName: 'Tempel / Schrein',
+        workplaceType: 'other',
+        allowsPersonalHolding: false
+      };
+    }
+
+    return {
+      holdingType: 'werkstatt',
+      category: 'betrieb',
+      roleName: prof || 'Arbeiter',
+      defaultHoldingName: prof ? `Betrieb (${prof})` : 'Werkstatt',
+      workplaceType: 'economy',
+      allowsPersonalHolding: false
+    };
+  }
+
+  /**
+   * Generates a setting-appropriate holding name (Specification #13).
+   */
+  static generateSettingAppropriateHoldingName(
+    holdingType: EconomyHoldingType,
+    profession: string,
+    characterName?: string,
+    locationName?: string
+  ): string {
+    const charPart = characterName ? characterName.trim().split(' ')[0] : '';
+    const locPart = locationName ? locationName.replace(/^(dorf|stadt|burg|festung|hafen)\s+/i, '').trim() : '';
+
+    if (holdingType === 'schmiede') {
+      const options = [
+        charPart ? `Schmiede ${charPart}` : null,
+        locPart ? `Schmiede ${locPart}` : null,
+        `Zum alten Amboss`,
+        `Schmiede Eisenfaust`,
+        `Waffenschmiede Falkenhammer`,
+        charPart ? `${charPart}s Schmiede` : `Dorfschmiede`
+      ].filter(Boolean) as string[];
+      return options[Math.floor(Math.random() * options.length)];
+    }
+    if (holdingType === 'baeckerei') {
+      const options = [
+        `Bäckerei Goldkruste`,
+        charPart ? `Bäckerei ${charPart}` : null,
+        `Zum frischen Brot`,
+        `Ofenfrisch ${locPart || 'Falkengrund'}`
+      ].filter(Boolean) as string[];
+      return options[Math.floor(Math.random() * options.length)];
+    }
+    if (holdingType === 'gasthaus' || holdingType === 'taverne' || holdingType === 'herberge') {
+      const options = [
+        `Gasthaus Zum Falken`,
+        `Taverne Zum Goldenen Hirsch`,
+        `Herberge Am Marktplatz`,
+        charPart ? `Gasthaus ${charPart}` : null,
+        locPart ? `Gasthaus ${locPart}` : `Wirtshaus`
+      ].filter(Boolean) as string[];
+      return options[Math.floor(Math.random() * options.length)];
+    }
+    if (holdingType === 'bauernhof') {
+      const options = [
+        charPart ? `Hof ${charPart}` : null,
+        locPart ? `Gut ${locPart}` : null,
+        `Bauernhof Sonnenhain`,
+        `Wiesenhof`
+      ].filter(Boolean) as string[];
+      return options[Math.floor(Math.random() * options.length)];
+    }
+    if (holdingType === 'fischerei') {
+      return locPart ? `Fischerei ${locPart}` : `Fischerhütte Seewind`;
+    }
+    if (holdingType === 'haendler' || holdingType === 'markt') {
+      return charPart ? `Handelskontor ${charPart}` : `Krämerladen Am Markt`;
+    }
+
+    return charPart ? `Werkstatt ${charPart}` : `Betrieb ${locPart || ''}`.trim();
+  }
+
+  /**
+   * Central resolution function for character workplace and residence (Specifications #1 - #35).
+   */
+  static resolveCharacterWorkplaceAndResidence(params: {
+    character: Character | NPC;
+    world: WorldSetting;
+    autoCreateIfMissing?: boolean;
+  }): {
+    updatedCharacter: Character | NPC;
+    updatedWorld: WorldSetting;
+    newHoldingCreated: EconomyHolding | null;
+    derivedStoryInfo?: {
+      title: string;
+      content: string;
+      category: string;
+      source: string;
+    } | null;
+    warnings: string[];
+  } {
+    const { character, world, autoCreateIfMissing = true } = params;
+    const warnings: string[] = [];
+    let updatedCharacter = { ...character };
+    let currentWorld = { ...world };
+    let newHoldingCreated: EconomyHolding | null = null;
+    let derivedStoryInfo: { title: string; content: string; category: string; source: string } | null = null;
+
+    const holdings: EconomyHolding[] = [
+      ...(currentWorld.economyConfig?.holdings || []),
+      ...(currentWorld.economy?.holdings || [])
+    ];
+    const uniqueHoldingsMap = new Map<string, EconomyHolding>();
+    holdings.forEach(h => uniqueHoldingsMap.set(h.id, h));
+    const allHoldings = Array.from(uniqueHoldingsMap.values());
+
+    const territories = currentWorld.territories || [];
+
+    // 1. Resolve Residence (Wohnort)
+    let residenceTerritory: Territory | null = null;
+    const residenceInput = updatedCharacter.residenceName || updatedCharacter.residenceId || updatedCharacter.appearance?.currentLocation || updatedCharacter.appearance?.origin;
+
+    if (residenceInput) {
+      const terrMatch = territories.find(t => t.id === residenceInput || t.name.toLowerCase().trim() === residenceInput.toLowerCase().trim());
+      if (terrMatch) {
+        residenceTerritory = terrMatch;
+        updatedCharacter.residenceId = terrMatch.id;
+        updatedCharacter.residenceName = terrMatch.name;
+      } else {
+        updatedCharacter.residenceName = residenceInput;
+      }
+    }
+
+    // 2. Resolve Profession & Workplace
+    const profession = updatedCharacter.profession || updatedCharacter.jobTitle || (updatedCharacter as any).job;
+    if (!profession) {
+      return { updatedCharacter, updatedWorld: currentWorld, newHoldingCreated: null, warnings };
+    }
+
+    const mapping = this.getProfessionHoldingMapping(profession);
+    updatedCharacter.workplaceType = updatedCharacter.workplaceType || mapping.workplaceType;
+
+    let targetHolding: EconomyHolding | null = null;
+
+    if (updatedCharacter.workplaceId) {
+      targetHolding = allHoldings.find(h => h.id === updatedCharacter.workplaceId) || null;
+    }
+
+    if (!targetHolding && updatedCharacter.workplaceName) {
+      targetHolding = allHoldings.find(h => h.name.toLowerCase().trim() === updatedCharacter.workplaceName?.toLowerCase().trim()) || null;
+    }
+
+    // Search matching existing holding at residence location
+    if (!targetHolding && residenceTerritory) {
+      const locMatch = allHoldings.find(h => {
+        const matchesLoc = h.locationId === residenceTerritory?.id || (h.locationName && h.locationName.toLowerCase().trim() === residenceTerritory?.name.toLowerCase().trim());
+        const matchesType = h.type === mapping.holdingType || h.category === mapping.category;
+        return matchesLoc && matchesType;
+      });
+      if (locMatch) {
+        targetHolding = locMatch;
+      }
+    }
+
+    // Bind to existing holding if found
+    if (targetHolding) {
+      updatedCharacter.workplaceId = targetHolding.id;
+      updatedCharacter.workplaceName = targetHolding.name;
+
+      const employeeIds = new Set(targetHolding.employeeIds || []);
+      const employeeNames = new Set(targetHolding.employeeNames || []);
+      const charId = updatedCharacter.id || updatedCharacter.name;
+      employeeIds.add(charId);
+      employeeNames.add(updatedCharacter.name);
+
+      const updatedHolding: EconomyHolding = {
+        ...targetHolding,
+        employeeIds: Array.from(employeeIds),
+        employeeNames: Array.from(employeeNames)
+      };
+
+      const updatedHoldingsList = allHoldings.map(h => h.id === updatedHolding.id ? updatedHolding : h);
+
+      if (currentWorld.economyConfig) {
+        currentWorld = { ...currentWorld, economyConfig: { ...currentWorld.economyConfig, holdings: updatedHoldingsList } };
+      }
+      if (currentWorld.economy) {
+        currentWorld = { ...currentWorld, economy: { ...currentWorld.economy, holdings: updatedHoldingsList } };
+      }
+
+      return {
+        updatedCharacter,
+        updatedWorld: currentWorld,
+        newHoldingCreated: null,
+        warnings
+      };
+    }
+
+    // 3. Auto-Derive New Holding if Allowed & Missing
+    if (!targetHolding && autoCreateIfMissing && mapping.allowsPersonalHolding && residenceTerritory) {
+      const holdingName = this.generateSettingAppropriateHoldingName(
+        mapping.holdingType,
+        profession,
+        updatedCharacter.name,
+        residenceTerritory.name
+      );
+
+      const holdingId = `holding_auto_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+      const charId = updatedCharacter.id || updatedCharacter.name;
+
+      newHoldingCreated = {
+        id: holdingId,
+        name: holdingName,
+        category: mapping.category,
+        type: mapping.holdingType,
+        level: 1,
+        ownerType: 'character',
+        assignedCharacterId: charId,
+        assignedCharacterName: updatedCharacter.name,
+        ownerCharacterId: charId,
+        locationId: residenceTerritory.id,
+        locationName: residenceTerritory.name,
+        territoryId: residenceTerritory.id,
+        description: `Automatisch aus dem Beruf '${profession}' von ${updatedCharacter.name} in ${residenceTerritory.name} abgeleiteter Betrieb.`,
+        incomePerInterval: 25,
+        upkeepPerInterval: 10,
+        staffCount: 1,
+        reputation: 50,
+        status: 'active',
+        source: 'auto-derived',
+        derivedFromCharacterId: charId,
+        derivedFromProfession: profession,
+        employeeIds: [charId],
+        employeeNames: [updatedCharacter.name],
+        roles: [
+          {
+            name: mapping.roleName,
+            assignedToName: updatedCharacter.name,
+            assignedCharacterId: charId,
+            authorities: ['Betrieb leiten', 'Handel betreiben']
+          }
+        ]
+      };
+
+      updatedCharacter.workplaceId = newHoldingCreated.id;
+      updatedCharacter.workplaceName = newHoldingCreated.name;
+
+      const newHoldingsList = [...allHoldings, newHoldingCreated];
+
+      if (currentWorld.economyConfig) {
+        currentWorld = { ...currentWorld, economyConfig: { ...currentWorld.economyConfig, holdings: newHoldingsList } };
+      } else {
+        currentWorld = {
+          ...currentWorld,
+          economyConfig: {
+            holdings: newHoldingsList,
+            currencyName: currentWorld.economy?.currencyName || 'Goldmünzen',
+            currencyIcon: '🪙',
+            payoutInterval: 'weekly',
+            allowPassiveIncome: true,
+            enableRandomEvents: true
+          }
+        };
+      }
+      if (currentWorld.economy) {
+        currentWorld = { ...currentWorld, economy: { ...currentWorld.economy, holdings: newHoldingsList } };
+      }
+
+      derivedStoryInfo = {
+        title: `Automatisch erfasster Betrieb: ${holdingName}`,
+        content: `Basierend auf dem Charakter ${updatedCharacter.name} (${profession}) wurde am Standort ${residenceTerritory.name} die wirtschaftliche Einheit '${holdingName}' abgeleitet.`,
+        category: 'Wirtschaft',
+        source: 'auto-derived'
+      };
+    }
+
+    return {
+      updatedCharacter,
+      updatedWorld: currentWorld,
+      newHoldingCreated,
+      derivedStoryInfo,
+      warnings
+    };
+  }
+
+  /**
+   * Central Resolver for all World Relationships (Specification #36 & #44).
+   */
+  static resolveWorldRelationships(params: {
+    world: WorldSetting;
+    characters?: Character[];
+    npcs?: NPC[];
+    autoCreateMissingBusiness?: boolean;
+  }): {
+    updatedWorld: WorldSetting;
+    updatedCharacters: Character[];
+    updatedNpcs: NPC[];
+    createdHoldings: EconomyHolding[];
+    derivedStoryInfos: Array<{ title: string; content: string; category: string; source: string }>;
+    validationWarnings: string[];
+  } {
+    const { world, characters = [], npcs = [], autoCreateMissingBusiness = true } = params;
+    let currentWorld = { ...world };
+    const updatedCharsList: Character[] = [];
+    const updatedNpcsList: NPC[] = [];
+    const createdHoldings: EconomyHolding[] = [];
+    const derivedStoryInfos: Array<{ title: string; content: string; category: string; source: string }> = [];
+    const validationWarnings: string[] = [];
+
+    // Process Characters
+    for (const char of characters) {
+      const res = this.resolveCharacterWorkplaceAndResidence({
+        character: char,
+        world: currentWorld,
+        autoCreateIfMissing: autoCreateMissingBusiness
+      });
+      currentWorld = res.updatedWorld;
+      updatedCharsList.push(res.updatedCharacter);
+      if (res.newHoldingCreated) createdHoldings.push(res.newHoldingCreated);
+      if (res.derivedStoryInfo) derivedStoryInfos.push(res.derivedStoryInfo);
+      validationWarnings.push(...res.warnings);
+    }
+
+    // Process NPCs
+    for (const npc of npcs) {
+      const res = this.resolveCharacterWorkplaceAndResidence({
+        character: npc,
+        world: currentWorld,
+        autoCreateIfMissing: autoCreateMissingBusiness
+      });
+      currentWorld = res.updatedWorld;
+      updatedNpcsList.push(res.updatedCharacter as NPC);
+      if (res.newHoldingCreated) createdHoldings.push(res.newHoldingCreated);
+      if (res.derivedStoryInfo) derivedStoryInfos.push(res.derivedStoryInfo);
+      validationWarnings.push(...res.warnings);
+    }
+
+    // Perform World Consistency Audit
+    const consistencyRes = this.validateWorldConsistency(currentWorld, updatedCharsList, updatedNpcsList);
+    validationWarnings.push(...consistencyRes.warnings);
+
+    return {
+      updatedWorld: consistencyRes.cleanedWorld,
+      updatedCharacters: updatedCharsList,
+      updatedNpcs: updatedNpcsList,
+      createdHoldings,
+      derivedStoryInfos,
+      validationWarnings
+    };
+  }
+
+  /**
+   * Audit and repair world relationship consistency (Specification #33).
+   */
+  static validateWorldConsistency(
+    world: WorldSetting,
+    characters: Character[] = [],
+    npcs: NPC[] = []
+  ): {
+    cleanedWorld: WorldSetting;
+    warnings: string[];
+  } {
+    const warnings: string[] = [];
+    const holdings: EconomyHolding[] = [
+      ...(world.economyConfig?.holdings || []),
+      ...(world.economy?.holdings || [])
+    ];
+    const territories = world.territories || [];
+
+    const cleanedHoldings = holdings.map(h => {
+      if (h.locationId && !territories.some(t => t.id === h.locationId)) {
+        warnings.push(`Betrieb '${h.name}' verwies auf ungültigen Standort '${h.locationId}'. Standort zurückgesetzt.`);
+        return { ...h, locationId: undefined };
+      }
+      return h;
+    });
+
+    let cleanedWorld = { ...world };
+    if (cleanedWorld.economyConfig) {
+      cleanedWorld = { ...cleanedWorld, economyConfig: { ...cleanedWorld.economyConfig, holdings: cleanedHoldings } };
+    }
+    if (cleanedWorld.economy) {
+      cleanedWorld = { ...cleanedWorld, economy: { ...cleanedWorld.economy, holdings: cleanedHoldings } };
+    }
+
+    return { cleanedWorld, warnings };
+  }
 }
+

@@ -29,15 +29,54 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
       {/* Basic Meta fields */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div>
-          <label className="text-xs font-bold text-slate-300 block mb-1">Betriebstyp</label>
+          <label className="text-xs font-bold text-slate-300 block mb-1">Betriebs- / Gebäudetyp</label>
           <select
             value={holding.type}
-            onChange={e => onUpdateHolding(holding.id, { type: e.target.value as any })}
+            onChange={e => {
+              const newType = e.target.value as any;
+              const preset = HOLDING_TYPES.find(t => t.type === newType);
+              onUpdateHolding(holding.id, { 
+                type: newType,
+                category: preset?.category || holding.category || 'betrieb'
+              });
+            }}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-amber-500 font-semibold cursor-pointer"
           >
-            {HOLDING_TYPES.map(t => (
-              <option key={t.type} value={t.type}>{t.label}</option>
-            ))}
+            <optgroup label="Betriebe & Handwerk">
+              {HOLDING_TYPES.filter(t => t.category === 'betrieb').map(t => (
+                <option key={t.type} value={t.type}>{t.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Produktion & Rohstoffe">
+              {HOLDING_TYPES.filter(t => t.category === 'produktion').map(t => (
+                <option key={t.type} value={t.type}>{t.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Handel & Dienstleistungen">
+              {HOLDING_TYPES.filter(t => t.category === 'handel').map(t => (
+                <option key={t.type} value={t.type}>{t.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Gebäude & Anwesen">
+              {HOLDING_TYPES.filter(t => t.category === 'gebaeude_anwesen').map(t => (
+                <option key={t.type} value={t.type}>{t.label}</option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-bold text-slate-300 block mb-1">Kategorie</label>
+          <select
+            value={holding.category || 'betrieb'}
+            onChange={e => onUpdateHolding(holding.id, { category: e.target.value as any })}
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-amber-400 outline-none focus:border-amber-500 font-semibold cursor-pointer"
+          >
+            <option value="betrieb">Betrieb & Handwerk</option>
+            <option value="produktion">Produktion & Rohstoffe</option>
+            <option value="handel">Handel & Logistik</option>
+            <option value="dienstleistung">Dienstleistung & Herbergen</option>
+            <option value="gebaeude_anwesen">Gebäude & Anwesen</option>
           </select>
         </div>
 
@@ -140,15 +179,16 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
         <label className="text-xs font-bold text-amber-400 block flex items-center gap-1.5">
           <i className="fa-solid fa-map-location-dot"></i> Standort & Weltkarten-Verknüpfung
         </label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           <div>
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Kartengebiet</label>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Ort / Siedlung (Territorium)</label>
             <select
-              value={holding.territoryId || ''}
+              value={holding.locationId || holding.territoryId || ''}
               onChange={e => {
                 const tId = e.target.value;
                 const terr = (world.territories || []).find(t => t.id === tId);
                 onUpdateHolding(holding.id, {
+                  locationId: tId || undefined,
                   territoryId: tId || undefined,
                   locationName: terr ? terr.name : holding.locationName
                 });
@@ -169,6 +209,17 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
               value={holding.locationName || ''}
               onChange={e => onUpdateHolding(holding.id, { locationName: e.target.value })}
               placeholder="z.B. Hafenviertel, Marktring 4"
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Gebäude / Anwesen (Übergeordnet)</label>
+            <input
+              type="text"
+              value={holding.buildingName || ''}
+              onChange={e => onUpdateHolding(holding.id, { buildingName: e.target.value })}
+              placeholder="z.B. Burg Falkenstein, Gutshof"
               className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500"
             />
           </div>

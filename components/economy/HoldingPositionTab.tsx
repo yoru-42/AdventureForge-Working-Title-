@@ -21,8 +21,10 @@ export const HoldingPositionTab: React.FC<HoldingPositionTabProps> = ({
   const handleSetUserRole = (roleIndex: number) => {
     const updated = roles.map((r, idx) => ({
       ...r,
-      isUserPosition: idx === roleIndex,
-      assignedToName: idx === roleIndex ? 'Spieler' : (r.assignedToName === 'Spieler' ? '' : r.assignedToName)
+      isUserPosition: roleIndex >= 0 ? idx === roleIndex : false,
+      assignedToName: roleIndex >= 0
+        ? (idx === roleIndex ? 'Spieler' : (r.assignedToName === 'Spieler' ? '' : r.assignedToName))
+        : (r.assignedToName === 'Spieler' ? '' : r.assignedToName)
     }));
     onUpdateHolding(holding.id, { roles: updated });
   };
@@ -52,10 +54,7 @@ export const HoldingPositionTab: React.FC<HoldingPositionTabProps> = ({
             <span className="text-xs text-slate-400 font-medium">Position wechseln:</span>
             <select
               value={roles.findIndex(r => r.isUserPosition)}
-              onChange={e => {
-                const idx = parseInt(e.target.value);
-                if (idx >= 0) handleSetUserRole(idx);
-              }}
+              onChange={e => handleSetUserRole(parseInt(e.target.value))}
               className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-amber-300 font-bold outline-none cursor-pointer focus:border-amber-500"
             >
               <option value="-1">(Keine Position)</option>

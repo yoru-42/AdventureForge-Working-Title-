@@ -803,6 +803,11 @@ export interface Character {
   professionPromotionConditions?: string;
   professionProgress?: ProfessionProgress;
   professionCompetencies?: ProfessionCompetency[];
+  workplaceId?: string;
+  workplaceName?: string;
+  workplaceType?: 'economy' | 'administration' | 'military' | 'other';
+  residenceId?: string;
+  residenceName?: string;
   craftingSkills?: string;
   talents?: string;
   everydaySkills?: string;
@@ -1068,7 +1073,7 @@ export interface EconomyUpgrade {
   description: string;
 }
 
-export type EconomyResourceCategory = 'money' | 'goods' | 'raw_material' | 'food_drink' | 'equipment' | 'inventory' | 'staff' | 'capacity' | 'land' | 'animals' | 'vehicles' | 'special';
+export type EconomyResourceCategory = 'money' | 'goods' | 'raw_material' | 'food_drink' | 'equipment' | 'inventory' | 'staff' | 'capacity' | 'land' | 'animals' | 'vehicles' | 'luxury' | 'special';
 
 export interface EconomyResource {
   id: string;
@@ -1221,10 +1226,57 @@ export interface EconomyLogEntry {
   severity?: 'info' | 'warning' | 'urgent' | 'positive';
 }
 
+export type EconomyEntityCategory = 
+  | 'betrieb'          // Betriebe: Taverne, Gasthaus, Schmiede, Bäckerei, Werkstatt, Manufaktur, Magierladen
+  | 'produktion'       // Produktion: Bauernhof, Mine, Sägewerk, Fischerei
+  | 'handel'           // Handel: Marktstand, Handelskontor, Laden, Werft, Hafenbetrieb, Schiff, Gilde
+  | 'dienstleistung'   // Dienstleistung: Herberge, Schänke, Gasthaus, Fuhrbetrieb
+  | 'gebaeude_anwesen';// Gebäude & Anwesen: Wohnhaus, Rathaus, Gutshof, Herrenhaus, Burg, Schloss, Lagerhaus, Adelssitz, Fraktionssitz
+
+export type EconomicUnitCategory = EconomyEntityCategory;
+
+export type EconomyHoldingType =
+  // Betriebe
+  | 'taverne' 
+  | 'gasthaus' 
+  | 'schmiede' 
+  | 'baeckerei' 
+  | 'werkstatt' 
+  | 'manufaktur' 
+  | 'magierladen'
+  // Produktion
+  | 'bauernhof' 
+  | 'mine' 
+  | 'saegewerk' 
+  | 'fischerei'
+  // Handel & Dienstleistungen
+  | 'markt' 
+  | 'haendler' 
+  | 'herberge' 
+  | 'werft' 
+  | 'hafenbetrieb' 
+  | 'schiff' 
+  | 'gilde'
+  // Gebäude & Anwesen
+  | 'wohnhaus' 
+  | 'rathaus' 
+  | 'gutshof' 
+  | 'herrenhaus' 
+  | 'burg' 
+  | 'schloss' 
+  | 'lagerhaus' 
+  | 'anwesen' 
+  | 'adelssitz' 
+  | 'fraktionsgebaeude'
+  // Individuell
+  | 'custom'
+  | (string & {});
+
 export interface EconomyHolding {
   id: string;
   name: string;
-  type: 'taverne' | 'anwesen' | 'schloss' | 'koenigreich' | 'schiff' | 'werkstatt' | 'mine' | 'gilde' | 'schmiede' | 'baeckerei' | 'markt' | 'haendler' | 'gasthaus' | 'bauernhof' | 'saegewerk' | 'werft' | 'hafenbetrieb' | 'manufaktur' | 'magierladen' | 'adelssitz' | 'burg' | 'fraktionsgebaeude' | 'custom' | (string & {});
+  category?: EconomicUnitCategory; // Logische Zuordnung: betrieb | produktion | handel | gebaeude_anwesen
+  type: EconomyHoldingType;
   icon?: string;
   description?: string;
   level: number; // 1-5
@@ -1240,8 +1292,11 @@ export interface EconomyHolding {
   reputation?: number; // 0-100
   status: 'active' | 'damaged' | 'expanding' | 'bankrupt' | 'under_siege';
   upgrades?: EconomyUpgrade[];
-  locationName?: string;
-  territoryId?: string; // Stabile Referenz auf geografisches Territory (Standort)
+  locationName?: string; // Name des Ortes / Gebiets (z.B. "Dorf Falkengrund", "Silberhafen")
+  locationId?: string; // Stabile Referenz auf geografisches Territory (Ort / Gebiet)
+  territoryId?: string; // Synonym für locationId
+  buildingId?: string; // Optional: ID des Gebäudes/Anwesens, in dem dieser Betrieb liegt
+  buildingName?: string; // Optional: Name des übergeordneten Gebäudes/Anwesens (z.B. "Gutshof Falkenstein", "Westtor-Turm")
   loreEntryId?: string; // Referenz auf zugehörigen Codex-Eintrag
   ownerCharacterId?: string; // Besitzer-Charakter ID aus Codex
   ownerFactionId?: string; // Besitzer-Fraktion ID aus Codex
@@ -1258,6 +1313,11 @@ export interface EconomyHolding {
   activityLogs?: EconomyLogEntry[]; // Lebendige Hintergrundaktivität & Betriebs-Log
   temporaryAuthorities?: TemporaryAuthority[]; // Vergebene Sonderrechte & temporäre Befugnisse
   workTemplates?: WorkWorkflowTemplate[]; // Vorlagen für Arbeitsabläufe
+  employeeIds?: string[]; // Verknüpfte Mitarbeiter- / Angestellten-Charakter-IDs
+  employeeNames?: string[]; // Verknüpfte Mitarbeiter- / Angestellten-Charakter-Namen
+  source?: 'auto-derived' | 'explicit' | string; // Quelle des Betriebs (z.B. auto-derived aus Charakter-Erstellung)
+  derivedFromCharacterId?: string; // Charakter-ID, aus der dieser Betrieb abgeleitet wurde
+  derivedFromProfession?: string; // Beruf, aus dem dieser Betrieb abgeleitet wurde
 
   // Physischer Zustand & Allgemeine Gebäudeinformationen
   physicalCondition?: string; // Zustand (z.B. "Hervorragend", "Gut", "Reparaturbedürftig", "Ruine")

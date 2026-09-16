@@ -20,7 +20,12 @@ import { HoldingFinancesTab } from './economy/HoldingFinancesTab';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { smartFillEconomyHolding } from '../services/geminiService';
 import * as LucideIcons from 'lucide-react';
-import { syncEconomyWithWorld, createLoreEntryFromHolding, registerAllHoldingsInCodex } from '../lib/economySync';
+import { 
+  syncEconomyWithWorld, 
+  createLoreEntryFromHolding, 
+  registerAllHoldingsInCodex,
+  getAllTerritoriesEconomySummaries 
+} from '../lib/economySync';
 
 import { TacticalManagementTab } from './economy/TacticalManagementTab';
 
@@ -67,6 +72,8 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
 }) => {
   const [mainTab, setMainTab] = useState<'overview' | 'holdings' | 'resources' | 'finances' | 'tactical' | 'management'>('overview');
   const [filterOwner, setFilterOwner] = useState<'all' | 'user' | 'character' | 'faction'>('all');
+  const [filterCategory, setFilterCategory] = useState<'all' | 'betrieb' | 'produktion' | 'handel' | 'dienstleistung' | 'gebaeude_anwesen'>('all');
+  const [filterLocation, setFilterLocation] = useState<string>('all');
   const [filterCodexOnly, setFilterCodexOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingHoldingId, setEditingHoldingId] = useState<string | null>(null);
@@ -94,7 +101,8 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
         icon: 'Beer',
         description: 'Eine gut besuchte Hafen-Taverne mit treuen Stammgästen und regelmäßigen Gerüchten.',
         level: 1,
-        ownerType: 'user',
+        ownerType: 'character',
+        assignedCharacterName: 'Wirtin Karin',
         incomePerInterval: 180,
         upkeepPerInterval: 40,
         staffCount: 6,
@@ -143,10 +151,12 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
       loreEntryId: loreId,
       name: `Neues ${preset.label.split('/')[0].trim()}`,
       type: preset.type,
+      category: preset.category,
       icon: preset.icon,
       description: preset.description,
       level: 1,
-      ownerType: 'user',
+      ownerType: 'character',
+      assignedCharacterName: 'Unbekannter Besitzer',
       incomePerInterval: preset.defaultIncome,
       upkeepPerInterval: preset.defaultUpkeep,
       staffCount: 5,
@@ -331,8 +341,75 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
     );
   };
 
+  const availableLocations = React.useMemo(() => {
+    const locMap = new Map<string, { id?: string; name: string; count: number }>();
+    
+    // 1. Territories (Siedlungen & Gebiete)
+    (world.territories || []).forEach(t => {
+      locMap.set(t.name.trim().toLowerCase(), { id: t.id, name: t.name, count: 0 });
+    });
+
+    // 2. Count matching holdings
+    economy.holdings.forEach(h => {
+      let matched = false;
+      if (h.locationId || h.territoryId) {
+        const id = h.locationId || h.territoryId;
+        const terr = (world.territories || []).find(t => t.id === id);
+        if (terr) {
+          const key = terr.name.trim().toLowerCase();
+          if (locMap.has(key)) {
+            locMap.get(key)!.count++;
+            matched = true;
+          }
+        }
+      }
+      if (!matched && h.locationName) {
+        const key = h.locationName.trim().toLowerCase();
+        if (locMap.has(key)) {
+          locMap.get(key)!.count++;
+        } else {
+          locMap.set(key, { name: h.locationName, count: 1 });
+        }
+      }
+    });
+
+    return Array.from(locMap.values())
+      .filter(l => l.count > 0 || (world.territories || []).some(t => t.name.toLowerCase() === l.name.toLowerCase()))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [world.territories, economy.holdings]);
+
   const filteredHoldings = economy.holdings.filter(h => {
     if (filterOwner !== 'all' && h.ownerType !== filterOwner) return false;
+
+    if (filterCategory !== 'all') {
+      const hCat = h.category || HOLDING_TYPES.find(t => t.type === h.type)?.category || 'betrieb';
+      if (filterCategory === 'dienstleistung') {
+        if (hCat !== 'dienstleistung' && !['herberge', 'hafenbetrieb', 'gasthaus'].includes(h.type)) return false;
+      } else {
+        if (hCat !== filterCategory) return false;
+      }
+    }
+
+    if (filterLocation !== 'all') {
+      const targetLoc = filterLocation.trim().toLowerCase();
+      const terrMatch = (world.territories || []).find(t => t.id === filterLocation);
+      const targetName = terrMatch ? terrMatch.name.trim().toLowerCase() : targetLoc;
+
+      const locId = h.locationId || h.territoryId;
+      const matchId = locId === filterLocation || (terrMatch && locId === terrMatch.id);
+      const matchName = (h.locationName || '').trim().toLowerCase() === targetName;
+      
+      // Also check if holding's associated territory matches
+      let matchTerr = false;
+      if (locId) {
+        const hTerr = (world.territories || []).find(t => t.id === locId);
+        if (hTerr && (hTerr.id === filterLocation || hTerr.name.trim().toLowerCase() === targetName)) {
+          matchTerr = true;
+        }
+      }
+
+      if (!matchId && !matchName && !matchTerr) return false;
+    }
 
     if (filterCodexOnly) {
       if (!isHoldingInCodex(h)) return false;
@@ -344,7 +421,8 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
       const locMatch = (h.locationName || '').toLowerCase().includes(q);
       const descMatch = (h.description || '').toLowerCase().includes(q);
       const typeMatch = (h.type || '').toLowerCase().includes(q);
-      return nameMatch || locMatch || descMatch || typeMatch;
+      const buildingMatch = (h.buildingName || '').toLowerCase().includes(q);
+      return nameMatch || locMatch || descMatch || typeMatch || buildingMatch;
     }
     return true;
   });
@@ -645,6 +723,94 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
               </div>
             )}
           </div>
+
+          {/* Aggregated Settlement & Regional Economy */}
+          <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl space-y-5 shadow-xl relative overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                  <LucideIcons.MapPin className="w-4 h-4 text-emerald-500" /> Siedlungs- & Ortswirtschaft (Aggregiert)
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Orte und Dörfer sind keine Betriebe – sie beherbergen Betriebe, Gebäude und eine aggregierte Gesamtwirtschaft.
+                </p>
+              </div>
+            </div>
+
+            {(() => {
+              const summaries = getAllTerritoriesEconomySummaries(world.territories || [], economy.holdings);
+              if (summaries.length === 0) {
+                return (
+                  <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-950/40 rounded-2xl border border-slate-800/60">
+                    Noch keine Siedlungen oder Gebiete mit zugewiesenen Betrieben vorhanden. Weisen Sie Betrieben ein Kartengebiet zu, um die Ortswirtschaft zu analysieren.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {summaries.map(summary => (
+                    <div key={summary.territoryId} className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400">
+                            <LucideIcons.Home className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-xs text-slate-100">{summary.territoryName}</div>
+                            <div className="text-[10px] text-slate-400">{summary.territoryType} • {summary.holdingsCount} {summary.holdingsCount === 1 ? 'Wirtschaftseinheit' : 'Wirtschaftseinheiten'}</div>
+                          </div>
+                        </div>
+                        <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg border ${
+                          summary.netBalance >= 0 
+                            ? 'text-emerald-400 bg-emerald-950/30 border-emerald-900/40' 
+                            : 'text-red-400 bg-red-950/30 border-red-900/40'
+                        }`}>
+                          {summary.netBalance >= 0 ? '+' : ''}{summary.netBalance} {economy.currencyIcon} / Intervall
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-center text-[10px] bg-slate-900/60 p-2 rounded-xl border border-slate-800/60">
+                        <div>
+                          <span className="text-slate-500 block">Einnahmen</span>
+                          <span className="text-slate-200 font-bold">{summary.totalIncome}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Kosten</span>
+                          <span className="text-slate-200 font-bold">{summary.totalUpkeep}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 block">Gesamtpersonal</span>
+                          <span className="text-slate-200 font-bold">{summary.totalStaff}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Ansässige Betriebe & Gebäude</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {summary.holdings.map(h => (
+                            <button
+                              key={h.id}
+                              type="button"
+                              onClick={() => {
+                                setEditingHoldingId(h.id);
+                                setMainTab('holdings');
+                                setActiveSubTab('details');
+                              }}
+                              className="text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-amber-400 border border-slate-800 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <HoldingIcon icon={h.icon || 'Building2'} className="w-3 h-3 text-amber-500" />
+                              <span>{h.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
         </div>
       )}
 
@@ -670,18 +836,33 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
 
               {/* Search & Filter */}
               <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
-                <div className="relative w-full sm:w-60">
+                <div className="relative w-full sm:w-56">
                   <LucideIcons.Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                   <input
                     type="text"
-                    placeholder="Betrieb oder Ort suchen..."
+                    placeholder="Betrieb, Gebäude oder Ort..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500"
                   />
                 </div>
 
-                <div className="w-full sm:w-52">
+                <div className="w-full sm:w-48">
+                  <select
+                    value={filterLocation}
+                    onChange={e => setFilterLocation(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+                  >
+                    <option value="all">Alle Standorte ({economy.holdings.length})</option>
+                    {availableLocations.map(loc => (
+                      <option key={loc.id || loc.name} value={loc.id || loc.name}>
+                        {loc.name} {loc.count > 0 ? `(${loc.count})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="w-full sm:w-48">
                   <select
                     value={filterOwner}
                     onChange={e => setFilterOwner(e.target.value as any)}
@@ -696,6 +877,36 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
               </div>
             </div>
 
+            {/* Category Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {[
+                { id: 'all', label: 'Alle', count: economy.holdings.length },
+                { id: 'betrieb', label: 'Betriebe & Handwerk', count: economy.holdings.filter(h => (h.category || 'betrieb') === 'betrieb').length },
+                { id: 'produktion', label: 'Produktion & Rohstoffe', count: economy.holdings.filter(h => h.category === 'produktion').length },
+                { id: 'handel', label: 'Handel & Logistik', count: economy.holdings.filter(h => h.category === 'handel').length },
+                { id: 'dienstleistung', label: 'Dienstleistung & Herbergen', count: economy.holdings.filter(h => h.category === 'dienstleistung' || ['herberge', 'hafenbetrieb', 'gasthaus'].includes(h.type)).length },
+                { id: 'gebaeude_anwesen', label: 'Gebäude & Anwesen', count: economy.holdings.filter(h => h.category === 'gebaeude_anwesen').length }
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => setFilterCategory(cat.id as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    filterCategory === cat.id
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <span>{cat.label}</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
+                    filterCategory === cat.id ? 'bg-amber-700 text-white' : 'bg-slate-900 text-slate-400'
+                  }`}>
+                    {cat.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+
             {/* Horizontal Grid / List of Business Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 max-h-[280px] overflow-y-auto pr-1 custom-scrollbar">
               {filteredHoldings.length === 0 ? (
@@ -706,6 +917,13 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                 filteredHoldings.map(holding => {
                   const isActive = activeHolding?.id === holding.id;
                   const net = (holding.incomePerInterval || 0) - (holding.upkeepPerInterval || 0);
+                  const catLabel = holding.category === 'gebaeude_anwesen' 
+                    ? 'Gebäude' 
+                    : holding.category === 'produktion'
+                    ? 'Produktion'
+                    : holding.category === 'handel'
+                    ? 'Handel'
+                    : 'Betrieb';
 
                   return (
                     <button
@@ -723,9 +941,14 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                           <HoldingIcon icon={holding.icon || 'Building2'} className="w-4 h-4 text-amber-500" />
                         </div>
                         <div className="min-w-0">
-                          <h5 className="font-bold text-xs truncate group-hover:text-amber-400 transition-colors">{holding.name}</h5>
+                          <div className="flex items-center gap-1.5">
+                            <h5 className="font-bold text-xs truncate group-hover:text-amber-400 transition-colors">{holding.name}</h5>
+                            <span className="text-[8px] uppercase tracking-wider px-1 py-0.2 rounded bg-slate-900 border border-slate-800 text-slate-400 shrink-0 font-mono">
+                              {catLabel}
+                            </span>
+                          </div>
                           <span className="text-[10px] text-slate-400 block truncate mt-0.5">
-                            Stufe {holding.level || 1} • {holding.locationName || 'Kein Standort'}
+                            Stufe {holding.level || 1} • {holding.locationName || 'Kein Ort'}{holding.buildingName ? ` (${holding.buildingName})` : ''}
                           </span>
                         </div>
                       </div>
