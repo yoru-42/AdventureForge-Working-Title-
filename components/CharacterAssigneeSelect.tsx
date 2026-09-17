@@ -74,11 +74,11 @@ export const CharacterAssigneeSelect: React.FC<CharacterAssigneeSelectProps> = (
           }
         }}
       >
-        <option value="">-- Unbesetzt / Vakant --</option>
+        <option value="">No-Name-Charakter (erhält erst im Chat Persönlichkeit)</option>
         <option value="Spieler">Spieler / Nutzer</option>
 
         {allKnownCharacters.length > 0 && (
-          <optgroup label="Bekannte Charaktere & Personen">
+          <optgroup label="Codex-Charaktere & NPCs">
             {allKnownCharacters.map(name => (
               <option key={name} value={name}>
                 {name}

@@ -1,5 +1,5 @@
 // -*- coding: utf-8 -*-
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   LoreEntry, 
   WorldSetting, 
@@ -12,10 +12,33 @@ import {
   ItemMainCategory, 
   STANDARD_UNITS, 
   RARITY_LEVELS, 
-  ITEM_CONDITION_OPTIONS 
+  ITEM_CONDITION_OPTIONS,
+  TYPICAL_PRODUCING_HOLDING_TYPES,
+  CRAFTING_PROFESSIONS,
+  MILITARY_SUPPLY_ROLES
 } from '../lib/itemCategoriesData';
-import { Sparkles, Save, X, Trash2, Link2, CheckCircle2, AlertCircle, Building2, Package } from 'lucide-react';
+import { 
+  Sparkles, 
+  Save, 
+  Trash2, 
+  Link2, 
+  CheckCircle2, 
+  AlertCircle, 
+  Building2, 
+  Package, 
+  Layers, 
+  Hammer, 
+  Coins,
+  Crosshair,
+  Compass,
+  Shield,
+  ArrowRight,
+  Boxes,
+  Database,
+  Workflow
+} from 'lucide-react';
 import { GeminiService } from '../services/geminiService';
+import { MonsterLootItem } from '../types';
 
 export interface ItemLoreFormProps {
   editForm: Partial<LoreEntry>;
@@ -42,8 +65,6 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
   onCancel,
   lore,
   onUpdateLore,
-  worldTitle,
-  isNsfw,
   world
 }) => {
   // Smart Fill state
@@ -53,15 +74,22 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
   const [appendMode, setAppendMode] = useState(true);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
+  // Codex collections
+  const monsterEntries = lore.filter(l => l.category === 'Gegner');
+  const locationEntries = lore.filter(l => l.category === 'Orte');
+
   // Active Category & Subcategory resolution
   const activeMainCat: ItemMainCategory = (editForm.details?.mainCategory as ItemMainCategory) || 'Rohstoffe';
   const categoryMeta = ITEM_MAIN_CATEGORIES.find(c => c.id === activeMainCat) || ITEM_MAIN_CATEGORIES[0];
   const activeSubCat: string = editForm.details?.subCategory || (categoryMeta.subcategories ? categoryMeta.subcategories[0] : '');
 
+  // Animal mode (Species vs Individual)
+  const isAnimalIndividual = editForm.details?.animalTypeClassification === 'individual';
+
   // Ensure initial defaults when category changes
   const handleMainCategoryChange = (newCat: ItemMainCategory) => {
     const meta = ITEM_MAIN_CATEGORIES.find(c => c.id === newCat) || ITEM_MAIN_CATEGORIES[0];
-    const newSubCat = meta.subcategories ? meta.subcategories[0] : '';
+    const newSubCat = meta.subcategories && meta.subcategories.length > 0 ? meta.subcategories[0] : '';
     setEditForm(prev => ({
       ...prev,
       category: 'Gegenstände',
@@ -132,13 +160,15 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         maxCapacity,
         unit,
         pricePerUnit,
-        condition
+        condition,
+        category: categoryMeta.economyCategory as any,
+        notes: editForm.description || r.notes
       } : r);
     } else {
       const newRes: EconomyResource = {
         id: `res-${holding.id}-${Date.now()}`,
         name: itemName,
-        category: categoryMeta.economyCategory,
+        category: categoryMeta.economyCategory as any,
         amount,
         maxCapacity,
         unit,
@@ -151,8 +181,106 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
 
     holding.resources = updatedResources;
     updateDetail('producingHoldingName', holding.name);
-    setSyncNotice(`Erfolgreich im Betriebsinventar von "${holding.name}" hinterlegt (${amount} ${unit}).`);
+    setSyncNotice(`Im Betriebsinventar von "${holding.name}" hinterlegt (${amount} ${unit}).`);
     setTimeout(() => setSyncNotice(null), 5000);
+  };
+
+  const handleSyncToMonsterCodex = () => {
+    if (!onUpdateLore) {
+      setSyncNotice('Keine Aktualisierungsfunktion verfügbar.');
+      setTimeout(() => setSyncNotice(null), 4000);
+      return;
+    }
+    const monsterTarget = editForm.details?.droppedByMonsterName || editForm.details?.chainMonsterOrigin;
+    if (!monsterTarget) {
+      setSyncNotice('Bitte wähle zuerst ein Monster aus oder gib einen Monsternamen ein.');
+      setTimeout(() => setSyncNotice(null), 4000);
+      return;
+    }
+    const targetMonster = monsterEntries.find(m => m.id === editForm.details?.droppedByMonsterId || m.title?.toLowerCase() === monsterTarget.toLowerCase());
+    const itemName = editForm.title?.trim() || 'Gegenstand';
+
+    if (targetMonster) {
+      const existingLoot: MonsterLootItem[] = targetMonster.details?.lootTable || [];
+      const isAlreadyIn = existingLoot.some(l => l.itemName.toLowerCase() === itemName.toLowerCase());
+      
+      const newLootEntry: MonsterLootItem = {
+        id: `loot-${Date.now()}`,
+        itemName,
+        itemId: editForm.id || `item-${Date.now()}`,
+        category: editForm.details?.mainCategory || 'Rohstoffe',
+        dropChance: typeof editForm.details?.dropChance === 'number' ? editForm.details.dropChance : (parseInt(String(editForm.details?.dropChance || '50'), 10) || 50),
+        isGuaranteed: editForm.details?.lootType === 'Standardbeute' || String(editForm.details?.dropChance).includes('100'),
+        minQuantity: 1,
+        maxQuantity: parseInt(String(editForm.details?.dropQuantityRange || '1').split('-').pop() || '1', 10) || 1,
+        unit: editForm.details?.unit || 'Stück',
+        harvestCondition: editForm.details?.dropConditions || '',
+        partType: (editForm.details?.harvestedBodyPart as any) || 'Sonstiges',
+        notes: `Ausbeute: ${editForm.details?.harvestedBodyPart || 'Körperteil'}`
+      };
+
+      const updatedLoot = isAlreadyIn
+        ? existingLoot.map(l => l.itemName.toLowerCase() === itemName.toLowerCase() ? { ...l, ...newLootEntry } : l)
+        : [...existingLoot, newLootEntry];
+
+      const updatedLore = lore.map(l => l.id === targetMonster.id ? {
+        ...l,
+        details: {
+          ...(l.details || {}),
+          lootTable: updatedLoot,
+          guaranteedDrops: updatedLoot.filter(x => x.isGuaranteed).map(x => x.itemName).join(', ') || l.details?.guaranteedDrops,
+          rareDrops: updatedLoot.filter(x => !x.isGuaranteed).map(x => `${x.itemName} (${x.dropChance}%)`).join(', ') || l.details?.rareDrops
+        }
+      } : l);
+
+      onUpdateLore(updatedLore);
+      updateDetail('droppedByMonsterId', targetMonster.id);
+      updateDetail('droppedByMonsterName', targetMonster.title);
+      setSyncNotice(`"${itemName}" erfolgreich im Monster-Codex bei "${targetMonster.title}" hinterlegt.`);
+      setTimeout(() => setSyncNotice(null), 5000);
+    } else {
+      setSyncNotice(`Monster "${monsterTarget}" wurde nicht im Codex gefunden. Bitte zuerst im Monster-Codex anlegen.`);
+      setTimeout(() => setSyncNotice(null), 5000);
+    }
+  };
+
+  const handleSyncToDungeonCodex = () => {
+    if (!onUpdateLore) {
+      setSyncNotice('Keine Aktualisierungsfunktion verfügbar.');
+      setTimeout(() => setSyncNotice(null), 4000);
+      return;
+    }
+    const dungeonTarget = editForm.details?.dungeonLocationName || editForm.details?.chainDungeonOrigin;
+    if (!dungeonTarget) {
+      setSyncNotice('Bitte wähle zuerst einen Dungeon oder Ort aus.');
+      setTimeout(() => setSyncNotice(null), 4000);
+      return;
+    }
+    const targetDungeon = locationEntries.find(loc => loc.id === editForm.details?.dungeonLocationId || loc.title?.toLowerCase() === dungeonTarget.toLowerCase());
+    const itemName = editForm.title?.trim() || 'Gegenstand';
+
+    if (targetDungeon) {
+      const existingResources = targetDungeon.details?.economicFocus || '';
+      const newFocus = existingResources ? (existingResources.includes(itemName) ? existingResources : `${existingResources}, ${itemName}`) : itemName;
+      
+      const updatedLore = lore.map(l => l.id === targetDungeon.id ? {
+        ...l,
+        details: {
+          ...(l.details || {}),
+          economicFocus: newFocus,
+          landmarks: l.details?.landmarks ? (l.details.landmarks.includes(itemName) ? l.details.landmarks : `${l.details.landmarks}; Vorkommen: ${itemName} (${editForm.details?.dungeonFloorLevel || 'Ebene 1'})`) : `Vorkommen: ${itemName}`
+        }
+      } : l);
+
+      onUpdateLore(updatedLore);
+      updateDetail('dungeonLocationId', targetDungeon.id);
+      updateDetail('dungeonLocationName', targetDungeon.title);
+      setSyncNotice(`"${itemName}" erfolgreich im Orts-/Dungeon-Codex bei "${targetDungeon.title}" hinterlegt.`);
+      setTimeout(() => setSyncNotice(null), 5000);
+    } else {
+      setSyncNotice(`Ort/Dungeon "${dungeonTarget}" wurde nicht im Codex gefunden. Bitte zuerst im Orts-Codex anlegen.`);
+      setTimeout(() => setSyncNotice(null), 5000);
+    }
   };
 
   // AI Smart Fill
@@ -219,7 +347,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
               {isEditing ? 'Gegenstand bearbeiten' : 'Neuer Eintrag: Gegenstände'}
             </h2>
             <p className="text-xs text-slate-400">
-              Kategorisierung, technische Eigenschaften und direkte Anbindung an Wirtschaft und Betriebe.
+              Kategorisierung, technische Eigenschaften, Produktionsketten und direkte Anbindung an Wirtschaft und Betriebe.
             </p>
           </div>
         </div>
@@ -263,7 +391,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
       </div>
 
       {/* Subcategory Pills if present */}
-      {categoryMeta.hasSubcategories && categoryMeta.subcategories && (
+      {categoryMeta.hasSubcategories && categoryMeta.subcategories && categoryMeta.subcategories.length > 0 && (
         <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
             Unterkategorie ({categoryMeta.label})
@@ -312,7 +440,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
           <AutoExpandingTextarea
             value={smartFillInput}
             onChange={e => setSmartFillInput(e.target.value)}
-            placeholder={`Beschreibe den Gegenstand (z.B. Herkunft, Material, Besonderheiten, Betrieb oder Verwendungszweck)...`}
+            placeholder={`Beschreibe den Gegenstand (Herkunft, Material, Funktion, Produktionskette, Betrieb oder Verwendungszweck)...`}
             minRows={2}
             className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-indigo-500"
           />
@@ -334,7 +462,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         )}
       </div>
 
-      {/* Core Attributes */}
+      {/* 1. Basis- & Stammdaten */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -383,7 +511,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       </div>
 
-      {/* Main Description */}
+      {/* 2. Hauptbeschreibung & Beschaffenheit */}
       <div>
         <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
           Hauptbeschreibung &amp; Beschaffenheit
@@ -398,7 +526,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* CATEGORY SPECIFIC FORM SECTIONS */}
+      {/* 3. KATEGORIE-SPEZIFISCHE DETAILFORMULARE */}
       {/* ========================================================================= */}
 
       {/* 1. ROHSTOFFE */}
@@ -557,7 +685,51 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 4. NAHRUNG */}
+      {/* 4. ALLTAGS- & HAUSHALTSGEGENSTÄNDE */}
+      {activeMainCat === 'Alltags- & Haushaltsgegenstände' && (
+        <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+              Alltags- &amp; Haushalts-Parameter ({activeSubCat || 'Gebrauchsartikel'})
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Haushaltsfunktion / Verwendungszweck</label>
+              <input
+                type="text"
+                value={editForm.details?.householdFunction || ''}
+                onChange={e => updateDetail('householdFunction', e.target.value)}
+                placeholder="z.B. Kochen, Beleuchtung, Aufbewahrung, Körperpflege"
+                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Material &amp; Fertigung</label>
+              <input
+                type="text"
+                value={editForm.details?.householdMaterial || ''}
+                onChange={e => updateDetail('householdMaterial', e.target.value)}
+                placeholder="z.B. Ton, Gusseisen, Zinn, gewachstes Leinen"
+                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Langlebigkeit &amp; Abnutzung</label>
+              <input
+                type="text"
+                value={editForm.details?.durability || ''}
+                onChange={e => updateDetail('durability', e.target.value)}
+                placeholder="z.B. Jahrelang haltbar, Verbrauchsartikel"
+                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. NAHRUNG */}
       {activeMainCat === 'Nahrung' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -612,7 +784,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 5. KLEIDUNG & TEXTILIEN */}
+      {/* 6. KLEIDUNG & TEXTILIEN */}
       {activeMainCat === 'Kleidung & Textilien' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -667,7 +839,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 6. WAFFEN */}
+      {/* 7. WAFFEN */}
       {activeMainCat === 'Waffen' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -744,7 +916,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 7. RÜSTUNG & SCHUTZAUSRÜSTUNG */}
+      {/* 8. RÜSTUNG & SCHUTZAUSRÜSTUNG */}
       {activeMainCat === 'Rüstung & Schutzausrüstung' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -799,7 +971,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 8. WERKZEUGE */}
+      {/* 9. WERKZEUGE */}
       {activeMainCat === 'Werkzeuge' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -843,7 +1015,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 9. LANDWIRTSCHAFT */}
+      {/* 10. LANDWIRTSCHAFT */}
       {activeMainCat === 'Landwirtschaft' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -887,56 +1059,138 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 10. TIERE */}
+      {/* 11. TIERE (Art / Rasse vs Einzeltier) */}
       {activeMainCat === 'Tiere' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
             <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
               Tierhaltung &amp; Nutzvieh-Eigenschaften
             </span>
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-0.5">
+              <button
+                type="button"
+                onClick={() => updateDetail('animalTypeClassification', 'species')}
+                className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                  !isAnimalIndividual ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Tierart / Rasse
+              </button>
+              <button
+                type="button"
+                onClick={() => updateDetail('animalTypeClassification', 'individual')}
+                className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-all cursor-pointer ${
+                  isAnimalIndividual ? 'bg-amber-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Konkretes Einzeltier
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rasse &amp; Verwendungszweck</label>
-              <input
-                type="text"
-                value={editForm.details?.animalRole || ''}
-                onChange={e => updateDetail('animalRole', e.target.value)}
-                placeholder="z.B. Streitross, Zugochse, Schlachtvieh, Wachhund"
-                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
-              />
+          {/* Einzeltier Form */}
+          {isAnimalIndividual ? (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Name des Tieres</label>
+                  <input
+                    type="text"
+                    value={editForm.details?.animalName || ''}
+                    onChange={e => updateDetail('animalName', e.target.value)}
+                    placeholder="z.B. Schattenwind, Bello, Donnerhuf"
+                    className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Alter &amp; Geschlecht</label>
+                  <input
+                    type="text"
+                    value={editForm.details?.animalAge || ''}
+                    onChange={e => updateDetail('animalAge', e.target.value)}
+                    placeholder="z.B. 5 Jahre, Hengst / Stute"
+                    className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Besitzer / Halter</label>
+                  <input
+                    type="text"
+                    value={editForm.details?.animalOwner || ''}
+                    onChange={e => updateDetail('animalOwner', e.target.value)}
+                    placeholder="z.B. Graf Aldor, Gestütsmeister, Spieler"
+                    className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ausbildungsstand &amp; Dressur</label>
+                  <input
+                    type="text"
+                    value={editForm.details?.animalTraining || ''}
+                    onChange={e => updateDetail('animalTraining', e.target.value)}
+                    placeholder="z.B. Schlachtross-Ausbildung, Jagdhund-Apportieren, Rohling"
+                    className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Besondere Eigenschaften &amp; Bindung</label>
+                  <input
+                    type="text"
+                    value={editForm.details?.animalPersonality || ''}
+                    onChange={e => updateDetail('animalPersonality', e.target.value)}
+                    placeholder="z.B. Schreckhaft bei Feuer, Treu ergeben, Sehr schnell"
+                    className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Futter- &amp; Pflegekosten pro Tag</label>
-              <input
-                type="text"
-                value={editForm.details?.dailyFeedCost || ''}
-                onChange={e => updateDetail('dailyFeedCost', e.target.value)}
-                placeholder="z.B. 0.5 Silber / Weidegang"
-                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
-              />
+          ) : (
+            /* Tierart / Rasse Form */
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rasse &amp; Verwendungszweck</label>
+                <input
+                  type="text"
+                  value={editForm.details?.animalRole || ''}
+                  onChange={e => updateDetail('animalRole', e.target.value)}
+                  placeholder="z.B. Streitross, Zugochse, Schlachtvieh, Wachhund"
+                  className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Futter- &amp; Pflegekosten pro Tag</label>
+                <input
+                  type="text"
+                  value={editForm.details?.dailyFeedCost || ''}
+                  onChange={e => updateDetail('dailyFeedCost', e.target.value)}
+                  placeholder="z.B. 0.5 Silber / Weidegang"
+                  className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Traglast / Zugkraft / Tempo</label>
+                <input
+                  type="text"
+                  value={editForm.details?.animalCapacity || ''}
+                  onChange={e => updateDetail('animalCapacity', e.target.value)}
+                  placeholder="z.B. 150 kg Traglast, Hohe Zugkraft"
+                  className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                />
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Traglast / Zugkraft / Tempo</label>
-              <input
-                type="text"
-                value={editForm.details?.animalCapacity || ''}
-                onChange={e => updateDetail('animalCapacity', e.target.value)}
-                placeholder="z.B. 150 kg Traglast, Hohe Zugkraft"
-                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
-              />
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* 11. TRANSPORTMITTEL */}
+      {/* 12. TRANSPORTMITTEL */}
       {activeMainCat === 'Transportmittel' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
             <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
-              Fahrzeug- &amp; Schiffsdaten
+              Fahrzeug- &amp; Transportdaten
             </span>
           </div>
 
@@ -952,12 +1206,22 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Fracht- &amp; Ladekapazität</label>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Passagierkapazität</label>
               <input
                 type="text"
-                value={editForm.details?.maxCapacity || ''}
-                onChange={e => updateDetail('maxCapacity', e.target.value)}
-                placeholder="z.B. 2 Tonnen Fracht, 6 Personen"
+                value={editForm.details?.passengerCapacity || ''}
+                onChange={e => updateDetail('passengerCapacity', e.target.value)}
+                placeholder="z.B. 6 Personen, 20 Passagiere"
+                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Frachtkapazität (Nutzlast)</label>
+              <input
+                type="text"
+                value={editForm.details?.cargoCapacity || ''}
+                onChange={e => updateDetail('cargoCapacity', e.target.value)}
+                placeholder="z.B. 1.5 Tonnen, 40 Kisten"
                 className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
               />
             </div>
@@ -971,13 +1235,36 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
                 className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Besatzungsbedarf</label>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Geschwindigkeit &amp; Reichweite</label>
+              <input
+                type="text"
+                value={editForm.details?.speedRange || ''}
+                onChange={e => updateDetail('speedRange', e.target.value)}
+                placeholder="z.B. 25 km/Tag, 8 Knoten"
+                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Mindestbesatzung</label>
               <input
                 type="text"
                 value={editForm.details?.minCrew || ''}
                 onChange={e => updateDetail('minCrew', e.target.value)}
-                placeholder="z.B. 1 Kutscher, 4 Ruderer"
+                placeholder="z.B. 1 Kutscher, 4 Ruderer, 10 Matrosen"
+                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Wartungszustand &amp; Robustheit</label>
+              <input
+                type="text"
+                value={editForm.details?.maintenanceCondition || ''}
+                onChange={e => updateDetail('maintenanceCondition', e.target.value)}
+                placeholder="z.B. Hochseetauglich, Verstärkte Achsen"
                 className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
               />
             </div>
@@ -985,7 +1272,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 12. MILITÄRBEDARF */}
+      {/* 13. MILITÄRBEDARF */}
       {activeMainCat === 'Militärbedarf' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -996,27 +1283,29 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Nachschubtyp</label>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Militärische Funktion / Rolle</label>
+              <select
+                value={editForm.details?.militarySupplyRole || MILITARY_SUPPLY_ROLES[0]}
+                onChange={e => updateDetail('militarySupplyRole', e.target.value)}
+                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              >
+                {MILITARY_SUPPLY_ROLES.map(role => (
+                  <option key={role} value={role}>{role}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Zuteilungsbedarf pro Soldat / Einheit</label>
               <input
                 type="text"
-                value={editForm.details?.militarySupplyType || ''}
-                onChange={e => updateDetail('militarySupplyType', e.target.value)}
-                placeholder="z.B. Pfeilbündel, Belagerungsmunition, Feldzelte"
+                value={editForm.details?.supplyPerUnit || ''}
+                onChange={e => updateDetail('supplyPerUnit', e.target.value)}
+                placeholder="z.B. 1 Bündel (20 Pfeile) pro Schütze / Tag"
                 className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
               />
             </div>
             <div>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Truppengattung / Verwendung</label>
-              <input
-                type="text"
-                value={editForm.details?.targetUnit || ''}
-                onChange={e => updateDetail('targetUnit', e.target.value)}
-                placeholder="z.B. Bogenschützen-Kompanie, Festungsgarnison"
-                className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
-              />
-            </div>
-            <div>
-              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Taktischer Nutzen / Kampfwert</label>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Taktischer Nutzen &amp; Kampfwert</label>
               <input
                 type="text"
                 value={editForm.details?.tacticalValue || ''}
@@ -1029,7 +1318,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 13. MEDIZIN */}
+      {/* 14. MEDIZIN */}
       {activeMainCat === 'Medizin' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -1073,7 +1362,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 14. HANDELSWAREN */}
+      {/* 15. HANDELSWAREN */}
       {activeMainCat === 'Handelswaren' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -1117,7 +1406,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 15. MAGISCHE GEGENSTÄNDE */}
+      {/* 16. MAGISCHE GEGENSTÄNDE */}
       {activeMainCat === 'Magische Gegenstände' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -1172,7 +1461,7 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
-      {/* 16. QUEST- / STORY-GEGENSTÄNDE */}
+      {/* 17. QUEST- / STORY-GEGENSTÄNDE */}
       {activeMainCat === 'Quest-/Story-Gegenstände' && (
         <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
@@ -1206,8 +1495,260 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       )}
 
+      {/* 18. MONSTER-BEUTE & DROPS */}
+      {activeMainCat === 'Monster-Beute & Drops' && (
+        <div className="bg-amber-950/20 border border-amber-800/60 rounded-xl p-4 flex flex-col gap-4">
+          <div className="flex items-center gap-2 border-b border-amber-900/50 pb-2">
+            <Crosshair className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+              Monsterbeute- &amp; Codex-Eigenschaften
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Erntbares Gewebe / Organ</label>
+              <input
+                type="text"
+                value={editForm.details?.harvestedBodyPart || ''}
+                onChange={e => updateDetail('harvestedBodyPart', e.target.value)}
+                placeholder="z.B. Drüse, Chitin, Giftzahn, Fell"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Dropchance &amp; Erntemenge</label>
+              <input
+                type="text"
+                value={editForm.details?.dropChance || ''}
+                onChange={e => updateDetail('dropChance', e.target.value)}
+                placeholder="z.B. 75%, 1-3 Stück"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Häufigste Beutekreatur</label>
+              <input
+                type="text"
+                value={editForm.details?.droppedByMonsterName || ''}
+                onChange={e => updateDetail('droppedByMonsterName', e.target.value)}
+                placeholder="z.B. Schattenwolf, Höhlenspinne"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 19. DUNGEON-VORKOMMEN & FUNDE */}
+      {activeMainCat === 'Dungeon-Vorkommen & Funde' && (
+        <div className="bg-sky-950/20 border border-sky-800/60 rounded-xl p-4 flex flex-col gap-4">
+          <div className="flex items-center gap-2 border-b border-sky-900/50 pb-2">
+            <Compass className="w-4 h-4 text-sky-400" />
+            <span className="text-xs font-bold text-sky-300 uppercase tracking-wider">
+              Dungeon- &amp; Fundort-Eigenschaften
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Dungeon / Fundort-Name</label>
+              <input
+                type="text"
+                value={editForm.details?.dungeonLocationName || ''}
+                onChange={e => updateDetail('dungeonLocationName', e.target.value)}
+                placeholder="z.B. Finsterwald-Krypta, Silbermine"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Fundquelle &amp; Ebene</label>
+              <input
+                type="text"
+                value={editForm.details?.dungeonFloorLevel || ''}
+                onChange={e => updateDetail('dungeonFloorLevel', e.target.value)}
+                placeholder="z.B. Ebene 1-2, Schatztruhe"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Abbauvoraussetzungen</label>
+              <input
+                type="text"
+                value={editForm.details?.dungeonAccessCondition || ''}
+                onChange={e => updateDetail('dungeonAccessCondition', e.target.value)}
+                placeholder="z.B. Spitzhacke Stufe 2, Dietrich"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 20. LOOT-QUELLEN & TROPHÄEN */}
+      {activeMainCat === 'Loot-Quellen & Trophäen' && (
+        <div className="bg-emerald-950/20 border border-emerald-800/60 rounded-xl p-4 flex flex-col gap-4">
+          <div className="flex items-center gap-2 border-b border-emerald-900/50 pb-2">
+            <Workflow className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
+              Ökologische Herkunft &amp; Sammel-Details
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Primärer Herkunftsort</label>
+              <input
+                type="text"
+                value={editForm.details?.originSourceType || ''}
+                onChange={e => updateDetail('originSourceType', e.target.value)}
+                placeholder="z.B. Jagd, Tiefseefischerei, Botanik, Ausgrabung"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Haltbarkeit &amp; Lagerung</label>
+              <input
+                type="text"
+                value={editForm.details?.sideEffects || ''}
+                onChange={e => updateDetail('sideEffects', e.target.value)}
+                placeholder="z.B. Frisch verarbeiten binnen 3 Tagen"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Erforderliche Werkzeuge</label>
+              <input
+                type="text"
+                value={editForm.details?.requiredTools || ''}
+                onChange={e => updateDetail('requiredTools', e.target.value)}
+                placeholder="z.B. Kürschnermesser, Spaten, Netz"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
-      {/* WIRTSCHAFTS- & MANAGEMENT-INTEGRATION */}
+      {/* 4. ECHTE PRODUKTIONSKETTEN & HANDWERKS-BEZIEHUNGEN */}
+      {/* ========================================================================= */}
+      <div className="bg-slate-950/50 border border-amber-900/30 rounded-xl p-4 sm:p-5 flex flex-col gap-4">
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+          <Hammer className="w-4 h-4 text-amber-400" />
+          <span className="text-xs sm:text-sm font-bold text-amber-300 uppercase tracking-wider">
+            Produktionskette &amp; Handwerks-Beziehungen
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Ausgangsstoffe / Hergestellt aus (Rohstoffe &amp; Komponenten)
+            </label>
+            <input
+              type="text"
+              value={editForm.details?.producedFrom || ''}
+              onChange={e => updateDetail('producedFrom', e.target.value)}
+              placeholder="z.B. Eisenerz, Steinkohle, Eichenholzbrett, Wolle"
+              className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Weiterverarbeitung zu / Verwendet für (Folgeprodukte)
+            </label>
+            <input
+              type="text"
+              value={editForm.details?.processedInto || ''}
+              onChange={e => updateDetail('processedInto', e.target.value)}
+              placeholder="z.B. Langschwerter, Kettenhemden, Baugerüste, Bier"
+              className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Benötigter Handwerksberuf
+            </label>
+            <input
+              type="text"
+              list="crafting-professions-list"
+              value={editForm.details?.requiredProfession || ''}
+              onChange={e => updateDetail('requiredProfession', e.target.value)}
+              placeholder="z.B. Schmied, Schreiner, Bäcker"
+              className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+            <datalist id="crafting-professions-list">
+              {CRAFTING_PROFESSIONS.map(p => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Benötigter Betriebstyp
+            </label>
+            <input
+              type="text"
+              list="holding-types-list"
+              value={editForm.details?.productionHoldingType || ''}
+              onChange={e => updateDetail('productionHoldingType', e.target.value)}
+              placeholder="z.B. Schmiede, Bäckerei, Sägewerk"
+              className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+            <datalist id="holding-types-list">
+              {TYPICAL_PRODUCING_HOLDING_TYPES.map(h => (
+                <option key={h} value={h} />
+              ))}
+            </datalist>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Benötigte Werkzeuge &amp; Stätte
+            </label>
+            <input
+              type="text"
+              value={editForm.details?.requiredTools || ''}
+              onChange={e => updateDetail('requiredTools', e.target.value)}
+              placeholder="z.B. Amboss & Schmiedehammer, Backofen"
+              className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Anfallende Nebenprodukte / Reste
+            </label>
+            <input
+              type="text"
+              value={editForm.details?.byproducts || ''}
+              onChange={e => updateDetail('byproducts', e.target.value)}
+              placeholder="z.B. Schlacke, Späne, Kleie, Asche"
+              className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Herstellungsdauer &amp; Aufwand
+            </label>
+            <input
+              type="text"
+              value={editForm.details?.productionTime || ''}
+              onChange={e => updateDetail('productionTime', e.target.value)}
+              placeholder="z.B. 4 Stunden, 1 Arbeitstag pro Charge"
+              className="w-full mt-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 5. WIRTSCHAFTS- & MANAGEMENT-INTEGRATION */}
       {/* ========================================================================= */}
       <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-700/60 rounded-xl p-4 sm:p-5 flex flex-col gap-4 shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
@@ -1357,7 +1898,425 @@ export const ItemLoreForm: React.FC<ItemLoreFormProps> = ({
         </div>
       </div>
 
-      {/* Verborgenes Wissen & Geheimnisse */}
+      {/* 6. Loot-Quellen, Monster-Drops, Dungeon-Vorkommen & Wertschöpfungskette */}
+      <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-amber-950/70 border border-amber-700/40 flex items-center justify-center text-amber-400 shrink-0">
+              <Crosshair className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-amber-400 uppercase tracking-wider block">
+                Loot-Quellen, Monster-Drops, Dungeon-Vorkommen &amp; Wertschöpfungskette
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Ökologische Herkunft, Verknüpfung mit Monster- und Dungeon-Einträgen sowie 5-stufige Produktionskette.
+              </span>
+            </div>
+          </div>
+          {syncNotice && (
+            <div className="text-xs text-amber-300 bg-amber-950/60 border border-amber-700/50 px-3 py-1 rounded-lg flex items-center gap-1.5 animate-fadeIn">
+              <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>{syncNotice}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Herkunftsart */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="sm:col-span-2">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Primäre Herkunftsart
+            </label>
+            <select
+              value={editForm.details?.originSourceType || 'Handwerk / Produktion'}
+              onChange={e => updateDetail('originSourceType', e.target.value)}
+              className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            >
+              <option value="Monsterbeute">Monsterbeute &amp; Jagdtrophäe (Kreaturen-Drop)</option>
+              <option value="Dungeon-Vorkommen">Dungeon- &amp; Höhlen-Vorkommen (Erzader / Fundort)</option>
+              <option value="Handwerk / Produktion">Handwerk &amp; Veredelung (Herstellung im Betrieb)</option>
+              <option value="Schatztruhe / Lager">Schatztruhe &amp; Ruinenlager (Beutekiste / Versteck)</option>
+              <option value="Landwirtschaft / Ernte">Landwirtschaft &amp; Natur (Feldfrüchte / Pflanzung)</option>
+              <option value="Handel / Import">Handel &amp; Fernimport (Karawanenware / Markt)</option>
+              <option value="Quest / Relikt">Quest- &amp; Einzigartiges Relikt (Handlungsgegenstand)</option>
+              <option value="Unterwasserbeute">Unterwasser- &amp; Ozean-Beute (Schiffswrack / Tiefsee)</option>
+              <option value="Wildnisfund">Natur- &amp; Wildnis-Fund (Botanisches Sammelgut)</option>
+              <option value="Ausgrabung">Spaten- &amp; Ausgrabungs-Fund (Archäologie / Relikt)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Beute-Klassifizierung
+            </label>
+            <select
+              value={editForm.details?.lootType || 'Standardbeute'}
+              onChange={e => updateDetail('lootType', e.target.value)}
+              className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            >
+              <option value="Standardbeute">Standardbeute (Garantierter / Häufiger Drop)</option>
+              <option value="Seltene Beute">Seltene Beute (Geringe Dropchance)</option>
+              <option value="Bedingte Beute">Bedingte Beute (Spezifische Tötungsart/Voraussetzung)</option>
+              <option value="Boss- / Spezialbeute">Boss- &amp; Spezialbeute (Einzigartiger Dungeonboss-Drop)</option>
+              <option value="Story- / Questbeute">Story- &amp; Questbeute (Handlungsbezogen)</option>
+              <option value="Saisonale Beute">Saisonale &amp; Wetterbedingte Beute (Phänomen / Ereignis)</option>
+              <option value="Magische Beute">Magisch Resonante Beute (Elementar / Arkane Aura)</option>
+              <option value="Mythische Beute">Legendäre &amp; Mythische Beute (Artefakt-Klasse)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Ausbeutbarer Körperteil / Quelle
+            </label>
+            <select
+              value={editForm.details?.harvestedBodyPart || 'Fell'}
+              onChange={e => updateDetail('harvestedBodyPart', e.target.value)}
+              className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+            >
+              <option value="Fell">Fell &amp; Pelz</option>
+              <option value="Leder / Haut">Leder, Haut &amp; Chitinpanzer</option>
+              <option value="Fleisch">Fleisch, Fett &amp; Innereien</option>
+              <option value="Knochen">Knochen, Schädel &amp; Rippen</option>
+              <option value="Horn / Geweih">Horn, Stoßzahn &amp; Geweih</option>
+              <option value="Zähne">Zähne &amp; Reißzähne</option>
+              <option value="Krallen">Krallen &amp; Klauen</option>
+              <option value="Schuppen">Schuppen &amp; Panzerplatten</option>
+              <option value="Drüsen">Drüsen, Sekrete &amp; Duftstoffe</option>
+              <option value="Giftorgan">Giftorgan, Giftstachel &amp; Toxine</option>
+              <option value="Federn">Federn &amp; Schwingen</option>
+              <option value="Blut">Blut &amp; Lebensessenz</option>
+              <option value="Kristallkern">Kristallkern &amp; Elementarherz</option>
+              <option value="Besonderes Organ">Besonderes Organ (z.B. Flammenbeutel, Kiemen)</option>
+              <option value="Ausrüstung / Beute">Getragene Ausrüstung / Gestohlene Beute</option>
+              <option value="Essenz">Essenz &amp; Auralicht</option>
+              <option value="Schimären-Gliedmaß">Schimären-Gliedmaß (Tentakel, Flügel, Greifer)</option>
+              <option value="Magie-Resonanzkern">Magie-Resonanzkern (Kristalliner Energiespeicher)</option>
+              <option value="Sonstiges">Sonstiger Bestandteil</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Verknüpfung Monster-Codex */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+              <Crosshair className="w-3.5 h-3.5" />
+              Monster-Codex Verknüpfung (Droppende Kreatur)
+            </span>
+            {onUpdateLore && (
+              <button
+                type="button"
+                onClick={handleSyncToMonsterCodex}
+                className="px-2.5 py-1 bg-amber-950/60 hover:bg-amber-900/80 border border-amber-700/50 text-amber-200 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+              >
+                <Link2 className="w-3 h-3" />
+                Im Monster-Codex als Drop hinterlegen
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Monster / Kreatur auswählen
+              </label>
+              <select
+                value={editForm.details?.droppedByMonsterId || ''}
+                onChange={e => {
+                  const sel = monsterEntries.find(m => m.id === e.target.value);
+                  updateDetail('droppedByMonsterId', e.target.value);
+                  if (sel) {
+                    updateDetail('droppedByMonsterName', sel.title);
+                    if (!editForm.details?.chainMonsterOrigin) {
+                      updateDetail('chainMonsterOrigin', sel.title);
+                    }
+                  }
+                }}
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              >
+                <option value="">-- Freier Name oder Auswahl --</option>
+                {monsterEntries.map(m => (
+                  <option key={m.id} value={m.id}>
+                    {m.title} ({m.details?.species || 'Kreatur'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Monster-Name (Freitext / Referenz)
+              </label>
+              <input
+                type="text"
+                value={editForm.details?.droppedByMonsterName || ''}
+                onChange={e => {
+                  updateDetail('droppedByMonsterName', e.target.value);
+                  if (!editForm.details?.chainMonsterOrigin) {
+                    updateDetail('chainMonsterOrigin', e.target.value);
+                  }
+                }}
+                placeholder="z.B. Schattenwolf, Höhlenspinne, Feuerdrache"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Dropchance &amp; Wahrscheinlichkeit
+              </label>
+              <input
+                type="text"
+                value={editForm.details?.dropChance !== undefined ? editForm.details.dropChance : '75%'}
+                onChange={e => updateDetail('dropChance', e.target.value)}
+                placeholder="z.B. 100% (Garantie), 65%, 15% (Selten)"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Erntemenge / Drop-Anzahl
+              </label>
+              <input
+                type="text"
+                value={editForm.details?.dropQuantityRange || '1 - 3'}
+                onChange={e => updateDetail('dropQuantityRange', e.target.value)}
+                placeholder="z.B. 1 - 2 Stück, 1 Fell, 50g"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Spezifische Ernte- &amp; Drop-Bedingungen
+            </label>
+            <AutoExpandingTextarea
+              value={editForm.details?.dropConditions || ''}
+              onChange={e => updateDetail('dropConditions', e.target.value)}
+              placeholder="z.B. Unbeschädigter Kadaver erforderlich; Gezielter Kehlenschnitt; Erfordert Kürschnermesser Stufe 2; Nur bei Vollmond oder im Winter..."
+              minRows={2}
+              className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+          </div>
+        </div>
+
+        {/* Verknüpfung Dungeon- & Fundort-Codex */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
+              <Compass className="w-3.5 h-3.5" />
+              Dungeon- &amp; Fundort-Codex Verknüpfung (Ortslogik)
+            </span>
+            {onUpdateLore && (
+              <button
+                type="button"
+                onClick={handleSyncToDungeonCodex}
+                className="px-2.5 py-1 bg-sky-950/60 hover:bg-sky-900/80 border border-sky-700/50 text-sky-200 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+              >
+                <Link2 className="w-3 h-3" />
+                Im Orts-/Dungeon-Codex als Ressource hinterlegen
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Dungeon / Ort auswählen
+              </label>
+              <select
+                value={editForm.details?.dungeonLocationId || ''}
+                onChange={e => {
+                  const sel = locationEntries.find(loc => loc.id === e.target.value);
+                  updateDetail('dungeonLocationId', e.target.value);
+                  if (sel) {
+                    updateDetail('dungeonLocationName', sel.title);
+                    if (!editForm.details?.chainDungeonOrigin) {
+                      updateDetail('chainDungeonOrigin', sel.title);
+                    }
+                  }
+                }}
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+              >
+                <option value="">-- Freier Name oder Auswahl --</option>
+                {locationEntries.map(loc => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.title} ({loc.details?.type || 'Ort'})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Dungeon- / Fundort-Name
+              </label>
+              <input
+                type="text"
+                value={editForm.details?.dungeonLocationName || ''}
+                onChange={e => {
+                  updateDetail('dungeonLocationName', e.target.value);
+                  if (!editForm.details?.chainDungeonOrigin) {
+                    updateDetail('chainDungeonOrigin', e.target.value);
+                  }
+                }}
+                placeholder="z.B. Finsterwald-Krypta, Alte Silbermine"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Fundquelle im Dungeon
+              </label>
+              <select
+                value={editForm.details?.dungeonSourceType || 'Monster-Drop'}
+                onChange={e => updateDetail('dungeonSourceType', e.target.value)}
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+              >
+                <option value="Monster-Drop">Monster-Drop (Kreaturenbeute)</option>
+                <option value="Schatztruhe">Schatztruhe &amp; Beutekiste</option>
+                <option value="Erzader / Natürliches Vorkommen">Erzader / Natürliches Vorkommen</option>
+                <option value="Verstecktes Lager">Verstecktes Lager / Geheimraum</option>
+                <option value="Leichen / Trümmer">Leichen / Trümmer vergangener Abenteurer</option>
+                <option value="Boss-Kammer">Boss-Kammer (Abschlussbelohnung)</option>
+                <option value="Quest-Objekt">Quest-Objekt / Story-Fund</option>
+                <option value="Fallen-Mechanismus">Fallen- &amp; Altar-Mechanismus (Ausgelöster Fund)</option>
+                <option value="Unterwassersee">Unterwasser- &amp; Höhlensee (Versunkener Schatz)</option>
+                <option value="Magischer Riss">Magischer Riss &amp; Arkaner Altar (Erscheinung)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Ebene / Dungeon-Bereich
+              </label>
+              <input
+                type="text"
+                value={editForm.details?.dungeonFloorLevel || 'Ebene 1-2'}
+                onChange={e => updateDetail('dungeonFloorLevel', e.target.value)}
+                placeholder="z.B. Ebene 1-2, Tiefste Krypta, Schatzkammer"
+                className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Fund- &amp; Abbauvoraussetzungen
+            </label>
+            <input
+              type="text"
+              value={editForm.details?.dungeonAccessCondition || ''}
+              onChange={e => updateDetail('dungeonAccessCondition', e.target.value)}
+              placeholder="z.B. Spitzhacke erforderlich; Verschlossene Eisentruhe (Dietrich Stufe 2); Arkane Barriere..."
+              className="w-full mt-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500"
+            />
+          </div>
+        </div>
+
+        {/* 5-Stufige Wertschöpfungskette */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+              <Workflow className="w-3.5 h-3.5" />
+              Vollständige 5-Stufen Wertschöpfungskette (Dungeon → Monster → Rohstoff → Handwerk → Endprodukt)
+            </span>
+            <span className="text-[10px] text-slate-400">
+              Systemkette nach Abschlusskriterium
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2.5">
+            {/* Stufe 1: Dungeon */}
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">
+                1. Dungeon / Habitat
+              </span>
+              <input
+                type="text"
+                value={editForm.details?.chainDungeonOrigin || editForm.details?.dungeonLocationName || ''}
+                onChange={e => updateDetail('chainDungeonOrigin', e.target.value)}
+                placeholder="z.B. Finsterwald"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-sky-500"
+              />
+              <span className="text-[10px] text-slate-400">Wo die Kreatur lebt / Vorkommen</span>
+            </div>
+
+            {/* Stufe 2: Monster */}
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
+                2. Monster / Kreatur
+              </span>
+              <input
+                type="text"
+                value={editForm.details?.chainMonsterOrigin || editForm.details?.droppedByMonsterName || ''}
+                onChange={e => updateDetail('chainMonsterOrigin', e.target.value)}
+                placeholder="z.B. Schattenwolf"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-amber-500"
+              />
+              <span className="text-[10px] text-slate-400">Droppendes Wesen</span>
+            </div>
+
+            {/* Stufe 3: Rohstoff */}
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                3. Beute / Rohstoff
+              </span>
+              <input
+                type="text"
+                value={editForm.details?.chainRawResource || editForm.title || ''}
+                onChange={e => updateDetail('chainRawResource', e.target.value)}
+                placeholder="z.B. Wolfsfell"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-emerald-500"
+              />
+              <span className="text-[10px] text-slate-400">Dieser Codex-Gegenstand</span>
+            </div>
+
+            {/* Stufe 4: Handwerker & Betrieb */}
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                4. Beruf &amp; Betrieb
+              </span>
+              <input
+                type="text"
+                value={editForm.details?.chainRefiningProfession || editForm.details?.requiredProfession || ''}
+                onChange={e => updateDetail('chainRefiningProfession', e.target.value)}
+                placeholder="z.B. Gerber / Kürschner"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-indigo-500"
+              />
+              <input
+                type="text"
+                value={editForm.details?.chainRefiningHolding || editForm.details?.productionHoldingType || ''}
+                onChange={e => updateDetail('chainRefiningHolding', e.target.value)}
+                placeholder="Betrieb: z.B. Gerberei"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            {/* Stufe 5: Endprodukt */}
+            <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">
+                5. Endprodukt &amp; Handel
+              </span>
+              <input
+                type="text"
+                value={editForm.details?.chainEndProduct || editForm.details?.processedInto || ''}
+                onChange={e => updateDetail('chainEndProduct', e.target.value)}
+                placeholder="z.B. Wolfslederrüstung"
+                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-purple-500"
+              />
+              <span className="text-[10px] text-slate-400">Ausrüstung / Ware für Handel</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 7. Geheimnis-Stufen & Verborgenes Wissen */}
       <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
         <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">
           Geheimnis-Stufen &amp; Verborgenes Wissen

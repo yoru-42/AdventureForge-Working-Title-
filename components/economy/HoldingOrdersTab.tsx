@@ -11,7 +11,7 @@ export const HoldingOrdersTab: React.FC<HoldingOrdersTabProps> = ({
   holding,
   onUpdateHolding
 }) => {
-  const orders = holding.orders || [];
+  const orders = Array.isArray(holding.orders) ? holding.orders : [];
 
   const handleAddOrder = () => {
     const newOrder: EconomyOrder = {

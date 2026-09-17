@@ -28,6 +28,7 @@ import { WorldNpcsManager } from './WorldNpcsManager';
 import { WorldStoryManager } from './WorldStoryManager';
 import { WorldMapEditor } from './WorldMapEditor';
 import { InteractiveWorldMap } from './InteractiveWorldMap';
+import { CharacterInventorySection } from './CharacterInventorySection';
 import { TacticalCanvasEditor } from './TacticalCanvasEditor';
 import { EconomyManager } from './EconomyManager';
 import { normalizeOnePieceWorldGeometry, normalizeWorldGeometry, formatDisplayLocationName } from '../utils/mapUtils';
@@ -576,7 +577,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   };
 
   const [player, setPlayer] = useState<Character>(getDefaultPlayerState());
-  const [playerCharTab, setPlayerCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente'>('profil');
+  const [playerCharTab, setPlayerCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('profil');
 
   const [step4SubTab, setStep4SubTab] = useState<'interactive' | 'worldmap' | 'tactical'>('interactive');
   const [customCombatState, setCustomCombatState] = useState<any>(() => {
@@ -3908,87 +3909,144 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
           {step === 6 && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="flex justify-between items-center flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-slate-100">Gestalte deinen Charakter</h3>
-                  {structuredInventory && (
-                    <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-full text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 animate-pulse" title="Ausrüstung und Tascheninhalte wurden erfolgreich aus der Charakter-Beschreibung extrahiert!">
-                      <i className="fa-solid fa-circle text-[6px]"></i> Inventar Geladen
-                    </span>
-                  )}
+              {/* Header */}
+              <div className="flex justify-between items-center flex-wrap gap-4 border-b border-slate-800 pb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                      <i className="fa-solid fa-user-gear text-sm"></i>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base sm:text-lg font-bold text-slate-100">Gestalte deinen Charakter</h3>
+                      {structuredInventory && (
+                        <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-full text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 animate-pulse" title="Ausrüstung und Tascheninhalte wurden erfolgreich aus der Charakter-Beschreibung extrahiert!">
+                          <i className="fa-solid fa-circle text-[6px]"></i> Inventar Geladen
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Gestalte Erscheinung, Biografie, Persönlichkeit, Beziehungen und Kampffähigkeiten dieses Charakters.
+                  </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+
+                <div className="flex items-center gap-2 flex-wrap">
                   {userProfile && (
-                    <button onClick={handleImportFromProfile} className="px-3 py-1.5 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-slate-700 transition-all">
-                      <i className="fa-solid fa-user-check"></i> Vom Profil laden
+                    <button
+                      type="button"
+                      onClick={handleImportFromProfile}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold border border-slate-700 flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <i className="fa-solid fa-user-check"></i>
+                      <span>Vom Profil laden</span>
                     </button>
                   )}
-                  <button onClick={handleGeneratePlayer} disabled={isGeneratingChar} className="px-3 py-1.5 bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-indigo-600/30 transition-all">
-                    <i className={`fa-solid ${isGeneratingChar ? 'fa-spinner animate-spin' : 'fa-wand-magic-sparkles'}`}></i> KI Held
+                  <button
+                    type="button"
+                    onClick={handleGeneratePlayer}
+                    disabled={isGeneratingChar}
+                    className="px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg text-xs font-bold border border-amber-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    {isGeneratingChar ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-wand-magic-sparkles"></i>}
+                    <span>KI Charakter</span>
                   </button>
-                  <button onClick={handleGeneratePlayerPortrait} disabled={isGeneratingPortrait || !player.name} className="px-3 py-1.5 bg-amber-600/20 border border-amber-500/30 text-amber-500 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-amber-600/30 transition-all">
-                    <i className={`fa-solid ${isGeneratingPortrait ? 'fa-spinner animate-spin' : 'fa-image'}`}></i> KI Portrait
+                  <button
+                    type="button"
+                    onClick={handleGeneratePlayerPortrait}
+                    disabled={isGeneratingPortrait || !player.name}
+                    className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg text-xs font-bold border border-indigo-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    {isGeneratingPortrait ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-image"></i>}
+                    <span>KI Portrait</span>
                   </button>
-                  <button onClick={handleExtractInventory} disabled={isExtractingInventory || !player.name} className="px-3 py-1.5 bg-emerald-600/20 border border-emerald-500/30 text-emerald-500 rounded-lg text-[10px] font-bold flex items-center gap-2 hover:bg-emerald-600/30 transition-all" title="Extrahiert Waffen, Kleidung und Tascheninhalte aus deinen Charakterdaten">
-                    <i className={`fa-solid ${isExtractingInventory ? 'fa-spinner animate-spin' : 'fa-briefcase'}`}></i> KI Inventar
+                  <button
+                    type="button"
+                    onClick={handleExtractInventory}
+                    disabled={isExtractingInventory || !player.name}
+                    className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-lg text-xs font-bold border border-emerald-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="Extrahiert Waffen, Kleidung und Tascheninhalte aus deinen Charakterdaten"
+                  >
+                    {isExtractingInventory ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-briefcase"></i>}
+                    <span>KI Inventar</span>
                   </button>
                 </div>
               </div>
 
-              {/* Tab Navigation for Character Creation */}
-              <div className="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 shadow-xl gap-1">
+              {/* 5 Main Tabs */}
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setPlayerCharTab('profil')}
-                  className={`flex-1 py-3 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
                     playerCharTab === 'profil'
-                      ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 shadow-lg font-black scale-[1.01]'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                      ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
-                  <i className="fa-solid fa-id-card text-sm"></i>
-                  <span>1. Profil & Aussehen</span>
+                  <i className="fa-solid fa-user-gear"></i>
+                  <span>1. Profil &amp; Aussehen</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setPlayerCharTab('beziehungen')}
-                  className={`flex-1 py-3 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
                     playerCharTab === 'beziehungen'
-                      ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 shadow-lg font-black scale-[1.01]'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                      ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
-                  <i className="fa-solid fa-people-arrows text-sm"></i>
-                  <span>2. Beziehungen</span>
-                  {player.relationships && player.relationships.length > 0 && (
-                    <span className="px-1.5 py-0.5 text-[9px] bg-slate-900/80 border border-amber-500/30 text-amber-400 rounded-full font-bold">
-                      {player.relationships.length}
+                  <i className="fa-solid fa-people-arrows"></i>
+                  <span>2. Beziehungen, Motivation &amp; Ziele</span>
+                  {((player.relationships && player.relationships.length > 0) || (player.goals && player.goals.length > 0)) && (
+                    <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${playerCharTab === 'beziehungen' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-400'}`}>
+                      {(player.relationships?.length || 0) + (player.goals?.length || 0)}
                     </span>
                   )}
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setPlayerCharTab('kampffaehigkeiten')}
-                  className={`flex-1 py-3 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
                     playerCharTab === 'kampffaehigkeiten'
-                      ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 shadow-lg font-black scale-[1.01]'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                      ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
-                  <i className="fa-solid fa-wand-magic-sparkles text-sm"></i>
+                  <i className="fa-solid fa-bolt"></i>
                   <span>3. Kampffähigkeiten</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setPlayerCharTab('beruf_talente')}
-                  className={`flex-1 py-3 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
                     playerCharTab === 'beruf_talente'
-                      ? 'bg-gradient-to-r from-amber-600 to-amber-500 text-slate-950 shadow-lg font-black scale-[1.01]'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+                      ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
-                  <i className="fa-solid fa-briefcase text-sm"></i>
-                  <span>4. Berufe & Talente</span>
+                  <i className="fa-solid fa-graduation-cap"></i>
+                  <span>4. Berufe &amp; Talente</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPlayerCharTab('besitz_inventar')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+                    playerCharTab === 'besitz_inventar'
+                      ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                  }`}
+                >
+                  <i className="fa-solid fa-briefcase"></i>
+                  <span>5. Besitz / Inventar</span>
+                  {((structuredInventory?.customItems?.length || 0) > 0 || (structuredInventory?.weapons?.length || 0) > 0) && (
+                    <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${playerCharTab === 'besitz_inventar' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-400'}`}>
+                      {(structuredInventory?.customItems?.length || 0) + (structuredInventory?.weapons?.length || 0)}
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -4606,332 +4664,24 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 />
               </div>
 
-              {/* Ausrüstung & Inventar (Detailzuordnung) - standalone */}
-              <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-xl space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <i className="fa-solid fa-briefcase text-sky-400 text-sm"></i>
-                        <div>
-                          <span className="text-xs text-slate-200 font-bold uppercase tracking-wider block">Ausrüstung & Inventar</span>
-                          <span className="text-[10px] text-slate-500 block">Bestimmt das detaillierte Start-Inventar im Logbuch.</span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleExtractInventory}
-                        disabled={isExtractingInventory || !player.name}
-                        className="px-2 py-1 bg-sky-600/20 border border-sky-500/30 text-sky-400 rounded hover:bg-sky-600/30 transition-all flex items-center gap-1.5 text-[9.5px] font-bold"
-                        title="Analysiert das obige 'Kleidung / Outfit' Feld und befüllt die Slots automatisch neu"
-                      >
-                        <i className={`fa-solid ${isExtractingInventory ? 'fa-spinner animate-spin' : 'fa-wand-magic-sparkles'}`}></i>
-                        Aus Outfit extrahieren
-                      </button>
-                    </div>
-
-                    {/* Inventory Form Fields */}
-                    <div className="space-y-4">
-                      {/* Kleidung & Rüstung */}
-                      <div className="space-y-2">
-                        <span className="text-[10px] text-sky-400 font-extrabold uppercase tracking-wide flex items-center gap-1.5">
-                          <i className="fa-solid fa-shirt"></i> Kleidung & Rüstung
-                        </span>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Kopf</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Kopfbedeckung"
-                              value={structuredInventory?.armor?.head || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const armor = inv.armor || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  armor: { ...armor, head: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Brust / Torso</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Oberbekleidung"
-                              value={structuredInventory?.armor?.chest || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const armor = inv.armor || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  armor: { ...armor, chest: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Hände</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Handschuhe"
-                              value={structuredInventory?.armor?.hands || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const armor = inv.armor || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  armor: { ...armor, hands: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Beine</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Beinkleidung"
-                              value={structuredInventory?.armor?.legs || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const armor = inv.armor || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  armor: { ...armor, legs: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div className="col-span-2 sm:col-span-1">
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Füße</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Schuhwerk"
-                              value={structuredInventory?.armor?.feet || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const armor = inv.armor || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  armor: { ...armor, feet: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Schmuck & Accessoires */}
-                      <div className="space-y-2">
-                        <span className="text-[10px] text-sky-400 font-extrabold uppercase tracking-wide flex items-center gap-1.5">
-                          <i className="fa-solid fa-gem"></i> Schmuck & Accessoires
-                        </span>
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Finger</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Ringe"
-                              value={structuredInventory?.accessories?.finger || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const acc = inv.accessories || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  accessories: { ...acc, finger: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Hals</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Ketten, Amulette"
-                              value={structuredInventory?.accessories?.neck || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const acc = inv.accessories || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  accessories: { ...acc, neck: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Handgelenke</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Armreifen"
-                              value={structuredInventory?.accessories?.wrist || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const acc = inv.accessories || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  accessories: { ...acc, wrist: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Taille</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Gürtel, Schärpen"
-                              value={structuredInventory?.accessories?.waist || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const acc = inv.accessories || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  accessories: { ...acc, waist: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                          <div className="col-span-2 sm:col-span-1">
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Rücken</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Umhänge, Taschen"
-                              value={structuredInventory?.accessories?.back || ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                const acc = inv.accessories || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  accessories: { ...acc, back: e.target.value }
-                                });
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Finanzen, Waffen & Sonstiges */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-800/60 pt-3">
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Geld</label>
-                            <input
-                              type="number"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500 font-mono font-bold"
-                              value={structuredInventory?.money ?? 100}
-                              onChange={e => {
-                                const newMoney = parseInt(e.target.value) || 0;
-                                const inv = structuredInventory || {};
-                                const currLabel = inv.currencyLabel || (world.title.toLowerCase().includes('one piece') ? 'Berry' : 'Goldstücke');
-                                setStructuredInventory({
-                                  ...inv,
-                                  money: newMoney
-                                });
-                                setStatusElements(prev => prev.map(s => {
-                                  const l = (s.label || '').toLowerCase();
-                                  if (l.includes('vermögen') || l.includes('geld') || l.includes('gold') || l.includes('währung') || l.includes('münzen') || l.includes('berry') || l.includes('credits')) {
-                                    return { ...s, value: `${newMoney} ${currLabel}`.trim() };
-                                  }
-                                  return s;
-                                }));
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Währung</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="Berry"
-                              value={structuredInventory?.currencyLabel || ''}
-                              onChange={e => {
-                                const newCurr = e.target.value;
-                                const inv = structuredInventory || {};
-                                const currentMoney = inv.money ?? 100;
-                                setStructuredInventory({
-                                  ...inv,
-                                  currencyLabel: newCurr
-                                });
-                                setStatusElements(prev => prev.map(s => {
-                                  const l = (s.label || '').toLowerCase();
-                                  if (l.includes('vermögen') || l.includes('geld') || l.includes('gold') || l.includes('währung') || l.includes('münzen') || l.includes('berry') || l.includes('credits')) {
-                                    return { ...s, value: `${currentMoney} ${newCurr}`.trim() };
-                                  }
-                                  return s;
-                                }));
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <div>
-                            <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Waffen (kommagetrennt)</label>
-                            <input
-                              type="text"
-                              className="w-full bg-slate-950 border border-slate-850 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                              placeholder="z.B. Holzschwert"
-                              value={structuredInventory?.weapons ? structuredInventory.weapons.join(', ') : ''}
-                              onChange={e => {
-                                const inv = structuredInventory || {};
-                                setStructuredInventory({
-                                  ...inv,
-                                  weapons: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                                });
-                              }}
-                            />
-                          </div>
-
-                          {/* Synced Codex Items for the Player */}
-                          {(() => {
-                            const pName = player?.name || 'Spieler';
-                            const isOwnerMatch = (owner?: string) => {
-                              if (!owner) return false;
-                              const o = owner.trim().toLowerCase();
-                              const p = pName.trim().toLowerCase();
-                              return o === p || o === 'spieler' || o === 'player' || (player?.nickname && o === player.nickname.trim().toLowerCase());
-                            };
-                            const codexPlayerItems = loreDatabase.filter(entry => 
-                              entry.category === 'Gegenstände' && isOwnerMatch(entry.details?.owner)
-                            );
-
-                            if (codexPlayerItems.length === 0) return null;
-
-                            return (
-                              <div className="bg-slate-950/70 border border-amber-500/20 rounded-lg p-2 mt-1">
-                                <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1 mb-1.5">
-                                  <i className="fa-solid fa-scroll text-amber-500 text-[8px]"></i>
-                                  Aus Codex verknüpft (Besitzer: {pName}):
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {codexPlayerItems.map((item, iIdx) => (
-                                    <span 
-                                      key={item.id || `codex-itm-${iIdx}`} 
-                                      className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-slate-200 flex items-center gap-1"
-                                      title={`${item.title} (${item.details?.itemType || 'Gegenstand'}): ${item.description}`}
-                                    >
-                                      <i className="fa-solid fa-shield-halved text-amber-400 text-[8px]"></i>
-                                      <span className="font-semibold">{item.title}</span>
-                                      {item.details?.itemType && (
-                                        <span className="text-[8px] text-amber-400/70">({item.details.itemType})</span>
-                                      )}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      </div>
+                {/* Quick-Link to Tab 5: Besitz & Inventar */}
+                <div className="p-3.5 bg-slate-900/30 border border-slate-800 rounded-xl flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <i className="fa-solid fa-briefcase text-amber-400 text-sm"></i>
+                    <div>
+                      <span className="text-xs font-bold text-slate-200 block">Besitz, Ausrüstung &amp; Spezial-Gegenstände</span>
+                      <span className="text-[11px] text-slate-400 block">Waffen, Katanas, Rüstungsteile, Finanzen und Inventar-Slots werden in Tab 5 verwaltet.</span>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setPlayerCharTab('besitz_inventar')}
+                    className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <span>Zu Besitz / Inventar</span>
+                    <i className="fa-solid fa-arrow-right text-[10px]"></i>
+                  </button>
+                </div>
  
               <div className="grid grid-cols-1 gap-4">
                 <AutoExpandingTextarea className="w-full bg-slate-800 border border-slate-700 rounded-lg p-4 text-white min-h-[64px] text-sm outline-none focus:ring-1 focus:ring-amber-500" placeholder={activeTransformation ? `Persönlichkeit (${activeTransformation.transformName || activeTransformation.name})...` : "Persönlichkeit (z.B. mutig, stur, humorvoll)..."} value={getPlayerPersonality()} onChange={e => updatePlayerPersonality(e.target.value)} />
@@ -5085,6 +4835,10 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                         baseAbilities={baseAbilities}
                         techniques={techniques}
                         progressionLogic={world?.techniqueProgressionLogic || 'ep'}
+                        world={world}
+                        worldPowerSettings={world?.campaignPowerSettings}
+                        costResources={world?.costResources}
+                        costPowerNames={world?.costPowerNames}
                         onChange={(newPs, newBa, newTech) => {
                           const updatedPlayer = syncCharacterAbilityTree(player, newPs, newBa, newTech);
                           setPlayer(updatedPlayer as Character);
@@ -5171,6 +4925,35 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       onToolsAndEquipmentChange={val => setPlayer(prev => ({ ...prev, toolsAndEquipment: val }))}
                     />
                   </div>
+                </div>
+              )}
+
+              {/* TAB 5: BESITZ / INVENTAR */}
+              {playerCharTab === 'besitz_inventar' && (
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  <CharacterInventorySection
+                    structuredInventory={structuredInventory}
+                    onChangeStructuredInventory={inv => {
+                      setStructuredInventory(inv);
+                      if (inv.money !== undefined) {
+                        const currLabel = inv.currencyLabel || (world.title?.toLowerCase().includes('one piece') ? 'Berry' : 'Goldstücke');
+                        setStatusElements(prev => prev.map(s => {
+                          const l = (s.label || '').toLowerCase();
+                          if (l.includes('vermögen') || l.includes('geld') || l.includes('gold') || l.includes('währung') || l.includes('münzen') || l.includes('berry') || l.includes('credits')) {
+                            return { ...s, value: `${inv.money} ${currLabel}`.trim() };
+                          }
+                          return s;
+                        }));
+                      }
+                    }}
+                    characterName={player.name || 'Spieler'}
+                    characterOutfit={getAppearanceValue('outfit')}
+                    lore={loreDatabase}
+                    onUpdateLore={setLoreDatabase}
+                    world={world}
+                    isExtractingInventory={isExtractingInventory}
+                    onExtractInventory={handleExtractInventory}
+                  />
                 </div>
               )}
             </div>

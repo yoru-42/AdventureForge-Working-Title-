@@ -4193,14 +4193,14 @@ const LoreDatabaseView: React.FC<Props> = ({
                     </div>
 
                     <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                      {lore.filter(l => l.category === 'Orte').map((place) => {
+                      {lore.filter(l => l.category === 'Orte').map((place, placeIdx) => {
                         if (!place.details?.coordinates) return null;
                         const parent = lore.find(p => p.id === place.details?.parentPlaceId || p.title === place.details?.parentPlaceId);
                         if (!parent || !parent.details?.coordinates) return null;
                         
                         return (
                           <line
-                            key={`conn-${place.id}-${parent.id}`}
+                            key={`conn-${place.id}-${parent.id}-${placeIdx}`}
                             x1={`${place.details.coordinates.x}%`}
                             y1={`${place.details.coordinates.y}%`}
                             x2={`${parent.details.coordinates.x}%`}
@@ -4213,9 +4213,9 @@ const LoreDatabaseView: React.FC<Props> = ({
                         );
                       })}
 
-                      {combatEffects.map(eff => (
+                      {combatEffects.map((eff, effIdx) => (
                         <circle
-                          key={`eff-circle-${eff.id}`}
+                          key={`eff-circle-${eff.id}-${effIdx}`}
                           cx={`${eff.x}%`}
                           cy={`${eff.y}%`}
                           r={`${eff.radius * 2}%`}
@@ -4227,9 +4227,9 @@ const LoreDatabaseView: React.FC<Props> = ({
                       ))}
                     </svg>
 
-                    {combatEffects.map(eff => (
+                    {combatEffects.map((eff, effIdx) => (
                       <div
-                        key={`eff-marker-${eff.id}`}
+                        key={`eff-marker-${eff.id}-${effIdx}`}
                         style={{
                           left: `${eff.x}%`,
                           top: `${eff.y}%`,
@@ -4260,7 +4260,7 @@ const LoreDatabaseView: React.FC<Props> = ({
                       </div>
                     ))}
 
-                    {lore.filter(l => l.category === 'Orte').map((node) => {
+                    {lore.filter(l => l.category === 'Orte').map((node, nodeIdx) => {
                       const lvl = node.details?.mapLevel || 'meso';
                       let isVisible = false;
                       if (mapZoomLevel === 'macro') isVisible = lvl === 'macro';
@@ -4276,7 +4276,7 @@ const LoreDatabaseView: React.FC<Props> = ({
 
                       return (
                         <div
-                          key={node.id}
+                          key={`${node.id}-${nodeIdx}`}
                           data-node="true"
                           onPointerDown={(e) => {
                             e.stopPropagation();

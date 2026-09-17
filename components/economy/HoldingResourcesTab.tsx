@@ -25,7 +25,7 @@ export const HoldingResourcesTab: React.FC<HoldingResourcesTabProps> = ({
   currencyIcon,
   onUpdateHolding
 }) => {
-  const resources = holding.resources || [];
+  const resources = Array.isArray(holding.resources) ? holding.resources : [];
 
   const handleAddResource = () => {
     const newRes: EconomyResource = {

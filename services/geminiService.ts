@@ -5321,13 +5321,48 @@ ${existingEntry.details.eventSteps.map((s: any, idx: number) => `    ${idx + 1}.
         contextPrompt += `
 Für Gegenstände / Items (STRENGSTE DIRECTIVE & HIERARCHIE):
 - HIERARCHISCHE KATEGORISIERUNG:
-  Weise dem Gegenstand zwingend eine passende Hauptkategorie ('mainCategory') und ggf. Unterkategorie ('subCategory') zu:
-  1. 'Rohstoffe' (Unterkategorien: 'Erz', 'Holz', 'Stein', 'Pflanzen', 'Tierische Rohstoffe')
-  2. 'Materialien & Zwischenprodukte' (Unterkategorien: 'Barren', 'Bretter', 'Stoff', 'Leder', 'Verarbeitete Materialien')
-  3. 'Produkte' (Unterkategorien: 'Lebensmittel', 'Werkzeuge', 'Möbel', 'Handwerksprodukte')
-  4. 'Nahrung', 'Kleidung & Textilien', 'Waffen', 'Rüstung & Schutzausrüstung', 'Werkzeuge', 'Landwirtschaft', 'Tiere', 'Transportmittel', 'Militärbedarf', 'Medizin', 'Handelswaren', 'Magische Gegenstände', 'Quest-/Story-Gegenstände'
+  Weise dem Gegenstand zwingend eine passende Hauptkategorie ('mainCategory') und Unterkategorie ('subCategory') zu:
+  1. 'Rohstoffe' (z.B. 'Metallerze', 'Edelmetalle & Edelsteine', 'Bau- & Nutzholz', 'Pflanzen, Fasern & Kräuter', 'Tierische Rohstoffe', 'Steine, Erden & Mineralien', 'Harze, Pech & Naturstoffe')
+  2. 'Materialien & Zwischenprodukte' (z.B. 'Barren & Metallhalbzeuge', 'Bretter & Bauholz', 'Stoffe, Garne & Seile', 'Leder, Pergament & Felle', 'Platten, Nägel & Beschläge', 'Glas, Keramik & Ton', 'Papier, Tinte & Schreibstoffe', 'Legierungen & Veredelte Metalle', 'Verarbeitete Materialien')
+  3. 'Produkte' (z.B. 'Handwerksprodukte', 'Fertigwaren', 'Gebrauchswaren', 'Manufakturwaren')
+  4. 'Alltags- & Haushaltsgegenstände' (z.B. 'Geschirr & Kochgeschirr', 'Beleuchtung (Lampen, Kerzen, Laternen)', 'Möbel & Einrichtungsgegenstände', 'Haushaltsgeräte & Reinigungsutensilien', 'Hygiene, Seifen & Waschmittel', 'Schreib- & Dokumentenbedarf', 'Behälter, Truhen & Gefäße', 'Bettzeug & Textile Haushaltswaren')
+  5. 'Nahrung' (z.B. 'Frischwaren & Grundnahrungsmittel', 'Brot & Backwaren', 'Fleisch- & Wurstwaren', 'Fisch & Meeresfrüchte', 'Milch- & Käseprodukte', 'Konserven & Dauerproviant', 'Getränke & Brauereiprodukte', 'Gewürzte Speisen & Delikatessen')
+  6. 'Kleidung & Textilien' (z.B. 'Alltagskleidung', 'Arbeits- & Schutzkleidung', 'Berufsbekleidung', 'Militäruniformen & Truppenkleidung', 'Festkleidung & Trachten', 'Adels- & Zeremoniengewänder', 'Schuhe, Stiefel & Schuhwerk', 'Mäntel, Umhänge & Wetterkleidung', 'Kopfbedeckungen & Hüte', 'Stoffwaren & Meterware')
+  7. 'Waffen' (z.B. 'Schwerter & Klingen', 'Dolche & Messer', 'Äxte & Beile', 'Hämmer & Streitkolben', 'Stangenwaffen & Speere', 'Bögen & Pfeile', 'Armbrüste & Bolzen', 'Feuerwaffen & Schwarzpulverwaffen', 'Wurfwaffen', 'Belagerungswaffen & Geschütze', 'Magische & Runenwaffen')
+  8. 'Rüstung & Schutzausrüstung' (z.B. 'Helme & Kopfschutz', 'Brustpanzer & Kürasse', 'Schilde & Parierschilde', 'Arm- & Handschutz', 'Bein- & Fußschienen', 'Leichte Rüstung', 'Mittlere Rüstung', 'Schwere Rüstung', 'Vollständige Rüstungsgarnituren', 'Spezial- & Elementarschutz')
+  9. 'Werkzeuge' (z.B. 'Schmiedewerkzeuge', 'Holzbearbeitung & Schreinerei', 'Steinbearbeitung & Maurerei', 'Bergbau & Steinbruch', 'Landwirtschaft & Erntewerkzeuge', 'Kochen & Küchenwerkzeuge', 'Fischerei & Fanggerät', 'Jagd & Fallenbau', 'Baugewerbe & Zimmerei', 'Medizin- & Wundarztbesteck', 'Schreib- & Feinmechanikerwerkzeug')
+  10. 'Landwirtschaft' (z.B. 'Saatgut & Saatgetreide', 'Pflanzgut & Setzlinge', 'Dünger & Bodenhilfsstoffe', 'Futtermittel & Silage', 'Landwirtschaftliche Hilfsstoffe', 'Landwirtschaftliche Arbeitsmittel & Gespanne')
+  11. 'Tiere' (z.B. 'Nutztiere & Stallvieh', 'Reittiere', 'Lasttiere & Packtiere', 'Zugtiere', 'Zuchttiere', 'Schlachtvieh', 'Wachtiere & Schutztiere', 'Jagd- & Spürtiere', 'Arbeitstiere', 'Exotische & Fantastische Tiere')
+  12. 'Transportmittel' (z.B. 'Landfahrzeuge', 'Wasserfahrzeuge', 'Luftfahrzeuge', 'Magische & Besondere Transportmittel', 'Reit- & Zugtier-Zubehör')
+  13. 'Militärbedarf' (z.B. 'Munition', 'Belagerungsbedarf & Geschützmunition', 'Feldlager-Ausrüstung', 'Signal- & Kommunikationsmittel', 'Truppenbedarf, Rationen & Feldführung', 'Militärische Marschausrüstung')
+  14. 'Medizin' (z.B. 'Heilkräuter & Naturmedizin', 'Tinkturen & Elixiere', 'Salben & Balsame', 'Gegengifte & Neutralisatoren', 'Verbände, Schienen & Wundversorgung', 'Pharmazeutika & Arzneien')
+  15. 'Handelswaren' (z.B. 'Gewürze & Kolonialwaren', 'Luxusgüter, Schmuck & Edelsteine', 'Salz & Konservierungsgüter', 'Edeltuche, Seide & Samt', 'Tee, Kaffee & Tabakwaren', 'Handelsballen & Fernhandelsgüter')
+  16. 'Magische Gegenstände' (z.B. 'Verzauberte Waffen & Rüstungen', 'Artefakte & Relikte', 'Fokussteine, Kristalle & Zauberstäbe', 'Schriftrollen & Zauberformeln', 'Zaubertränke & Alchemie', 'Magische Ringe, Amulette & Talismane', 'Wundersame Alltagsartefakte')
+  17. 'Quest-/Story-Gegenstände' (z.B. 'Schlüssel, Dietriche & Öffnungswerkzeuge', 'Siegel, Wappen & Amtsurkunden', 'Geheime Dokumente, Tagebücher & Pergamente', 'Beweisstücke, Indizien & Tatwerkzeuge', 'Relikte & Familienerbstücke', 'Einzigartige Handlungs-Unikate')
+- PRODUKTIONSKETTEN & HANDWERKS-BEZIEHUNGEN:
+  Befülle logisch: 'producedFrom' (Ausgangsrohstoffe/Materialien), 'processedInto' (Weiterverarbeitung), 'productionHoldingType' (z.B. Schmiede, Mühle, Weberei, Bauernhof), 'requiredProfession' (z.B. Schmied, Bäcker, Gerber), 'requiredTools' (benötigtes Werkzeug), 'byproducts' (anfallende Nebenprodukte) und 'productionTime'.
+- LOOT, MONSTER-DROPS & DUNGEON-VORKOMMEN (KREATUREN- & DUNGEON-VERKNÜPFUNGEN):
+  Falls es sich um einen tierischen/monster-basierten Rohstoff, Jagdbeute, Dungeon-Loot oder eine Höhlenressource handelt:
+  * 'originSourceType': Art der Herkunft (z.B. 'Monsterbeute', 'Dungeon-Vorkommen', 'Handwerk / Produktion', 'Schatztruhe / Lager', 'Landwirtschaft / Ernte', 'Handel / Import', 'Quest / Relikt').
+  * 'droppedByMonsterName': Name des droppenden Monsters/der Kreatur (z.B. 'Schattenwolf', 'Feuerdrache', 'Höhlenspinne').
+  * 'harvestedBodyPart': Geernteter Körperteil/Organ (z.B. 'Fell', 'Leder / Haut', 'Fleisch', 'Knochen', 'Horn / Geweih', 'Zähne', 'Krallen', 'Schuppen', 'Drüsen', 'Giftorgan', 'Federn', 'Blut', 'Kristallkern', 'Besonderes Organ', 'Ausrüstung / Beute').
+  * 'lootType': Beutekategorie ('Standardbeute', 'Seltene Beute', 'Bedingte Beute', 'Boss- / Spezialbeute', 'Story- / Questbeute').
+  * 'dropChance': Droprate / Wahrscheinlichkeit (z.B. '75%', '100% (Garantierter Drop)', '15%').
+  * 'dropQuantityRange': Erntemenge (z.B. '1 - 3 Stück').
+  * 'dropConditions': Ernte-/Drop-Bedingungen (z.B. 'Unbeschädigter Kadaver', 'Gezielter Schnitt am Nacken', 'Erfordert Alchemie-Werkzeug', 'Nur bei Nacht').
+  * 'dungeonLocationName': Vorkommender Dungeon / Ort (z.B. 'Finsterwald-Krypta', 'Alte Silbermine', 'Drachenhort').
+  * 'dungeonFloorLevel': Ebene / Bereich (z.B. 'Ebene 2 (Tiefkeller)', 'Königliche Grabkammer').
+  * 'dungeonSourceType': Fundquelle ('Monster-Drop', 'Schatztruhe', 'Erzader / Natürliches Vorkommen', 'Verstecktes Lager', 'Leichen / Trümmer', 'Boss-Kammer', 'Quest-Objekt').
+  * 'dungeonAccessCondition': Fundvoraussetzung (z.B. 'Spitzhacke erforderlich', 'Verschlossene Eisentruhe').
+- VOLLSTÄNDIGE 5-STUFIGE WERTSCHÖPFUNGSKETTE:
+  * 'chainDungeonOrigin': 1. Dungeon / Habitat (z.B. 'Finsterwald / Schattenhöhle')
+  * 'chainMonsterOrigin': 2. Monster / Kreatur (z.B. 'Schattenwolf')
+  * 'chainRawResource': 3. Beute / Rohstoff (dieser Gegenstand, z.B. 'Wolfsfell')
+  * 'chainRefiningProfession': 4. Handwerksberuf (z.B. 'Gerber & Kürschner')
+  * 'chainRefiningHolding': 4b. Betrieb (z.B. 'Gerberei')
+  * 'chainEndProduct': 5. Endprodukt & Handel (z.B. 'Gehärteter Wolfslederpanzer')
 - WIRTSCHAFTS- & MARKT-DATEN:
-  Befülle Standard-Einheit ('unit', z.B. 'Stück', 'kg', 'Portionen'), Richtpreis ('pricePerUnit' in Gold), Zustand ('condition') und Lagermenge ('stockAmount').
+  Befülle Standard-Einheit ('unit', z.B. 'Stück', 'kg', 'Portionen', 'Säcke'), Richtpreis ('pricePerUnit' in Gold), Zustand ('condition') und Lagermenge ('stockAmount').
 - FOKUS AUF DEN GEGENSTAND SELBST: Der Fokus muss vollkommen auf dem Gegenstand selbst liegen (Form, Beschaffenheit, Funktionsweise, Material, historische Herkunft).
 - EINZIGARTIGKEIT & AUFENTHALTSORT (isUnique & currentLocation): Bestimme zwingend, ob der Gegenstand ein einzigartiges Unikat, ein seltenes Einzelstück oder Massenware ist, sowie seinen aktuellen Aufenthaltsort/Verbleib.
 - ABSOLUT KEINE ZUKÜNFTIGEN INHALTE: Es dürfen keinerlei zukünftige Quests oder Story-Ereignisse vorweggenommen werden.
@@ -5658,19 +5693,44 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
         requiredFields.push("originHabitat", "distinctiveFeatures", "socialStructure");
       } else if (category === 'Gegenstände') {
         Object.assign(detailsProperties, {
-          mainCategory: { type: Type.STRING, description: "Hauptkategorie (z.B. 'Rohstoffe', 'Materialien & Zwischenprodukte', 'Produkte', 'Nahrung', 'Kleidung & Textilien', 'Waffen', 'Rüstung & Schutzausrüstung', 'Werkzeuge', 'Landwirtschaft', 'Tiere', 'Transportmittel', 'Militärbedarf', 'Medizin', 'Handelswaren', 'Magische Gegenstände', 'Quest-/Story-Gegenstände')." },
-          subCategory: { type: Type.STRING, description: "Unterkategorie (z.B. 'Erz', 'Holz', 'Stein', 'Barren', 'Bretter', 'Stoff', 'Leder', 'Lebensmittel', 'Werkzeuge', 'Möbel')." },
+          mainCategory: { type: Type.STRING, description: "Hauptkategorie (z.B. 'Rohstoffe', 'Materialien & Zwischenprodukte', 'Produkte', 'Alltags- & Haushaltsgegenstände', 'Nahrung', 'Kleidung & Textilien', 'Waffen', 'Rüstung & Schutzausrüstung', 'Werkzeuge', 'Landwirtschaft', 'Tiere', 'Transportmittel', 'Militärbedarf', 'Medizin', 'Handelswaren', 'Magische Gegenstände', 'Quest-/Story-Gegenstände')." },
+          subCategory: { type: Type.STRING, description: "Unterkategorie passend zur Hauptkategorie." },
           itemType: { type: Type.STRING, description: "Gegenstandsart oder Typbezeichnung." },
           isUnique: { type: Type.STRING, description: "Einzigartigkeit (z. B. 'Unikat / Legendär', 'Seltenes Einzelstück', 'Regionale Spezialität' oder 'Massenware / Standard')." },
           currentLocation: { type: Type.STRING, description: "Aktueller Aufenthaltsort / Verbleib in der Welt." },
           rarity: { type: Type.STRING, description: "Seltenheitswert (z. B. 'Gewöhnlich / Alltäglich', 'Solide / Gehoben', 'Selten / Hochwertig', 'Meisterlich / Kostbar', 'Legendär / Einzigartig')." },
-          unit: { type: Type.STRING, description: "Standard-Mengeneinheit (z.B. 'Stück', 'kg', 'Portionen', 'Flaschen', 'Säcke')." },
+          unit: { type: Type.STRING, description: "Standard-Mengeneinheit (z.B. 'Stück', 'kg', 'Portionen', 'Flaschen', 'Säcke', 'Tiere', 'Fahrzeuge')." },
           pricePerUnit: { type: Type.NUMBER, description: "Richtpreis / Handelswert in Goldmünzen." },
+          costPrice: { type: Type.NUMBER, description: "Herstellungskosten in Goldmünzen." },
           stockAmount: { type: Type.NUMBER, description: "Standard-Lagermenge in Betrieben." },
           maxCapacity: { type: Type.NUMBER, description: "Maximale Lagerkapazität oder Transportkapazität." },
           condition: { type: Type.STRING, description: "Zustand (z.B. 'exzellent', 'gut', 'knapp', 'beschaedigt')." },
-          effects: { type: Type.STRING, description: "Wirkungen / Magische Effekte / Kampfeigenschaften." },
-          producingHoldingName: { type: Type.STRING, description: "Produzierender oder lagernder Betrieb in der Welt." }
+          effects: { type: Type.STRING, description: "Wirkungen / Magische Effekte / Kampfeigenschaften / Gebrauchsfunktion." },
+          producedFrom: { type: Type.STRING, description: "Benötigte Ausgangsstoffe / Rohstoffe für die Herstellung." },
+          processedInto: { type: Type.STRING, description: "Mögliche Weiterverarbeitung zu Folgeprodukten." },
+          productionHoldingType: { type: Type.STRING, description: "Benötigter Betriebstyp zur Herstellung (z.B. Schmiede, Bäckerei, Mühle, Sägewerk, Weberei)." },
+          requiredProfession: { type: Type.STRING, description: "Benötigter Handwerksberuf (z.B. Schmied, Bäcker, Weber, Alchemist)." },
+          requiredTools: { type: Type.STRING, description: "Benötigte Werkzeuge oder Ausrüstung zur Herstellung." },
+          byproducts: { type: Type.STRING, description: "Anfallende Nebenprodukte bei der Herstellung." },
+          productionTime: { type: Type.STRING, description: "Herstellungsdauer und Arbeitsaufwand." },
+          producingHoldingName: { type: Type.STRING, description: "Produzierender oder lagernder Betrieb in der Welt." },
+          originSourceType: { type: Type.STRING, description: "Herkunftsart ('Monsterbeute', 'Dungeon-Vorkommen', 'Handwerk / Produktion', 'Schatztruhe / Lager', 'Landwirtschaft / Ernte', 'Handel / Import', 'Quest / Relikt')." },
+          droppedByMonsterName: { type: Type.STRING, description: "Name des droppenden Monsters / der Jagdbeute." },
+          harvestedBodyPart: { type: Type.STRING, description: "Geernteter Körperteil / Organ (z.B. Fell, Knochen, Schuppen, Drüsen, Giftorgan, Kristallkern, Fleisch)." },
+          lootType: { type: Type.STRING, description: "Beutekategorie ('Standardbeute', 'Seltene Beute', 'Bedingte Beute', 'Boss- / Spezialbeute', 'Story- / Questbeute')." },
+          dropChance: { type: Type.STRING, description: "Droprate oder Wahrscheinlichkeit (z.B. '65%')." },
+          dropQuantityRange: { type: Type.STRING, description: "Erntemenge (z.B. '1 - 3 Stück')." },
+          dropConditions: { type: Type.STRING, description: "Bedingungen für den Drop / die Ernte." },
+          dungeonLocationName: { type: Type.STRING, description: "Vorkommender Dungeon / Ort." },
+          dungeonFloorLevel: { type: Type.STRING, description: "Ebene oder Areal im Dungeon." },
+          dungeonSourceType: { type: Type.STRING, description: "Fundquelle im Dungeon ('Monster-Drop', 'Schatztruhe', 'Erzader / Natürliches Vorkommen', 'Verstecktes Lager', 'Leichen / Trümmer', 'Boss-Kammer', 'Quest-Objekt')." },
+          dungeonAccessCondition: { type: Type.STRING, description: "Fund- oder Abbauvoraussetzung." },
+          chainDungeonOrigin: { type: Type.STRING, description: "Kettenglied 1: Dungeon / Habitat." },
+          chainMonsterOrigin: { type: Type.STRING, description: "Kettenglied 2: Monster / Kreatur." },
+          chainRawResource: { type: Type.STRING, description: "Kettenglied 3: Beute / Rohstoff (dieser Gegenstand)." },
+          chainRefiningProfession: { type: Type.STRING, description: "Kettenglied 4: Verarbeitender Handwerker (z.B. Gerber, Schmied)." },
+          chainRefiningHolding: { type: Type.STRING, description: "Kettenglied 4b: Verarbeitender Betrieb." },
+          chainEndProduct: { type: Type.STRING, description: "Kettenglied 5: Endprodukt / Handelsware." }
         });
         requiredFields.push("mainCategory", "itemType", "isUnique", "rarity");
       } else if (category === 'Verbotenes Wissen') {
@@ -6508,6 +6568,64 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
       });
 
       return this.parseJSONSafely(response.text || '{}', {});
+    });
+  }
+
+  static async generateCustomItem(
+    itemPrompt: string,
+    world?: WorldSetting,
+    characterName?: string
+  ): Promise<any> {
+    return this.callWithRetry(async () => {
+      const ai = this.getAI();
+      const worldContext = world ? `Spielwelt: "${world.title}" (${world.era || 'Fantasy'}, ${world.description || ''})` : 'Fantasy / RPG Spielwelt';
+      const charContext = characterName ? `Besitzer / Träger: "${characterName}"` : '';
+      const prompt = `Du bist ein Item- und Ausrüstungs-Designer für ein anspruchsvolles Text-RPG.
+${worldContext}
+${charContext}
+
+Aufgabe: Entwirf einen detaillierten, maßgeschneiderten Gegenstand (z.B. ein besonderes Katana wie Muramasa oder Kiku-ichimonji, magische Rüstung, Schmuckstücke, Relikte oder Spezialwaffen).
+Benutzer-Wunsch / Konzept: "${itemPrompt || 'Ein besonderer, meisterhafter Gegenstand'}"
+
+Gib ein valides JSON-Objekt mit folgendem Schema zurück:
+{
+  "name": "Name des Gegenstands",
+  "category": "Waffen",
+  "subCategory": "z.B. Katana, Langschwert, Amulett, Plattenharnisch, Robe",
+  "slot": "weapon",
+  "rarity": "Selten",
+  "quality": "z.B. Meisterlich geschmiedet, Makellos, Uralt",
+  "material": "z.B. Gefalteter Tamahagane-Stahl, Sternensilber, Drachenleder",
+  "weight": "1.2 kg",
+  "value": 500,
+  "durability": "100 / 100",
+  "description": "Detaillierte Beschreibung des Aussehens, Klingenform/Verarbeitung und Haptik.",
+  "specialEffects": "Besondere Effekte, Schnittwind, Status-Effekte oder Boni.",
+  "combatStats": {
+    "damage": "z.B. 1d10+4 (Schlitzen & Schatten)",
+    "damageType": "z.B. Schlitzen / Dunkelheit",
+    "defense": "z.B. +8 Rüstung",
+    "range": "z.B. Nahkampf (1.2m)",
+    "scalingStat": "z.B. Geschicklichkeit & Schärfe"
+  },
+  "enchantments": "Verzauberungen, Runen oder magische Eigenschaften.",
+  "originHistory": "Herkunft, Schmied oder Legende hinter dem Gegenstand.",
+  "requirements": "Bedingungen zur Nutzung (z.B. Geschick 14 oder Schwertmeister)"
+}`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      const parsed = this.parseJSONSafely(response.text || '{}', {});
+      if (!parsed.id) {
+        parsed.id = 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      }
+      return parsed;
     });
   }
 

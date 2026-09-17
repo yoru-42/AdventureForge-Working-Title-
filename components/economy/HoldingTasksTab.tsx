@@ -11,17 +11,28 @@ export const HoldingTasksTab: React.FC<HoldingTasksTabProps> = ({
   holding,
   onUpdateHolding
 }) => {
-  const tasks = holding.tasks || [];
-  const duties = holding.duties || [];
+  const tasks = Array.isArray(holding.tasks) ? holding.tasks : [];
+  const duties = Array.isArray(holding.duties) ? holding.duties : [];
   const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
 
-  // Collect responsibilities and duties defined in roles and staff groups
-  const roleResponsibilities = (holding.roles || []).flatMap(r =>
-    (r.responsibilities || []).map(resp => ({ source: r.name, text: resp, assignee: r.assignedToName }))
-  );
-  const groupDuties = (holding.staffGroups || []).flatMap(g =>
-    (g.duties || []).map(duty => ({ source: g.roleName, text: duty, count: g.count }))
-  );
+  // Collect responsibilities and duties defined in roles and staff groups safely
+  const roleResponsibilities = (Array.isArray(holding.roles) ? holding.roles : []).flatMap(r => {
+    const resps = Array.isArray(r.responsibilities)
+      ? r.responsibilities
+      : typeof r.responsibilities === 'string' && (r.responsibilities as string).trim()
+        ? (r.responsibilities as string).split('\n').map(s => s.trim()).filter(Boolean)
+        : [];
+    return resps.map(resp => ({ source: r.name, text: resp, assignee: r.assignedToName }));
+  });
+
+  const groupDuties = (Array.isArray(holding.staffGroups) ? holding.staffGroups : []).flatMap(g => {
+    const dutiesList = Array.isArray(g.duties)
+      ? g.duties
+      : typeof g.duties === 'string' && (g.duties as string).trim()
+        ? (g.duties as string).split('\n').map(s => s.trim()).filter(Boolean)
+        : [];
+    return dutiesList.map(duty => ({ source: g.roleName, text: duty, count: g.count }));
+  });
   const totalDefinedInStaff = roleResponsibilities.length + groupDuties.length;
 
   // Handler to sync staff responsibilities into duties

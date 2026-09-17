@@ -48,10 +48,10 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Schmiedejunge & Essegehilfe',
+        name: 'Schmiedejunge',
         tier: 'einstieg',
         rankOrder: 0,
-        rankTitle: 'Einstieg & Essegehilfe',
+        rankTitle: 'Einstieg & Grundausbildung',
         description: 'Einstieg in das Schmiedehandwerk: Esse schüren, Blasebalg bedienen und Eisen zuschlagen.',
         suggestedCompetencies: ['Esse regulieren', 'Blasebalgführung', 'Zuschlaghammer führen', 'Werkstoffkunde Metall'],
         possibleRanks: ['Schmiedejunge', 'Essegehilfe', 'Ambossanwärter'],
@@ -65,9 +65,9 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         rankTitle: 'Grundstufe / Geselle',
         description: 'Selbstständiges Schmieden von Werkzeugen, Hufeisen, Beschlägen und Alltagsgeräten.',
         suggestedCompetencies: ['Ambossführung', 'Härten & Anlassen', 'Feuerverschweißung', 'Beschlagfertigung'],
-        possibleRanks: ['Schmiedegeselle', 'Grobschmied', 'Dorfschmied'],
+        possibleRanks: ['Schmiedegeselle', 'Grobschmied', 'Hufschmied', 'Blechschmied', 'Kupferschmied'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Schmiedejunge & Essegehilfe',
+        prerequisiteJobName: 'Schmiedejunge',
         nextRankName: 'Waffenschmied'
       },
       {
@@ -78,7 +78,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         rankTitle: 'Beförderung & Spezialisierung',
         description: 'Fertigung von Klingen, Lanzen, Hellebarden, Äxten und Streitkolben für Krieger und Heere.',
         suggestedCompetencies: ['Klingen schmieden', 'Damaszenerfaltung', 'Waffenhärtung', 'Schneidengeometrie'],
-        possibleRanks: ['Klingenschmied', 'Waffenschmied', 'Rüstzeugschmied'],
+        possibleRanks: ['Klingenschmied', 'Waffenschmied', 'Klingenschleifer'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Schmied',
         nextRankName: 'Meisterschmied'
@@ -91,9 +91,35 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         rankTitle: 'Beförderung & Spezialisierung',
         description: 'Treiben von Schutzplatten, Schilden, Helmen und maßgeschneiderten Plattenharnischen.',
         suggestedCompetencies: ['Blechtreiben', 'Harnischpassung', 'Visierbau', 'Gelenkverbindungen'],
-        possibleRanks: ['Plattner', 'Harnischmacher', 'Panzerschmied'],
+        possibleRanks: ['Plattner', 'Harnischmacher', 'Panzerschmied', 'Kettenmacher'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Schmied',
+        nextRankName: 'Meisterschmied'
+      },
+      {
+        idSuffix: 'werkzeugmacher',
+        name: 'Werkzeugmacher & Nagelschmied',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Beförderung & Spezialisierung',
+        description: 'Präzisionsfertigung gehärteter Werkzeuge, Zangen, Meißel, Kessel, Drähte und Baunägel.',
+        suggestedCompetencies: ['Werkzeugstähle', 'Drahtziehen', 'Kesselbau', 'Punzen & Meißel'],
+        possibleRanks: ['Werkzeugmacher', 'Kesselschmied', 'Nagelschmied', 'Drahtzieher'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Schmied',
+        nextRankName: 'Meisterschmied'
+      },
+      {
+        idSuffix: 'runenschmied',
+        name: 'Runenschmied & Artefaktschmied',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Magische Metallurgie & Artefakte',
+        description: 'Schmieden magischer Metalle wie Mithril oder Sterneneisen, Einbinden von Runen und arkaner Glut.',
+        suggestedCompetencies: ['Mithrilschmieden', 'Runengravur in Stahl', 'Arkanbindung', 'Sterneneisen'],
+        possibleRanks: ['Runenschmied', 'Artefaktschmied', 'Sternenschmied'],
+        requiredExperienceYears: 3,
+        prerequisiteJobName: 'Waffenschmied',
         nextRankName: 'Meisterschmied'
       },
       {
@@ -104,7 +130,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         rankTitle: 'Meisterstufe',
         description: 'Höchste zünftige Meisterschaft in Metallverarbeitung, Legierungskunst und Damaszenerstahl.',
         suggestedCompetencies: ['Meisterstückfertigung', 'Metallurgische Meisterschaft', 'Prüfsiegelvergabe', 'Zunftführung'],
-        possibleRanks: ['Schmiedemeister', 'Zunftobermeister', 'Hofschmied'],
+        possibleRanks: ['Schmiedemeister', 'Zunftobermeister', 'Hofschmied', 'Großplattner'],
         requiredExperienceYears: 4,
         prerequisiteJobName: 'Waffenschmied'
       },
@@ -116,9 +142,80 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         rankTitle: 'Meisterstufe',
         description: 'Meisterliche Fertigung vollendeter Schwerter, zeremonieller Prunkwaffen und Klingenbalancierung.',
         suggestedCompetencies: ['Klingenbalancierung', 'Damaszener-Faltkunst', 'Meisterklinge', 'Klingengravur'],
-        possibleRanks: ['Schwertmeister', 'Klingengroßmeister', 'Hofschwertschmied'],
+        possibleRanks: ['Schwertmeister', 'Klingengroßmeister', 'Hofschwertschmied', 'Meister-Artefaktschmied'],
         requiredExperienceYears: 4,
         prerequisiteJobName: 'Waffenschmied'
+      }
+    ]
+  },
+
+  goldschmied: {
+    branchKey: 'goldschmied',
+    branchName: 'Goldschmied',
+    category: 'Goldschmied',
+    description: 'Veredelung von Gold, Silber, Platin und Fassung kostbarer Edelsteine zu erlesenem Schmuck.',
+    ranks: [
+      {
+        idSuffix: 'lehrling',
+        name: 'Probierbursche',
+        tier: 'einstieg',
+        rankOrder: 0,
+        rankTitle: 'Einstieg & Edelmetallgehilfe',
+        description: 'Probierstein bedienen, Schmelztiegel reinigen, Draht walzen und Sägeblätter einspannen.',
+        suggestedCompetencies: ['Probiersteinkunde', 'Edelmetallschmelze', 'Feilen & Sägen', 'Lötpaste ansetzen'],
+        possibleRanks: ['Probierbursche', 'Goldschmiedelehrling', 'Polierbursche'],
+        nextRankName: 'Goldschmied'
+      },
+      {
+        idSuffix: 'geselle',
+        name: 'Goldschmied',
+        tier: 'beruf',
+        rankOrder: 1,
+        rankTitle: 'Grundstufe / Geselle',
+        description: 'Anfertigung von Ringen, Ketten, Broschen, Medaillons und kunstvollem Tafelsilber.',
+        suggestedCompetencies: ['Feinlöten', 'Goldlegierungen', 'Silberschmiedearbeiten', 'Oberflächenpolitur'],
+        possibleRanks: ['Goldschmied', 'Silberschmied', 'Feinschmied'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Probierbursche',
+        nextRankName: 'Juwelier'
+      },
+      {
+        idSuffix: 'juwelier',
+        name: 'Juwelier & Edelsteinschleifer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Beförderung & Edelsteinfassung',
+        description: 'Präzisionsfassung von Rubinen, Diamanten und Saphiren sowie Facettenschliff und Gemmologie.',
+        suggestedCompetencies: ['Krappen- & Zargenfassung', 'Facettenschliff', 'Edelsteinbewertung', 'Mikrooptik'],
+        possibleRanks: ['Juwelier', 'Edelsteinschleifer', 'Gemmologe'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Goldschmied',
+        nextRankName: 'Goldschmiedemeister'
+      },
+      {
+        idSuffix: 'graveur',
+        name: 'Graveur & Feinziseleur',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Beförderung & Feinvergoldung',
+        description: 'Gravur von Siegelringen, Wappen, Monogrammen, Feinziselierungen und filigranen Gürtlerarbeiten.',
+        suggestedCompetencies: ['Stichelführung', 'Wappengravur', 'Ziselierkunst', 'Gürtlerarbeiten & Beschläge'],
+        possibleRanks: ['Graveur', 'Ziseleur', 'Gürtler', 'Siegelstecher'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Goldschmied',
+        nextRankName: 'Goldschmiedemeister'
+      },
+      {
+        idSuffix: 'goldschmiedemeister',
+        name: 'Goldschmiedemeister',
+        tier: 'meister',
+        rankOrder: 3,
+        rankTitle: 'Meisterstufe',
+        description: 'Höchste zünftige Meisterschaft in Geschmeide, Kronjuwelen, Hofinsignien und Münzstempelung.',
+        suggestedCompetencies: ['Kronjuwelenfertigung', 'Insignienbau', 'Zunftoberprüfung', 'Hofgoldschmiede'],
+        possibleRanks: ['Goldschmiedemeister', 'Hofjuwelier', 'Kronjuwelenmeister'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Juwelier & Edelsteinschleifer'
       }
     ]
   },
@@ -131,7 +228,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Werkstattbursche & Getriebegehilfe',
+        name: 'Werkstattbursche',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Werkstattgehilfe',
@@ -146,22 +243,35 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Grundstufe / Geselle',
-        description: 'Bau und Instandhaltung mechanischer Apparate, Winden, Flaschenzüge und Wasserradantriebe.',
-        suggestedCompetencies: ['Getriebebau', 'Hebelgesetze', 'Federspannung', 'Präzisionsmontage'],
-        possibleRanks: ['Mechanikergeselle', 'Getriebetechniker', 'Maschinist'],
+        description: 'Bau und Instandhaltung mechanischer Apparate, Winden, Flaschenzüge, Schlösser und Wasserradantriebe.',
+        suggestedCompetencies: ['Getriebebau', 'Hebelgesetze', 'Federspannung', 'Schloss- & Beschlagmontage'],
+        possibleRanks: ['Mechanikergeselle', 'Schlosser', 'Getriebetechniker', 'Maschinist'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Werkstattbursche & Getriebegehilfe',
+        prerequisiteJobName: 'Werkstattbursche',
         nextRankName: 'Feinmechaniker / Uhrmacher'
       },
       {
         idSuffix: 'feinmechaniker',
-        name: 'Feinmechaniker / Uhrmacher',
+        name: 'Feinmechaniker & Uhrmacher',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Beförderung & Spezialisierung',
-        description: 'Fertigung kleinster Zahnräder, Chronometer, Taschenuhren, Schlösser und Messinstrumente.',
-        suggestedCompetencies: ['Mikrogetriebe', 'Unruh & Spiralfeder', 'Uhrwerkhemmung', 'Schlossmechanik'],
+        description: 'Fertigung kleinster Zahnräder, Chronometer, Taschenuhren, Navigationsinstrumente und Messgeräte.',
+        suggestedCompetencies: ['Mikrogetriebe', 'Unruh & Spiralfeder', 'Uhrwerkhemmung', 'Präzisionsjustierung'],
         possibleRanks: ['Feinmechaniker', 'Uhrmacher', 'Chronometrist'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Mechaniker',
+        nextRankName: 'Meistermechaniker'
+      },
+      {
+        idSuffix: 'schlosser_tresor',
+        name: 'Kunstschlosser & Tresortechniker',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Sicherheitsmechanik & Schließwerke',
+        description: 'Konstruktion diebstahlsicherer Geheimmechanismen, Kombinationsschlösser, Panzerriegel und Tresorgewölbe.',
+        suggestedCompetencies: ['Kombinationsschlösser', 'Panzerriegelbau', 'Geheimmechanismen', 'Tresorprüfung'],
+        possibleRanks: ['Kunstschlosser', 'Tresorbauer', 'Sicherheitsschlosser'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Mechaniker',
         nextRankName: 'Meistermechaniker'
@@ -185,11 +295,11 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Meisterstufe',
-        description: 'Vollendeter Ingenieur und Erfinder monumentaler Getriebe, Automaten und Hebevorrichtungen.',
+        description: 'Vollendeter Ingenieur und Erfinder monumentaler Getriebe, Automaten, Hofchronometer und Hebevorrichtungen.',
         suggestedCompetencies: ['Automatenkonstruktion', 'Ingenieurmathematik', 'Meisterwerk', 'Hydraulik & Winden'],
-        possibleRanks: ['Oberingenieur', 'Mechanicus', 'Meistermechaniker'],
+        possibleRanks: ['Oberingenieur', 'Mechanicus', 'Meistermechaniker', 'Hofuhrmachermeister'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Feinmechaniker / Uhrmacher'
+        prerequisiteJobName: 'Feinmechaniker & Uhrmacher'
       }
     ]
   },
@@ -202,7 +312,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Klangschüler & Holzschnitzer',
+        name: 'Klangschüler',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Klangschüler',
@@ -221,12 +331,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Klangkörperbau', 'Feinstimmung', 'Bundierung & Stegbau', 'Lackierung'],
         possibleRanks: ['Instrumentenbauergeselle', 'Klangmacher'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Klangschüler & Holzschnitzer',
-        nextRankName: 'Geigen- & Lautenbauer'
+        prerequisiteJobName: 'Klangschüler',
+        nextRankName: 'Geigenbauer'
       },
       {
         idSuffix: 'geigenbauer',
-        name: 'Geigen- & Lautenbauer',
+        name: 'Geigenbauer',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Beförderung & Spezialisierung',
@@ -239,7 +349,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
       },
       {
         idSuffix: 'orgelbauer',
-        name: 'Orgel- & Blasinstrumentenbauer',
+        name: 'Orgelbauer',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Beförderung & Spezialisierung',
@@ -260,7 +370,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Konzertinstrumente fertigen', 'Akustische Perfektion', 'Resonanzmeisterung', 'Zunftabnahme'],
         possibleRanks: ['Klangbaumeister', 'Hofinstrumentenmacher', 'Meisterluthier'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Geigen- & Lautenbauer'
+        prerequisiteJobName: 'Geigenbauer'
       }
     ]
   },
@@ -273,7 +383,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Schlosserjunge & Feilbursche',
+        name: 'Schlosserjunge',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Feilbursche',
@@ -292,12 +402,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Schlossmontage', 'Schlüssel feilen', 'Zuhaltungssysteme', 'Gitterbau'],
         possibleRanks: ['Schlossergeselle', 'Bauschlosser'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Schlosserjunge & Feilbursche',
-        nextRankName: 'Kunstschmied & Zierschlosser'
+        prerequisiteJobName: 'Schlosserjunge',
+        nextRankName: 'Kunstschmied'
       },
       {
         idSuffix: 'kunstschmied',
-        name: 'Kunstschmied & Zierschlosser',
+        name: 'Kunstschmied',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Beförderung & Spezialisierung',
@@ -310,7 +420,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
       },
       {
         idSuffix: 'tresorbauer',
-        name: 'Tresor- & Schließtechniker',
+        name: 'Tresortechniker',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Beförderung & Spezialisierung',
@@ -331,7 +441,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Meisterschlosskonstruktion', 'Sicherheitsberatung', 'Zunftabnahme', 'Werkstattleitung'],
         possibleRanks: ['Schlossermeister', 'Zunftobermeister'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Tresor- & Schließtechniker'
+        prerequisiteJobName: 'Tresortechniker'
       }
     ]
   },
@@ -340,30 +450,30 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     branchKey: 'giesser',
     branchName: 'Gießer',
     category: 'Gießer',
-    description: 'Schmelzen und Gießen von Bronze, Messing, Zinn und Glockenbronze in Formen.',
+    description: 'Schmelzen und Gießen von Bronze, Messing, Zinn, Eisen und Glockenbronze in Formen.',
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Schmelzergehilfe & Tiegelbursche',
+        name: 'Schmelzergehilfe',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Tiegelbursche',
-        description: 'Formsand aufbereiten, Tiegel heizen und Schmelzöfen reinigen.',
+        description: 'Formsand aufbereiten, Tiegel heizen, Gussformen vorbereiten und Schmelzöfen reinigen.',
         suggestedCompetencies: ['Formsand mischen', 'Schmelzofen pflegen', 'Tiegelhandhabung', 'Hitzeschutz'],
         possibleRanks: ['Gießerjunge', 'Tiegelbursche', 'Schmelzergehilfe'],
         nextRankName: 'Bronzegießer'
       },
       {
         idSuffix: 'geselle',
-        name: 'Bronzegießer / Metallgießer',
+        name: 'Gießer',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Grundstufe / Geselle',
-        description: 'Selbstständiges Gießen von Statuetten, Beschlägen, Töpfen und Glockenrohlingen.',
+        description: 'Selbstständiges Gießen von Statuetten, Beschlägen, Töpfen, Zinnkannen und Geschirr.',
         suggestedCompetencies: ['Formkastenbau', 'Schmelzführung Bronze', 'Gussreinigung', 'Ziselieren'],
-        possibleRanks: ['Gussgeselle', 'Bronzegießer', 'Zinngießer'],
+        possibleRanks: ['Gussgeselle', 'Bronzegießer', 'Zinngießer', 'Messingschmied', 'Gelbgießer'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Schmelzergehilfe & Tiegelbursche',
+        prerequisiteJobName: 'Schmelzergehilfe',
         nextRankName: 'Glockengießer'
       },
       {
@@ -371,25 +481,38 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         name: 'Glockengießer',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Beförderung & Spezialisierung',
+        rankTitle: 'Beförderung & Glockenkunst',
         description: 'Präziser Guss tonreiner Kirchenglocken und monumentaler Klangkörper.',
         suggestedCompetencies: ['Glockenrippe berechnen', 'Klangstimmung Glocke', 'Lehmformverfahren', 'Großschmelze'],
         possibleRanks: ['Glockengießer', 'Klanggießer'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Bronzegießer / Metallgießer',
+        prerequisiteJobName: 'Gießer',
         nextRankName: 'Meistergießer'
       },
       {
         idSuffix: 'kanonengiesser',
-        name: 'Kanonengießer / Zeuggussmeister',
+        name: 'Geschützgießer & Stückgießer',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Beförderung & Spezialisierung',
-        description: 'Gießen dickwandiger Geschütze, Mörser und Artillerierohre aus schwerer Bronze.',
+        rankTitle: 'Beförderung & Artillerieguss',
+        description: 'Gießen dickwandiger Geschütze, Mörser und Artillerierohre aus schwerer Bronze und Gusseisen.',
         suggestedCompetencies: ['Kanonenguss', 'Kernbohrung', 'Druckfestigkeitsprüfung', 'Hohlformguss'],
-        possibleRanks: ['Geschützgießer', 'Zeuggießer'],
+        possibleRanks: ['Geschützgießer', 'Zeuggießer', 'Stückgießer'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Bronzegießer / Metallgießer',
+        prerequisiteJobName: 'Gießer',
+        nextRankName: 'Meistergießer'
+      },
+      {
+        idSuffix: 'kunstgiesser',
+        name: 'Kunstgießer & Statuenformer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Beförderung & Wachsausschmelzguss',
+        description: 'Monumentale Bronzeplastiken, Zunftreliefs und detailreiche Kunstwerke im Wachsausschmelzverfahren.',
+        suggestedCompetencies: ['Wachsausschmelzverfahren', 'Cire-perdue-Guss', 'Ziselierung', 'Patina & Polieren'],
+        possibleRanks: ['Kunstgießer', 'Statuengießer', 'Formstecher'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Gießer',
         nextRankName: 'Meistergießer'
       },
       {
@@ -398,7 +521,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Meisterstufe',
-        description: 'Höchste zünftige Meisterschaft in Großguss, Statuenguss und Glockenintonation.',
+        description: 'Höchste zünftige Meisterschaft in Großguss, Statuenguss, Artillerie und Glockenintonation.',
         suggestedCompetencies: ['Monumentalguss', 'Metallurgische Meisterung', 'Zunftleitung', 'Gussfehlervermeidung'],
         possibleRanks: ['Gießermeister', 'Hofgießer', 'Oberstgießer'],
         requiredExperienceYears: 4,
@@ -418,13 +541,24 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Küchenjunge & Schürzenbursche',
+        name: 'Küchenjunge',
         tier: 'einstieg',
         rankOrder: 0,
-        rankTitle: 'Einstieg & Küchenjunge',
+        rankTitle: 'Einstieg & Grundpraxis',
         description: 'Gemüse putzen, Fleisch parieren, Feuer im Herd schüren und Küchenhygiene.',
         suggestedCompetencies: ['Mise en place', 'Messerführung', 'Herdfeuerregulierung', 'Küchenhygiene'],
-        possibleRanks: ['Küchenjunge', 'Schürzenbursche', 'Beikoch'],
+        possibleRanks: ['Küchenjunge', 'Küchenmädchen', 'Küchengehilfe'],
+        nextRankName: 'Koch'
+      },
+      {
+        idSuffix: 'schuerzenbursche',
+        name: 'Schürzenbursche',
+        tier: 'einstieg',
+        rankOrder: 0,
+        rankTitle: 'Einstieg & Küchenhilfe',
+        description: 'Küchenabwasch, Vorratsbeförderung, Zutatenwiegen und Tischabräumen.',
+        suggestedCompetencies: ['Küchenreinigung', 'Zutatenlagerung', 'Topfpflege', 'Feuerunterhaltung'],
+        possibleRanks: ['Schürzenbursche', 'Schürzenmagd', 'Topfwäscher'],
         nextRankName: 'Koch'
       },
       {
@@ -437,35 +571,64 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Grundzubereitung', 'Braten & Schmoren', 'Suppen & Saucen', 'Kräuterkunde'],
         possibleRanks: ['Kochgeselle', 'Gasthauskoch', 'Postenkoch'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Küchenjunge & Schürzenbursche',
-        nextRankName: 'Gourmet- & Saucenkoch'
+        prerequisiteJobName: 'Küchenjunge',
+        nextRankName: 'Gourmetkoch'
       },
       {
         idSuffix: 'gourmetkoch',
-        name: 'Gourmet- & Saucenkoch',
+        name: 'Gourmetkoch',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Beförderung & Spezialisierung',
-        description: 'Erlesene Menüs, Fonds, feine Saucen und Festtagsgerichte für Adlige und Gildenbankette.',
-        suggestedCompetencies: ['Saucenreduktion', 'Festmenü-Konzeption', 'Edle Gewürze', 'Fleischreifung'],
-        possibleRanks: ['Saucier', 'Chef de Partie', 'Festkoch'],
+        nodeType: 'specialization',
+        rankTitle: 'Beförderung & Gourmetküche',
+        description: 'Erlesene Menüs, feine Speisenabfolgen und Festtagsgerichte für Adlige und Gildenbankette.',
+        suggestedCompetencies: ['Festmenü-Konzeption', 'Edle Gewürze', 'Fleischreifung', 'Gourmetpräsentation'],
+        possibleRanks: ['Chef de Partie', 'Festkoch', 'Gourmetkoch'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Koch',
+        nextRankName: 'Hofküchenmeister'
+      },
+      {
+        idSuffix: 'saucenkoch',
+        name: 'Saucenkoch',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        nodeType: 'specialization',
+        rankTitle: 'Spezialisierung / Saucier',
+        description: 'Zubereitung meisterhafter Bratensäfte, Fonds, Reduktionen, Buttersaucen und feiner Vinaigrettes.',
+        suggestedCompetencies: ['Saucenreduktion', 'Fondherstellung', 'Gewürzbalance', 'Emulgiertechnik'],
+        possibleRanks: ['Saucier', 'Saucenkoch', 'Brühenmeister'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Koch',
         nextRankName: 'Hofküchenmeister'
       },
       {
         idSuffix: 'feldkoch',
-        name: 'Feld- & Großküchenkoch',
+        name: 'Feldkoch',
         tier: 'spezialisierung',
         rankOrder: 2,
         nodeType: 'specialization',
-        rankTitle: 'Spezialisierung',
-        description: 'Verpflegung von Karawanen, Heeren und Festgesellschaften mit nahrhafter Großverpflegung.',
-        suggestedCompetencies: ['Rationswirtschaft', 'Kesselkochen', 'Proviantlagerung', 'Mengenplanung'],
+        rankTitle: 'Spezialisierung / Feldküche',
+        description: 'Verpflegung von Karawanen, Heeren und Wanderlagern unter freiem Himmel.',
+        suggestedCompetencies: ['Rationswirtschaft', 'Kesselkochen', 'Proviantlagerung', 'Feuerstellenbau'],
         possibleRanks: ['Feldkoch', 'Quartiermeister-Koch', 'Trosskoch'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Koch',
         nextRankName: 'Hofküchenmeister'
+      },
+      {
+        idSuffix: 'grosskuechenkoch',
+        name: 'Großküchenkoch',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        nodeType: 'specialization',
+        rankTitle: 'Spezialisierung / Großverpflegung',
+        description: 'Planung und Koordination der Essensausgabe für Festgesellschaften, Gilden, Spitäler und Kasernen.',
+        suggestedCompetencies: ['Mengenberechnung', 'Großkesselbetrieb', 'Vorratseinteilung', 'Ausgabelogistik'],
+        possibleRanks: ['Großküchenkoch', 'Speisesaalkoch', 'Kantinenkoch'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Koch',
+        nextRankName: 'Küchendirektor'
       },
       {
         idSuffix: 'schiffskoch',
@@ -473,10 +636,10 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         tier: 'spezialisierung',
         rankOrder: 2,
         nodeType: 'specialization',
-        rankTitle: 'Spezialisierung',
+        rankTitle: 'Spezialisierung / Bordküche',
         description: 'Zubereitung von Mahlzeiten unter widrigen Bedingungen auf See, Verwaltung des Schiffsproviants und Schutz vor Skorbut.',
         suggestedCompetencies: ['Pökeln & Konservieren', 'Kochen bei Seegang', 'Rationsrationierung', 'Ernährungsmedizin (Skorbut)'],
-        possibleRanks: ['Schiffskoch', 'Smutje'],
+        possibleRanks: ['Schiffskoch', 'Smutje', 'Bordkoch'],
         requiredExperienceYears: 2,
         prerequisites: [
           { type: 'profession', label: 'Koch', targetId: 'Koch', required: true },
@@ -493,12 +656,24 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         name: 'Hofküchenmeister',
         tier: 'meister',
         rankOrder: 3,
-        rankTitle: 'Meisterstufe',
+        rankTitle: 'Meisterstufe / Palastküche',
         description: 'Leiter fürstlicher Palastküchen, Zeremonienbankette und kulinarischer Großveranstaltungen.',
         suggestedCompetencies: ['Küchenmeisterei', 'Bankettinszenierung', 'Gourmetkuration', 'Palastverpflegung'],
         possibleRanks: ['Hofküchenchef', 'Chef de Cuisine', 'Küchenmeister'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Gourmet- & Saucenkoch'
+        prerequisiteJobName: 'Gourmetkoch'
+      },
+      {
+        idSuffix: 'kuechendirektor',
+        name: 'Küchendirektor',
+        tier: 'meister',
+        rankOrder: 3,
+        rankTitle: 'Meisterstufe / Gastronomieleitung',
+        description: 'Kaufmännische und organisatorische Gesamtleitung großer Residenz- und Festküchenbetriebe.',
+        suggestedCompetencies: ['Gastronomiemanagement', 'Großeinkauf', 'Personaldelegation', 'Qualitätskontrolle'],
+        possibleRanks: ['Küchendirektor', 'Oberküchenmeister', 'Gastronomiedirektor'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Großküchenkoch'
       }
     ]
   },
@@ -511,7 +686,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Bäckerjunge & Teigkneter',
+        name: 'Bäckerjunge',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Bäckerjunge',
@@ -530,12 +705,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Sauerteigführung', 'Gärzeitenüberwachung', 'Backofentemperatur', 'Formgebung'],
         possibleRanks: ['Bäckergeselle', 'Brotbäcker'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Bäckerjunge & Teigkneter',
-        nextRankName: 'Konditor & Zuckerbäcker'
+        prerequisiteJobName: 'Bäckerjunge',
+        nextRankName: 'Konditor'
       },
       {
         idSuffix: 'konditor',
-        name: 'Konditor & Zuckerbäcker',
+        name: 'Konditor',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Beförderung & Spezialisierung',
@@ -556,7 +731,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Rezepturentwicklung', 'Zunftprüfung', 'Backhausleitung', 'Rohstoffbeschaffung'],
         possibleRanks: ['Bäckermeister', 'Zunftbäcker', 'Obermeister'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Konditor & Zuckerbäcker'
+        prerequisiteJobName: 'Konditor'
       }
     ]
   },
@@ -569,18 +744,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Braubursche & Fasswäscher',
+        name: 'Braubursche',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Braubursche',
         description: 'Fassreinigung, Maische rühren, Darren überwachen und Kessel anheizen.',
         suggestedCompetencies: ['Fässer pechen', 'Sudkessel heizen', 'Getreide reinigen', 'Wasserqualität prüfen'],
         possibleRanks: ['Braubursche', 'Fasswäscher', 'Mälzergehilfe'],
-        nextRankName: 'Brauer & Mälzer'
+        nextRankName: 'Brauer'
       },
       {
         idSuffix: 'geselle',
-        name: 'Brauer & Mälzer',
+        name: 'Brauer',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Grundstufe / Geselle',
@@ -588,12 +763,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Maischeführung', 'Hopfengabe', 'Gärungskontrolle', 'Hefepflege'],
         possibleRanks: ['Braugeselle', 'Sudgeselle', 'Mälzer'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Braubursche & Fasswäscher',
-        nextRankName: 'Kellermeister & Biersommelier'
+        prerequisiteJobName: 'Braubursche',
+        nextRankName: 'Kellermeister'
       },
       {
         idSuffix: 'kellermeister',
-        name: 'Kellermeister & Biersommelier',
+        name: 'Kellermeister',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Beförderung & Spezialisierung',
@@ -601,7 +776,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Fassreifung', 'Geschmacksprofile', 'Klärung & Lagerung', 'Schanksysteme'],
         possibleRanks: ['Kellermeister', 'Biersommelier', 'Sudmeister'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Brauer & Mälzer',
+        prerequisiteJobName: 'Brauer',
         nextRankName: 'Braumeister'
       },
       {
@@ -614,7 +789,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Großbrauereileitung', 'Braurezepturen', 'Zunftabnahme', 'Reinigungsgebotsüberwachung'],
         possibleRanks: ['Braumeister', 'Zunftbrauer', 'Hofbraumeister'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Kellermeister & Biersommelier'
+        prerequisiteJobName: 'Kellermeister'
       }
     ]
   },
@@ -627,18 +802,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Fleischerbursche & Pökelgehilfe',
+        name: 'Fleischerbursche',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Fleischerbursche',
         description: 'Reinigung des Schlachthauses, Messer schärfen, Därme putzen und Pökelbottiche füllen.',
         suggestedCompetencies: ['Messer schärfen', 'Schlachthygiene', 'Salzen & Pökeln', 'Kühlung'],
         possibleRanks: ['Fleischerbursche', 'Pökelgehilfe', 'Schlachthofjunge'],
-        nextRankName: 'Metzger & Fleischer'
+        nextRankName: 'Metzger'
       },
       {
         idSuffix: 'geselle',
-        name: 'Metzger & Fleischer',
+        name: 'Metzger',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Grundstufe / Geselle',
@@ -646,12 +821,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Zerlegetechnik', 'Knochen auslösen', 'Fleischreifung', 'Kundenzuschnitt'],
         possibleRanks: ['Fleischergeselle', 'Metzger'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Fleischerbursche & Pökelgehilfe',
-        nextRankName: 'Wurstmacher & Pökelspezialist'
+        prerequisiteJobName: 'Fleischerbursche',
+        nextRankName: 'Wurstmacher'
       },
       {
         idSuffix: 'wurstmacher',
-        name: 'Wurstmacher & Pökelspezialist',
+        name: 'Wurstmacher',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Beförderung & Spezialisierung',
@@ -659,7 +834,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Brätbereitung', 'Wurstabfüllung', 'Heiß- & Kalträuchern', 'Gewürzmischung'],
         possibleRanks: ['Wurstmacher', 'Räuchermeister'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Metzger & Fleischer',
+        prerequisiteJobName: 'Metzger',
         nextRankName: 'Metzgermeister'
       },
       {
@@ -672,7 +847,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Fleischbeschau', 'Betriebsführung', 'Zunftvorsitz', 'Großeinkauf'],
         possibleRanks: ['Metzgermeister', 'Oberfleischer', 'Zunftmeister'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Wurstmacher & Pökelspezialist'
+        prerequisiteJobName: 'Wurstmacher'
       }
     ]
   },
@@ -688,7 +863,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Laufbursche & Hauspage',
+        name: 'Laufbursche',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Hausdienst',
@@ -707,12 +882,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Umgangsformen', 'Tafeldecken', 'Gepäckdienst', 'Gästeempfang'],
         possibleRanks: ['Hausdiener', 'Livrierter Diener', 'Saaldiener'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Laufbursche & Hauspage',
-        nextRankName: 'Kammerdiener & Tafeldiener'
+        prerequisiteJobName: 'Laufbursche',
+        nextRankName: 'Kammerdiener'
       },
       {
         idSuffix: 'kammerdiener',
-        name: 'Kammerdiener & Tafeldiener',
+        name: 'Kammerdiener',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Vertrauensstellung & Tafelaufsicht',
@@ -721,11 +896,11 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         possibleRanks: ['Kammerdiener', 'Valet', 'Tafelmeister'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Diener',
-        nextRankName: 'Haushofmeister & Majordomus'
+        nextRankName: 'Haushofmeister'
       },
       {
         idSuffix: 'majordomus',
-        name: 'Haushofmeister & Majordomus',
+        name: 'Haushofmeister',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Hausleitung & Residenzführung',
@@ -733,7 +908,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Gesindeaufsicht', 'Wirtschaftsbuchführung', 'Bankettorganisation', 'Residenzverwaltung'],
         possibleRanks: ['Haushofmeister', 'Majordomus', 'Kastellan'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Kammerdiener & Tafeldiener'
+        prerequisiteJobName: 'Kammerdiener'
       }
     ]
   },
@@ -746,7 +921,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Stubenmädchen & Gemachgehilfin',
+        name: 'Stubenmädchen',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Gemächerpflege',
@@ -765,12 +940,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Frisierkunst', 'Kleideranpassung', 'Korsettschnürung', 'Verschwiegenheit'],
         possibleRanks: ['Zofe', 'Kammerzofe'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Stubenmädchen & Gemachgehilfin',
-        nextRankName: 'Kammerjungfer & Garderobiere'
+        prerequisiteJobName: 'Stubenmädchen',
+        nextRankName: 'Kammerjungfer'
       },
       {
         idSuffix: 'kammerjungfer',
-        name: 'Kammerjungfer & Garderobiere',
+        name: 'Kammerjungfer',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Garderoben- & Toilettenaufsicht',
@@ -779,11 +954,11 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         possibleRanks: ['Kammerjungfer', 'Garderobiere', 'Erste Zofe'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Zofe',
-        nextRankName: 'Oberhofdame & Erste Hausdame'
+        nextRankName: 'Oberhofdame'
       },
       {
         idSuffix: 'oberhofdame',
-        name: 'Oberhofdame & Erste Hausdame',
+        name: 'Oberhofdame',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Residenz- & Damenpalastleitung',
@@ -791,7 +966,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Hofdamenführung', 'Zeremoniell', 'Etikette-Kodex', 'Palastwirtschaft'],
         possibleRanks: ['Oberhofdame', 'Erste Hausdame', 'Hofgouvernante'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Kammerjungfer & Garderobiere'
+        prerequisiteJobName: 'Kammerjungfer'
       }
     ]
   },
@@ -804,7 +979,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Unterbutler & Saalbursche',
+        name: 'Unterbutler',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Saaldienst',
@@ -823,12 +998,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Weinservice', 'Tafelprotokoll', 'Türdienst & Ankündigung', 'Schlüsselverwaltung'],
         possibleRanks: ['Butler', 'Hausverwalter'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Unterbutler & Saalbursche',
-        nextRankName: 'Chefbutler & Silberkämmerer'
+        prerequisiteJobName: 'Unterbutler',
+        nextRankName: 'Chefbutler'
       },
       {
         idSuffix: 'chefbutler',
-        name: 'Chefbutler & Silberkämmerer',
+        name: 'Chefbutler',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Silberkammer & Repräsentation',
@@ -837,11 +1012,11 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         possibleRanks: ['Chefbutler', 'Silberkämmerer'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Butler',
-        nextRankName: 'Großhofmeister & Seneschall'
+        nextRankName: 'Großhofmeister'
       },
       {
         idSuffix: 'seneschall',
-        name: 'Großhofmeister & Seneschall',
+        name: 'Großhofmeister',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Oberste Schloss- & Hofleitung',
@@ -849,7 +1024,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Seneschallamt', 'Staatsbankette', 'Oberste Etikette', 'Residenzbudget'],
         possibleRanks: ['Großhofmeister', 'Seneschall', 'Oberstkämmerer'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Chefbutler & Silberkämmerer'
+        prerequisiteJobName: 'Chefbutler'
       }
     ]
   },
@@ -865,18 +1040,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Rekrut & Trossknecht',
+        name: 'Rekrut',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Rekrutenausbildung',
         description: 'Exerzieren, Waffeninstandhaltung, Lagerbau und Formationsgrundlagen.',
         suggestedCompetencies: ['Waffenpflege', 'Formationsmarsch', 'Wachbereitschaft', 'Schilddeckung'],
         possibleRanks: ['Rekrut', 'Trossknecht', 'Musketieranwärter'],
-        nextRankName: 'Infanterist & Landsknecht'
+        nextRankName: 'Infanterist'
       },
       {
         idSuffix: 'geselle',
-        name: 'Infanterist & Landsknecht',
+        name: 'Infanterist',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Garnisons- & Felddienst',
@@ -884,12 +1059,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Pikenkampf', 'Schildwall', 'Nachtwache', 'Klingenführung'],
         possibleRanks: ['Infanterist', 'Landsknecht', 'Gefreiter'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Rekrut & Trossknecht',
-        nextRankName: 'Gardist & Wehrmeister'
+        prerequisiteJobName: 'Rekrut',
+        nextRankName: 'Gardist'
       },
       {
         idSuffix: 'gardist',
-        name: 'Gardist & Wehrmeister',
+        name: 'Gardist',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Garde & Gefechtstaktik',
@@ -897,12 +1072,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Zweikampf', 'Gardeformation', 'Gefechtstaktik', 'Belagerungsabwehr'],
         possibleRanks: ['Gardist', 'Wehrmeister', 'Fähnrich'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Infanterist & Landsknecht',
-        nextRankName: 'Feldwebel & Hauptmann'
+        prerequisiteJobName: 'Infanterist',
+        nextRankName: 'Feldwebel'
       },
       {
         idSuffix: 'hauptmann',
-        name: 'Feldwebel & Hauptmann',
+        name: 'Feldwebel',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Truppenkommando & Regimentsleitung',
@@ -910,7 +1085,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Truppenführung', 'Schlachtfeldstrategie', 'Garnisonsverwaltung', 'Offizierskorps'],
         possibleRanks: ['Feldwebel', 'Hauptmann', 'Festungskommandant'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Gardist & Wehrmeister'
+        prerequisiteJobName: 'Gardist'
       }
     ]
   },
@@ -926,7 +1101,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'schiffsjunge',
-        name: 'Schiffsjunge & Leichtmatrose',
+        name: 'Schiffsjunge',
         tier: 'einstieg',
         nodeType: 'training',
         rankOrder: 0,
@@ -947,7 +1122,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Seemannschaft', 'Ruderdienst', 'Sturmsicherung', 'Takelagereparatur'],
         possibleRanks: ['Vollmatrose', 'Bootsmannsmaat', 'Seemann'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Schiffsjunge & Leichtmatrose',
+        prerequisiteJobName: 'Schiffsjunge',
         nextRankName: 'Erfahrener Seemann'
       },
       {
@@ -1010,18 +1185,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Arkan-Novize & Schriftrollenschüler',
+        name: 'Arkan-Novize',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Mana-Grundlagen',
         description: 'Lesen alter Folianten, Schriftrollenkopieren, Mana-Meditation und erste Funkenzauber.',
         suggestedCompetencies: ['Mana-Fokussierung', 'Runenschrift lesen', 'Kreidekreis ziehen', 'Foliantenpflege'],
         possibleRanks: ['Novize', 'Akademie-Adept', 'Schriftrollenschüler'],
-        nextRankName: 'Magier & Zauberer'
+        nextRankName: 'Magier'
       },
       {
         idSuffix: 'geselle',
-        name: 'Magier & Zauberer',
+        name: 'Magier',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Spruchpraxis & Ritualistik',
@@ -1029,12 +1204,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Spruchkanalisierung', 'Aura wahrnehmen', 'Schutzschilde', 'Gedankendisziplin'],
         possibleRanks: ['Magier', 'Spruchweber', 'Elementarist'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Arkan-Novize & Schriftrollenschüler',
-        nextRankName: 'Elementarmagier & Siegelweber'
+        prerequisiteJobName: 'Arkan-Novize',
+        nextRankName: 'Elementarmagier'
       },
       {
         idSuffix: 'elementarmagier',
-        name: 'Elementarmagier & Siegelweber',
+        name: 'Elementarmagier',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Elementarbindung & Runenmatrix',
@@ -1042,12 +1217,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Elementare Großzauber', 'Runenmatrix weben', 'Telekinese', 'Dimensionsrisse schließen'],
         possibleRanks: ['Elementarmagier', 'Siegelmeister', 'Arkanweber'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Magier & Zauberer',
-        nextRankName: 'Erzmagier & Magister Artium'
+        prerequisiteJobName: 'Magier',
+        nextRankName: 'Erzmagier'
       },
       {
         idSuffix: 'erzmagier',
-        name: 'Erzmagier & Magister Artium',
+        name: 'Erzmagier',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Arkaner Konvent & Hochmagie',
@@ -1055,7 +1230,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Sphärenmagie', 'Großritualleitung', 'Arkane Schöpfung', 'Konventsleitung'],
         possibleRanks: ['Erzmagier', 'Großinquisitor der Magie', 'Magister Artium'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Elementarmagier & Siegelweber'
+        prerequisiteJobName: 'Elementarmagier'
       }
     ]
   },
@@ -1071,18 +1246,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Kontorbursche & Laufgehilfe',
+        name: 'Kontorbursche',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Kontorarbeiten',
         description: 'Frachtbriefe abstempeln, Kisten wiegen, Münzen wiegen und Botengänge zur Börse.',
         suggestedCompetencies: ['Münzwaage bedienen', 'Rechnen & Buchführen', 'Frachtkontrolle', 'Warenlagern'],
         possibleRanks: ['Kontorbursche', 'Handelsjunge', 'Laufgehilfe'],
-        nextRankName: 'Kaufmann & Händler'
+        nextRankName: 'Kaufmann'
       },
       {
         idSuffix: 'geselle',
-        name: 'Kaufmann & Händler',
+        name: 'Kaufmann',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Warenverkehr & Ladengeschäft',
@@ -1090,12 +1265,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Feilschkunst', 'Kalkulation & Gewinnspanne', 'Zollabwicklung', 'Kundenbetreuung'],
         possibleRanks: ['Krämer', 'Kaufmann', 'Kontorist'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Kontorbursche & Laufgehilfe',
-        nextRankName: 'Fernhändler & Faktoreileiter'
+        prerequisiteJobName: 'Kontorbursche',
+        nextRankName: 'Fernhändler'
       },
       {
         idSuffix: 'fernhaendler',
-        name: 'Fernhändler & Faktoreileiter',
+        name: 'Fernhändler',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Karawanenhandel & Großposten',
@@ -1103,12 +1278,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Karawanenlogistik', 'Seefrachtverträge', 'Devisenhandel', 'Großhandelsrabatte'],
         possibleRanks: ['Fernhändler', 'Faktoreileiter', 'Hanseat'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Kaufmann & Händler',
-        nextRankName: 'Handelsherr & Großpatrizier'
+        prerequisiteJobName: 'Kaufmann',
+        nextRankName: 'Handelsherr'
       },
       {
         idSuffix: 'handelsherr',
-        name: 'Handelsherr & Großpatrizier',
+        name: 'Handelsherr',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Gildevorsitz & Großkapital',
@@ -1116,7 +1291,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Handelsimperium leiten', 'Expeditionsfinanzierung', 'Gildevorsitz', 'Monopolpolitik'],
         possibleRanks: ['Handelsherr', 'Großpatrizier', 'Gildeältester'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Fernhändler & Faktoreileiter'
+        prerequisiteJobName: 'Fernhändler'
       }
     ]
   },
@@ -1132,18 +1307,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Hofknecht & Saatjunge',
+        name: 'Hofknecht',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Feldbestellung',
         description: 'Stall ausmisten, Steine vom Acker klauben, Wasser tragen und Ochsen führen.',
         suggestedCompetencies: ['Feldarbeit', 'Viehfütterung', 'Werkzeuginstandhaltung', 'Wetterkunde Grundlagen'],
         possibleRanks: ['Hofknecht', 'Saatjunge', 'Pfluggehilfe'],
-        nextRankName: 'Bauer & Ackerwirt'
+        nextRankName: 'Bauer'
       },
       {
         idSuffix: 'geselle',
-        name: 'Bauer & Ackerwirt',
+        name: 'Bauer',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Bodenwirtschaft & Feldbau',
@@ -1151,12 +1326,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Pflügen & Eggen', 'Dreifelderwirtschaft', 'Ernteplanung', 'Kornlagerung'],
         possibleRanks: ['Ackerbauer', 'Freibauer', 'Hufner'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Hofknecht & Saatjunge',
-        nextRankName: 'Gutspächter & Saatzüchter'
+        prerequisiteJobName: 'Hofknecht',
+        nextRankName: 'Gutspächter'
       },
       {
         idSuffix: 'gutspaechter',
-        name: 'Gutspächter & Saatzüchter',
+        name: 'Gutspächter',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Saatgutveredelung & Vorratswirtschaft',
@@ -1164,12 +1339,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Saatgutzucht', 'Bewässerungsbau', 'Siloverwaltung', 'Knechte anleiten'],
         possibleRanks: ['Gutspächter', 'Saatzüchter', 'Meier'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Bauer & Ackerwirt',
-        nextRankName: 'Hofbesitzer & Dorfschulze'
+        prerequisiteJobName: 'Bauer',
+        nextRankName: 'Hofbesitzer'
       },
       {
         idSuffix: 'dorfschulze',
-        name: 'Hofbesitzer & Dorfschulze',
+        name: 'Hofbesitzer',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Dorfleitung & Großbauernwirtschaft',
@@ -1177,7 +1352,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Dorfgericht', 'Zehntverwaltung', 'Genossenschaftswesen', 'Agrarökonomie'],
         possibleRanks: ['Dorfschulze', 'Großhofherr', 'Bauernältester'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Gutspächter & Saatzüchter'
+        prerequisiteJobName: 'Gutspächter'
       }
     ]
   },
@@ -1193,18 +1368,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Akolyth & Tempelnovize',
+        name: 'Akolyth',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Liturgiedienst',
         description: 'Weihrauchschwenken, Altarkerzen entzünden, Gesangsbücher tragen und Gebetszeiten einhalten.',
         suggestedCompetencies: ['Liturgiegesang', 'Weihrauchdienst', 'Heilige Texte rezitieren', 'Altarordnung'],
         possibleRanks: ['Akolyth', 'Tempelnovize', 'Messdiener'],
-        nextRankName: 'Priester & Kleriker'
+        nextRankName: 'Priester'
       },
       {
         idSuffix: 'geselle',
-        name: 'Priester & Kleriker',
+        name: 'Priester',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Gemeindeseelsorge & Andacht',
@@ -1212,12 +1387,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Seelsorge & Beichte', 'Segnungsriten', 'Predigtlehre', 'Religionsunterricht'],
         possibleRanks: ['Priester', 'Pfarrer', 'Kleriker'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Akolyth & Tempelnovize',
-        nextRankName: 'Dompropst & Zeremonienmeister'
+        prerequisiteJobName: 'Akolyth',
+        nextRankName: 'Dompropst'
       },
       {
         idSuffix: 'dompropst',
-        name: 'Dompropst & Zeremonienmeister',
+        name: 'Dompropst',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Zeremonien & Sakramente',
@@ -1225,12 +1400,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Hochliturgie', 'Kathedralverwaltung', 'Kirchenrecht', 'Theologische Disputation'],
         possibleRanks: ['Dompropst', 'Erzpriester', 'Prälat'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Priester & Kleriker',
-        nextRankName: 'Bischof & Hochkleriker'
+        prerequisiteJobName: 'Priester',
+        nextRankName: 'Bischof'
       },
       {
         idSuffix: 'bischof',
-        name: 'Bischof & Hochkleriker',
+        name: 'Bischof',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Diözesanleitung & Oberster Konvent',
@@ -1238,7 +1413,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Priesterweihe', 'Diözesanführung', 'Kirchenkonzil', 'Glaubenskanon'],
         possibleRanks: ['Bischof', 'Erzbischof', 'Patriarch'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Dompropst & Zeremonienmeister'
+        prerequisiteJobName: 'Dompropst'
       }
     ]
   },
@@ -1254,18 +1429,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Gassenjunge & Schnüffler',
+        name: 'Gassenjunge',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Schattenschritte',
         description: 'Spähen nach Wachen, Ablenken von Markthändlern und Schnelles Fliehen durch enge Gassen.',
         suggestedCompetencies: ['Gassenkunde', 'Ablenkung', 'Wachbeobachtung', 'Schneller Antritt'],
         possibleRanks: ['Gassenjunge', 'Beutelspäher'],
-        nextRankName: 'Taschendieb & Beutelschneider'
+        nextRankName: 'Taschendieb'
       },
       {
         idSuffix: 'geselle',
-        name: 'Taschendieb & Beutelschneider',
+        name: 'Taschendieb',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Fingerfertigkeit & Ablenkung',
@@ -1273,12 +1448,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Fingerfertigkeit', 'Gedränge nutzen', 'Gegenstände weiterreichen', 'Fluchtwege'],
         possibleRanks: ['Beutelschneider', 'Taschendieb', 'Langfinger'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Gassenjunge & Schnüffler',
-        nextRankName: 'Fingerkünstler & Schlösserknacker'
+        prerequisiteJobName: 'Gassenjunge',
+        nextRankName: 'Fingerkünstler'
       },
       {
         idSuffix: 'fingerkuenstler',
-        name: 'Fingerkünstler & Schlösserknacker',
+        name: 'Fingerkünstler',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Infiltration & Präzisionsdiebstahl',
@@ -1286,12 +1461,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Dietrichführung', 'Schmuckentwendung', 'Schleichen im Dunkeln', 'Hehlerkontakte'],
         possibleRanks: ['Fingerkünstler', 'Schlösserknacker', 'Schattenkriecher'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Taschendieb & Beutelschneider',
-        nextRankName: 'Meisterdieb & Schattenfürst'
+        prerequisiteJobName: 'Taschendieb',
+        nextRankName: 'Meisterdieb'
       },
       {
         idSuffix: 'meisterdieb',
-        name: 'Meisterdieb & Schattenfürst',
+        name: 'Meisterdieb',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Gildenführung & Meisterstreifzug',
@@ -1299,7 +1474,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Meistercoups planen', 'Diebesgildenführung', 'Schattensysteme', 'Untergrundkodex'],
         possibleRanks: ['Meisterdieb', 'Schattenfürst', 'Zunftoberhaupt der Diebe'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Fingerkünstler & Schlösserknacker'
+        prerequisiteJobName: 'Fingerkünstler'
       }
     ]
   },
@@ -1315,18 +1490,18 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
     ranks: [
       {
         idSuffix: 'lehrling',
-        name: 'Spiellehrling & Reimschmied',
+        name: 'Spiellehrling',
         tier: 'einstieg',
         rankOrder: 0,
         rankTitle: 'Einstieg & Lautenspiel',
         description: 'Akkorde lernen, Reime finden, Schellen schütteln und Hüte für Kupfermünzen herumreichen.',
         suggestedCompetencies: ['Grundakkorde Laute', 'Reimlehre', 'Stimmbildung', 'Bühnenpräsenz'],
         possibleRanks: ['Spiellehrling', 'Reimschmied', 'Kupfersänger'],
-        nextRankName: 'Barde & Spielmann'
+        nextRankName: 'Barde'
       },
       {
         idSuffix: 'geselle',
-        name: 'Barde & Spielmann',
+        name: 'Barde',
         tier: 'beruf',
         rankOrder: 1,
         rankTitle: 'Wirtshausgesang & Balladen',
@@ -1334,12 +1509,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Balladenvortrag', 'Tanzweisen', 'Geschichtenerzählen', 'Publikumsstimmung'],
         possibleRanks: ['Spielmann', 'Gauklerbarde', 'Sänger'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Spiellehrling & Reimschmied',
-        nextRankName: 'Minnesänger & Hofskalde'
+        prerequisiteJobName: 'Spiellehrling',
+        nextRankName: 'Minnesänger'
       },
       {
         idSuffix: 'minnesaenger',
-        name: 'Minnesänger & Hofskalde',
+        name: 'Minnesänger',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Hoflyrik & Heldenepen',
@@ -1347,12 +1522,12 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Minnelyrik', 'Heldenepos dichten', 'Harfenvirtuosität', 'Höfische Gunst'],
         possibleRanks: ['Minnesänger', 'Hofskalde', 'Troubadour'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Barde & Spielmann',
-        nextRankName: 'Oberbarde & Fürstensänger'
+        prerequisiteJobName: 'Barde',
+        nextRankName: 'Oberbarde'
       },
       {
         idSuffix: 'oberbarde',
-        name: 'Oberbarde & Fürstensänger',
+        name: 'Oberbarde',
         tier: 'meister',
         rankOrder: 3,
         rankTitle: 'Akademieleitung & Gesangskrone',
@@ -1360,68 +1535,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         suggestedCompetencies: ['Eposkomposition', 'Bardenkollegium', 'Macht des Liedes', 'Kulturelle Schirmherrschaft'],
         possibleRanks: ['Oberbarde', 'Fürstensänger', 'Meistersänger'],
         requiredExperienceYears: 4,
-        prerequisiteJobName: 'Minnesänger & Hofskalde'
-      }
-    ]
-  },
-
-  // ===========================================================================
-  // LUXUS & EDELMETALLE (luxus_spezial)
-  // ===========================================================================
-  goldschmied: {
-    branchKey: 'goldschmied',
-    branchName: 'Goldschmied',
-    category: 'Goldschmied',
-    description: 'Veredelung von Gold, Platin und Silber zu erlesenen Diademen, Ketten und Siegelringen.',
-    ranks: [
-      {
-        idSuffix: 'lehrling',
-        name: 'Schmelzjunge & Polierlehrling',
-        tier: 'einstieg',
-        rankOrder: 0,
-        rankTitle: 'Einstieg & Edelmetallwäsche',
-        description: 'Goldstaub auffangen, Tiegel polieren, Zieheisen vorbereiten und Feilung trennen.',
-        suggestedCompetencies: ['Goldstaubrückgewinnung', 'Lötfeuer bedienen', 'Polieren', 'Feingehalt prüfen'],
-        possibleRanks: ['Goldschmiedelehrling', 'Polierjunge'],
-        nextRankName: 'Goldschmied'
-      },
-      {
-        idSuffix: 'geselle',
-        name: 'Goldschmied',
-        tier: 'beruf',
-        rankOrder: 1,
-        rankTitle: 'Edelmetallschmuck & Legierungen',
-        description: 'Schmieden von Trauringen, Broschen, Zierfibeln und feinen Goldketten.',
-        suggestedCompetencies: ['Löttechnik Gold', 'Drahtziehen & Walzen', 'Gravurwerkzeuge', 'Legierungskunde'],
-        possibleRanks: ['Goldschmiedegeselle', 'Juwelenschmied'],
-        requiredExperienceYears: 1,
-        prerequisiteJobName: 'Schmelzjunge & Polierlehrling',
-        nextRankName: 'Filigranschmied & Gemmensetzer'
-      },
-      {
-        idSuffix: 'filigranschmied',
-        name: 'Filigranschmied & Gemmensetzer',
-        tier: 'spezialisierung',
-        rankOrder: 2,
-        rankTitle: 'Edelsteinfassung & Granulation',
-        description: 'Präzises Einbinden von Diamanten, Saphiren und Smaragden in filigrane Krappenfassungen.',
-        suggestedCompetencies: ['Krappenfassung', 'Granulationskunst', 'Edelsteinfassungen', 'Mikrogravur'],
-        possibleRanks: ['Gemmensetzer', 'Filigranschmied', 'Juwelier'],
-        requiredExperienceYears: 2,
-        prerequisiteJobName: 'Goldschmied',
-        nextRankName: 'Hofgoldschmied & Kronjuwelier'
-      },
-      {
-        idSuffix: 'kronjuwelier',
-        name: 'Hofgoldschmied & Kronjuwelier',
-        tier: 'meister',
-        rankOrder: 3,
-        rankTitle: 'Insignien & Kronjuwelen',
-        description: 'Fertigung von Reichskronen, Szeptern, Zeremonienschwertern und kaiserlichen Insignien.',
-        suggestedCompetencies: ['Kronenarchitektur', 'Historische Schmuckrestauration', 'Reichsinsignien', 'Zunftgutachten'],
-        possibleRanks: ['Hofgoldschmied', 'Kronjuwelier', 'Oberstmeister der Juwelierzunft'],
-        requiredExperienceYears: 4,
-        prerequisiteJobName: 'Filigranschmied & Gemmensetzer'
+        prerequisiteJobName: 'Minnesänger'
       }
     ]
   },
@@ -1511,7 +1625,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
       },
       {
         idSuffix: 'militaerarzt',
-        name: 'Militärarzt & Sanitätsoffizier',
+        name: 'Militärarzt',
         tier: 'spezialisierung',
         nodeType: 'specialization',
         rankOrder: 2,
@@ -1525,11 +1639,11 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
           { type: 'competence', label: 'Militärische Feldversorgung', targetId: 'Feldversorgung', targetFieldId: 'militaer', targetFieldName: 'Militär & Sicherheit', minValue: 45, required: true },
           { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2, required: true }
         ],
-        nextRankName: 'Meisterarzt & Chefarzt'
+        nextRankName: 'Meisterarzt'
       },
       {
         idSuffix: 'chefarzt',
-        name: 'Meisterarzt & Chefarzt',
+        name: 'Meisterarzt',
         tier: 'meister',
         nodeType: 'leadership',
         rankOrder: 3,
@@ -1644,7 +1758,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
       },
       {
         idSuffix: 'meisterheiler',
-        name: 'Meisterheiler & Chefpfleger',
+        name: 'Meisterheiler',
         tier: 'meister',
         nodeType: 'leadership',
         rankOrder: 3,
@@ -1692,7 +1806,7 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
       },
       {
         idSuffix: 'stadtapotheker',
-        name: 'Stadtapotheker & Ratspharmazeut',
+        name: 'Stadtapotheker',
         tier: 'meister',
         nodeType: 'leadership',
         rankOrder: 3,
@@ -1757,11 +1871,11 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
           { type: 'competence', label: 'Schiffskunde & Rumpfbau', targetId: 'Schiffskunde', targetFieldId: 'seefahrt', targetFieldName: 'Seefahrt', minValue: 40, required: true },
           { type: 'experience_years', label: '2 Jahre Praxis', minValue: 2, required: true }
         ],
-        nextRankName: 'Zimmermeister & Werftmeister'
+        nextRankName: 'Zimmermeister'
       },
       {
         idSuffix: 'zimmermeister',
-        name: 'Zimmermeister & Werftmeister',
+        name: 'Zimmermeister',
         tier: 'meister',
         nodeType: 'leadership',
         rankOrder: 3,
@@ -1781,49 +1895,49 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
  * Maps field IDs to their primary career branch keys.
  */
 export const FIELD_BRANCH_MAP: Record<string, string[]> = {
-  // 16 Kern-Berufszweige
+  // 16 Konsolidierte Kern-Berufsfelder (jeweils 3 bis 7 thematisch vereinte Hauptberufszweige)
   lebensmittel_versorgung: ['koch', 'baecker', 'brauer', 'metzger', 'winzer', 'mueller', 'kaeser'],
-  bau_handwerk: ['architekt', 'steinmetz', 'zimmermann', 'maurer', 'tischler', 'schneider', 'gerber', 'weber', 'toepfer'],
-  metall_feinhandwerk: ['schmied', 'goldschmied', 'juwelier', 'mechaniker', 'schlosser', 'giesser'],
-  natur_landwirtschaft: ['bauer', 'jaeger', 'foerster', 'bergmann', 'imker', 'schaefer', 'pferdezuechter'],
-  medizin: ['arzt', 'heiler', 'apotheker', 'feldscher', 'kraeuterkundiger'],
-  wissenschaft: ['alchemist', 'gelehrter', 'astronom', 'kartograph', 'archaeologe', 'lehrer'],
-  handel_wirtschaft: ['kaufmann', 'haendler', 'grosshaendler', 'bankier', 'lagerverwalter'],
-  dienstleistung: ['diener', 'butler', 'kutscher', 'barbier', 'bote', 'reisefuehrer'],
-  verwaltung: ['schreiber', 'buchhalter', 'notar', 'diplomat', 'richter', 'beamter', 'archivar', 'statthalter'],
-  militaer: ['soldat', 'gardist', 'schuetze', 'kavallerist', 'scout', 'quartiermeister', 'waffenmeister'],
+  bau_handwerk: ['steinmetz', 'zimmermann', 'tischler', 'schneider', 'gerber', 'toepfer'],
+  metall_feinhandwerk: ['schmied', 'goldschmied', 'mechaniker', 'giesser'],
+  natur_landwirtschaft: ['bauer', 'jaeger', 'foerster', 'bergmann', 'imker', 'schaefer'],
+  medizin: ['arzt', 'heiler', 'apotheker'],
+  wissenschaft: ['alchemist', 'gelehrter', 'astronom', 'kartograph'],
+  handel_wirtschaft: ['kaufmann', 'bankier', 'lagerverwalter'],
+  dienstleistung: ['diener', 'kutscher', 'barbier', 'bote', 'gastwirt'],
+  verwaltung: ['schreiber', 'beamter', 'richter', 'diplomat'],
+  militaer: ['soldat', 'schuetze', 'kavallerist', 'scout', 'waffenmeister'],
   seefahrt: ['seemann', 'fischer', 'lotse'],
-  kriminalitaet: ['taschendieb', 'einbrecher', 'hehler', 'schmuggler', 'spion', 'assasine', 'bandit', 'pirat'],
-  magie: ['magier', 'runenschmied', 'verzauberer', 'beschwoerer', 'wahrsager', 'arkanist'],
-  kunst_kultur: ['maler', 'bildhauer', 'barde', 'musiker', 'schauspieler', 'dichter', 'schriftsteller'],
-  religion: ['priester', 'paladin', 'inquisitor', 'moench', 'exorzist', 'seelsorger'],
-  abenteuer: ['abenteurer', 'soeldner', 'gladiator', 'monsterjaeger', 'schatzsucher', 'kundschafter'],
+  kriminalitaet: ['taschendieb', 'einbrecher', 'hehler', 'spion', 'bandit'],
+  magie: ['magier', 'runenschmied', 'beschwoerer', 'wahrsager'],
+  kunst_kultur: ['maler', 'bildhauer', 'barde', 'schauspieler', 'schriftsteller'],
+  religion: ['priester', 'paladin', 'moench', 'seelsorger'],
+  abenteuer: ['abenteurer', 'soeldner', 'gladiator', 'monsterjaeger'],
 
   // Legacy Aliases for backwards compatibility
-  metall_waffen: ['schmied', 'mechaniker', 'instrumentenbauer', 'schlosser', 'giesser'],
+  metall_waffen: ['schmied', 'goldschmied', 'mechaniker', 'giesser'],
   lebensmittel_ernaehrung: ['koch', 'baecker', 'brauer', 'metzger', 'winzer', 'mueller', 'kaeser'],
-  militaer_streitkraefte: ['soldat', 'schuetze', 'kavallerist', 'scout'],
-  militaer_sicherheit: ['soldat', 'schuetze', 'kavallerist', 'scout'],
-  magie_arkana: ['magier', 'runenschmied', 'alchemist'],
-  arkan_magie: ['magier', 'runenschmied', 'alchemist'],
-  wissenschaft_forschung: ['alchemist', 'apotheker', 'astronom', 'kartograph'],
-  verwaltung_wirtschaft: ['kaufmann', 'buchhalter', 'notar', 'schreiber'],
-  verwaltung_recht: ['kaufmann', 'buchhalter', 'notar', 'schreiber'],
-  staatsdienst_diplomatie: ['diplomat', 'leibwaechter', 'kanzler', 'vogt', 'herold'],
+  militaer_streitkraefte: ['soldat', 'schuetze', 'kavallerist', 'scout', 'waffenmeister'],
+  militaer_sicherheit: ['soldat', 'schuetze', 'kavallerist', 'scout', 'waffenmeister'],
+  magie_arkana: ['magier', 'runenschmied', 'beschwoerer', 'wahrsager'],
+  arkan_magie: ['magier', 'runenschmied', 'beschwoerer', 'wahrsager'],
+  wissenschaft_forschung: ['alchemist', 'gelehrter', 'astronom', 'kartograph'],
+  verwaltung_wirtschaft: ['kaufmann', 'bankier', 'lagerverwalter'],
+  verwaltung_recht: ['schreiber', 'beamter', 'richter', 'diplomat'],
+  staatsdienst_diplomatie: ['diplomat', 'richter', 'beamter', 'schreiber'],
   unabhaengige_abenteurer: ['abenteurer', 'soeldner', 'gladiator', 'monsterjaeger'],
   abenteuer_sondergewerbe: ['abenteurer', 'soeldner', 'gladiator', 'monsterjaeger'],
-  geheimoperationen_ueberleben: ['spion', 'infiltrator', 'assasine'],
-  landwirtschaft_versorgung: ['bauer', 'schaefer', 'imker', 'foerster'],
-  religion_klerus: ['priester', 'paladin', 'inquisitor'],
-  materialverarbeitung: ['gerber', 'schneider', 'weber', 'glasmacher', 'toepfer'],
-  bergbau_rohstoffe: ['bergmann', 'steinhauer', 'prospektor', 'schmelzer'],
-  wandernde_erkundung: ['jaeger', 'fallensteller', 'faehrtenleser'],
-  tierfuehrung_tamer: ['tiertrainer', 'falkner', 'pferdezuechter'],
-  kriminelle_berufe: ['taschendieb', 'einbrecher', 'hehler', 'schmuggler'],
-  haushalt_dienste: ['diener', 'zofe', 'butler'],
-  unterhaltung_spezial: ['schauspieler', 'gaukler', 'illusionist'],
-  luxus_spezial: ['goldschmied', 'juwelier', 'parfuemeur'],
-  bildung_erziehung: ['lehrer', 'fechtmeister', 'dozent']
+  geheimoperationen_ueberleben: ['spion', 'einbrecher', 'taschendieb', 'bandit'],
+  landwirtschaft_versorgung: ['bauer', 'jaeger', 'foerster', 'bergmann', 'imker', 'schaefer'],
+  religion_klerus: ['priester', 'paladin', 'moench', 'seelsorger'],
+  materialverarbeitung: ['steinmetz', 'zimmermann', 'tischler', 'schneider', 'gerber', 'toepfer'],
+  bergbau_rohstoffe: ['bergmann', 'steinmetz'],
+  wandernde_erkundung: ['jaeger', 'foerster', 'scout'],
+  tierfuehrung_tamer: ['schaefer', 'jaeger'],
+  kriminelle_berufe: ['taschendieb', 'einbrecher', 'hehler', 'spion', 'bandit'],
+  haushalt_dienste: ['diener', 'kutscher', 'barbier', 'bote', 'gastwirt'],
+  unterhaltung_spezial: ['barde', 'schauspieler', 'maler'],
+  luxus_spezial: ['goldschmied', 'schmied', 'mechaniker'],
+  bildung_erziehung: ['gelehrter', 'schreiber']
 };
 
 /**
@@ -1845,78 +1959,78 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
   // Wine & Viticulture
   if (lower.includes('winzer') || lower.includes('wein') || lower.includes('kelter') || lower.includes('reben') || lower.includes('oenolog')) {
     return {
-      entryName: 'Weinberggehilfe & Kelterbursche',
+      entryName: 'Weinberggehilfe',
       entryTitle: 'Einstieg & Weinbergpflege',
       journeyName: clean,
       journeyTitle: 'Weinbau & Kellerwirtschaft',
-      specName: 'Kellermeister & Weinsommelier',
+      specName: 'Kellermeister',
       specTitle: 'Fassausbau & Cuvéekunst',
-      masterName: 'Weingutsleiter & Oberkellermeister',
+      masterName: 'Weingutsleiter',
       masterTitle: 'Weingutsdirektion & Lagenmeister'
     };
   }
   // Brewing & Malting
   if (lower.includes('brauer') || lower.includes('bier') || lower.includes('mälzer')) {
     return {
-      entryName: 'Braubursche & Fasswäscher',
+      entryName: 'Braubursche',
       entryTitle: 'Einstieg & Sudhausdienst',
       journeyName: clean,
       journeyTitle: 'Braukunst & Gärungskontrolle',
-      specName: 'Braumeister & Biersommelier',
+      specName: 'Biersommelier',
       specTitle: 'Spezialsud & Fassreifung',
-      masterName: 'Brauereidirektor & Zunftbraumeister',
+      masterName: 'Braumeister',
       masterTitle: 'Großbrauereileitung & Zunftvorsitz'
     };
   }
   // Restaurant Service & Waiter
   if (lower.includes('kellner') || lower.includes('schank') || lower.includes('bedienung') || lower.includes('service')) {
     return {
-      entryName: 'Schankbursche & Saalläufer',
+      entryName: 'Schankbursche',
       entryTitle: 'Einstieg & Gästebewirtung',
       journeyName: clean,
       journeyTitle: 'Servierpraxis & Kundenbetreuung',
-      specName: 'Chef de Rang & Bankettleiter',
+      specName: 'Bankettleiter',
       specTitle: 'Weinservice & Festsaalkoordination',
-      masterName: 'Maître d’Hôtel & Oberkellner',
+      masterName: 'Maître d’Hôtel',
       masterTitle: 'Gastronomieleitung & Serviceinspektion'
     };
   }
   // Gardening & Botany
   if (lower.includes('gärtner') || lower.includes('garten') || lower.includes('pflanz') || lower.includes('botan')) {
     return {
-      entryName: 'Gartengehilfe & Beetpfleger',
+      entryName: 'Gartengehilfe',
       entryTitle: 'Einstieg & Anzuchtpraxis',
       journeyName: clean,
       journeyTitle: 'Gartenbau & Gehölzpflege',
-      specName: 'Gartenbauspezialist & Ziergärtner',
+      specName: 'Ziergärtner',
       specTitle: 'Veredelung & Parkgestaltung',
-      masterName: 'Hofgärtnermeister & Parkdirektor',
+      masterName: 'Hofgärtnermeister',
       masterTitle: 'Gartenarchitektur & Direktion'
     };
   }
   // Beekeeping & Apiary
   if (lower.includes('imker') || lower.includes('bien') || lower.includes('zeidl')) {
     return {
-      entryName: 'Zeidlergehilfe & Bienenbursche',
+      entryName: 'Zeidlergehilfe',
       entryTitle: 'Einstieg & Bienenstockbetreuung',
       journeyName: clean,
       journeyTitle: 'Imkerei & Honigernte',
-      specName: 'Königinnenzüchter & Metbrauer',
+      specName: 'Königinnenzüchter',
       specTitle: 'Völkerzucht & Veredelung',
-      masterName: 'Zeidlermeister & Imkerobermeister',
+      masterName: 'Zeidlermeister',
       masterTitle: 'Zunftleitung & Bienenschutz'
     };
   }
   // Fishing & Aquaculture
   if (lower.includes('fischer') || lower.includes('fischfang') || lower.includes('netz')) {
     return {
-      entryName: 'Netzflicker & Bootsjunge',
+      entryName: 'Netzflicker',
       entryTitle: 'Einstieg & Fangvorbereitung',
       journeyName: clean,
       journeyTitle: 'Fischerei & Gewässerkunde',
-      specName: 'Hochseefischer & Zuchtmeister',
+      specName: 'Hochseefischer',
       specTitle: 'Schwarmortung & Teichwirtschaft',
-      masterName: 'Fischereimeister & Oberaufseher',
+      masterName: 'Fischereimeister',
       masterTitle: 'Innungsleitung & Revierverwaltung'
     };
   }
@@ -1936,26 +2050,26 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
   // Domestic / Service
   if (lower.includes('diener') || lower.includes('zofe') || lower.includes('butler') || lower.includes('kammer') || lower.includes('page') || fieldId === 'haushalt_dienste') {
     return {
-      entryName: `Laufbursche & Hauspage (${clean})`,
+      entryName: `Laufbursche (${clean})`,
       entryTitle: 'Einstieg & Hausdienst',
       journeyName: clean,
       journeyTitle: 'Herrschaftlicher Dienst',
       specName: `Kammer- & Tafeldienst (${clean})`,
       specTitle: 'Vertrauensstellung & Tafelaufsicht',
-      masterName: `Haushofmeister & Majordomus (${clean})`,
+      masterName: `Haushofmeister (${clean})`,
       masterTitle: 'Hausleitung & Residenzführung'
     };
   }
   // Coachman / Transport
   if (lower.includes('kutscher') || lower.includes('fuhrmann') || lower.includes('karren')) {
     return {
-      entryName: 'Stalljunge & Wagenknecht',
+      entryName: 'Stalljunge',
       entryTitle: 'Einstieg & Gespanndienst',
       journeyName: clean,
       journeyTitle: 'Fahrpraxis & Gespannführung',
-      specName: 'Postillon & Karossenlenker',
+      specName: 'Postillon',
       specTitle: 'Reisekutsche & Fernrouten',
-      masterName: 'Hofkutscher & Fahrmeister',
+      masterName: 'Hofkutscher',
       masterTitle: 'Hofstallmeister & Fuhrwerksleitung'
     };
   }
@@ -1966,7 +2080,7 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
       entryTitle: 'Einstieg & Rekrutenausbildung',
       journeyName: clean,
       journeyTitle: 'Garnisonsdienst & Feldeinsatz',
-      specName: `Gardist & Wehrmeister (${clean})`,
+      specName: `Gardist (${clean})`,
       specTitle: 'Garde & Gefechtstaktik',
       masterName: `Feldwebel & Waffenmeister (${clean})`,
       masterTitle: 'Truppenkommando & Ausbilder'
@@ -1975,13 +2089,13 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
   // Ranged / Archer
   if (lower.includes('schütz') || lower.includes('bogen') || lower.includes('armbrust')) {
     return {
-      entryName: 'Pfeiljunge & Spanngehilfe',
+      entryName: 'Pfeiljunge',
       entryTitle: 'Einstieg & Schießübungen',
       journeyName: clean,
       journeyTitle: 'Präzisionsschütze',
-      specName: 'Scharfschütze & Weitschütze',
+      specName: 'Scharfschütze',
       specTitle: 'Windkunde & Zielvisierung',
-      masterName: 'Meisterschütze & Schützenhauptmann',
+      masterName: 'Meisterschütze',
       masterTitle: 'Schützenkommando & Meisterschaft'
     };
   }
@@ -2001,13 +2115,13 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
   // Magic / Arcana
   if (lower.includes('magi') || lower.includes('zauber') || lower.includes('arkan') || lower.includes('hexe') || lower.includes('beschwör') || fieldId.includes('magie')) {
     return {
-      entryName: `Arkan-Novize & Schriftrollenschüler (${clean})`,
+      entryName: `Arkan-Novize (${clean})`,
       entryTitle: 'Einstieg & Mana-Grundlagen',
       journeyName: clean,
       journeyTitle: 'Spruchpraxis & Ritualistik',
       specName: `Siegelweber & Elementarkundiger (${clean})`,
       specTitle: 'Komplexe Matrix & Arkanbindung',
-      masterName: `Erzmagier & Magister Artium (${clean})`,
+      masterName: `Erzmagier (${clean})`,
       masterTitle: 'Arkaner Konvent & Hochmagie'
     };
   }
@@ -2027,26 +2141,26 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
   // Clergy / Religion
   if (lower.includes('priester') || lower.includes('klerik') || lower.includes('mönch') || lower.includes('nonne') || lower.includes('predig') || lower.includes('akolyth') || fieldId === 'religion_klerus') {
     return {
-      entryName: `Akolyth & Tempelnovize (${clean})`,
+      entryName: `Akolyth (${clean})`,
       entryTitle: 'Einstieg & Liturgiedienst',
       journeyName: clean,
       journeyTitle: 'Seelsorge & Gemeindeandacht',
-      specName: `Dompropst & Zeremonienmeister (${clean})`,
+      specName: `Dompropst (${clean})`,
       specTitle: 'Sakramente & Heilige Riten',
-      masterName: `Bischof & Hochkleriker (${clean})`,
+      masterName: `Bischof (${clean})`,
       masterTitle: 'Diözesanleitung & Oberklerus'
     };
   }
   // Trade / Commerce
   if (lower.includes('kauf') || lower.includes('händl') || lower.includes('kräm') || lower.includes('markt') || fieldId.includes('verwaltung_wirtschaft')) {
     return {
-      entryName: `Kontorbursche & Laufgehilfe (${clean})`,
+      entryName: `Kontorbursche (${clean})`,
       entryTitle: 'Einstieg & Kontorarbeiten',
       journeyName: clean,
       journeyTitle: 'Warenverkehr & Feilschen',
-      specName: `Fernhändler & Faktoreileiter (${clean})`,
+      specName: `Fernhändler (${clean})`,
       specTitle: 'Karawanenhandel & Kontore',
-      masterName: `Handelsherr & Großpatrizier (${clean})`,
+      masterName: `Handelsherr (${clean})`,
       masterTitle: 'Gildevorsitz & Großkapital'
     };
   }
@@ -2066,13 +2180,13 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
   // Rogue / Thief / Subterfuge
   if (lower.includes('dieb') || lower.includes('schurke') || lower.includes('schmugg') || lower.includes('spion') || lower.includes('hehler') || lower.includes('einbrech') || fieldId === 'kriminelle_berufe' || fieldId.includes('geheimoperationen')) {
     return {
-      entryName: `Gassenjunge & Schnüffler (${clean})`,
+      entryName: `Gassenjunge (${clean})`,
       entryTitle: 'Einstieg & Schattenschritte',
       journeyName: clean,
       journeyTitle: 'Fingerfertigkeit & Hehlerei',
-      specName: `Fingerkünstler & Schlösserknacker (${clean})`,
+      specName: `Fingerkünstler (${clean})`,
       specTitle: 'Infiltration & Mechanik',
-      masterName: `Meisterdieb & Schattenfürst (${clean})`,
+      masterName: `Meisterdieb (${clean})`,
       masterTitle: 'Unterweltführung & Zunftleitung'
     };
   }
@@ -2105,13 +2219,13 @@ export function getRoleSpecificTitles(jobName: string, fieldId: string): {
   // Agriculture / Livestock
   if (lower.includes('bauer') || lower.includes('acker') || lower.includes('hirte') || lower.includes('schäf') || lower.includes('zucht') || lower.includes('vieh') || fieldId.includes('landwirtschaft')) {
     return {
-      entryName: `Hofknecht & Saatjunge (${clean})`,
+      entryName: `Hofknecht (${clean})`,
       entryTitle: 'Einstieg & Feldbestellung',
       journeyName: clean,
       journeyTitle: 'Bodenpflege & Ernteführung',
       specName: `Gutspächter & Zuchtmeister (${clean})`,
       specTitle: 'Saatgutveredelung & Stallaufsicht',
-      masterName: `Hofbesitzer & Dorfschulze (${clean})`,
+      masterName: `Hofbesitzer (${clean})`,
       masterTitle: 'Gutsverwaltung & Agrargroßbetrieb'
     };
   }
@@ -2344,11 +2458,30 @@ export function convertProgressionToNodes(
 
   progression.ranks.forEach(rankStep => {
     const nodeId = `${fieldId}.${branchKey}_${rankStep.idSuffix}`;
-    const nextStep = progression.ranks.find(r => r.rankOrder === rankStep.rankOrder + 1);
-    const prevStep = progression.ranks.find(r => r.rankOrder === rankStep.rankOrder - 1);
 
-    const parentIds: string[] = prevStep ? [`${fieldId}.${branchKey}_${prevStep.idSuffix}`] : [];
-    const childIds: string[] = nextStep ? [`${fieldId}.${branchKey}_${nextStep.idSuffix}`] : [];
+    // Find all potential parents (rankOrder - 1) and children (rankOrder + 1)
+    const prevSteps = progression.ranks.filter(r => r.rankOrder === rankStep.rankOrder - 1);
+    const nextSteps = progression.ranks.filter(r => r.rankOrder === rankStep.rankOrder + 1);
+
+    let parentIds: string[] = [];
+    if (rankStep.prerequisiteJobName) {
+      const match = progression.ranks.find(r => r.name.toLowerCase().trim() === rankStep.prerequisiteJobName?.toLowerCase().trim());
+      if (match) {
+        parentIds = [`${fieldId}.${branchKey}_${match.idSuffix}`];
+      }
+    }
+    if (parentIds.length === 0 && prevSteps.length > 0) {
+      parentIds = prevSteps.map(p => `${fieldId}.${branchKey}_${p.idSuffix}`);
+    }
+
+    let childIds: string[] = [];
+    // Next steps that explicitly target this rankStep or general next tier
+    const explicitChildren = progression.ranks.filter(r => r.prerequisiteJobName?.toLowerCase().trim() === rankStep.name.toLowerCase().trim());
+    if (explicitChildren.length > 0) {
+      childIds = explicitChildren.map(c => `${fieldId}.${branchKey}_${c.idSuffix}`);
+    } else if (nextSteps.length > 0) {
+      childIds = nextSteps.map(n => `${fieldId}.${branchKey}_${n.idSuffix}`);
+    }
 
     // Assemble prerequisites
     const prerequisites: ProfessionPrerequisite[] = [];
@@ -2418,11 +2551,11 @@ export function convertProgressionToNodes(
       category: progression.branchName,
       rankOrder: rankStep.rankOrder,
       rankTitle: rankStep.rankTitle,
-      nextRankProfession: rankStep.nextRankName || nextStep?.name,
-      previousRankProfession: prevStep?.name,
+      nextRankProfession: rankStep.nextRankName || (nextSteps.length > 0 ? nextSteps[0].name : undefined),
+      previousRankProfession: prevSteps.length > 0 ? prevSteps[0].name : undefined,
       parentIds,
       childIds,
-      specializationOf: prevStep ? `${fieldId}.${branchKey}_${prevStep.idSuffix}` : undefined,
+      specializationOf: prevSteps.length > 0 ? `${fieldId}.${branchKey}_${prevSteps[0].idSuffix}` : undefined,
       description: rankStep.description,
       prerequisites,
       careerRoutes: [
@@ -2456,7 +2589,7 @@ export function getBranchesForField(fieldId: string, fieldName?: string): Profes
   const branches: ProfessionBranchProgression[] = [];
   const seen = new Set<string>();
 
-  // 1. Process manually mapped branches first
+  // 1. Process manually mapped consolidated branches first
   for (const key of branchKeys) {
     if (seen.has(key)) continue;
     seen.add(key);
@@ -2469,32 +2602,34 @@ export function getBranchesForField(fieldId: string, fieldName?: string): Profes
     }
   }
 
-  // 2. Process all preset jobs in JOB_CATEGORIES to ensure no profession is left behind
-  const categoryPreset = JOB_CATEGORIES.find(c => c.fieldId === fieldId);
-  if (categoryPreset && categoryPreset.jobs.length > 0) {
-    const rawJobs = categoryPreset.jobs;
-    for (const rawJob of rawJobs) {
-      const parts = rawJob.split(' / ').map(p => p.trim());
-      const mainJob = parts[0];
-      
-      // Standard key normalization
-      const mainKey = mainJob.toLowerCase().replace(/[^a-z0-9]/g, '_');
-      // German umlaut aware normalization
-      const umKey = mainJob.toLowerCase()
-        .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
-        .replace(/[^a-z0-9]/g, '_');
+  // 2. Only if no mapped branches were defined for this field, fall back to raw preset jobs in JOB_CATEGORIES
+  if (branches.length === 0) {
+    const categoryPreset = JOB_CATEGORIES.find(c => c.fieldId === fieldId);
+    if (categoryPreset && categoryPreset.jobs.length > 0) {
+      const rawJobs = categoryPreset.jobs;
+      for (const rawJob of rawJobs) {
+        const parts = rawJob.split(' / ').map(p => p.trim());
+        const mainJob = parts[0];
+        
+        // Standard key normalization
+        const mainKey = mainJob.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        // German umlaut aware normalization
+        const umKey = mainJob.toLowerCase()
+          .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+          .replace(/[^a-z0-9]/g, '_');
 
-      if (seen.has(mainKey) || seen.has(umKey)) continue;
-      
-      seen.add(mainKey);
-      seen.add(umKey);
+        if (seen.has(mainKey) || seen.has(umKey)) continue;
+        
+        seen.add(mainKey);
+        seen.add(umKey);
 
-      if (DETAILED_PROFESSION_PROGRESSIONS[mainKey]) {
-        branches.push(DETAILED_PROFESSION_PROGRESSIONS[mainKey]);
-      } else if (DETAILED_PROFESSION_PROGRESSIONS[umKey]) {
-        branches.push(DETAILED_PROFESSION_PROGRESSIONS[umKey]);
-      } else {
-        branches.push(generateDefaultRanksForJob(mainJob, fieldId, cleanFieldName));
+        if (DETAILED_PROFESSION_PROGRESSIONS[mainKey]) {
+          branches.push(DETAILED_PROFESSION_PROGRESSIONS[mainKey]);
+        } else if (DETAILED_PROFESSION_PROGRESSIONS[umKey]) {
+          branches.push(DETAILED_PROFESSION_PROGRESSIONS[umKey]);
+        } else {
+          branches.push(generateDefaultRanksForJob(mainJob, fieldId, cleanFieldName));
+        }
       }
     }
   }

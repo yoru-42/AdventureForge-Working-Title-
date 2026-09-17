@@ -13,7 +13,7 @@ export const HoldingLogsTab: React.FC<HoldingLogsTabProps> = ({
   world,
   onUpdateHolding
 }) => {
-  const logs = holding.activityLogs || [];
+  const logs = Array.isArray(holding.activityLogs) ? holding.activityLogs : [];
   const [filter, setFilter] = useState<'all' | 'staff_action' | 'incident' | 'issue_report'>('all');
   const [isSimulating, setIsSimulating] = useState(false);
 

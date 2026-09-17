@@ -13,7 +13,7 @@ export const HoldingFinancesTab: React.FC<HoldingFinancesTabProps> = ({
   currencyIcon,
   onUpdateHolding
 }) => {
-  const upgrades = holding.upgrades || [];
+  const upgrades = Array.isArray(holding.upgrades) ? holding.upgrades : [];
   const net = (holding.incomePerInterval || 0) - (holding.upkeepPerInterval || 0);
 
   const handleAddUpgrade = () => {

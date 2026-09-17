@@ -8,7 +8,8 @@ import {
   EconomyStaffGroup, 
   EconomyOrder, 
   EconomyDecision, 
-  EconomyLogEntry 
+  EconomyLogEntry,
+  HoldingRoom 
 } from '../../types';
 
 export interface HoldingTypePreset {
@@ -331,6 +332,569 @@ export const AUTHORITY_DUTIES_MAP: Record<string, string> = {
   'Notfall- & Evakuierungskommando': 'Befehlsgewalt bei Notfällen, Brandbekämpfung, Seuchen oder Verteidigung'
 };
 
+export interface DefaultJobPosition {
+  name: string;
+  workplaceArea: string;
+  salary: number;
+  responsibilities: string[];
+  authorities?: string[];
+}
+
+/**
+ * Liefert Standardräume passend zum Betriebs- / Gebäudetyp und der gewählten Größe.
+ */
+export const getDefaultRoomsForHolding = (type: string, size: string = 'Mittel'): HoldingRoom[] => {
+  const normSize = (size || 'Mittel').toLowerCase();
+  const isKlein = normSize.includes('klein');
+  const isGross = normSize.includes('groß') || normSize.includes('gross');
+  const isMonumental = normSize.includes('monumental') || normSize.includes('riesig');
+
+  switch (type) {
+    case 'taverne':
+    case 'gasthaus':
+    case 'herberge':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Schankraum & Gaststube', count: 1, purpose: 'Ausschank & Bewirtung (ca. 15 Gäste)' },
+          { id: 'room-2', name: 'Kleine Küche', count: 1, purpose: 'Einfache Speisenzubereitung' },
+          { id: 'room-3', name: 'Schlafzimmer für Gäste', count: 2, purpose: 'Gästeunterkunft' },
+          { id: 'room-4', name: 'Schlafzimmer für Personal', count: 1, purpose: 'Personalunterkunft' },
+          { id: 'room-5', name: 'Vorratskammer', count: 1, purpose: 'Lebensmittel- & Faßlager' }
+        ];
+      }
+      if (isGross) {
+        return [
+          { id: 'room-1', name: 'Großer Schankraum', count: 1, purpose: 'Hauptgaststube (ca. 80 Gäste)' },
+          { id: 'room-2', name: 'Separater Festsaal / Clubzimmer', count: 1, purpose: 'Gesellschaften & geschlossene Runden' },
+          { id: 'room-3', name: 'Großküche & Backstube', count: 1, purpose: 'Warme Küche & Vorbereitung' },
+          { id: 'room-4', name: 'Schlafzimmer für Gäste', count: 12, purpose: 'Gästeunterkunft (Einzel- & Doppelzimmer)' },
+          { id: 'room-5', name: 'Schlafzimmer für Personal', count: 5, purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Gewölbekeller für Bier & Vorräte', count: 1, purpose: 'Fässer, Weine & Kühlung' },
+          { id: 'room-7', name: 'Pferdestall & Kutschenremise', count: 1, purpose: 'Gastpferde & Reisewagen' },
+          { id: 'room-8', name: 'Büro des Wirts / Schreibstube', count: 1, purpose: 'Buchführung & Kasse' }
+        ];
+      }
+      if (isMonumental) {
+        return [
+          { id: 'room-1', name: 'Prunkvoller Hauptsaal', count: 1, purpose: 'Großbewirtung & Festlichkeiten (150+ Gäste)' },
+          { id: 'room-2', name: 'Nebensäle & Séparées', count: 2, purpose: 'Exklusive Runden & VIP-Gäste' },
+          { id: 'room-3', name: 'Großgastronomieküche mit Kühlkellern', count: 1, purpose: 'Vollgastronomie' },
+          { id: 'room-4', name: 'Schlafzimmer für Gäste (Suiten)', count: 25, purpose: 'Gästeunterkunft gehobener Güte' },
+          { id: 'room-5', name: 'Schlafzimmer für Personal', count: 10, purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Große Hausbrauerei & Weinkeller', count: 1, purpose: 'Braustube & Großlager' },
+          { id: 'room-7', name: 'Große Stallung & Wagenhalle', count: 1, purpose: 'Gespann- & Pferdewechsel' },
+          { id: 'room-8', name: 'Direktionskontor & Geldkammer', count: 1, purpose: 'Geschäftsleitung' },
+          { id: 'room-9', name: 'Badehaus & Waschküche', count: 1, purpose: 'Gästekomfort & Wäscheservice' }
+        ];
+      }
+      // Mittel (Standard) - Vorgabe: 1 Küche, 5 Gästezimmer, 3 Personalzimmer etc.
+      return [
+        { id: 'room-1', name: 'Schankraum & Gaststube', count: 1, purpose: 'Ausschank & Bewirtung (ca. 40 Gäste)' },
+        { id: 'room-2', name: 'Küche', count: 1, purpose: 'Speisenzubereitung' },
+        { id: 'room-3', name: 'Schlafzimmer für Gäste', count: 5, purpose: 'Gästeunterkunft' },
+        { id: 'room-4', name: 'Schlafzimmer für Personal', count: 3, purpose: 'Personalunterkunft' },
+        { id: 'room-5', name: 'Vorratskeller & Bierlager', count: 1, purpose: 'Fässer & Vorräte' },
+        { id: 'room-6', name: 'Pferdestall & Innenhof', count: 1, purpose: 'Reittiere der Reisenden' }
+      ];
+
+    case 'schmiede':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Werkstatt mit Esse & Amboss', count: 1, purpose: 'Schmiedearbeiten' },
+          { id: 'room-2', name: 'Werkzeug- & Kohlelager', count: 1, purpose: 'Brennstoff & Arbeitsgeräte' },
+          { id: 'room-3', name: 'Wohnstube des Schmieds', count: 1, purpose: 'Wohnbereich' }
+        ];
+      }
+      if (isGross) {
+        return [
+          { id: 'room-1', name: 'Grobschmiede & Hufbeschlag', count: 1, purpose: 'Werkzeuge & Hufeisen' },
+          { id: 'room-2', name: 'Waffenschmiede & Feinarbeit', count: 1, purpose: 'Klingen & Rüstungsteile' },
+          { id: 'room-3', name: 'Gießerei & Härtebecken', count: 1, purpose: 'Guss & thermische Härtung' },
+          { id: 'room-4', name: 'Großes Material- & Erzlager', count: 1, purpose: 'Barren & Kohlevorräte' },
+          { id: 'room-5', name: 'Waffenkammer & Ausstellungsraum', count: 1, purpose: 'Verkauf & Kundenpräsentation' },
+          { id: 'room-6', name: 'Schlafzimmer für Gesellen & Knechte', count: 4, purpose: 'Personalunterkunft' },
+          { id: 'room-7', name: 'Meisterwohnung & Schreibstube', count: 1, purpose: 'Leitung & Buchhaltung' }
+        ];
+      }
+      if (isMonumental) {
+        return [
+          { id: 'room-1', name: 'Große Rüstungsschmiede & Zeughaus', count: 1, purpose: 'Serienfertigung von Rüstzeug' },
+          { id: 'room-2', name: 'Waffenmanufaktur', count: 1, purpose: 'Schwerter, Stangenwaffen, Schilde' },
+          { id: 'room-3', name: 'Erzschmelze & Großhochofen', count: 1, purpose: 'Erzveredelung' },
+          { id: 'room-4', name: 'Zentralmagazin für Metalle & Kohle', count: 2, purpose: 'Rohstoffdepots' },
+          { id: 'room-5', name: 'Schlafzimmer für Handwerker & Gesellen', count: 8, purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Verwaltungskanzlei & Prüfstelle', count: 1, purpose: 'Güteprüfung & Auftragsvergabe' }
+        ];
+      }
+      // Mittel (Standard)
+      return [
+        { id: 'room-1', name: 'Hauptschmiede (2 Essen, 2 Ambosse)', count: 1, purpose: 'Tagesproduktion & Reparaturen' },
+        { id: 'room-2', name: 'Material- & Kohlebunker', count: 1, purpose: 'Rohstoffe & Brennmaterial' },
+        { id: 'room-3', name: 'Verkaufs- & Schauraum', count: 1, purpose: 'Warenpräsentation & Auftragsannahme' },
+        { id: 'room-4', name: 'Schlafzimmer für Gesellen', count: 2, purpose: 'Personalunterkunft' },
+        { id: 'room-5', name: 'Beschlagplatz im Hof', count: 1, purpose: 'Pferdebeschlag & Wagenräder' }
+      ];
+
+    case 'baeckerei':
+    case 'muehle':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Backstube mit Steinofen', count: 1, purpose: 'Teigbereitung & Backen' },
+          { id: 'room-2', name: 'Verkaufsladen', count: 1, purpose: 'Theke & Warenausgabe' },
+          { id: 'room-3', name: 'Mehl- & Vorratskammer', count: 1, purpose: 'Zutatenlager' }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { id: 'room-1', name: 'Großbackstube mit 3 Backöfen', count: 1, purpose: 'Großproduktion von Brot & Gebäck' },
+          { id: 'room-2', name: 'Konditorei & Feingebäck-Stube', count: 1, purpose: 'Spezialitäten & Kuchen' },
+          { id: 'room-3', name: 'Großer Verkaufsraum & Probierstube', count: 1, purpose: 'Kundenbedienung' },
+          { id: 'room-4', name: 'Mehl- & Getreidesilo', count: 2, purpose: 'Rohstoffsicherung' },
+          { id: 'room-5', name: 'Schlafzimmer für Bäckergesellen', count: 4, purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Expedition & Auslieferungshof', count: 1, purpose: 'Beladung von Marktkarren' }
+        ];
+      }
+      return [
+        { id: 'room-1', name: 'Backstube mit 2 Backöfen', count: 1, purpose: 'Tagesproduktion' },
+        { id: 'room-2', name: 'Verkaufsraum mit Theke', count: 1, purpose: 'Kundenbedienung & Kasse' },
+        { id: 'room-3', name: 'Mehlkammer & Getreidelager', count: 1, purpose: 'Zutatenvorrat' },
+        { id: 'room-4', name: 'Schlafzimmer für Bäcker & Gesellen', count: 2, purpose: 'Personalunterkunft' },
+        { id: 'room-5', name: 'Holz- & Geräteschuppen', count: 1, purpose: 'Ofenholz & Mulden' }
+      ];
+
+    case 'bauernhof':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Wohnstube & Bauernküche', count: 1, purpose: 'Wohnbereich der Bauernfamilie' },
+          { id: 'room-2', name: 'Viehstall für Kleinvieh', count: 1, purpose: 'Hühner, Ziegen, Schwein' },
+          { id: 'room-3', name: 'Heuboden & Gerätescheune', count: 1, purpose: 'Heu & Werkzeug' },
+          { id: 'room-4', name: 'Erdkeller für Wurzelgemüse', count: 1, purpose: 'Wintervorräte' }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { id: 'room-1', name: 'Hof-Herrenhaus mit Gesindeküche', count: 1, purpose: 'Hauptwohnsitz & Verwaltung' },
+          { id: 'room-2', name: 'Großstallungen (Rinder & Pferde)', count: 2, purpose: 'Nutztierhaltung' },
+          { id: 'room-3', name: 'Schweinestall & Geflügelhof', count: 1, purpose: 'Zucht & Mast' },
+          { id: 'room-4', name: 'Große Getreidescheune & Dreschplatz', count: 2, purpose: 'Erntegut' },
+          { id: 'room-5', name: 'Schlafzimmer für Mägde & Knechte', count: 6, purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Räucherkammer, Käserei & Mostkeller', count: 1, purpose: 'Veredelung von Hofgütern' },
+          { id: 'room-7', name: 'Remise für Pflüge & Fuhrwerke', count: 1, purpose: 'Geräteunterstand' }
+        ];
+      }
+      return [
+        { id: 'room-1', name: 'Bauernhaus mit Wohnstube', count: 1, purpose: 'Wohnbereich & Speisekammer' },
+        { id: 'room-2', name: 'Großviehställe', count: 1, purpose: 'Kühe & Arbeitspferde' },
+        { id: 'room-3', name: 'Schweinestall & Hühnerstall', count: 1, purpose: 'Kleinvieh' },
+        { id: 'room-4', name: 'Getreidescheune & Heulager', count: 1, purpose: 'Erntevorräte' },
+        { id: 'room-5', name: 'Schlafzimmer für Mägde & Knechte', count: 3, purpose: 'Personalunterkunft' },
+        { id: 'room-6', name: 'Vorrats- & Vorratskeller', count: 1, purpose: 'Haltbarmachung' }
+      ];
+
+    case 'mine':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Mundloch & Förderstollen', count: 1, purpose: 'Erzabbau' },
+          { id: 'room-2', name: 'Werkzeug- & Gezäheschuppen', count: 1, purpose: 'Spitzhacken, Lampen & Seile' },
+          { id: 'room-3', name: 'Unterstand für Knappen', count: 1, purpose: 'Pausenraum & Schichtwechsel' }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { id: 'room-1', name: 'Hauptförderschächte & Tiefsohlen', count: 3, purpose: 'Untertageabbau' },
+          { id: 'room-2', name: 'Zechenverwaltung & Kasse', count: 1, purpose: 'Schichtleitung & Lohnvergabe' },
+          { id: 'room-3', name: 'Große Kaue mit Waschgelegenheit', count: 1, purpose: 'Umkleide & Mannschaftsraum' },
+          { id: 'room-4', name: 'Erzaufbereitung & Pochwerk', count: 1, purpose: 'Zerkleinerung & Sortierung' },
+          { id: 'room-5', name: 'Zechenschmiede & Zimmererwerkstatt', count: 1, purpose: 'Gezähe-Instandhaltung & Stützbalken' },
+          { id: 'room-6', name: 'Schlafzimmer für Bergleute (Baracken)', count: 6, purpose: 'Knappschaftsquartiere' },
+          { id: 'room-7', name: 'Großes Erzlager & Verladestation', count: 1, purpose: 'Abtransport' }
+        ];
+      }
+      return [
+        { id: 'room-1', name: 'Förderschacht & Hauptstrecke', count: 1, purpose: 'Erz- & Gesteinsförderung' },
+        { id: 'room-2', name: 'Zechenkontor & Erzwaage', count: 1, purpose: 'Erfassung des Abbaus' },
+        { id: 'room-3', name: 'Mannschaftskaue', count: 1, purpose: 'Aufenthalt & Ausrüstung' },
+        { id: 'room-4', name: 'Erzlagerplatz im Freien', count: 1, purpose: 'Zwischenlagerung von Rohstein' },
+        { id: 'room-5', name: 'Bergschmiede', count: 1, purpose: 'Schärfen von Meißeln & Hacken' },
+        { id: 'room-6', name: 'Schlafzimmer für Bergleute', count: 2, purpose: 'Personalunterkunft' }
+      ];
+
+    case 'werkstatt':
+    case 'atelier':
+    case 'manufaktur':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Werkstattraum mit Werkbank', count: 1, purpose: 'Handwerkliche Fertigung' },
+          { id: 'room-2', name: 'Material- & Werkzeugkammer', count: 1, purpose: 'Lagerung' },
+          { id: 'room-3', name: 'Wohnstube des Handwerkers', count: 1, purpose: 'Wohnbereich' }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { id: 'room-1', name: 'Große Werkhalle mit Spezialstationen', count: 2, purpose: 'Serienfertigung & Zuschnitt' },
+          { id: 'room-2', name: 'Feinarbeits- & Veredelungsraum', count: 1, purpose: 'Präzisionshandwerk' },
+          { id: 'room-3', name: 'Schauraum & Kundenkontor', count: 1, purpose: 'Musterstücke & Bestellungen' },
+          { id: 'room-4', name: 'Großlager für Rohstoffe & Fertigwaren', count: 2, purpose: 'Logistik' },
+          { id: 'room-5', name: 'Schlafzimmer für Gesellen & Arbeiter', count: 5, purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Meisterbüro & Entwurfszimmer', count: 1, purpose: 'Pläne & Kalkulation' }
+        ];
+      }
+      return [
+        { id: 'room-1', name: 'Hauptwerkstatt mit Werkbänken', count: 1, purpose: 'Fertigung & Reparaturen' },
+        { id: 'room-2', name: 'Material- & Rohstofflager', count: 1, purpose: 'Holz, Leder, Metalle' },
+        { id: 'room-3', name: 'Schauraum & Auslage', count: 1, purpose: 'Verkauf' },
+        { id: 'room-4', name: 'Schlafzimmer für Gesellen', count: 2, purpose: 'Personalunterkunft' },
+        { id: 'room-5', name: 'Lagerplatz für Fertigwaren', count: 1, purpose: 'Versandbereit' }
+      ];
+
+    case 'magierladen':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Kleiner Verkaufsraum & Kuriositätenecke', count: 1, purpose: 'Kundenkontakt' },
+          { id: 'room-2', name: 'Alchemiekabinett & Destille', count: 1, purpose: 'Brauen von Tinkturen' },
+          { id: 'room-3', name: 'Kräuterkammer', count: 1, purpose: 'Trocknen von Reagenzien' }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { id: 'room-1', name: 'Arkanes Verkaufskontor & Schauraum', count: 1, purpose: 'Artefakte & Spruchrollen' },
+          { id: 'room-2', name: 'Meisterlaboratorium mit Abzugsanlage', count: 1, purpose: 'Komplexe Alchemie' },
+          { id: 'room-3', name: 'Ritualkammer & Bannkreis', count: 1, purpose: 'Magische Verzauberungen & Prüfungen' },
+          { id: 'room-4', name: 'Arkane Bibliothek & Skriptorium', count: 1, purpose: 'Schriftrollen kopieren & Forschen' },
+          { id: 'room-5', name: 'Reagenzien- & Essenzengewölbe', count: 1, purpose: 'Gefahrstoffe & seltene Mineralien' },
+          { id: 'room-6', name: 'Schlafzimmer für Adepten & Schüler', count: 4, purpose: 'Personalunterkunft' },
+          { id: 'room-7', name: 'Magus-Gemach', count: 1, purpose: 'Leitung' }
+        ];
+      }
+      return [
+        { id: 'room-1', name: 'Verkaufs- & Beratungsstube', count: 1, purpose: 'Kundenannahme & Tränkeverkauf' },
+        { id: 'room-2', name: 'Laboratorium mit 2 Arbeitsplätzen', count: 1, purpose: 'Tränke & Salben zubereiten' },
+        { id: 'room-3', name: 'Kräuter- & Trockenspeicher', count: 1, purpose: 'Pflanzen, Wurzeln, Pilze' },
+        { id: 'room-4', name: 'Verschlossene Gift- & Reagenzkammer', count: 1, purpose: 'Wertvolle Essenzen' },
+        { id: 'room-5', name: 'Schlafzimmer für Adepten', count: 2, purpose: 'Personalunterkunft' }
+      ];
+
+    case 'burg':
+    case 'adelssitz':
+    case 'herrenhaus':
+    case 'anwesen':
+    case 'gutshof':
+    case 'schloss':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Kamin- & Speisestube', count: 1, purpose: 'Gemeinschaftsraum' },
+          { id: 'room-2', name: 'Herrschaftliches Schlafgemach', count: 2, purpose: 'Herrschaftsunterkunft' },
+          { id: 'room-3', name: 'Burgküche & Speisekammer', count: 1, purpose: 'Mahlzeiten' },
+          { id: 'room-4', name: 'Schlafzimmer für Dienerschaft', count: 2, purpose: 'Personalunterkunft' },
+          { id: 'room-5', name: 'Wachstube & Waffenkammer', count: 1, purpose: 'Verteidigung' }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { id: 'room-1', name: 'Großer Thronsaal & Bankettsaal', count: 1, purpose: 'Feste & Staatsgeschäfte' },
+          { id: 'room-2', name: 'Empfangssalon & Audienzsaal', count: 1, purpose: 'Besucher & Bittsteller' },
+          { id: 'room-3', name: 'Prunkvolle Gemächer & Suiten', count: 10, purpose: 'Herrschaftsfamilie & Ehrengäste' },
+          { id: 'room-4', name: 'Herrschaftsküche mit Vorratsgewölben', count: 1, purpose: 'Bankette & Tafelrunden' },
+          { id: 'room-5', name: 'Zeughaus & Kasernenflügel', count: 2, purpose: 'Burgbesatzung & Waffen' },
+          { id: 'room-6', name: 'Schlafzimmer für Dienerschaft', count: 8, purpose: 'Personalunterkunft' },
+          { id: 'room-7', name: 'Schlosskapelle / Andachtsraum', count: 1, purpose: 'Kult & Besinnung' },
+          { id: 'room-8', name: 'Bibliothek & Kartenzimmer', count: 1, purpose: 'Wissen & Kriegspläne' },
+          { id: 'room-9', name: 'Marstall & Kutschenhalle', count: 1, purpose: 'Edelpferde & Kutschen' },
+          { id: 'room-10', name: 'Schatzkammer & Verliese', count: 1, purpose: 'Sicherheit' }
+        ];
+      }
+      return [
+        { id: 'room-1', name: 'Empfangs- & Rittersaal', count: 1, purpose: 'Repräsentation & Speisen' },
+        { id: 'room-2', name: 'Herrschaftliche Gemächer', count: 4, purpose: 'Wohnbereich der Gutsherren' },
+        { id: 'room-3', name: 'Schlossküche & Vorratskeller', count: 1, purpose: 'Speisenzubereitung' },
+        { id: 'room-4', name: 'Waffenkammer & Wachstube', count: 1, purpose: 'Garde & Wehr' },
+        { id: 'room-5', name: 'Schlafzimmer für Dienerschaft', count: 3, purpose: 'Personalunterkunft' },
+        { id: 'room-6', name: 'Pferdestall & Remise', count: 1, purpose: 'Kutschen & Reittiere' }
+      ];
+
+    case 'haendler':
+    case 'markt':
+    case 'lagerhaus':
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Verkaufsraum mit Schaufenster / Stand', count: 1, purpose: 'Warenverkauf' },
+          { id: 'room-2', name: 'Hinterer Lagerraum', count: 1, purpose: 'Warenkisten' },
+          { id: 'room-3', name: 'Schreibstube & Kasse', count: 1, purpose: 'Buchführung' }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { id: 'room-1', name: 'Großes Handelskabinett & Börsensaal', count: 1, purpose: 'Großhandel & Verträge' },
+          { id: 'room-2', name: 'Ladenlokal für Einzelkunden', count: 1, purpose: 'Direktverkauf' },
+          { id: 'room-3', name: 'Mehrstöckiges Lagerhaus (Kisten, Ballen, Fässer)', count: 2, purpose: 'Großlager' },
+          { id: 'room-4', name: 'Zoll- & Buchhaltungsbüro', count: 1, purpose: 'Finanzen' },
+          { id: 'room-5', name: 'Schlafzimmer für Schreiber & Lagerknechte', count: 5, purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Verladerampe & Fuhrparkremise', count: 1, purpose: 'Spedition' }
+        ];
+      }
+      return [
+        { id: 'room-1', name: 'Verkaufsraum mit Ladentresen', count: 1, purpose: 'Kundenbedienung' },
+        { id: 'room-2', name: 'Warenlager mit Regalen & Paletten', count: 1, purpose: 'Warenlagerung' },
+        { id: 'room-3', name: 'Schreibstube des Kaufmanns', count: 1, purpose: 'Kontor & Kasse' },
+        { id: 'room-4', name: 'Schlafzimmer für Handlungsgehilfen', count: 2, purpose: 'Personalunterkunft' },
+        { id: 'room-5', name: 'Ladehof für Karren', count: 1, purpose: 'Anlieferung' }
+      ];
+
+    default:
+      if (isKlein) {
+        return [
+          { id: 'room-1', name: 'Hauptarbeitsraum', count: 1, purpose: 'Betriebstätigkeit' },
+          { id: 'room-2', name: 'Material- & Vorratskammer', count: 1, purpose: 'Lager' },
+          { id: 'room-3', name: 'Wohn- / Schlafraum', count: 1, purpose: 'Unterkunft' }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { id: 'room-1', name: 'Haupthalle / Betriebsraum', count: 2, purpose: 'Betriebstätigkeit' },
+          { id: 'room-2', name: 'Verwaltungsbüro & Kasse', count: 1, purpose: 'Leitung' },
+          { id: 'room-3', name: 'Großlager & Depot', count: 2, purpose: 'Waren & Vorräte' },
+          { id: 'room-4', name: 'Schlafzimmer für Personal', count: 5, purpose: 'Personalunterkunft' },
+          { id: 'room-5', name: 'Küche & Gemeinschaftsraum', count: 1, purpose: 'Versorgung' }
+        ];
+      }
+      return [
+        { id: 'room-1', name: 'Haupthalle / Betriebsraum', count: 1, purpose: 'Betriebstätigkeit' },
+        { id: 'room-2', name: 'Schreibstube & Kasse', count: 1, purpose: 'Verwaltung' },
+        { id: 'room-3', name: 'Lagerraum', count: 1, purpose: 'Material & Waren' },
+        { id: 'room-4', name: 'Schlafzimmer für Mitarbeiter', count: 2, purpose: 'Personalunterkunft' }
+      ];
+  }
+};
+
+/**
+ * Liefert Standard-Berufsbilder passend zum Betriebs- / Gebäudetyp UND der gewählten Größe.
+ * Klein: 2-3 Stellen (Kompakt)
+ * Mittel: 5-7 Stellen (Standard)
+ * Groß: 9-12 Stellen (Erweitert)
+ * Monumental: 14-18 Stellen (Großbetrieb)
+ */
+export const getDefaultJobPositionsForHoldingType = (
+  type: EconomyHolding['type'], 
+  size: string = 'Mittel'
+): DefaultJobPosition[] => {
+  const normSize = (size || 'Mittel').toLowerCase();
+  const isKlein = normSize.includes('klein');
+  const isGross = normSize.includes('groß') || normSize.includes('gross');
+  const isMonumental = normSize.includes('monumental') || normSize.includes('riesig');
+
+  switch (type) {
+    case 'taverne':
+      if (isKlein) {
+        return [
+          { name: 'Gastwirt / Schankwirt', workplaceArea: 'Schankraum & Kontor', salary: 25, responsibilities: ['Tagesgeschäft & Finanzen leiten', 'Ausschank & Einkauf'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben'] },
+          { name: 'Schankmaid / Bedienung', workplaceArea: 'Gaststube', salary: 12, responsibilities: ['Gäste bedienen', 'Gläser spülen', 'Tische abwischen'] },
+          { name: 'Küchenhilfe & Allrounder', workplaceArea: 'Küche & Lager', salary: 10, responsibilities: ['Einfache Speisen zubereiten', 'Holz holen', 'Saubermachen'] }
+        ];
+      }
+      if (isGross) {
+        return [
+          { name: 'Gastwirt / Geschäftsführer', workplaceArea: 'Kontor & Festsaal', salary: 45, responsibilities: ['Gesamtleitung & Verträge', 'Finanz- & Personalplanung'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben', 'Personal einstellen & entlassen', 'Preise festlegen'] },
+          { name: 'Oberschankmaid / Saalchefin', workplaceArea: 'Großer Schankraum', salary: 24, responsibilities: ['Saalleitung', 'Gästeempfang & Kasse', 'Schichtaufsicht'], authorities: ['Tagesgeschäft leiten', 'Dienst- & Schichtpläne anordnen'] },
+          { name: 'Küchenchef', workplaceArea: 'Großküche', salary: 28, responsibilities: ['Speisekarte gestalten', 'Große Gesellschaften bekochen', 'Einkauf leiten'], authorities: ['Qualitätskontrolle & Werkabnahme'] },
+          { name: 'Beikoch / Bratenmeister', workplaceArea: 'Küche & Herd', salary: 18, responsibilities: ['Fleisch braten', 'Tagesgerichte kochen', 'Saucen zubereiten'] },
+          { name: 'Erste Bedienung', workplaceArea: 'Schankraum', salary: 14, responsibilities: ['Ausschank koordinieren', 'Stammgäste betreuen'] },
+          { name: 'Zweite Bedienung', workplaceArea: 'Festsaal', salary: 13, responsibilities: ['Tische abräumen', 'Getränke servieren', 'Nachschub holen'] },
+          { name: 'Hausdame / Zimmeraufsicht', workplaceArea: 'Gästeetagen', salary: 18, responsibilities: ['Zimmerkontrolle', 'Wäschebestand prüfen', 'Zimmermädchen anleiten'] },
+          { name: 'Zimmermädchen / Gehilfe', workplaceArea: 'Gästezimmer', salary: 11, responsibilities: ['12 Gästezimmer reinigen', 'Betten beziehen', 'Heizen'] },
+          { name: 'Stallmeister & Kutscher', workplaceArea: 'Stallungen & Remise', salary: 16, responsibilities: ['Gastpferde versorgen', 'Fuhrwerke sicher unterstellen'] },
+          { name: 'Stallknecht / Hofbursche', workplaceArea: 'Hof & Keller', salary: 10, responsibilities: ['Mist ausmisten', 'Bierfässer rollen', 'Brennholz spalten'] },
+          { name: 'Haupttürsteher & Sicherheitsmann', workplaceArea: 'Eingang & Saal', salary: 20, responsibilities: ['Hausfrieden sichern', 'Waffen abnehmen', 'Raufbolde verweisen'], authorities: ['Hausrecht & Sicherheit durchsetzen'] },
+          { name: 'Kellermeister / Buchhalter', workplaceArea: 'Gewölbekeller & Büro', salary: 22, responsibilities: ['Fässer anzapfen', 'Weinbestand prüfen', 'Kassenbuch führen'], authorities: ['Schlüsselgewalt & Lagerzugang'] }
+        ];
+      }
+      if (isMonumental) {
+        return [
+          { name: 'Generaldirektor des Hauses', workplaceArea: 'Direktionskontor', salary: 65, responsibilities: ['Gesamtleitung des Etablissements', 'Repräsentanz & Bankette'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben', 'Personal einstellen & entlassen', 'Preise festlegen'] },
+          { name: 'Betriebsleiter / Maître', workplaceArea: 'Prunksaal', salary: 40, responsibilities: ['Veranstaltungsleitung & Gästebetreuung'], authorities: ['Tagesgeschäft leiten', 'Disziplinar- & Rügegewalt'] },
+          { name: 'Küchendirektor / Chefkoch', workplaceArea: 'Gastronomieküche', salary: 45, responsibilities: ['Menüfolge & Festessen leiten'], authorities: ['Qualitätskontrolle & Werkabnahme'] },
+          { name: '2x Köche & Bäcker', workplaceArea: 'Küche & Backstube', salary: 22, responsibilities: ['Braten, Backen & Kochen'] },
+          { name: '4x Servierkräfte & Barkeeper', workplaceArea: 'Säle & Séparées', salary: 15, responsibilities: ['Gästebedienung & Ausschank'] },
+          { name: 'Oberhausdame', workplaceArea: 'Etagenflügel', salary: 25, responsibilities: ['Aufsicht über 25 Gästesuiten'], authorities: ['Dienst- & Schichtpläne anordnen'] },
+          { name: '3x Zimmer- & Wäschehilfen', workplaceArea: 'Suiten & Wäscherei', salary: 12, responsibilities: ['Suitenpflege & Gästewäsche'] },
+          { name: 'Braumeister & Kellermeister', workplaceArea: 'Brauhaus & Weinkeller', salary: 30, responsibilities: ['Hausbrauerei betreiben', 'Weine reifen lassen'], authorities: ['Rezeptur- & Werkgeheimnisse hüten'] },
+          { name: 'Stallmeister mit 2 Knechten', workplaceArea: 'Großstallungen', salary: 20, responsibilities: ['Karawanen & Reitpferde versorgen'] },
+          { name: 'Sicherheitsgarde (3 Wachposten)', workplaceArea: 'Tore & Säle', salary: 22, responsibilities: ['Objektschutz & Einlasskontrolle'], authorities: ['Hausrecht & Sicherheit durchsetzen'] }
+        ];
+      }
+      // Mittel (Standard)
+      return [
+        { name: 'Gastwirt / Schankwirt', workplaceArea: 'Schankraum & Kontor', salary: 30, responsibilities: ['Tagesgeschäft & Finanzen leiten', 'Einkauf & Personal koordinieren'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben', 'Personal einstellen & entlassen'] },
+        { name: 'Verwalterin / Schankmaid', workplaceArea: 'Tresen', salary: 18, responsibilities: ['Ausschank leiten', 'Gäste bewirten', 'Zimmervergabe'], authorities: ['Tagesgeschäft leiten', 'Lagerbestände & Einkauf verwalten'] },
+        { name: 'Koch / Küchenleiter', workplaceArea: 'Tavernenküche', salary: 20, responsibilities: ['Tagesgerichte zubereiten', 'Vorräte prüfen & einwecken'] },
+        { name: 'Bedienung / Schankbursche', workplaceArea: 'Gaststube', salary: 12, responsibilities: ['Tische bedienen', 'Gläser spülen', 'Getränke servieren'] },
+        { name: 'Stallknecht / Hausdiener', workplaceArea: 'Hof & Ställe', salary: 10, responsibilities: ['Reittiere der Gäste versorgen', 'Brennholz beschaffen', 'Hof säubern'] },
+        { name: 'Türsteher / Schankwache', workplaceArea: 'Eingangsbereich', salary: 18, responsibilities: ['Ruhe & Hausordnung sichern', 'Zechpreller & Raufbolde abwehren'], authorities: ['Hausrecht & Sicherheit durchsetzen'] }
+      ];
+
+    case 'gasthaus':
+    case 'herberge':
+      if (isKlein) {
+        return [
+          { name: 'Herbergswirt', workplaceArea: 'Empfang & Schankraum', salary: 28, responsibilities: ['Gäste empfangen', 'Zimmer vermieten', 'Kasse führen'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben'] },
+          { name: 'Herbergsmagd', workplaceArea: 'Gästezimmer & Küche', salary: 13, responsibilities: ['Zimmer richten', 'Frühstück bereiten', 'Saubermachen'] },
+          { name: 'Hausbursche', workplaceArea: 'Hof & Holzstapel', salary: 10, responsibilities: ['Gästepferde anbinden', 'Wasser holen', 'Heizen'] }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { name: 'Direktor / Herbergsvater', workplaceArea: 'Empfangsbüro', salary: 50, responsibilities: ['Geschäftsleitung', 'Kontrakte mit Händlern & Reisegilden'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben', 'Personal einstellen & entlassen'] },
+          { name: 'Empfangschef / Rezeptionist', workplaceArea: 'Empfangshalle', salary: 25, responsibilities: ['Gästeempfang', 'Zimmerbuchungen & Schlüsselverwaltung'], authorities: ['Schlüsselgewalt & Lagerzugang'] },
+          { name: 'Küchenchef', workplaceArea: 'Gasthausküche', salary: 30, responsibilities: ['Frühstücks- & Abendtafel leiten', 'Einkauf frischer Waren'] },
+          { name: 'Beikoch & Bäcker', workplaceArea: 'Backofen & Herd', salary: 18, responsibilities: ['Täglich frisches Brot backen', 'Warme Speisen'] },
+          { name: 'Hausdame / Erste Schankmaid', workplaceArea: 'Speisesaal & Etagen', salary: 22, responsibilities: ['Aufsicht über Zimmer & Service'], authorities: ['Dienst- & Schichtpläne anordnen'] },
+          { name: '2x Zimmermädchen', workplaceArea: 'Gästezimmer', salary: 12, responsibilities: ['Betten frisch beziehen', 'Zimmerreinigung', 'Wäschewaschen'] },
+          { name: '2x Servierer', workplaceArea: 'Speisesaal', salary: 13, responsibilities: ['Frühstück & Abendessen servieren'] },
+          { name: 'Stallmeister & Kutscher', workplaceArea: 'Remise & Ställe', salary: 18, responsibilities: ['Pferdepflege', 'Fahrdienste für vornehme Gäste'] },
+          { name: 'Nachtwächter & Pförtner', workplaceArea: 'Torhaus', salary: 16, responsibilities: ['Nachtglocke bedienen', 'Sicherheit im Haus garantieren'], authorities: ['Hausrecht & Sicherheit durchsetzen'] }
+        ];
+      }
+      return [
+        { name: 'Gastwirt / Herbergsvater', workplaceArea: 'Empfang & Büro', salary: 35, responsibilities: ['Betriebsleitung', 'Zimmervergabe & Abrechnung'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben', 'Personal einstellen & entlassen'] },
+        { name: 'Hausdame / Schankmaid', workplaceArea: 'Gaststube & Etagen', salary: 20, responsibilities: ['Zimmerkontrolle', 'Gästeempfang & Ausschank'], authorities: ['Tagesgeschäft leiten'] },
+        { name: 'Küchenchef', workplaceArea: 'Gasthausküche', salary: 25, responsibilities: ['Menüs kochen', 'Frischwaren beschaffen', 'Küchenhygiene'] },
+        { name: 'Zimmermädchen / Gehilfe', workplaceArea: 'Gästezimmer', salary: 12, responsibilities: ['Betten frisch beziehen', 'Zimmer reinigen', 'Wäsche waschen'] },
+        { name: 'Kutscher & Stallmeister', workplaceArea: 'Remise & Ställe', salary: 15, responsibilities: ['Gästepferde versorgen', 'Fuhrwerke instand halten'] }
+      ];
+
+    case 'schmiede':
+      if (isKlein) {
+        return [
+          { name: 'Schmiedemeister', workplaceArea: 'Esse & Amboss', salary: 35, responsibilities: ['Hufbeschlag & Werkzeuge reparieren', 'Betrieb leiten'], authorities: ['Tagesgeschäft leiten', 'Preise festlegen'] },
+          { name: 'Schmiedelehrling', workplaceArea: 'Blasebalg & Schleifstein', salary: 8, responsibilities: ['Feuer anheizen', 'Eisen vorwärmen', 'Schleifen'] },
+          { name: 'Hilfskraft / Träger', workplaceArea: 'Hof', salary: 9, responsibilities: ['Kohle heranschaffen', 'Pferde halten'] }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { name: 'Zeugschmiedemeister', workplaceArea: 'Meisterkontor', salary: 55, responsibilities: ['Gesamtbetrieb, Großaufträge für Stadtwache & Heer'], authorities: ['Tagesgeschäft leiten', 'Aufträge vergeben & annehmen', 'Personal einstellen & entlassen', 'Qualitätskontrolle & Werkabnahme'] },
+          { name: 'Erster Waffenschmied', workplaceArea: 'Klingenschmiede', salary: 28, responsibilities: ['Schwerter, Lanzen & Qualitätsklingen schmieden'], authorities: ['Qualitätskontrolle & Werkabnahme'] },
+          { name: 'Plattner / Rüstungsschmied', workplaceArea: 'Harnischwerkstatt', salary: 27, responsibilities: ['Brustpanzer, Helme & Schilde anpassen'] },
+          { name: 'Grobschmied & Hufschmied', workplaceArea: 'Esse 2', salary: 20, responsibilities: ['Beschläge, Karrenachsen & Hufeisen fertigen'] },
+          { name: 'Härtemeister & Gießer', workplaceArea: 'Härtebecken & Schmelze', salary: 22, responsibilities: ['Öl- & Wasserhärtung, Legierungen ansetzen'], authorities: ['Rezeptur- & Werkgeheimnisse hüten'] },
+          { name: '2x Schmiedegesellen', workplaceArea: 'Zuschlagstation', salary: 16, responsibilities: ['Vorschlaghammer führen', 'Rohlinge austreiben'] },
+          { name: '2x Schmiedelehrlinge', workplaceArea: 'Blasebälge & Esse', salary: 8, responsibilities: ['Feuerglut unterhalten', 'Schlacke räumen'] },
+          { name: 'Lagerverwalter & Materialeinkäufer', workplaceArea: 'Erz- & Kohlelager', salary: 18, responsibilities: ['Eisenbarren wiegen', 'Kohlenlieferungen sichern'] }
+        ];
+      }
+      return [
+        { name: 'Schmiedemeister', workplaceArea: 'Hauptschmiede', salary: 40, responsibilities: ['Meisterstücke schmieden', 'Betrieb führen & Aufträge prüfen'], authorities: ['Tagesgeschäft leiten', 'Aufträge vergeben & annehmen', 'Qualitätskontrolle & Werkabnahme'] },
+        { name: 'Waffenschmied-Geselle', workplaceArea: 'Werkbank & Amboss', salary: 22, responsibilities: ['Schwerter, Dolche & Klingen schmieden'], authorities: ['Tagesgeschäft leiten'] },
+        { name: 'Grobschmied-Geselle', workplaceArea: 'Zweitamposs', salary: 18, responsibilities: ['Beschläge, Werkzeuge & Hufeisen herstellen'] },
+        { name: 'Schmiedelehrling', workplaceArea: 'Esse & Blasebalg', salary: 8, responsibilities: ['Blasebalg betätigen', 'Esse anheizen', 'Schlacke räumen'] },
+        { name: 'Materialträger & Kohlegehilfe', workplaceArea: 'Materiallager', salary: 10, responsibilities: ['Eisenbarren transportieren', 'Schmiedekohle auffüllen'] }
+      ];
+
+    case 'baeckerei':
+    case 'muehle':
+      if (isKlein) {
+        return [
+          { name: 'Bäckermeister', workplaceArea: 'Backofen', salary: 28, responsibilities: ['Brot backen', 'Laden führen'], authorities: ['Tagesgeschäft leiten', 'Preise festlegen'] },
+          { name: 'Ladenhilfe / Verkäufer', workplaceArea: 'Theke', salary: 12, responsibilities: ['Brot verkaufen', 'Kasse abrechnen'] },
+          { name: 'Backbursche', workplaceArea: 'Mehlkammer', salary: 9, responsibilities: ['Holz nachlegen', 'Mehl sieben', 'Backbleche fetten'] }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { name: 'Oberbäckermeister', workplaceArea: 'Backkontor', salary: 45, responsibilities: ['Betriebsleitung', 'Großlieferverträge mit Gasthöfen & Heer'], authorities: ['Tagesgeschäft leiten', 'Preise festlegen', 'Personal einstellen & entlassen'] },
+          { name: 'Teigmacher / Knetmeister', workplaceArea: 'Knetstation', salary: 22, responsibilities: ['Sauerteig ansetzen', 'Mehlmischungen abstimmen'] },
+          { name: 'Ofenmeister', workplaceArea: 'Hauptöfen', salary: 22, responsibilities: ['Backhitze steuern', 'Einschießen & Ausbacken überwachen'] },
+          { name: 'Feinbäcker & Konditor', workplaceArea: 'Konditorstube', salary: 24, responsibilities: ['Torten, Honigkuchen & Feingebäck anfertigen'] },
+          { name: '2x Bäckergesellen', workplaceArea: 'Backtisch', salary: 16, responsibilities: ['Laibe formen', 'Teig portionieren'] },
+          { name: '2x Ladenverkäuferinnen', workplaceArea: 'Verkaufsladen', salary: 14, responsibilities: ['Kundschaft bedienen', 'Tageseinnahmen sichern'] },
+          { name: 'Fuhrmann / Auslieferer', workplaceArea: 'Hof & Wagen', salary: 14, responsibilities: ['Morgenlieferungen zu Abnehmern fahren'] },
+          { name: 'Mühl- & Mehllagerist', workplaceArea: 'Silo & Lager', salary: 12, responsibilities: ['Getreidesäcke schleppen', 'Vorratsgüte sichern'] }
+        ];
+      }
+      return [
+        { name: 'Bäckermeister', workplaceArea: 'Backstube', salary: 30, responsibilities: ['Rezepturen überwachen', 'Ofenhitze & Teigansatz steuern'], authorities: ['Tagesgeschäft leiten', 'Preise festlegen'] },
+        { name: 'Bäckergeselle', workplaceArea: 'Backofen & Knettrog', salary: 18, responsibilities: ['Teig kneten', 'Brote formen & einschießen'] },
+        { name: 'Ladenverkäuferin', workplaceArea: 'Verkaufstresen', salary: 14, responsibilities: ['Frische Backwaren verkaufen', 'Tageskasse abrechnen'] },
+        { name: 'Mühlgehilfe & Kneter', workplaceArea: 'Mehlkammer & Mahlwerk', salary: 10, responsibilities: ['Mehlsäcke schleppen', 'Getreide mahlen'] }
+      ];
+
+    case 'bauernhof':
+      if (isKlein) {
+        return [
+          { name: 'Kleinbauer', workplaceArea: 'Hof & Acker', salary: 22, responsibilities: ['Feldarbeit & Vieh versorgen'], authorities: ['Tagesgeschäft leiten'] },
+          { name: 'Bäuerin / Allrounderin', workplaceArea: 'Küche & Stall', salary: 14, responsibilities: ['Melken, Gemüsegarten, Kochen'] },
+          { name: 'Hofknecht', workplaceArea: 'Scheune', salary: 10, responsibilities: ['Misten, Füttern, Holz hacken'] }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { name: 'Gutsverwalter / Hofherr', workplaceArea: 'Gutskontor', salary: 45, responsibilities: ['Wirtschaftspläne, Pachtabrechnungen, Viehhandel'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben', 'Personal einstellen & entlassen'] },
+          { name: 'Oberstallmeister / Viehwirt', workplaceArea: 'Viehställe', salary: 22, responsibilities: ['Zucht, Tiergesundheit & Fütterung leiten'], authorities: ['Tagesgeschäft leiten'] },
+          { name: 'Ackerbaumeister / Vorarbeiter', workplaceArea: 'Felder', salary: 20, responsibilities: ['Feldarbeit, Pflügen, Aussaat & Ernte koordinieren'] },
+          { name: 'Molkereimeisterin / Käserin', workplaceArea: 'Käserei & Milchkammer', salary: 18, responsibilities: ['Käse reifen, Butter schlagen, Milch verarbeiten'] },
+          { name: '3x Feldknechte', workplaceArea: 'Ackerflächen', salary: 11, responsibilities: ['Schwere Feldarbeit, Mähen, Ernten'] },
+          { name: '2x Stallmägde', workplaceArea: 'Stallungen', salary: 10, responsibilities: ['Melken, Einstreuen, Kleinvieh versorgen'] },
+          { name: 'Fuhrmann & Wagenschmied', workplaceArea: 'Remise', salary: 15, responsibilities: ['Gespanne lenken', 'Ernte zur Stadt fahren'] },
+          { name: 'Scheunenmeister / Vorratsverwalter', workplaceArea: 'Getreidespeicher', salary: 16, responsibilities: ['Korn säubern', 'Dreschen leiten', 'Mäuse fernhalten'] }
+        ];
+      }
+      return [
+        { name: 'Hofbauer / Verwalter', workplaceArea: 'Hofhaus', salary: 30, responsibilities: ['Aussaat, Ernte & Viehbestand planen'], authorities: ['Tagesgeschäft leiten', 'Lagerbestände & Einkauf verwalten'] },
+        { name: 'Viehwirt / Stallmeister', workplaceArea: 'Stallungen', salary: 16, responsibilities: ['Rinder, Schafe & Schweine versorgen', 'Melken'] },
+        { name: 'Feldknecht', workplaceArea: 'Felder & Äcker', salary: 10, responsibilities: ['Pflügen, Hacken & Ernten'] },
+        { name: 'Erntemagd', workplaceArea: 'Scheune & Vorratskammer', salary: 10, responsibilities: ['Getreide dreschen', 'Früchte einlagern'] }
+      ];
+
+    case 'mine':
+      if (isKlein) {
+        return [
+          { name: 'Schachtführer / Steiger', workplaceArea: 'Stollenmund', salary: 35, responsibilities: ['Abbau anweisen & Grubenluft prüfen'], authorities: ['Tagesgeschäft leiten', 'Hausrecht & Sicherheit durchsetzen'] },
+          { name: 'Hauer', workplaceArea: 'Stollen', salary: 20, responsibilities: ['Gestein hauen'] },
+          { name: 'Schlepper / Förderer', workplaceArea: 'Schienen', salary: 12, responsibilities: ['Karren schieben & Erz ausladen'] }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { name: 'Zechenleiter / Oberbergmeister', workplaceArea: 'Bergamt & Kontor', salary: 60, responsibilities: ['Gesamtverwaltung der Mine, Förderquoten, Schmelzkontrakte'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben', 'Personal einstellen & entlassen'] },
+          { name: 'Schachtmeister / Fahrsteiger', workplaceArea: 'Tiefsohlen', salary: 32, responsibilities: ['Sicherheit unter Tage, Wetterführung & Sprengaufsicht'], authorities: ['Hausrecht & Sicherheit durchsetzen'] },
+          { name: 'Grubenzimmermeister', workplaceArea: 'Holzzimmerung', salary: 25, responsibilities: ['Stollenabstützung gegen Einstürze leiten'] },
+          { name: '4x Hauer & Mineure', workplaceArea: 'Abbaufront', salary: 22, responsibilities: ['Erzadern schlagen, Bohrlöcher setzen'] },
+          { name: '3x Schlepper & Fördermaschinisten', workplaceArea: 'Förderturm & Schienen', salary: 14, responsibilities: ['Erzloren zutage fördern'] },
+          { name: 'Poch- & Sortiermeister', workplaceArea: 'Aufbereitung', salary: 18, responsibilities: ['Erz von taubem Gestein trennen'] },
+          { name: 'Bergschmied', workplaceArea: 'Zechenschmiede', salary: 22, responsibilities: ['Gezähe schärfen, Ketten & Loren reparieren'] },
+          { name: 'Grubenwächter / Lampenmeister', workplaceArea: 'Kaue', salary: 16, responsibilities: ['Grubenlampen warten, Anwesenheit zählen'] }
+        ];
+      }
+      return [
+        { name: 'Obersteiger / Grubenmeister', workplaceArea: 'Zechenkontor & Schacht', salary: 45, responsibilities: ['Stollensicherheit, Bewetterung & Schichten leiten'], authorities: ['Tagesgeschäft leiten', 'Hausrecht & Sicherheit durchsetzen'] },
+        { name: 'Hauer / Bergmann', workplaceArea: 'Tiefsohle', salary: 22, responsibilities: ['Gestein schlagen', 'Erzadern abbauen'] },
+        { name: 'Grubenzimmermann', workplaceArea: 'Stollenausbau', salary: 20, responsibilities: ['Stützbalken setzen', 'Einsturzgefahr sichern'] },
+        { name: 'Förderknecht / Schlepper', workplaceArea: 'Schienen & Förderschacht', salary: 12, responsibilities: ['Erzkästen & Loren zutage fördern'] }
+      ];
+
+    default:
+      if (isKlein) {
+        return [
+          { name: 'Betriebsleiter / Meister', workplaceArea: 'Hauptbereich', salary: 25, responsibilities: ['Betrieb führen & Arbeit verrichten'], authorities: ['Tagesgeschäft leiten'] },
+          { name: 'Gehilfe / Lehrling', workplaceArea: 'Arbeitsbereich', salary: 10, responsibilities: ['Handreichungen & Saubermachen'] }
+        ];
+      }
+      if (isGross || isMonumental) {
+        return [
+          { name: 'Geschäftsführer / Obermeister', workplaceArea: 'Geschäftszimmer', salary: 50, responsibilities: ['Gesamtleitung, Finanzen & Verträge'], authorities: ['Tagesgeschäft leiten', 'Budget & Finanzen freigeben', 'Personal einstellen & entlassen'] },
+          { name: 'Werkstattleiter / Vorarbeiter', workplaceArea: 'Werkhalle', salary: 28, responsibilities: ['Tagesabläufe & Schichten koordinieren'], authorities: ['Tagesgeschäft leiten', 'Qualitätskontrolle & Werkabnahme'] },
+          { name: '3x Fachkräfte / Gesellen', workplaceArea: 'Produktion', salary: 18, responsibilities: ['Hauptarbeiten ausführen'] },
+          { name: '2x Hilfskräfte / Packer', workplaceArea: 'Lager & Versand', salary: 12, responsibilities: ['Waren stapeln, Material transportieren'] },
+          { name: 'Schreiber / Buchhalter', workplaceArea: 'Kontor', salary: 20, responsibilities: ['Bücher & Kasse führen'] }
+        ];
+      }
+      return [
+        { name: 'Betriebsleiter / Meister', workplaceArea: 'Hauptbereich', salary: 30, responsibilities: ['Geschäftsleitung & Koordination'], authorities: ['Tagesgeschäft leiten'] },
+        { name: 'Fachgeselle / Mitarbeiter', workplaceArea: 'Arbeitsbereich', salary: 18, responsibilities: ['Haupttätigkeit ausführen'] },
+        { name: 'Gehilfe / Hilfskraft', workplaceArea: 'Betriebsgelände', salary: 10, responsibilities: ['Unterstützung & Routinearbeiten'] }
+      ];
+  }
+};
+
 export const getHoldingPresets = (type: EconomyHolding['type']): {
   resources: EconomyResource[];
   tasks: EconomyTask[];
@@ -610,10 +1174,10 @@ export const getHoldingPresets = (type: EconomyHolding['type']): {
         ],
         roles: [
           { id: 'role-t-1', name: 'Gastwirt', assignedToName: '', isUserPosition: false, authorities: ['Preise festlegen', 'Personal einstellen & entlassen', 'Gewinne entnehmen', 'Ausbauten & Upgrades anordnen'], responsibilities: ['Finanzen', 'Hauptentscheidungen'], salary: 30, workplaceArea: 'Schankraum' },
-          { id: 'role-t-2', name: 'Verwalterin / Schankmaid', assignedToName: 'Wirtin Karin', superiorRole: 'Gastwirt', authorities: ['Tagesgeschäft leiten', 'Lagerbestände & Einkauf verwalten', 'Aufgaben & Pflichten delegieren'], responsibilities: ['Ausschank leiten', 'Zimmervergabe'], salary: 18, workplaceArea: 'Tresen' }
+          { id: 'role-t-2', name: 'Verwalterin / Schankmaid', assignedToName: '', superiorRole: 'Gastwirt', authorities: ['Tagesgeschäft leiten', 'Lagerbestände & Einkauf verwalten', 'Aufgaben & Pflichten delegieren'], responsibilities: ['Ausschank leiten', 'Zimmervergabe'], salary: 18, workplaceArea: 'Tresen' }
         ],
         staffGroups: [
-          { id: 'sg-t-1', roleName: 'Mägde & Bedienung', count: 3, workplaceArea: 'Gaststube & Zimmer', duties: ['Tische bedienen', 'Zimmer herrichten', 'Gläser spülen'], status: 'aktiv', assignedLeaderOrManager: 'Wirtin Karin', dailyCostPerUnit: 2 },
+          { id: 'sg-t-1', roleName: 'Mägde & Bedienung', count: 3, workplaceArea: 'Gaststube & Zimmer', duties: ['Tische bedienen', 'Zimmer herrichten', 'Gläser spülen'], status: 'aktiv', assignedLeaderOrManager: '', dailyCostPerUnit: 2 },
           { id: 'sg-t-2', roleName: 'Köche & Küchenjungen', count: 2, workplaceArea: 'Küche', duties: ['Eintöpfe kochen', 'Braten zubereiten', 'Spülen'], status: 'aktiv', dailyCostPerUnit: 3 },
           { id: 'sg-t-3', roleName: 'Türsteher / Wache', count: 1, workplaceArea: 'Eingang', duties: ['Raufbolde hinauswerfen', 'Ruhe sichern'], status: 'aktiv', dailyCostPerUnit: 3 }
         ],
@@ -636,7 +1200,7 @@ export const getHoldingPresets = (type: EconomyHolding['type']): {
         ],
         activityLogs: [
           { id: 'log-t1', timestamp: 'Heute 12:00', actorName: 'Magd Elsa', actorRole: 'Magd', type: 'staff_action', message: 'Mittagstisch für 18 Gäste reibungslos serviert.', severity: 'positive' },
-          { id: 'log-t2', timestamp: 'Heute 14:15', actorName: 'Wirtin Karin', actorRole: 'Verwalterin', type: 'issue_report', message: 'Kräuterschnaps-Vorrat neigt sich dem Ende zu (nur noch 2 Flaschen).', severity: 'warning' }
+          { id: 'log-t2', timestamp: 'Heute 14:15', actorName: 'Verwalterin', actorRole: 'Verwalterin', type: 'issue_report', message: 'Kräuterschnaps-Vorrat neigt sich dem Ende zu (nur noch 2 Flaschen).', severity: 'warning' }
         ]
       };
   }

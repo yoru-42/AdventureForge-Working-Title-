@@ -1039,6 +1039,7 @@ export interface Territory {
   landmarks?: string;
   pointsOfInterest?: string;
   dungeons?: string;
+  dungeonDetails?: DungeonDetails;
   magicPlaces?: string;
   naturalWonders?: string;
   layoutPreset?: string;
@@ -1087,6 +1088,12 @@ export interface EconomyResource {
   notes?: string;
 }
 
+export interface EconomyRoleTalent {
+  name: string;
+  score: number; // 1 to 5
+  description?: string;
+}
+
 export interface EconomyRole {
   id?: string;
   name: string; // e.g. "Besitzer", "Verwalter", "Manager", "Butler", "Wirt", "Koch", "Händler", "Wächter", "Handwerker", "Diener", "Arbeiter"
@@ -1099,6 +1106,19 @@ export interface EconomyRole {
   responsibilities?: string[]; // Verantwortlichkeiten / Pflichten
   salary?: number; // Lohn / Gehalt
   workplaceArea?: string; // Arbeitsplatz / Aufenthaltsbereich
+  
+  // Berufszweig & Qualifikationen
+  professionBranch?: string;
+  professionField?: string;
+  professionLevel?: string; // e.g. "Ungelernt", "Lehrling", "Geselle / Fortgeschritten", "Meister / Führungskraft"
+  professionRank?: string;
+  competencies?: ProfessionCompetency[];
+  talents?: EconomyRoleTalent[];
+  experienceYears?: number;
+  practiceHours?: number;
+  experiencePoints?: number;
+  progressPercent?: number; // 0 - 100
+  experienceNotes?: string;
 }
 
 export interface EconomyStaffGroup {
@@ -1290,6 +1310,13 @@ export type EconomyHoldingType =
   | 'custom'
   | (string & {});
 
+export interface HoldingRoom {
+  id: string;
+  name: string; // e.g. "Küche", "Schlafzimmer für Gäste", "Schlafzimmer für Personal"
+  count: number; // e.g. 1, 5, 3
+  purpose?: string; // e.g. "Speisenzubereitung", "Gästeunterkunft", "Personalunterkunft"
+}
+
 export interface EconomyHolding {
   id: string;
   name: string;
@@ -1343,7 +1370,8 @@ export interface EconomyHolding {
   physicalSize?: string; // Größe (z.B. "Klein", "Mittel", "Groß", "Monumental")
   physicalCapacity?: string; // Kapazität (z.B. "50 Gäste", "25 Mitarbeiter")
   physicalUsage?: string; // Zweck / Aktuelle Nutzung (z.B. "Wohnen", "Gewerbe", "Militär", "Kult")
-  roomsOrAreas?: string | string[]; // Räume / Bereiche
+  roomsOrAreas?: string | string[]; // Räume / Bereiche (Text-Zusammenfassung)
+  buildingRooms?: HoldingRoom[]; // Detaillierte Liste der Räume mit Anzahl und Zweck
   damages?: string | string[]; // Schäden / Mängel
   accessibility?: string; // Zugänglichkeit (z.B. Öffentlich, Geheim, Nur Befugte, Privat)
   residentsOrVisitors?: string; // Bewohner / Besucher
@@ -2087,16 +2115,184 @@ export interface RaceDetails {
   prominentFigures?: string; // Bedeutende historische Persönlichkeiten oder Anführer
 }
 
+export interface ItemIngredient {
+  id?: string;
+  name: string;
+  amount: number;
+  unit: string;
+  itemId?: string; // Optionaler Verweis auf Item im Codex
+}
+
+export interface ItemDetails {
+  // 1. Kategorisierung & Identifikation
+  mainCategory?: string; // z.B. 'Rohstoffe', 'Materialien & Zwischenprodukte', 'Produkte', 'Alltags- & Haushaltsgegenstände', 'Nahrung', 'Kleidung & Textilien', 'Waffen', 'Rüstung & Schutzausrüstung', 'Werkzeuge', 'Landwirtschaft', 'Tiere', 'Transportmittel', 'Militärbedarf', 'Medizin', 'Handelswaren', 'Magische Gegenstände', 'Quest-/Story-Gegenstände'
+  subCategory?: string; // z.B. 'Metallerze', 'Schwerter & Klingen', 'Frischwaren', etc.
+  itemType?: string; // Spezifische Typbezeichnung (z.B. 'Einhändiges Langschwert', 'Heilbalsam')
+  isUnique?: string; // 'Unikat / Legendär', 'Seltenes Einzelstück', 'Regionale Spezialität', 'Massenware / Standard'
+  rarity?: string; // 'Gewöhnlich / Alltäglich', 'Solide / Gehoben', 'Selten / Hochwertig', 'Meisterlich / Kostbar', 'Legendär / Einzigartig', 'Mythisch / Antik'
+  currentLocation?: string; // Aufenthaltsort / Vorkommen / Verbleib
+
+  // 2. Physische Eigenschaften & Zustand
+  unit?: string; // 'Stück', 'kg', 'Portionen', 'Flaschen', 'Säcke', 'Tiere', 'Fahrzeuge', etc.
+  weight?: number | string; // Gewicht pro Einheit
+  dimensions?: string; // Abmessungen / Packmaß
+  condition?: string; // 'exzellent', 'gut', 'knapp', 'beschaedigt', 'verdorben'
+  durability?: number | string; // Haltbarkeit / Zustandspunkte
+  maxDurability?: number | string;
+
+  // 3. Wirtschaft, Handel & Produktion
+  pricePerUnit?: number; // Richtpreis / Handelswert in Goldmünzen
+  costPrice?: number; // Herstellungskosten
+  stockAmount?: number; // Aktueller Lagerbestand
+  maxCapacity?: number; // Maximale Lagerkapazität
+  producingHoldingName?: string; // Name des produzierenden / lagernden Betriebs
+  producingHoldingId?: string; // Referenz auf Holding ID
+  productionHoldingType?: string; // Erforderlicher Betriebstyp (z.B. 'Schmiede', 'Bäckerei')
+  requiredProfession?: string; // Erforderlicher Handwerksberuf (z.B. 'Schmied')
+  requiredTools?: string; // Benötigte Werkzeuge / Ausstattung
+  productionTime?: string; // Herstellungsdauer
+  byproducts?: string; // Anfallende Nebenprodukte
+  producedFrom?: string; // Textuelle Ausgangsstoffe
+  processedInto?: string; // Textuelle Folgeprodukte
+  ingredients?: ItemIngredient[]; // Strukturierte Ausgangsstoffe
+
+  // 4. Waffen- & Kampf-Spezifika
+  weaponType?: string; // Klingenwaffe, Wuchtwaffe, Stangenwaffe, Bogen, etc.
+  damageType?: string; // Hieb, Stich, Wucht, Magisch, Feuer, Eis, Blitz, etc.
+  damageValue?: string; // z.B. '1d8 + 2', '24-32'
+  range?: string; // Nahkampf, 30m, 100m
+  attackSpeed?: string; // Sehr schnell, Schnell, Normal, Langsam
+  twoHanded?: boolean;
+
+  // 5. Rüstungs- & Schutz-Spezifika
+  armorType?: string; // Leicht, Mittel, Schwer, Schild, Helm, etc.
+  armorValue?: number | string; // Rüstungsschutz / AC
+  coverage?: string; // Ganzer Körper, Torso, Kopf, Arme, Beine
+  movementPenalty?: string; // Bewegungsabzug / Belastung
+
+  // 6. Nahrung, Konsumgüter & Medizin
+  shelfLifeDays?: number | string; // Haltbarkeit in Tagen / Verfall
+  nutritionValue?: string; // Sättigungswert / Erholungsgrad
+  servingSize?: string;
+  medicalEffect?: string; // Heilwirkung, Schmerzlinderung, Wunddesinfektion
+  dosage?: string; // Dosierung / Einnahmehinweis
+  sideEffects?: string; // Nebenwirkungen / Toxizität
+
+  // 7. Tiere & Transportmittel
+  animalSpecies?: string; // Rasse / Tierart
+  temperament?: string; // Sanftmütig, Stur, Aggressiv, Gelehrig
+  speedKmH?: number | string; // Geschwindigkeit in km/h
+  carryingCapacityKg?: number | string; // Tragkraft / Zuladung
+  crewRequirement?: string; // Erforderliche Besatzung / Gespannführer
+  feedRequirement?: string; // Futterbedarf pro Tag
+
+  // 8. Magie, Runen & Effekte
+  effects?: string; // Primäre Wirkung / Funktion
+  magicalProperties?: string; // Magische Verzauberungen / Runen
+  manaCost?: string; // Manakosten bei Aktivierung
+  charges?: number | string; // Aufladungen / Verwendungsanzahl
+
+  // 9. Militärischer Bedarf & Tross
+  militaryRole?: string; // 'Standardausrüstung (Infantrie)', 'Fernkampfausrüstung', 'Kavallerie', etc.
+  troopConsumptionRate?: string; // Verbrauch pro 100 Soldaten / Tag
+
+  // 10. Quest & Story
+  questImportance?: string; // Wichtigkeit für Quests
+  ownerCharacterId?: string; // Besitzer-NPC
+  secretProperties?: string; // Verborgene Eigenschaften
+
+  // 11. Loot, Monster-Drops, Dungeons & Wertschöpfungskette
+  originSourceType?: string; // 'Monsterbeute', 'Dungeon-Vorkommen', 'Handwerk / Produktion', 'Schatztruhe / Lager', 'Landwirtschaft / Ernte', 'Handel / Import', 'Quest / Relikt'
+  droppedByMonsterId?: string; // Referenz auf Monster (LoreEntry Gegner)
+  droppedByMonsterName?: string; // Monstername
+  harvestedBodyPart?: string; // z.B. 'Fleisch', 'Fell', 'Leder / Haut', 'Knochen', 'Horn / Geweih', 'Zähne', 'Krallen', 'Schuppen', 'Drüsen', 'Giftorgan', 'Federn', 'Blut', 'Kristallkern', 'Besonderes Organ', 'Ausrüstung / Beute'
+  lootType?: string; // 'Standardbeute', 'Seltene Beute', 'Bedingte Beute', 'Boss- / Spezialbeute', 'Story- / Questbeute'
+  dropChance?: number | string; // Dropchance (z.B. 60 oder '60%')
+  dropQuantityRange?: string; // z.B. '1 - 3'
+  dropConditions?: string; // z.B. 'Unbeschädigter Kadaver', 'Gezielter Schnitt', 'Nur bei Vollmond'
+  dungeonLocationId?: string; // Referenz auf Dungeon / Ort (LoreEntry Orte)
+  dungeonLocationName?: string; // Dungeonname (z.B. 'Goblin-Höhle', 'Alte Silbermine')
+  dungeonFloorLevel?: string; // z.B. 'Ebene 1-2', 'Tiefste Krypta'
+  dungeonSourceType?: string; // 'Monster-Drop', 'Schatztruhe', 'Erzader / Natürliches Vorkommen', 'Verstecktes Lager', 'Leichen / Trümmer', 'Boss-Kammer', 'Quest-Objekt'
+  dungeonAccessCondition?: string; // z.B. 'Spitzhacke erforderlich', 'Dietrich Stufe 2'
+  chainDungeonOrigin?: string; // Kette Schritt 1: Dungeon / Habitat
+  chainMonsterOrigin?: string; // Kette Schritt 2: Monster / Kreatur
+  chainRawResource?: string; // Kette Schritt 3: Dieser Rohstoff
+  chainRefiningProfession?: string; // Kette Schritt 4: Handwerksberuf (z.B. Gerber, Schmied, Alchemist)
+  chainRefiningHolding?: string; // Kette Schritt 4b: Betrieb (z.B. Gerberei, Schmiede)
+  chainEndProduct?: string; // Kette Schritt 5: Endprodukt (z.B. Drachenschuppenrüstung, Wolfslederwams)
+}
+
+export interface MonsterLootItem {
+  id: string;
+  itemName: string;
+  itemId?: string; // Referenz auf Gegenstands-Codex LoreEntry
+  category?: string; // Rohstoffe, Materialien, Beute, Trophäe, Quest
+  dropChance: number; // 0 - 100%
+  isGuaranteed?: boolean; // 100% Drop
+  minQuantity: number;
+  maxQuantity: number;
+  unit: string; // Stück, kg, Portionen, etc.
+  harvestCondition?: string; // z.B. "Unversehrte Haut", "Erfordert Alchemie Stufe 2", "Nur bei Nacht"
+  partType?: 'Fleisch' | 'Fell' | 'Leder' | 'Haut' | 'Knochen' | 'Horn' | 'Zähne' | 'Krallen' | 'Schuppen' | 'Drüsen' | 'Gift' | 'Federn' | 'Blut' | 'Kristallkern' | 'Ausrüstung' | 'Schatz' | 'Sonstiges';
+  notes?: string;
+}
+
+export interface DungeonFloor {
+  levelNumber: number;
+  name: string;
+  description?: string;
+  dangerLevel?: string;
+  monsters?: string[]; // Monster Namen oder IDs
+  bossName?: string;
+  bossEnemyId?: string;
+  trapsAndHazards?: string;
+  lootChests?: string;
+  resourceVeins?: string;
+}
+
+export interface DungeonMonsterSpawn {
+  enemyId?: string;
+  name: string;
+  rarity: 'common' | 'uncommon' | 'rare' | 'boss';
+  spawnArea?: string;
+  quantity?: string;
+}
+
+export interface DungeonDetails {
+  dungeonType?: string; // Höhle, Ruine, Mine, Tempel, Grabstätte, Katakombe, Festung, Turm, unterirdische Stadt, Monsterbau / Nest, natürliche Tiefenzone, magischer Dungeon, versunkene Anlage, dimensionsfremder Ort, Sonstiges
+  originAndHistory?: string; // Ursprung, Erbauer und Historie
+  age?: string; // Alter des Dungeons
+  sizeAndDepth?: string; // Ausdehnung, Tiefe und Anzahl der Ebenen
+  entryAccess?: string; // Eingang, Zugangsbedingungen und Schlüssel
+  environmentAndAtmosphere?: string; // Beleuchtung, Luft, Temperatur, Geruch
+  trapsAndHazards?: string; // Mechanische und magische Fallen, Einsturzgefahr
+  floors?: DungeonFloor[]; // Detaillierte Etagen / Ebenen
+  monsterPopulations?: DungeonMonsterSpawn[]; // Monster-Populationen mit Codex-Verknüpfung
+  bossEnemyId?: string; // Hauptboss aus dem Gegner-Codex
+  bossName?: string;
+  resourceVeins?: string; // Rohstoffvorkommen & Erzadern (referenziert Item-Codex)
+  treasureChests?: string; // Schatztruhen & versteckte Lager
+  bossLoot?: string; // Einzigartige Boss-Beute
+  regenerationRules?: string; // Respawn & Regenerationslogik des Dungeon-Ökosystems
+}
+
 export interface EnemyDetails {
   // Klassifizierung & Typ
   enemyType?: string; // Scherge / Fußsoldat, Regulärer Gegner, Elite / Champion, Miniboss, Dungeonboss / Gebietsboss, Weltboss / Epischer Boss, Schwarm / Rudel
   species?: string; // Humanoid, Untoter, Bestie / Tier, Dämon / Unhold, Konstrukt / Golem, Elementar, Monstrum, Drache / Drachenblut, Pflanze / Pilz, Geist / Phantom, Aberration / Kosmisch
+  subSpecies?: string; // Unterart / Variante
   threatLevel?: string; // Harmlos (Stufe 1), Niedrig (Stufe 2-3), Mittel (Stufe 4-5), Gefährlich (Stufe 6-7), Tödlich / Heroisch (Stufe 8-9), Kataklysmisch (Stufe 10+)
   habitat?: string; // Bevorzugter Lebensraum, Spawn-Gebiete, Dungeons, Zonen
   typicalGroupSize?: string; // Einzelgänger, Kleines Rudel (2-4), Kampftrupp (4-8), Große Horde (10-25), Massenhafter Schwarm (30+)
   tacticalFormation?: string; // Keilformation (Wedge), Schlachtlinie (Line), Umzingelung (Surround), Zangenangriff (Flank), Verstreut / Plänkler (Skirmish)
   faction?: string; // Zugehörige Fraktion oder Organisation
   alignment?: string; // Gesinnung / Wesen (Aggressiv-Raubtierhaft, Fanatisch-Böse, Territorial-Neutral, Kontrolliert/Konstrukt)
+
+  // Ökologie, Verhalten & Sozialstruktur
+  diet?: string; // Fleischfresser, Pflanzenfresser, Aasfresser, Allesfresser, Magie-/Seelenfresser
+  socialBehavior?: string; // Einzelgänger, Rudel, Schwarm, Bienenstaat / Schwarmintelligenz, Parasitisch
+  reproduction?: string; // Fortpflanzung, Vermehrungsrate, Gelege/Nestbau
 
   // Physische & Sensorische Merkmale
   appearance?: string; // Physische Erscheinung, Panzerung, Klauen, Schuppen, Aura
@@ -2128,10 +2324,14 @@ export interface EnemyDetails {
   powerSources?: any[];
 
   // Beute & Rohstoffe (Loot-Tabelle)
-  guaranteedDrops?: string; // Garantierte Beute
-  rareDrops?: string; // Seltene Drops & Schätze
-  harvestableParts?: string; // Verwertbare Handwerksmaterialien
-  goldDrop?: string; // Währungsausbeute
+  guaranteedDrops?: string; // Garantierte Beute (Text)
+  rareDrops?: string; // Seltene Drops & Schätze (Text)
+  harvestableParts?: string; // Verwertbare Handwerksmaterialien (Text)
+  goldDrop?: string; // Währungsausbeute (Text)
+  lootTable?: MonsterLootItem[]; // Strukturierte Beute- und Rohstofftabelle
+  harvestRequirements?: string; // Benötigte Werkzeuge / Fertigkeiten zur Verwertung
+  associatedDungeonIds?: string[]; // Vorkommen in Dungeons
+  territoryIds?: string[]; // Zugeordnete Habitate / Territorien
 }
 
 export interface EventStep {
@@ -2445,6 +2645,111 @@ export interface PlacedCombatObject {
   isDestroyed?: boolean;
 }
 
+export interface CustomInventoryItem {
+  id: string;
+  name: string;
+  category?: string;
+  subCategory?: string;
+  itemType?: string;
+  slot?: 'weapon' | 'shield' | 'head' | 'chest' | 'hands' | 'legs' | 'feet' | 'finger' | 'neck' | 'wrist' | 'waist' | 'back' | 'pocket' | 'bag' | 'inventory';
+  equipped?: boolean;
+  rarity?: 'Gewöhnlich' | 'Ungewöhnlich' | 'Selten' | 'Episch' | 'Legendär' | 'Mythisch' | 'Artefakt' | 'Unikat';
+  quality?: string;
+  material?: string;
+  weight?: string | number;
+  value?: number;
+  currency?: string;
+  description?: string;
+  specialEffects?: string;
+  combatStats?: {
+    damage?: string | number;
+    damageType?: string;
+    defense?: string | number;
+    range?: string;
+    scalingStat?: string;
+    attackSpeed?: string;
+    armorClass?: 'Leicht' | 'Mittel' | 'Schwer' | 'Stoff' | string;
+    resists?: string;
+    mobilityPenalty?: string;
+  };
+  enchantments?: string;
+  originHistory?: string;
+  requirements?: string;
+  durability?: string;
+  codexItemId?: string;
+  
+  // Category-specific properties
+  // Rohstoffe & Materialien
+  purityGrade?: string;
+  depositLocation?: string;
+  miningToolRequired?: string;
+  processedInto?: string;
+  processingFacility?: string;
+  hardnessOrMeltingPoint?: string;
+  stackSize?: number | string;
+  unit?: string;
+
+  // Nahrung & Genussmittel & Landwirtschaft
+  nutritionSaturation?: string;
+  freshnessDuration?: string;
+  spoilageState?: string;
+  regenerationEffect?: string;
+  tasteQuality?: string;
+  preparationMethod?: string;
+  seedGrowthTime?: string;
+
+  // Medizin, Tränke & Alchemie
+  healingOrPoisonEffect?: string;
+  effectDuration?: string;
+  toxicityOrSideEffects?: string;
+  dosesOrUses?: string;
+  alchemyRecipe?: string;
+
+  // Magische Gegenstände & Relikte
+  magicSchoolAffinity?: string;
+  manaCapacityOrCharges?: string;
+  activatedSpellEffect?: string;
+  curseOrAstralResonance?: string;
+  attunementRequired?: boolean | string;
+  ancientOriginEra?: string;
+
+  // Werkzeuge & Alltagsgegenstände
+  craftingDiscipline?: string;
+  craftingBonus?: string;
+  maxToolUses?: string;
+  intendedUsageField?: string;
+
+  // Tiere & Transportmittel
+  carryingCapacity?: string;
+  speedOrPace?: string;
+  crewOrPassengers?: string;
+  feedOrMaintenanceCost?: string;
+  tamenessDegree?: string;
+
+  // Bücher, Schriften & Quest
+  textExcerptOrInscription?: string;
+  languageOrLoreField?: string;
+  authenticityStatus?: string;
+  associatedQuestOrLock?: string;
+
+  // Progression Logic Properties (Synchronized with Step 2 of 9)
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
+  progressionLevel?: string | number;
+  epBonus?: string;
+  scalingWithLevel?: string;
+  killRequirement?: string;
+  trainingProficiencyBonus?: string;
+  masteryRank?: string;
+  practiceUsageCount?: string;
+  trainingNotes?: string;
+  milestoneUnlockReq?: string;
+  awakeningStages?: string;
+  reputationOrTitle?: string;
+  staticTalentCost?: string | number;
+  staticRequirements?: string;
+  isFixedStats?: boolean;
+}
+
 export interface StructuredInventory {
   money?: number;
   currencyLabel?: string;
@@ -2464,6 +2769,7 @@ export interface StructuredInventory {
     neck?: string;
   };
   generalItems?: string[];
+  customItems?: CustomInventoryItem[];
 }
 
 export interface StoryEntityItem {

@@ -7,7 +7,7 @@ import {
   EconomyConfig,
   CombatState
 } from '../types';
-import { HOLDING_TYPES, getHoldingPresets } from './economy/EconomyPresets';
+import { HOLDING_TYPES, getHoldingPresets, getDefaultRoomsForHolding, getDefaultJobPositionsForHoldingType } from './economy/EconomyPresets';
 import { HoldingDetailsTab } from './economy/HoldingDetailsTab';
 import { HoldingPositionTab } from './economy/HoldingPositionTab';
 import { HoldingStaffTab } from './economy/HoldingStaffTab';
@@ -85,6 +85,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
   const [smartFillPrompt, setSmartFillPrompt] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [createForLocationModal, setCreateForLocationModal] = useState<{ territoryId: string; territoryName: string } | null>(null);
 
   // Initialize economyConfig if not present
   const economy: EconomyConfig = world.economyConfig || {
@@ -102,7 +103,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
         description: 'Eine gut besuchte Hafen-Taverne mit treuen Stammgästen und regelmäßigen Gerüchten.',
         level: 1,
         ownerType: 'character',
-        assignedCharacterName: 'Wirtin Karin',
+        assignedCharacterName: '',
         incomePerInterval: 180,
         upkeepPerInterval: 40,
         staffCount: 6,
@@ -113,6 +114,12 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
           { id: 'upg-1', name: 'Weinkeller-Erweiterung', cost: 300, levelRequired: 1, unlocked: false, description: '+60 Gold Einnahmen pro Woche' },
           { id: 'upg-2', name: 'Bühne für Barden', cost: 450, levelRequired: 2, unlocked: false, description: '+15 Ansehen & lockt seltene Questgeber an' }
         ],
+        physicalCondition: 'Gut',
+        physicalSize: 'Mittel',
+        physicalCapacity: 'ca. 40-50 Personen / Gäste',
+        physicalUsage: 'Gastronomie & Beherbergung',
+        buildingRooms: getDefaultRoomsForHolding('taverne', 'Mittel'),
+        roomsOrAreas: '1x Schankraum & Gaststube, 1x Küche, 5x Schlafzimmer für Gäste, 3x Schlafzimmer für Personal, 1x Vorratskeller & Bierlager, 1x Pferdestall & Innenhof',
         ...getHoldingPresets('taverne')
       }
     ]
@@ -140,7 +147,10 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
     });
   };
 
-  const handleAddHolding = (typePreset?: EconomyHolding['type']) => {
+  const handleAddHolding = (
+    typePreset?: EconomyHolding['type'],
+    initialLocation?: { territoryId?: string; locationName?: string; locationId?: string }
+  ) => {
     const preset = HOLDING_TYPES.find(t => t.type === typePreset) || HOLDING_TYPES[0];
     const assets = getHoldingPresets(preset.type);
     const holdingId = `holding-${Date.now()}`;
@@ -149,20 +159,24 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
     const newHolding: EconomyHolding = {
       id: holdingId,
       loreEntryId: loreId,
-      name: `Neues ${preset.label.split('/')[0].trim()}`,
+      name: initialLocation?.locationName 
+        ? `${preset.label.split('/')[0].trim()} (${initialLocation.locationName})` 
+        : `Neues ${preset.label.split('/')[0].trim()}`,
       type: preset.type,
       category: preset.category,
       icon: preset.icon,
       description: preset.description,
       level: 1,
       ownerType: 'character',
-      assignedCharacterName: 'Unbekannter Besitzer',
+      assignedCharacterName: '',
       incomePerInterval: preset.defaultIncome,
       upkeepPerInterval: preset.defaultUpkeep,
       staffCount: 5,
       reputation: 50,
       status: 'active',
-      locationName: '',
+      locationName: initialLocation?.locationName || '',
+      territoryId: initialLocation?.territoryId,
+      locationId: initialLocation?.locationId || initialLocation?.territoryId,
       budget: preset.defaultIncome * 2,
       storageCapacity: 150,
       upgrades: [
@@ -171,17 +185,27 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
       resources: assets.resources.map(r => ({ ...r, id: `res-${Math.random().toString(36).substring(2, 11)}` })),
       tasks: assets.tasks.map(t => ({ ...t, id: `tsk-${Math.random().toString(36).substring(2, 11)}` })),
       duties: assets.duties.map(d => ({ ...d, id: `dty-${Math.random().toString(36).substring(2, 11)}` })),
-      roles: assets.roles.map(r => ({ ...r, id: `role-${Math.random().toString(36).substring(2, 11)}` })),
-      staffGroups: assets.staffGroups.map(s => ({ ...s, id: `sg-${Math.random().toString(36).substring(2, 11)}` })),
+      roles: getDefaultJobPositionsForHoldingType(preset.type, 'Mittel').map((job, idx) => ({
+        id: `role-${Date.now()}-${idx}`,
+        name: job.name,
+        assignedToName: '',
+        authorities: job.authorities || ['Tagesgeschäft leiten'],
+        responsibilities: job.responsibilities || [],
+        salary: job.salary || 15,
+        workplaceArea: job.workplaceArea || 'Betrieb'
+      })),
+      staffGroups: [],
       orders: assets.orders.map(o => ({ ...o, id: `ord-${Math.random().toString(36).substring(2, 11)}` })),
       decisions: assets.decisions.map(d => ({ ...d, id: `dec-${Math.random().toString(36).substring(2, 11)}` })),
       activityLogs: assets.activityLogs.map(l => ({ ...l, id: `log-${Math.random().toString(36).substring(2, 11)}` })),
       
-      // Default physical properties
+      // Default physical properties & structured rooms
       physicalCondition: 'Gut',
       physicalSize: 'Mittel',
-      physicalCapacity: 'Standard-Kapazität',
+      physicalCapacity: 'ca. 40-50 Personen / Gäste',
       physicalUsage: 'Gewerbe & Betrieb',
+      buildingRooms: getDefaultRoomsForHolding(preset.type, 'Mittel'),
+      roomsOrAreas: getDefaultRoomsForHolding(preset.type, 'Mittel').map(r => `${r.count || 1}x ${r.name}`).join(', '),
       
       // Active modules
       useResourcesModule: true,
@@ -738,11 +762,11 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
             </div>
 
             {(() => {
-              const summaries = getAllTerritoriesEconomySummaries(world.territories || [], economy.holdings);
+              const summaries = getAllTerritoriesEconomySummaries(world.territories || [], economy.holdings, loreDatabase);
               if (summaries.length === 0) {
                 return (
                   <div className="p-6 text-center text-xs text-slate-500 italic bg-slate-950/40 rounded-2xl border border-slate-800/60">
-                    Noch keine Siedlungen oder Gebiete mit zugewiesenen Betrieben vorhanden. Weisen Sie Betrieben ein Kartengebiet zu, um die Ortswirtschaft zu analysieren.
+                    Noch keine Siedlungen oder Gebiete vorhanden. Erstellen Sie Orte im Codex oder auf der Weltkarte, um hier die Ortswirtschaft zu verwalten.
                   </div>
                 );
               }
@@ -750,24 +774,37 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
               return (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {summaries.map(summary => (
-                    <div key={summary.territoryId} className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400">
+                    <div key={summary.territoryId} className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-3 hover:border-slate-700 transition-colors">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 shrink-0">
                             <LucideIcons.Home className="w-4 h-4" />
                           </div>
-                          <div>
-                            <div className="font-bold text-xs text-slate-100">{summary.territoryName}</div>
-                            <div className="text-[10px] text-slate-400">{summary.territoryType} • {summary.holdingsCount} {summary.holdingsCount === 1 ? 'Wirtschaftseinheit' : 'Wirtschaftseinheiten'}</div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-xs text-slate-100 truncate">{summary.territoryName}</div>
+                            <div className="text-[10px] text-slate-400 truncate">{summary.territoryType} • {summary.holdingsCount} {summary.holdingsCount === 1 ? 'Wirtschaftseinheit' : 'Wirtschaftseinheiten'}</div>
                           </div>
                         </div>
-                        <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg border ${
-                          summary.netBalance >= 0 
-                            ? 'text-emerald-400 bg-emerald-950/30 border-emerald-900/40' 
-                            : 'text-red-400 bg-red-950/30 border-red-900/40'
-                        }`}>
-                          {summary.netBalance >= 0 ? '+' : ''}{summary.netBalance} {economy.currencyIcon} / Intervall
-                        </span>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-lg border ${
+                            summary.netBalance >= 0 
+                              ? 'text-emerald-400 bg-emerald-950/30 border-emerald-900/40' 
+                              : 'text-red-400 bg-red-950/30 border-red-900/40'
+                          }`}>
+                            {summary.netBalance >= 0 ? '+' : ''}{summary.netBalance} {economy.currencyIcon} / Intervall
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => setCreateForLocationModal({ territoryId: summary.territoryId, territoryName: summary.territoryName })}
+                            className="bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                            title={`Neuen Betrieb direkt in ${summary.territoryName} gründen`}
+                          >
+                            <LucideIcons.Plus className="w-3 h-3 text-amber-400" />
+                            <span>Betrieb anlegen</span>
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2 text-center text-[10px] bg-slate-900/60 p-2 rounded-xl border border-slate-800/60">
@@ -785,24 +822,48 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                         </div>
                       </div>
 
-                      <div className="space-y-1.5 pt-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Ansässige Betriebe & Gebäude</span>
+                      <div className="space-y-1.5 pt-1 border-t border-slate-900">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Ansässige Betriebe &amp; Gebäude</span>
+                          <button
+                            type="button"
+                            onClick={() => setCreateForLocationModal({ territoryId: summary.territoryId, territoryName: summary.territoryName })}
+                            className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer font-medium"
+                          >
+                            <LucideIcons.Plus className="w-2.5 h-2.5" />
+                            <span>Hinzufügen</span>
+                          </button>
+                        </div>
+
                         <div className="flex flex-wrap gap-1.5">
-                          {summary.holdings.map(h => (
-                            <button
-                              key={h.id}
-                              type="button"
-                              onClick={() => {
-                                setEditingHoldingId(h.id);
-                                setMainTab('holdings');
-                                setActiveSubTab('details');
-                              }}
-                              className="text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-amber-400 border border-slate-800 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                            >
-                              <HoldingIcon icon={h.icon || 'Building2'} className="w-3 h-3 text-amber-500" />
-                              <span>{h.name}</span>
-                            </button>
-                          ))}
+                          {summary.holdings.length === 0 ? (
+                            <div className="flex items-center gap-2 text-[11px] text-slate-500 italic py-1">
+                              <span>Keine Betriebe an diesem Ort.</span>
+                              <button
+                                type="button"
+                                onClick={() => setCreateForLocationModal({ territoryId: summary.territoryId, territoryName: summary.territoryName })}
+                                className="text-amber-400 hover:underline font-semibold not-italic cursor-pointer"
+                              >
+                                + Ersten Betrieb gründen
+                              </button>
+                            </div>
+                          ) : (
+                            summary.holdings.map(h => (
+                              <button
+                                key={h.id}
+                                type="button"
+                                onClick={() => {
+                                  setEditingHoldingId(h.id);
+                                  setMainTab('holdings');
+                                  setActiveSubTab('details');
+                                }}
+                                className="text-[10px] bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-amber-400 border border-slate-800 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                <HoldingIcon icon={h.icon || 'Building2'} className="w-3 h-3 text-amber-500" />
+                                <span>{h.name}</span>
+                              </button>
+                            ))
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1083,7 +1144,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                   {[
                     { id: 'details', label: 'Stammdaten & Gebäude', icon: 'fa-id-card' },
                     { id: 'position', label: 'Meine Position & Befugnisse', icon: 'fa-user-shield' },
-                    { id: 'staff', label: `Jobs & Personal (${(activeHolding.roles?.length || 0) + (activeHolding.staffGroups?.reduce((a, g) => a + (g.count || 0), 0) || 0)})`, icon: 'fa-users' },
+                    { id: 'staff', label: `Stellen & Berufe (${(activeHolding.roles?.length || 0) + (activeHolding.staffGroups?.length || 0)})`, icon: 'fa-briefcase' },
                     { id: 'resources', label: `Lager & Ressourcen (${activeHolding.resources?.length || 0})`, icon: 'fa-boxes-stacked' },
                     { id: 'tasks', label: `Aufgaben & Pflichten (${(activeHolding.tasks?.length || 0) + (activeHolding.duties?.length || 0)})`, icon: 'fa-list-check' },
                     { id: 'orders', label: `Aufträge & Weisungen (${activeHolding.orders?.length || 0})`, icon: 'fa-scroll' },
@@ -1466,6 +1527,101 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                   <span className="text-[10px] text-slate-400 block">Handelsbooms, Seeräuber-Überfälle, Inspektionsbesuche</span>
                 </div>
               </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREATE BUSINESS DIRECTLY LINKED TO LOCATION */}
+      {createForLocationModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <LucideIcons.Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    Neuen Betrieb in „{createForLocationModal.territoryName}“ errichten
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Wähle einen Betriebstyp. Der neue Betrieb wird automatisch mit <strong className="text-amber-400">{createForLocationModal.territoryName}</strong> verknüpft.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreateForLocationModal(null)}
+                className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <LucideIcons.X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Content - Presets Grid */}
+            <div className="p-5 overflow-y-auto space-y-5 flex-1">
+              {['betrieb', 'produktion', 'handel', 'gebaeude_anwesen'].map(cat => {
+                const presets = HOLDING_TYPES.filter(p => p.category === cat);
+                if (presets.length === 0) return null;
+                const catLabel = cat === 'betrieb' ? 'Gewerbe & Betriebe' :
+                                cat === 'produktion' ? 'Produktion & Gewinnung' :
+                                cat === 'handel' ? 'Handel & Dienstleistungen' :
+                                'Gebäude & Anwesen';
+
+                return (
+                  <div key={cat} className="space-y-2.5">
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      {catLabel}
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                      {presets.map(preset => (
+                        <button
+                          key={preset.type}
+                          type="button"
+                          onClick={() => {
+                            handleAddHolding(preset.type, {
+                              territoryId: createForLocationModal.territoryId,
+                              locationName: createForLocationModal.territoryName,
+                              locationId: createForLocationModal.territoryId
+                            });
+                            setCreateForLocationModal(null);
+                          }}
+                          className="flex flex-col text-left p-3 bg-slate-950 hover:bg-slate-800/90 border border-slate-800 hover:border-amber-500/60 rounded-2xl transition-all group cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 group-hover:border-amber-500/50 flex items-center justify-center text-amber-400 shrink-0">
+                              <HoldingIcon icon={preset.icon} className="w-4 h-4" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-100 group-hover:text-amber-300 truncate">
+                              {preset.label}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 line-clamp-2 leading-relaxed mb-2">
+                            {preset.description}
+                          </p>
+                          <div className="mt-auto pt-2 border-t border-slate-900/80 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+                            <span>+{preset.defaultIncome} {economy.currencyIcon}</span>
+                            <span>-{preset.defaultUpkeep} {economy.currencyIcon}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCreateForLocationModal(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Abbrechen
+              </button>
             </div>
           </div>
         </div>

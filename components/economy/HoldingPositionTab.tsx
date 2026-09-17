@@ -12,11 +12,21 @@ export const HoldingPositionTab: React.FC<HoldingPositionTabProps> = ({
   holding,
   onUpdateHolding
 }) => {
-  const roles = holding.roles || [];
+  const roles = Array.isArray(holding.roles) ? holding.roles : [];
   const myRole = roles.find(r => r.isUserPosition || r.assignedToName?.toLowerCase().includes('spieler') || r.assignedToName?.toLowerCase().includes('user'));
   const superiorRole = myRole?.superiorRole ? roles.find(r => r.name === myRole.superiorRole) : null;
   const subordinateRoles = myRole ? roles.filter(r => r.superiorRole === myRole.name) : [];
-  const myAuthorities = myRole?.authorities || [];
+  const myAuthorities: string[] = Array.isArray(myRole?.authorities)
+    ? myRole.authorities
+    : typeof myRole?.authorities === 'string'
+      ? (myRole.authorities as string).split(/[,;\n]+/).map(s => s.trim()).filter(Boolean)
+      : [];
+
+  const myResponsibilities: string[] = Array.isArray(myRole?.responsibilities)
+    ? myRole.responsibilities
+    : typeof myRole?.responsibilities === 'string'
+      ? (myRole.responsibilities as string).split('\n').map(s => s.trim()).filter(Boolean)
+      : [];
 
   const handleSetUserRole = (roleIndex: number) => {
     const updated = roles.map((r, idx) => ({
@@ -105,8 +115,8 @@ export const HoldingPositionTab: React.FC<HoldingPositionTabProps> = ({
             <div className="space-y-1 md:col-span-3">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Aufgaben & Verantwortungsbereiche</label>
               <AutoExpandingTextarea
-                value={(myRole.responsibilities || []).join('\n')}
-                onChange={e => handleUpdateMyRole({ responsibilities: e.target.value.split('\n').filter(Boolean) })}
+                value={myResponsibilities.join('\n')}
+                onChange={e => handleUpdateMyRole({ responsibilities: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) })}
                 placeholder="Tägliche Aufgaben, Pflichten und Arbeitsabläufe in dieser Rolle (eine Aufgabe pro Zeile)"
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500 min-h-[50px]"
               />

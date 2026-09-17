@@ -5196,11 +5196,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         const pendingTasks = h.tasks?.filter(t => t.status === 'pending' || t.status === 'in_progress')
           .map(t => `"${t.title}" [Prio: ${t.priority}, Zugewiesen: ${t.assigneeName || 'Offen'}]`).join(', ') || 'Keine offenen Aufgaben';
         const staffSummary = h.staffGroups?.map(sg => `${sg.count}x ${sg.roleName} (Bereich: ${sg.workplaceArea}, Status: ${sg.status})`).join(', ') || '';
-        const rolesSummary = h.roles?.map(r => `${r.name}: ${r.assignedToName}`).join(', ') || '';
+        const rolesSummary = h.roles?.map(r => r.assignedToName ? `${r.name}: ${r.assignedToName}` : `${r.name}: No-Name-Angestellter (erhält im Chat dynamisch Persönlichkeit & Namen)`).join(', ') || '';
         const dutiesSummary = h.duties?.map(d => `${d.title} (${d.frequency})`).join(', ') || '';
         return `  * "${h.name}" (${h.type.toUpperCase()}, Stufe ${h.level}) | Ort: ${h.locationName || 'Vor Ort'}
-    - Namentliche Posten: ${rolesSummary || 'Keine'}
-    - Personalgruppen (physisch präsent am Ort): ${staffSummary || `${h.staffCount} Mitarbeiter allgemein`}
+    - Stellen & Personal: ${rolesSummary || staffSummary || `${h.staffCount} Mitarbeiter allgemein`}
     - Aktuelle operative Aufgaben: ${pendingTasks}
     - Wiederkehrende Pflichten: ${dutiesSummary || 'Standardbetrieb'}`;
       }).join('\n')}
@@ -7287,11 +7286,10 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         const pendingTasks = h.tasks?.filter(t => t.status === 'pending' || t.status === 'in_progress')
           .map(t => `"${t.title}" [Prio: ${t.priority}, Zugewiesen: ${t.assigneeName || 'Offen'}]`).join(', ') || 'Keine offenen Aufgaben';
         const staffSummary = h.staffGroups?.map(sg => `${sg.count}x ${sg.roleName} (Bereich: ${sg.workplaceArea}, Status: ${sg.status})`).join(', ') || '';
-        const rolesSummary = h.roles?.map(r => `${r.name}: ${r.assignedToName}`).join(', ') || '';
+        const rolesSummary = h.roles?.map(r => r.assignedToName ? `${r.name}: ${r.assignedToName}` : `${r.name}: No-Name-Angestellter (erhält im Chat dynamisch Persönlichkeit & Namen)`).join(', ') || '';
         const dutiesSummary = h.duties?.map(d => `${d.title} (${d.frequency})`).join(', ') || '';
         return `  * "${h.name}" (${h.type.toUpperCase()}, Stufe ${h.level}) | Ort: ${h.locationName || 'Vor Ort'}
-    - Namentliche Posten: ${rolesSummary || 'Keine'}
-    - Personalgruppen (physisch präsent am Ort): ${staffSummary || `${h.staffCount} Mitarbeiter allgemein`}
+    - Stellen & Personal: ${rolesSummary || staffSummary || `${h.staffCount} Mitarbeiter allgemein`}
     - Aktuelle operative Aufgaben: ${pendingTasks}
     - Wiederkehrende Pflichten: ${dutiesSummary || 'Standardbetrieb'}`;
       }).join('\n')}

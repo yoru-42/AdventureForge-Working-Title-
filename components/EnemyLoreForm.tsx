@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   LoreEntry, 
   EnemyDetails, 
   WorldSetting, 
   CampaignPowerParameter,
-  CharacterPowerSource 
+  CharacterPowerSource,
+  MonsterLootItem 
 } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import CharacterPowerRadar from './CharacterPowerRadar';
@@ -12,6 +13,7 @@ import { GeminiService } from '../services/geminiService';
 import { EP_DEFAULT_PARAMETERS } from '../lib/progressionDefaults';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
+import { ITEM_MAIN_CATEGORIES, STANDARD_UNITS } from '../lib/itemCategoriesData';
 
 interface Props {
   editForm: Partial<LoreEntry>;
@@ -78,6 +80,57 @@ const THREAT_OPTIONS = [
   'Kataklysmisch (Stufe 10+)'
 ];
 
+const DIET_OPTIONS = [
+  'Fleischfresser (Carnivore / Raubtier)',
+  'Pflanzenfresser (Herbivore)',
+  'Allesfresser (Omnivore)',
+  'Aasfresser (Scavenger)',
+  'Magie- & Mana-Fresser (Mana-Drain)',
+  'Seelen- & Lebenskraft-Sauger',
+  'Blutsauger (Hämatophag)',
+  'Mineral- & Metallfresser',
+  'Keine Nahrungsaufnahme (Untot / Konstrukt)'
+];
+
+const SOCIAL_OPTIONS = [
+  'Einzelgänger (Solitär / Territorial)',
+  'Rudelverband mit Alphatier',
+  'Feste Sippe / Stamm / Familie',
+  'Schwarm / Schwarmintelligenz',
+  'Bienenstaat / Kastenwesen mit Königin',
+  'Symbiotisch / Parasitär',
+  'Gesteuert / Diener eines Meisters'
+];
+
+const REPRODUCTION_OPTIONS = [
+  'Lebendgebärend / Säugetier-Zyklus',
+  'Gelege / Eierbrut im Nest',
+  'Sporenbildung / Pilzkolonisation',
+  'Nekromantische Erweckung / Fluch',
+  'Magische Manifestation / Elementarriss',
+  'Alchemistische Erschaffung / Konstruktion',
+  'Zellteilung / Mutation'
+];
+
+const MONSTER_PART_TYPES = [
+  'Fell',
+  'Leder / Haut',
+  'Fleisch',
+  'Knochen',
+  'Horn / Geweih',
+  'Zähne / Fangzähne',
+  'Krallen / Klauen',
+  'Schuppen / Panzerung',
+  'Drüsen / Organe',
+  'Gift / Sekret',
+  'Federn',
+  'Blut / Essenz',
+  'Kristallkern / Magiekern',
+  'Ausrüstung / Beutegut',
+  'Schatz / Edelstein',
+  'Sonstiges'
+];
+
 const SIZE_OPTIONS = [
   'Winzig',
   'Klein',
@@ -140,6 +193,7 @@ export const EnemyLoreForm: React.FC<Props> = ({
   onDelete,
   onCancel,
   lore,
+  onUpdateLore,
   worldTitle,
   isNsfw,
   worldPowerSettings,
@@ -178,6 +232,121 @@ export const EnemyLoreForm: React.FC<Props> = ({
         [field]: value
       }
     }));
+  };
+
+  const codexItems = useMemo(() => lore.filter(l => l.category === 'Gegenstände'), [lore]);
+
+  const currentLootTable: MonsterLootItem[] = useMemo(() => {
+    return Array.isArray(editForm.details?.lootTable) ? editForm.details.lootTable : [];
+  }, [editForm.details?.lootTable]);
+
+  const updateLootTable = (newTable: MonsterLootItem[]) => {
+    updateDetail('lootTable', newTable);
+  };
+
+  const handleAddLootItem = () => {
+    const newItem: MonsterLootItem = {
+      id: 'loot_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      itemName: '',
+      category: 'Rohstoffe',
+      partType: 'Sonstiges',
+      dropChance: 50,
+      minQuantity: 1,
+      maxQuantity: 1,
+      unit: 'Stück',
+      isGuaranteed: false
+    };
+    updateLootTable([...currentLootTable, newItem]);
+  };
+
+  const handleUpdateLootItem = (index: number, patch: Partial<MonsterLootItem>) => {
+    const updated = [...currentLootTable];
+    updated[index] = { ...updated[index], ...patch };
+    updateLootTable(updated);
+  };
+
+  const handleRemoveLootItem = (index: number) => {
+    updateLootTable(currentLootTable.filter((_, i) => i !== index));
+  };
+
+  const handleSelectCodexItemForLoot = (index: number, codexTitle: string) => {
+    const found = codexItems.find(c => c.title === codexTitle || c.id === codexTitle);
+    if (found) {
+      handleUpdateLootItem(index, {
+        itemId: found.id,
+        itemName: found.title,
+        category: (found.details as any)?.mainCategory || 'Rohstoffe',
+        unit: (found.details as any)?.unit || 'Stück'
+      });
+    } else {
+      handleUpdateLootItem(index, { itemName: codexTitle });
+    }
+  };
+
+  const handleCreateCodexItemFromLoot = (lootItem: MonsterLootItem) => {
+    if (!lootItem.itemName.trim()) return;
+    const existing = lore.find(
+      l => l.category === 'Gegenstände' && l.title.toLowerCase() === lootItem.itemName.trim().toLowerCase()
+    );
+    if (existing) {
+      const idx = currentLootTable.indexOf(lootItem);
+      if (idx >= 0) handleUpdateLootItem(idx, { itemId: existing.id });
+      return;
+    }
+    const newEntry: LoreEntry = {
+      id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      title: lootItem.itemName.trim(),
+      category: 'Gegenstände',
+      description: `Monster-Beute & Rohstoff von ${editForm.title || 'Kreaturen'}.${lootItem.harvestCondition ? ` Gewinnung: ${lootItem.harvestCondition}` : ''}`,
+      isUnlocked: true,
+      details: {
+        mainCategory: (lootItem.category as any) || 'Rohstoffe',
+        subCategory: lootItem.partType || 'Monsterbeute',
+        rarity: lootItem.isGuaranteed ? 'Gewöhnlich' : (lootItem.dropChance || 50) < 15 ? 'Episch' : (lootItem.dropChance || 50) < 40 ? 'Selten' : 'Ungewöhnlich',
+        unit: lootItem.unit || 'Stück',
+        isQuestItem: false,
+        dropChance: `${lootItem.dropChance}%`,
+        itemLevel: 1
+      }
+    };
+    onUpdateLore([...lore, newEntry]);
+    const idx = currentLootTable.indexOf(lootItem);
+    if (idx >= 0) {
+      handleUpdateLootItem(idx, { itemId: newEntry.id });
+    }
+  };
+
+  const handleApplyLootPreset = (presetType: 'beast' | 'dragon' | 'alch' | 'crystal') => {
+    const timestamp = Date.now();
+    let presetItems: MonsterLootItem[] = [];
+    if (presetType === 'beast') {
+      presetItems = [
+        { id: `loot_${timestamp}_1`, itemName: `${editForm.title || 'Bestien'}-Fell`, category: 'Rohstoffe', partType: 'Fell', dropChance: 100, isGuaranteed: true, minQuantity: 1, maxQuantity: 1, unit: 'Stück', harvestCondition: 'Kürschnermesser' },
+        { id: `loot_${timestamp}_2`, itemName: `Rohes Fleisch`, category: 'Nahrung', partType: 'Fleisch', dropChance: 100, isGuaranteed: true, minQuantity: 2, maxQuantity: 4, unit: 'Stück' },
+        { id: `loot_${timestamp}_3`, itemName: `Spitze Reißzähne`, category: 'Rohstoffe', partType: 'Zähne', dropChance: 75, isGuaranteed: false, minQuantity: 2, maxQuantity: 6, unit: 'Stück' },
+        { id: `loot_${timestamp}_4`, itemName: `Bestien-Knochen`, category: 'Rohstoffe', partType: 'Knochen', dropChance: 80, isGuaranteed: false, minQuantity: 1, maxQuantity: 3, unit: 'Stück' }
+      ];
+    } else if (presetType === 'dragon') {
+      presetItems = [
+        { id: `loot_${timestamp}_1`, itemName: `Drachenschuppe`, category: 'Rohstoffe', partType: 'Schuppen', dropChance: 100, isGuaranteed: true, minQuantity: 3, maxQuantity: 8, unit: 'Stück', harvestCondition: 'Meister-Kürschner' },
+        { id: `loot_${timestamp}_2`, itemName: `Drachenblut`, category: 'Alchemie & Tränke', partType: 'Blut', dropChance: 60, isGuaranteed: false, minQuantity: 1, maxQuantity: 2, unit: 'Fläschchen', harvestCondition: 'Alchemie-Gefäß' },
+        { id: `loot_${timestamp}_3`, itemName: `Drachenhorn`, category: 'Rohstoffe', partType: 'Horn', dropChance: 40, isGuaranteed: false, minQuantity: 1, maxQuantity: 2, unit: 'Stück' },
+        { id: `loot_${timestamp}_4`, itemName: `Feuerdrüsen-Kern`, category: 'Alchemie & Tränke', partType: 'Drüsen', dropChance: 25, isGuaranteed: false, minQuantity: 1, maxQuantity: 1, unit: 'Stück' }
+      ];
+    } else if (presetType === 'alch') {
+      presetItems = [
+        { id: `loot_${timestamp}_1`, itemName: `Giftbeutel`, category: 'Alchemie & Tränke', partType: 'Gift', dropChance: 70, isGuaranteed: false, minQuantity: 1, maxQuantity: 2, unit: 'Beutel', harvestCondition: 'Alchemiewerkzeug' },
+        { id: `loot_${timestamp}_2`, itemName: `Schleimdrüse`, category: 'Alchemie & Tränke', partType: 'Drüsen', dropChance: 50, isGuaranteed: false, minQuantity: 1, maxQuantity: 1, unit: 'Stück' },
+        { id: `loot_${timestamp}_3`, itemName: `Kreaturen-Auge`, category: 'Alchemie & Tränke', partType: 'Drüsen', dropChance: 35, isGuaranteed: false, minQuantity: 1, maxQuantity: 2, unit: 'Stück' }
+      ];
+    } else if (presetType === 'crystal') {
+      presetItems = [
+        { id: `loot_${timestamp}_1`, itemName: `Kristallkern`, category: 'Edelsteine & Mineralien', partType: 'Kristallkern', dropChance: 80, isGuaranteed: false, minQuantity: 1, maxQuantity: 1, unit: 'Stück' },
+        { id: `loot_${timestamp}_2`, itemName: `Mana-Staub`, category: 'Alchemie & Tränke', partType: 'Blut', dropChance: 60, isGuaranteed: false, minQuantity: 2, maxQuantity: 5, unit: 'Gramm' },
+        { id: `loot_${timestamp}_3`, itemName: `Seelensplitter`, category: 'Magische Artefakte', partType: 'Schatz', dropChance: 20, isGuaranteed: false, minQuantity: 1, maxQuantity: 1, unit: 'Splitter' }
+      ];
+    }
+    updateLootTable([...currentLootTable, ...presetItems]);
   };
 
   const handleSmartFill = async () => {
@@ -536,6 +705,17 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
           </div>
 
           <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-300">Unterart / Zuchtform / Variante</label>
+            <input
+              type="text"
+              value={getDetail('subSpecies')}
+              onChange={e => updateDetail('subSpecies', e.target.value)}
+              placeholder="z.B. Schattenwölfe des Hochlands, Frost-Mutation, Alpha-Krieger..."
+              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-slate-300">Gefahrenstufe / Bedrohungsgrad</label>
             <select
               value={getDetail('threatLevel', THREAT_OPTIONS[2])}
@@ -551,6 +731,36 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
           </div>
 
           <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-300">Ernährungsweise &amp; Beuteschema</label>
+            <select
+              value={getDetail('diet', DIET_OPTIONS[0])}
+              onChange={e => updateDetail('diet', e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+            >
+              {DIET_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-300">Sozialverhalten &amp; Rudelstruktur</label>
+            <select
+              value={getDetail('socialBehavior', SOCIAL_OPTIONS[0])}
+              onChange={e => updateDetail('socialBehavior', e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+            >
+              {SOCIAL_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-slate-300">Typische Gruppengröße / Schwarm</label>
             <select
               value={getDetail('typicalGroupSize', GROUP_SIZE_OPTIONS[0])}
@@ -558,6 +768,21 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
               className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
             >
               {GROUP_SIZE_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold text-slate-300">Fortpflanzung &amp; Vermehrungszyklus</label>
+            <select
+              value={getDetail('reproduction', REPRODUCTION_OPTIONS[0])}
+              onChange={e => updateDetail('reproduction', e.target.value)}
+              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+            >
+              {REPRODUCTION_OPTIONS.map(opt => (
                 <option key={opt} value={opt}>
                   {opt}
                 </option>
@@ -820,6 +1045,10 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
                 baseAbilities={baseAbilities}
                 techniques={techniques}
                 progressionLogic={world?.techniqueProgressionLogic || 'ep'}
+                world={world}
+                worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
+                costResources={world?.costResources}
+                costPowerNames={world?.costPowerNames}
                 onChange={(newPs, newBa, newTech) => {
                   const updated = syncCharacterAbilityTree(editForm.details || {}, newPs, newBa, newTech);
                   setEditForm(prev => ({
@@ -881,50 +1110,303 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
 
       {/* 6. Beute & Rohstoffe (Loot) */}
       {activeTab === 'beute' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-150">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-slate-300">Garantierte Beute (Drop 100%)</label>
-            <AutoExpandingTextarea
-              value={getDetail('guaranteedDrops')}
-              onChange={e => updateDetail('guaranteedDrops', e.target.value)}
-              placeholder="z.B. 1x Wolfsfell, 2x Fangzähne, 1x Bestien-Essenz..."
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[70px]"
-            />
+        <div className="flex flex-col gap-5 animate-in fade-in duration-150">
+          {/* Schnell-Vorlagen für Monster-Beute */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-300">
+                Beutetabellen-Vorlagen &amp; Schnellauswahl
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Fügt typische Rohstoffe &amp; Beutegegenstände hinzu
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleApplyLootPreset('beast')}
+                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium border border-slate-700 transition flex items-center gap-1.5"
+              >
+                <span>Bestien-Beute (Fell, Fleisch, Zähne, Knochen)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyLootPreset('dragon')}
+                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium border border-slate-700 transition flex items-center gap-1.5"
+              >
+                <span>Drachen- &amp; Monstrum-Beute (Schuppen, Blut, Horn)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyLootPreset('alch')}
+                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium border border-slate-700 transition flex items-center gap-1.5"
+              >
+                <span>Alchemie &amp; Organe (Giftbeutel, Drüsen, Auge)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplyLootPreset('crystal')}
+                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium border border-slate-700 transition flex items-center gap-1.5"
+              >
+                <span>Magischer Kern (Kristallkern, Mana-Staub)</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-slate-300">
-              Seltene Drops &amp; Schätze (Chance in %)
-            </label>
-            <AutoExpandingTextarea
-              value={getDetail('rareDrops')}
-              onChange={e => updateDetail('rareDrops', e.target.value)}
-              placeholder="z.B. 5% Uralter Rubin, 2% Schattenklinge des Anführers..."
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[70px]"
-            />
+          {/* Strukturierte Loot-Tabelle */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-slate-200">
+                  Spezifische Beute-Tabelle ({currentLootTable.length} Einträge)
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Definiert exakte Beutechancen, Mengen und Verknüpfungen zum Gegenstands-Codex
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddLootItem}
+                className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+              >
+                <i className="fa-solid fa-plus text-[10px]"></i>
+                <span>Beute-Eintrag hinzufügen</span>
+              </button>
+            </div>
+
+            {currentLootTable.length === 0 ? (
+              <div className="bg-slate-950 border border-dashed border-slate-800 rounded-xl p-6 text-center text-slate-500 text-xs">
+                Keine spezifischen Beuteeinträge hinterlegt. Klicke auf &quot;Beute-Eintrag hinzufügen&quot; oder wähle oben eine Vorlage.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2.5">
+                {currentLootTable.map((item, index) => {
+                  const linkedCodex = codexItems.find(c => c.id === item.itemId || c.title.toLowerCase() === (item.itemName || '').toLowerCase());
+                  return (
+                    <div
+                      key={item.id || index}
+                      className="bg-slate-950 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-3"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
+                        {/* Gegenstand Name & Codex Auswahl */}
+                        <div className="md:col-span-4 flex flex-col gap-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold text-slate-300">
+                              Beute-Gegenstand
+                            </label>
+                            {linkedCodex ? (
+                              <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-1.5 py-0.2 rounded font-mono">
+                                Im Codex verknüpft
+                              </span>
+                            ) : item.itemName ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCreateCodexItemFromLoot(item)}
+                                className="text-[10px] text-amber-400 hover:text-amber-300 underline font-medium"
+                                title="Erstellt einen neuen Gegenstands-Codex-Eintrag mit diesen Daten"
+                              >
+                                + In Codex speichern
+                              </button>
+                            ) : null}
+                          </div>
+                          <input
+                            type="text"
+                            list={`codex-item-list-${index}`}
+                            value={item.itemName || ''}
+                            onChange={e => handleSelectCodexItemForLoot(index, e.target.value)}
+                            placeholder="z.B. Wolfsfell, Drachenschuppe..."
+                            className="bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                          />
+                          <datalist id={`codex-item-list-${index}`}>
+                            {codexItems.map(c => (
+                              <option key={c.id} value={c.title} />
+                            ))}
+                          </datalist>
+                        </div>
+
+                        {/* Beute-Teil / Materialtyp */}
+                        <div className="md:col-span-3 flex flex-col gap-1">
+                          <label className="text-[11px] font-semibold text-slate-300">
+                            Teil-Art / Material
+                          </label>
+                          <select
+                            value={item.partType || 'Sonstiges'}
+                            onChange={e => handleUpdateLootItem(index, { partType: e.target.value as any })}
+                            className="bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+                          >
+                            {MONSTER_PART_TYPES.map(pt => (
+                              <option key={pt} value={pt}>
+                                {pt}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Beutechance & Garantiert */}
+                        <div className="md:col-span-2 flex flex-col gap-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-semibold text-slate-300">
+                              Drop-Chance
+                            </label>
+                            <span className="text-[11px] font-bold text-amber-400">
+                              {item.isGuaranteed ? '100%' : `${item.dropChance ?? 50}%`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="1"
+                              max="100"
+                              disabled={item.isGuaranteed}
+                              value={item.isGuaranteed ? 100 : (item.dropChance ?? 50)}
+                              onChange={e => handleUpdateLootItem(index, { dropChance: parseInt(e.target.value, 10) || 1 })}
+                              className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
+                            />
+                            <label className="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer select-none whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={!!item.isGuaranteed}
+                                onChange={e => handleUpdateLootItem(index, { isGuaranteed: e.target.checked, dropChance: e.target.checked ? 100 : item.dropChance })}
+                                className="accent-amber-500 rounded"
+                              />
+                              <span>100%</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Menge (Min - Max) & Einheit */}
+                        <div className="md:col-span-2 flex flex-col gap-1">
+                          <label className="text-[11px] font-semibold text-slate-300">
+                            Menge (Min - Max)
+                          </label>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.minQuantity ?? 1}
+                              onChange={e => handleUpdateLootItem(index, { minQuantity: parseInt(e.target.value, 10) || 1 })}
+                              className="w-12 bg-slate-900 border border-slate-700/80 rounded-lg px-1.5 py-1.5 text-xs text-center text-slate-200 outline-none focus:border-amber-500"
+                            />
+                            <span className="text-slate-500 text-xs">-</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.maxQuantity ?? 1}
+                              onChange={e => handleUpdateLootItem(index, { maxQuantity: parseInt(e.target.value, 10) || 1 })}
+                              className="w-12 bg-slate-900 border border-slate-700/80 rounded-lg px-1.5 py-1.5 text-xs text-center text-slate-200 outline-none focus:border-amber-500"
+                            />
+                            <select
+                              value={item.unit || 'Stück'}
+                              onChange={e => handleUpdateLootItem(index, { unit: e.target.value })}
+                              className="bg-slate-900 border border-slate-700/80 rounded-lg px-1.5 py-1.5 text-[11px] text-slate-300 outline-none focus:border-amber-500"
+                            >
+                              {STANDARD_UNITS.slice(0, 8).map(u => (
+                                <option key={u} value={u}>{u}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Löschen */}
+                        <div className="md:col-span-1 flex items-end justify-center">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveLootItem(index)}
+                            className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-950/40 rounded-lg transition"
+                            title="Eintrag entfernen"
+                          >
+                            <i className="fa-solid fa-trash-can text-xs"></i>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Gewinnungs-Bedingung & Alchemie-Voraussetzung */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 border-t border-slate-900">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                            Bedingung / Werkzeug:
+                          </span>
+                          <input
+                            type="text"
+                            value={item.harvestCondition || ''}
+                            onChange={e => handleUpdateLootItem(index, { harvestCondition: e.target.value })}
+                            placeholder="z.B. Kürschnermesser, Alchemiewerkzeug, unversehrter Kadaver..."
+                            className="w-full bg-slate-900/80 border border-slate-800 rounded-md px-2 py-1 text-xs text-slate-300 outline-none focus:border-amber-500"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                            Hauptkategorie:
+                          </span>
+                          <select
+                            value={item.category || 'Rohstoffe'}
+                            onChange={e => handleUpdateLootItem(index, { category: e.target.value })}
+                            className="w-full bg-slate-900/80 border border-slate-800 rounded-md px-2 py-1 text-xs text-slate-300 outline-none focus:border-amber-500"
+                          >
+                            {ITEM_MAIN_CATEGORIES.map(cat => (
+                              <option key={cat.id} value={cat.id}>{cat.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-slate-300">
-              Verwertbare Rohstoffe &amp; Alchemie-Zutaten (Harvesting)
-            </label>
-            <AutoExpandingTextarea
-              value={getDetail('harvestableParts')}
-              onChange={e => updateDetail('harvestableParts', e.target.value)}
-              placeholder="z.B. Giftbeutel (erfordert Stufe 2 Alchemie), Chitin-Panzerplatte (für Rüstungsschmied)..."
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[70px]"
-            />
-          </div>
+          {/* Freitext-Zusammenfassungen & Währungsausbeute */}
+          <div className="border-t border-slate-800 pt-4 flex flex-col gap-3">
+            <h4 className="text-xs font-bold text-slate-300">
+              Ergänzende Beuteangaben &amp; Freitext
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-300">Garantierte Beute (Text)</label>
+                <AutoExpandingTextarea
+                  value={getDetail('guaranteedDrops')}
+                  onChange={e => updateDetail('guaranteedDrops', e.target.value)}
+                  placeholder="z.B. 1x Wolfsfell, 2x Fangzähne, 1x Bestien-Essenz..."
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                />
+              </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-bold text-slate-300">Typische Währungsausbeute</label>
-            <input
-              type="text"
-              value={getDetail('goldDrop')}
-              onChange={e => updateDetail('goldDrop', e.target.value)}
-              placeholder="z.B. 5 - 15 Silbermünzen, 50 Goldmünzen (Boss)..."
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500"
-            />
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Seltene Drops &amp; Schätze (Text)
+                </label>
+                <AutoExpandingTextarea
+                  value={getDetail('rareDrops')}
+                  onChange={e => updateDetail('rareDrops', e.target.value)}
+                  placeholder="z.B. 5% Uralter Rubin, 2% Schattenklinge des Anführers..."
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Verwertbare Rohstoffe (Harvesting-Text)
+                </label>
+                <AutoExpandingTextarea
+                  value={getDetail('harvestableParts')}
+                  onChange={e => updateDetail('harvestableParts', e.target.value)}
+                  placeholder="z.B. Giftbeutel (erfordert Stufe 2 Alchemie), Chitin-Panzerplatte..."
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-300">Typische Währungsausbeute</label>
+                <input
+                  type="text"
+                  value={getDetail('goldDrop')}
+                  onChange={e => updateDetail('goldDrop', e.target.value)}
+                  placeholder="z.B. 5 - 15 Silbermünzen, 50 Goldmünzen (Boss)..."
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -194,7 +194,6 @@ export const LocationSelector: React.FC<LocationSelectorProps> = ({
           placeholder={placeholder}
           value={safeValue}
           onChange={e => onChange(e.target.value)}
-          autoFocus
           id="location-selector-manual-input"
         />
         <button

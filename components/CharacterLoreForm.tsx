@@ -27,6 +27,7 @@ import { sanitizeCharacterNameAndProfession } from '../lib/loreSanitizer';
 import { migrateLegacyProfessionData } from '../services/professionCompetencyService';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
+import { CharacterInventorySection } from './CharacterInventorySection';
 
 export interface CharacterAbility {
   id: string;
@@ -104,7 +105,8 @@ const TARGET_SECTIONS = [
   { id: 'secrets', label: 'Geheimnis-Stufen (Verborgenes Wissen)' },
   { id: 'relationships', label: 'Beziehungen' },
   { id: 'combat', label: 'Kampffähigkeiten & Techniken' },
-  { id: 'professions', label: 'Berufe & Talente' }
+  { id: 'professions', label: 'Berufe & Talente' },
+  { id: 'inventory', label: '5. Besitz & Inventar' }
 ];
 
 export const CharacterLoreForm: React.FC<Props> = ({
@@ -123,7 +125,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
   playerName,
   world
 }) => {
-  const [charTab, setCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente'>('profil');
+  const [charTab, setCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('profil');
   const [activeTransformationId, setActiveTransformationId] = useState<string>('standard');
   const [activePowerSourceIdx, setActivePowerSourceIdx] = useState<number>(0);
   const [activeAbilityTab, setActiveAbilityTab] = useState<string>('Techniken');
@@ -828,6 +830,11 @@ export const CharacterLoreForm: React.FC<Props> = ({
               everydaySkills: data.everydaySkills || currentDetails.everydaySkills || ''
             };
             setCharTab('beruf_talente');
+          } else if (smartFillTargetSection === 'inventory') {
+            if (data.structuredInventory) {
+              setStructuredInventory(data.structuredInventory);
+            }
+            setCharTab('besitz_inventar');
           } else {
             // 'all'
             newDetails = keepExistingDetails ? {
@@ -1338,12 +1345,12 @@ export const CharacterLoreForm: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* 3 Main Tabs */}
-      <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1">
+      {/* 5 Main Tabs */}
+      <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 flex-wrap">
         <button
           type="button"
           onClick={() => setCharTab('profil')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
             charTab === 'profil'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
@@ -1356,7 +1363,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => setCharTab('beziehungen')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
             charTab === 'beziehungen'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
@@ -1374,7 +1381,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => setCharTab('kampffaehigkeiten')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
             charTab === 'kampffaehigkeiten'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
@@ -1387,14 +1394,32 @@ export const CharacterLoreForm: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => setCharTab('beruf_talente')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
             charTab === 'beruf_talente'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
           }`}
         >
+          <i className="fa-solid fa-graduation-cap"></i>
+          <span>4. Berufe &amp; Talente</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setCharTab('besitz_inventar')}
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+            charTab === 'besitz_inventar'
+              ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+          }`}
+        >
           <i className="fa-solid fa-briefcase"></i>
-          <span>4. Berufe & Talente</span>
+          <span>5. Besitz / Inventar</span>
+          {((structuredInventory?.customItems?.length || 0) > 0 || (structuredInventory?.weapons?.length || 0) > 0) && (
+            <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${charTab === 'besitz_inventar' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-400'}`}>
+              {(structuredInventory?.customItems?.length || 0) + (structuredInventory?.weapons?.length || 0)}
+            </span>
+          )}
         </button>
       </div>
 
@@ -2158,296 +2183,23 @@ export const CharacterLoreForm: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Ausrüstung & Inventar */}
-          <div className="p-4 bg-slate-900/40 border border-slate-800 rounded-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-briefcase text-sky-400 text-sm"></i>
-                <div>
-                  <span className="text-xs text-slate-200 font-bold uppercase tracking-wider block">Ausrüstung &amp; Inventar</span>
-                  <span className="text-[10px] text-slate-500 block">Bestimmt das Inventar und die Ausrüstung dieses Charakters.</span>
-                </div>
+          {/* Quick-Link to Tab 5: Besitz & Inventar */}
+          <div className="p-3.5 bg-slate-900/30 border border-slate-800 rounded-xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <i className="fa-solid fa-briefcase text-amber-400 text-sm"></i>
+              <div>
+                <span className="text-xs font-bold text-slate-200 block">Besitz, Ausrüstung &amp; Spezial-Gegenstände</span>
+                <span className="text-[11px] text-slate-400 block">Waffen, Katanas, Rüstungsteile, Finanzen und Inventar-Slots werden in Tab 5 verwaltet.</span>
               </div>
-              <button
-                type="button"
-                onClick={handleExtractInventory}
-                disabled={isExtractingInventory || !getAppearanceValue('outfit')}
-                className="px-2.5 py-1 bg-sky-600/20 border border-sky-500/30 text-sky-400 rounded-lg hover:bg-sky-600/30 transition-all flex items-center gap-1.5 text-[10px] font-bold cursor-pointer"
-                title="Analysiert das Outfit und befüllt die Slots automatisch"
-              >
-                <i className={`fa-solid ${isExtractingInventory ? 'fa-spinner animate-spin' : 'fa-wand-magic-sparkles'}`}></i>
-                <span>Aus Outfit extrahieren</span>
-              </button>
             </div>
-
-            <div className="space-y-4">
-              {/* Kleidung & Rüstung */}
-              <div className="space-y-2">
-                <span className="text-[10px] text-sky-400 font-extrabold uppercase tracking-wide flex items-center gap-1.5">
-                  <i className="fa-solid fa-shirt"></i> Kleidung &amp; Rüstung
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Kopf</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Kopfbedeckung"
-                      value={structuredInventory?.armor?.head || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          armor: { ...(inv.armor || {}), head: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Brust / Torso</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Oberbekleidung"
-                      value={structuredInventory?.armor?.chest || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          armor: { ...(inv.armor || {}), chest: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Hände</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Handschuhe"
-                      value={structuredInventory?.armor?.hands || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          armor: { ...(inv.armor || {}), hands: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Beine</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Beinkleidung"
-                      value={structuredInventory?.armor?.legs || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          armor: { ...(inv.armor || {}), legs: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Füße</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Schuhwerk"
-                      value={structuredInventory?.armor?.feet || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          armor: { ...(inv.armor || {}), feet: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Schmuck & Accessoires */}
-              <div className="space-y-2">
-                <span className="text-[10px] text-sky-400 font-extrabold uppercase tracking-wide flex items-center gap-1.5">
-                  <i className="fa-solid fa-gem"></i> Schmuck &amp; Accessoires
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Finger</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Ringe"
-                      value={structuredInventory?.accessories?.finger || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          accessories: { ...(inv.accessories || {}), finger: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Hals</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Ketten, Amulette"
-                      value={structuredInventory?.accessories?.neck || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          accessories: { ...(inv.accessories || {}), neck: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Handgelenke</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Armreifen"
-                      value={structuredInventory?.accessories?.wrist || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          accessories: { ...(inv.accessories || {}), wrist: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Taille</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Gürtel, Schärpen"
-                      value={structuredInventory?.accessories?.waist || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          accessories: { ...(inv.accessories || {}), waist: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Rücken</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Umhänge, Rucksäcke"
-                      value={structuredInventory?.accessories?.back || ''}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          accessories: { ...(inv.accessories || {}), back: e.target.value }
-                        });
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Finanzen & Waffen */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-800/60 pt-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Geld</label>
-                    <input
-                      type="number"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500 font-mono font-bold"
-                      value={structuredInventory?.money ?? 100}
-                      onChange={e => {
-                        const newMoney = parseInt(e.target.value) || 0;
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          money: newMoney
-                        });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Währung</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                      placeholder="Goldstücke"
-                      value={structuredInventory?.currencyLabel || 'Goldstücke'}
-                      onChange={e => {
-                        const inv = structuredInventory;
-                        setStructuredInventory({
-                          ...inv,
-                          currencyLabel: e.target.value
-                        });
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Waffen (kommagetrennt)</label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                    placeholder="z.B. Eisendolch, Zauberstab"
-                    value={structuredInventory?.weapons ? structuredInventory.weapons.join(', ') : ''}
-                    onChange={e => {
-                      const inv = structuredInventory;
-                      setStructuredInventory({
-                        ...inv,
-                        weapons: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                      });
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Codex Linked Items */}
-              {(() => {
-                const charName = editForm.title || '';
-                if (!charName) return null;
-                const codexItems = lore.filter(item => 
-                  item.category === 'Gegenstände' && 
-                  item.details?.owner?.trim().toLowerCase() === charName.trim().toLowerCase()
-                );
-                if (codexItems.length === 0) return null;
-
-                return (
-                  <div className="bg-slate-950/70 border border-amber-500/20 rounded-lg p-2.5 mt-1">
-                    <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1 mb-1.5">
-                      <i className="fa-solid fa-scroll text-amber-500 text-[9px]"></i>
-                      Aus Codex verknüpft (Besitzer: {charName}):
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {codexItems.map((item, iIdx) => (
-                        <span 
-                          key={`codex-item-${item.id || iIdx}-${iIdx}`} 
-                          className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-slate-200 flex items-center gap-1"
-                        >
-                          <i className="fa-solid fa-shield-halved text-amber-400 text-[8px]"></i>
-                          <span className="font-semibold">{item.title}</span>
-                          {item.details?.itemType && (
-                            <span className="text-[8px] text-amber-400/70">({item.details.itemType})</span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+            <button
+              type="button"
+              onClick={() => setCharTab('besitz_inventar')}
+              className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <span>Zu Besitz / Inventar</span>
+              <i className="fa-solid fa-arrow-right text-[10px]"></i>
+            </button>
           </div>
 
           {/* Persönlichkeit, Biografie & Hintergründe */}
@@ -2753,6 +2505,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   baseAbilities={baseAbilities}
                   techniques={techniques}
                   progressionLogic={world?.techniqueProgressionLogic || 'ep'}
+                  world={world}
+                  worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
+                  costResources={world?.costResources}
+                  costPowerNames={world?.costPowerNames}
                   onChange={(newPs, newBa, newTech) => {
                     const updated = syncCharacterAbilityTree(editForm.details || {}, newPs, newBa, newTech);
                     updateMultipleDetails(updated);
@@ -2838,6 +2594,23 @@ export const CharacterLoreForm: React.FC<Props> = ({
               onToolsAndEquipmentChange={val => updateDetail('toolsAndEquipment', val)}
             />
           </div>
+        </div>
+      )}
+
+      {/* TAB 5: BESITZ / INVENTAR */}
+      {charTab === 'besitz_inventar' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          <CharacterInventorySection
+            structuredInventory={structuredInventory}
+            onChangeStructuredInventory={setStructuredInventory}
+            characterName={editForm.title || ''}
+            characterOutfit={getAppearanceValue('outfit')}
+            lore={lore}
+            onUpdateLore={onUpdateLore}
+            world={world}
+            isExtractingInventory={isExtractingInventory}
+            onExtractInventory={handleExtractInventory}
+          />
         </div>
       )}
 

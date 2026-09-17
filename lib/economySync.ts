@@ -732,9 +732,34 @@ export const getTerritoryEconomySummary = (
 
 export const getAllTerritoriesEconomySummaries = (
   territories: Territory[],
-  holdings: EconomyHolding[]
+  holdings: EconomyHolding[],
+  loreDatabase?: LoreEntry[]
 ): TerritoryEconomySummary[] => {
-  return territories.map(t => getTerritoryEconomySummary(t, holdings));
+  const combinedTerritories: Territory[] = [...(territories || [])];
+
+  if (loreDatabase && Array.isArray(loreDatabase)) {
+    loreDatabase.forEach(lore => {
+      if ((lore.category === 'Orte' || (lore.category as string) === 'Weltkarte') && lore.title) {
+        const holdingType = detectHoldingType(lore);
+        if (holdingType === null) {
+          const exists = combinedTerritories.some(t => 
+            t.id === lore.id || 
+            (t.name && t.name.trim().toLowerCase() === lore.title.trim().toLowerCase())
+          );
+          if (!exists) {
+            combinedTerritories.push({
+              id: lore.id,
+              name: lore.title,
+              type: (lore.details?.type as any) || 'Ort',
+              description: lore.description || ''
+            } as Territory);
+          }
+        }
+      }
+    });
+  }
+
+  return combinedTerritories.map(t => getTerritoryEconomySummary(t, holdings));
 };
 
 /**
@@ -1047,6 +1072,8 @@ export const syncCharacterAndHoldingRoles = (
   };
 };
 
+import { ITEM_MAIN_CATEGORIES } from './itemCategoriesData';
+
 /**
  * Synchronizes all Codex items (Gegenstände) with the economy holdings and markets.
  */
@@ -1080,6 +1107,8 @@ export const syncCodexItemsToEconomy = (
         const unit = d.unit || 'Stück';
         const pricePerUnit = d.pricePerUnit !== undefined ? Number(d.pricePerUnit) : 10;
         const condition = d.condition || 'gut';
+        const matchedCategoryMeta = ITEM_MAIN_CATEGORIES.find(c => c.id === d.mainCategory);
+        const resourceCategory = matchedCategoryMeta ? matchedCategoryMeta.economyCategory : 'goods';
 
         if (existingIdx >= 0) {
           const existing = resources[existingIdx];
@@ -1097,6 +1126,7 @@ export const syncCodexItemsToEconomy = (
               unit,
               pricePerUnit,
               condition,
+              category: resourceCategory as any,
               notes: item.description || existing.notes
             };
             holding.resources = resources;
@@ -1106,7 +1136,7 @@ export const syncCodexItemsToEconomy = (
           resources.push({
             id: `res-${holding.id}-${item.id || Date.now()}`,
             name: itemName,
-            category: 'goods',
+            category: resourceCategory as any,
             amount,
             maxCapacity,
             unit,

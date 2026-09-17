@@ -13,7 +13,7 @@ export const HoldingDecisionsTab: React.FC<HoldingDecisionsTabProps> = ({
   currencyIcon,
   onUpdateHolding
 }) => {
-  const decisions = holding.decisions || [];
+  const decisions = Array.isArray(holding.decisions) ? holding.decisions : [];
 
   const handleAddDecision = () => {
     const newDec: EconomyDecision = {
@@ -197,7 +197,7 @@ export const HoldingDecisionsTab: React.FC<HoldingDecisionsTabProps> = ({
               <div className="space-y-2 pt-2 border-t border-slate-900">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Verfügbare Handlungsoptionen:</span>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {dec.options.map((opt, oIdx) => (
+                  {(Array.isArray(dec.options) ? dec.options : []).map((opt, oIdx) => (
                     <div
                       key={opt.id || oIdx}
                       className={`p-3.5 rounded-2xl border transition-all ${

@@ -37,6 +37,10 @@ export interface TechniqueHierarchyTreeProps {
   worldTitle?: string;
   readOnly?: boolean;
   progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
+  worldPowerSettings?: Record<string, any>;
+  costResources?: Array<{ id?: string; name: string }>;
+  costPowerNames?: string[];
+  world?: any;
 }
 
 export const CATEGORY_TABS = [
@@ -87,7 +91,11 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   characterRole,
   worldTitle,
   readOnly = false,
-  progressionLogic = 'ep'
+  progressionLogic = 'ep',
+  worldPowerSettings,
+  costResources,
+  costPowerNames,
+  world
 }) => {
   // 1. Sichere Standard-Kraftquelle falls Liste leer
   const safePowerSources = useMemo(() => {
@@ -138,6 +146,75 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     const found = safePowerSources.find(ps => ps.id === activePowerSourceId);
     return found || safePowerSources[0] || null;
   }, [safePowerSources, activePowerSourceId]);
+
+  // Dynamische Optionen aus Schritt 3 von 9
+  const step3PowerNames = useMemo(() => {
+    const set = new Set<string>();
+
+    if (worldPowerSettings) {
+      Object.keys(worldPowerSettings).forEach(k => set.add(k));
+    }
+    if (world?.campaignPowerSettings) {
+      Object.keys(world.campaignPowerSettings).forEach(k => set.add(k));
+    }
+
+    if (world?.customResourceMappings && Array.isArray(world.customResourceMappings)) {
+      world.customResourceMappings.forEach((m: any) => {
+        if (m.name) set.add(m.name);
+      });
+    }
+
+    if (world?.healthPowerNames && Array.isArray(world.healthPowerNames)) {
+      world.healthPowerNames.forEach((n: string) => set.add(n));
+    }
+    if (world?.costPowerNames && Array.isArray(world.costPowerNames)) {
+      world.costPowerNames.forEach((n: string) => set.add(n));
+    }
+
+    if (activePowerSource?.powerName) {
+      set.add(activePowerSource.powerName);
+    }
+    if (activePowerSource?.source) {
+      set.add(activePowerSource.source);
+    }
+
+    if (set.size === 0) {
+      ['Standard-Kraftquelle', 'Magie', 'Körperkraft', 'Teufelskräfte', 'Haki', 'Ki / Chi'].forEach(n => set.add(n));
+    }
+
+    return Array.from(set);
+  }, [worldPowerSettings, world, activePowerSource]);
+
+  const step3CostResources = useMemo(() => {
+    const set = new Set<string>();
+
+    const resList = costResources || world?.costResources;
+    if (Array.isArray(resList)) {
+      resList.forEach((r: any) => {
+        if (typeof r === 'string') set.add(r);
+        else if (r && r.name) set.add(r.name);
+      });
+    }
+
+    const cNames = costPowerNames || world?.costPowerNames;
+    if (Array.isArray(cNames)) {
+      cNames.forEach((n: string) => set.add(n));
+    }
+
+    if (world?.costPowerName) {
+      set.add(world.costPowerName);
+    }
+
+    if (activePowerSource?.cost) {
+      set.add(activePowerSource.cost);
+    }
+
+    if (set.size === 0) {
+      ['Mana', 'Ausdauer', 'MP', 'SP', 'Wut', 'Fokus', 'Qi', 'Chakra', 'Seelenkraft', 'Keine Kosten'].forEach(r => set.add(r));
+    }
+
+    return Array.from(set);
+  }, [costResources, costPowerNames, world, activePowerSource]);
 
   // Wenn activePowerSourceId ungültig ist, auf erste Kraftquelle zurücksetzen
   useEffect(() => {
@@ -697,26 +774,37 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
               <label className="text-[9px] font-bold text-slate-400 uppercase">
                 Name der Kraftquelle
               </label>
-              <input
-                type="text"
-                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+              <select
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
                 value={activePowerSource.powerName || activePowerSource.source || ''}
-                placeholder="z.B. Teufelskräfte, Magie, Haki"
-                onChange={e => handleUpdatePowerSource(activePowerSource.id, { powerName: e.target.value })}
-              />
+                onChange={e => handleUpdatePowerSource(activePowerSource.id, { 
+                  powerName: e.target.value,
+                  source: e.target.value
+                })}
+              >
+                {step3PowerNames.map(pName => (
+                  <option key={pName} value={pName} className="bg-slate-950 text-white">
+                    {pName}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex flex-col gap-1">
               <label className="text-[9px] font-bold text-slate-400 uppercase">
                 Ressource / Kosten
               </label>
-              <input
-                type="text"
-                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+              <select
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
                 value={activePowerSource.cost || ''}
-                placeholder="z.B. Mana, Ausdauer, MP"
                 onChange={e => handleUpdatePowerSource(activePowerSource.id, { cost: e.target.value })}
-              />
+              >
+                {step3CostResources.map(cRes => (
+                  <option key={cRes} value={cRes} className="bg-slate-950 text-white">
+                    {cRes}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="flex items-end justify-end">
