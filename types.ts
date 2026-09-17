@@ -597,6 +597,25 @@ export interface OfficeState {
   description?: string;
 }
 
+export type ProfessionType = 'civil' | 'combat';
+
+export interface ProfessionNode {
+  id: string;
+  fieldId: string;
+  name: string;
+  parentIds?: string[];
+  childIds?: string[];
+  specializationOf?: string;
+  prerequisites?: ProfessionPrerequisite[];
+  categoryId?: string;
+  professionType?: 'civil' | 'combat';
+  isMainProfession?: boolean;
+  isSecondaryProfession?: boolean;
+  isMasterQualification?: boolean;
+  isTitleQualification?: boolean;
+  description?: string;
+}
+
 export type ProfessionNodeType =
   | 'training'
   | 'profession'
@@ -678,6 +697,13 @@ export interface ProfessionTreeNode {
   category?: string;
   rankOrder?: number;
   rankTitle?: string;
+  categoryId?: string;
+  professionType?: 'civil' | 'combat';
+  isMasterQualification?: boolean;
+  isTitleQualification?: boolean;
+  isMainProfession?: boolean;
+  isSecondaryProfession?: boolean;
+  specializationOf?: string;
   nextRankProfession?: string;
   previousRankProfession?: string;
   suggestedCompetencies?: string[];

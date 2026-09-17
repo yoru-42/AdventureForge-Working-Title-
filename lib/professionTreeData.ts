@@ -95,6 +95,10 @@ export interface ProfessionTreeNode {
   authorities?: string[];
   suggestedAuthorities?: string[];
   grantedAuthorities?: string[];
+  categoryId?: string;
+  professionType?: 'civil' | 'combat';
+  isMasterQualification?: boolean;
+  isTitleQualification?: boolean;
 }
 
 export interface ProfessionTreeField {

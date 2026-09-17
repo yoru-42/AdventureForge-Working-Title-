@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Search, ChevronRight, Check, Lock, Unlock, Shield, Award, Info, Briefcase, GraduationCap, ArrowRight, Layers, Star, Compass } from 'lucide-react';
-import { JOB_CATEGORIES, getFieldIdForJob } from './jobPresets';
+import { JOB_CATEGORIES, getFieldIdForJob, getProfessionTypeForField, getProfessionTypeForJob, ProfessionType } from './jobPresets';
 import { getProfessionTreeForField, ProfessionTreeNode, ProfessionTreeField, ProfessionPrerequisite } from '../lib/professionTreeData';
 import { getPositionsForProfession, ProfessionPosition, PROFESSION_POSITIONS } from '../lib/professionPositionsData';
 import { getSuggestedAuthoritiesForProfession } from '../lib/professionAuthoritiesData';
@@ -32,9 +32,15 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'tree' | 'positions'>('tree');
   const [selectedBranchKey, setSelectedBranchKey] = useState<string>('all');
+  const [professionTypeFilter, setProfessionTypeFilter] = useState<'all' | 'civil' | 'combat'>('all');
 
   const activeField = selectedField || openField || 'lebensmittel_versorgung';
 
+
+  const filteredJobCategories = useMemo(() => {
+    if (professionTypeFilter === 'all') return JOB_CATEGORIES;
+    return JOB_CATEGORIES.filter(cat => getProfessionTypeForField(cat.fieldId) === professionTypeFilter);
+  }, [professionTypeFilter]);
   const activeCategory = useMemo(
     () => JOB_CATEGORIES.find(category => category.fieldId === activeField) || JOB_CATEGORIES[0],
     [activeField]
@@ -229,17 +235,63 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
         <>
           {/* 16 Berufsfelder Auswahltabs */}
           <div className="mt-1 space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] text-slate-400">
-              <span>Berufsfeld wählen (16 Fachbereiche)</span>
+            <div className="flex items-center justify-between gap-2 pb-1">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setProfessionTypeFilter('all')}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition border ${
+                    professionTypeFilter === 'all'
+                      ? 'bg-slate-700 text-white border-slate-600 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  Alle Berufsfelder (16)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfessionTypeFilter('civil');
+                    if (getProfessionTypeForField(activeField) !== 'civil') {
+                      const firstCivil = JOB_CATEGORIES.find(c => getProfessionTypeForField(c.fieldId) === 'civil');
+                      if (firstCivil) handleSelectField(firstCivil.fieldId);
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition border ${
+                    professionTypeFilter === 'civil'
+                      ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/70 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  Zivile Berufe (12)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfessionTypeFilter('combat');
+                    if (getProfessionTypeForField(activeField) !== 'combat') {
+                      const firstCombat = JOB_CATEGORIES.find(c => getProfessionTypeForField(c.fieldId) === 'combat');
+                      if (firstCombat) handleSelectField(firstCombat.fieldId);
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition border ${
+                    professionTypeFilter === 'combat'
+                      ? 'bg-rose-950/80 text-rose-300 border-rose-700/70 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  Kampfberufe (4)
+                </button>
+              </div>
               {activeCategory && (
-                <span className="text-slate-500">
+                <span className="text-[10px] text-slate-400">
                   {treeField.nodes.length} Stufen & Spezialisierungen
                 </span>
               )}
             </div>
 
             <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto p-1 bg-slate-950/70 border border-slate-800/80 rounded-xl">
-              {JOB_CATEGORIES.map(category => {
+              {filteredJobCategories.map(category => {
                 const isSelected = category.fieldId === activeField;
                 return (
                   <button

@@ -766,3 +766,49 @@ export function getJobCategoryByFieldId(fieldId: string): JobCategory | undefine
   const targetId = FIELD_ID_ALIASES[fieldId] || fieldId;
   return JOB_CATEGORIES.find(c => c.fieldId === targetId || c.category.toLowerCase() === targetId.toLowerCase());
 }
+
+export type ProfessionType = 'civil' | 'combat';
+
+export const COMBAT_FIELD_IDS = new Set<string>([
+  'militaer',
+  'abenteuer',
+  'kriminalitaet',
+  'magie'
+]);
+
+export const COMBAT_JOB_KEYWORDS = [
+  'soldat', 'krieger', 'schwert', 'ritter', 'paladin', 'berserker', 'duellant',
+  'speerkämpfer', 'speer', 'axtkämpfer', 'axt', 'bogenschütze', 'bogen', 'jäger',
+  'schütze', 'dieb', 'assassine', 'ninja', 'mönch', 'faustkämpfer', 'magier',
+  'schwarzmagier', 'weißmagier', 'rotmagier', 'blaumagier', 'elementarmagier',
+  'beschwörer', 'kampfmagier', 'magischer ritter', 'runenritter', 'drachenritter',
+  'nekromant', 'exorzist', 'kriegspriester', 'saint', 'saintess', 'held',
+  'drachenjäger', 'monsterjäger', 'wächter', 'schildkämpfer', 'waldläufer',
+  'scharfschütze', 'armbrustschütze', 'fallensteller', 'erzmagier', 'runenmagier',
+  'siegelmagier', 'zeitmagier', 'dimensionsmagier', 'illusionsmagier', 'geistermagier',
+  'beast tamer', 'monster tamer', 'drachenzähmer', 'geisterbeschwörer', 'dämonenbeschwörer',
+  'golem-beschwörer', 'schwertheiliger', 'magieschwertheiliger', 'dämonenritter',
+  'göttlicher ritter', 'schattenmeister', 'drachenblut', 'monsterlord', 'dämonenkönig',
+  'dämonenfürst', 'auserwählter', 'weltenwanderer', 'wiedergeborener', 'söldner',
+  'waffenmeister', 'gladiator', 'spion', 'meuchelmörder', 'bandit', 'raubritter',
+  'stadtwache', 'garde', 'hauptmann', 'kommandant', 'general', 'admiral'
+];
+
+export function getProfessionTypeForField(fieldId: string): ProfessionType {
+  const norm = (fieldId || '').toLowerCase().trim();
+  if (COMBAT_FIELD_IDS.has(norm)) return 'combat';
+  return 'civil';
+}
+
+export function getProfessionTypeForJob(jobName: string): ProfessionType {
+  if (!jobName) return 'civil';
+  const norm = jobName.toLowerCase().trim();
+  if (COMBAT_JOB_KEYWORDS.some(kw => norm.includes(kw))) {
+    return 'combat';
+  }
+  const fieldId = getFieldIdForJob(jobName);
+  if (fieldId && COMBAT_FIELD_IDS.has(fieldId)) {
+    return 'combat';
+  }
+  return 'civil';
+}

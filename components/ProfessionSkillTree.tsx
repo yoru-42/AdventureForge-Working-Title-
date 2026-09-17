@@ -20,6 +20,7 @@ import { calculateCompetencyProgress } from '../services/professionCompetencySer
 import { getDetailedDutiesForJobAndTier } from '../lib/professionDutiesDetailed';
 import { getSuggestedAuthoritiesForProfession } from '../lib/professionAuthoritiesData';
 import { formatGenderedProfessionTitle, getGenderPair } from '../lib/professionGenderHelper';
+import { getProfessionTypeForJob } from './jobPresets';
 import EverydaySkillsSelect, { parseEverydaySkills } from './EverydaySkillsSelect';
 import {
   Check,
@@ -869,9 +870,16 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
       >
         {/* Top Badges: Tier & Status */}
         <div className="flex items-center justify-between gap-1.5 w-full">
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${tierBadge.color}`}>
-            {tierBadge.label}
-          </span>
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${tierBadge.color}`}>
+              {tierBadge.label}
+            </span>
+            {node.isMasterQualification && (
+              <span className="text-[9px] font-bold text-amber-300 bg-amber-950/60 border border-amber-500/50 px-1.5 py-0.5 rounded-full">
+                Meister
+              </span>
+            )}
+          </div>
 
           <div className="flex items-center gap-1.5">
             {isMain ? (
@@ -996,6 +1004,20 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
               <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-950/80 text-amber-300 border border-amber-600/40">
                 {node.tier === 'einstieg' ? 'Lehrling / Einstieg' : node.tier === 'beruf' ? 'Geselle / Grundberuf' : node.tier === 'spezialisierung' ? 'Spezialisierung' : 'Meisterstufe'}
               </span>
+              {node.isMasterQualification && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-purple-950/80 text-purple-300 border border-purple-600/40">
+                  Meisterqualifikation
+                </span>
+              )}
+              {getProfessionTypeForJob(node.name) === 'combat' ? (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-950/80 text-rose-300 border border-rose-600/40">
+                  Kampfberuf
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-600/40">
+                  Ziviler Beruf
+                </span>
+              )}
               {node.category && (
                 <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-800">
                   Zweig: {node.category}

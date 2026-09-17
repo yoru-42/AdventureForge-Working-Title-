@@ -14,6 +14,11 @@ export interface ProfessionRankStep {
   possibleRanks: string[];
   requiredExperienceYears?: number;
   prerequisiteJobName?: string;
+  prerequisiteJobNames?: string[];
+  parentStepSuffixes?: string[];
+  isMasterQualification?: boolean;
+  isTitleQualification?: boolean;
+  professionType?: 'civil' | 'combat';
   prerequisites?: ProfessionPrerequisite[];
   crossBranchRequirements?: {
     fieldId: string;
@@ -62,89 +67,131 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         name: 'Schmied',
         tier: 'beruf',
         rankOrder: 1,
-        rankTitle: 'Grundstufe / Geselle',
+        rankTitle: 'Grundstufe / Geselle (Grundlagen der Schmiedekunst)',
         description: 'Selbstständiges Schmieden von Werkzeugen, Hufeisen, Beschlägen und Alltagsgeräten.',
         suggestedCompetencies: ['Ambossführung', 'Härten & Anlassen', 'Feuerverschweißung', 'Beschlagfertigung'],
-        possibleRanks: ['Schmiedegeselle', 'Grobschmied', 'Hufschmied', 'Blechschmied', 'Kupferschmied'],
+        possibleRanks: ['Schmiedegeselle', 'Grobschmied', 'Hufschmied', 'Blechschmied'],
         requiredExperienceYears: 1,
-        prerequisiteJobName: 'Schmiedejunge',
-        nextRankName: 'Waffenschmied'
+        prerequisiteJobName: 'Schmiedejunge'
       },
       {
         idSuffix: 'waffenschmied',
         name: 'Waffenschmied',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Beförderung & Spezialisierung',
+        rankTitle: 'Spezialisierung: Waffen',
         description: 'Fertigung von Klingen, Lanzen, Hellebarden, Äxten und Streitkolben für Krieger und Heere.',
         suggestedCompetencies: ['Klingen schmieden', 'Damaszenerfaltung', 'Waffenhärtung', 'Schneidengeometrie'],
         possibleRanks: ['Klingenschmied', 'Waffenschmied', 'Klingenschleifer'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Schmied',
-        nextRankName: 'Meisterschmied'
+        prerequisiteJobName: 'Schmied'
       },
       {
         idSuffix: 'ruestungsschmied',
         name: 'Rüstungsschmied',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Beförderung & Spezialisierung',
+        rankTitle: 'Spezialisierung: Rüstung',
         description: 'Treiben von Schutzplatten, Schilden, Helmen und maßgeschneiderten Plattenharnischen.',
         suggestedCompetencies: ['Blechtreiben', 'Harnischpassung', 'Visierbau', 'Gelenkverbindungen'],
         possibleRanks: ['Plattner', 'Harnischmacher', 'Panzerschmied', 'Kettenmacher'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Schmied',
-        nextRankName: 'Meisterschmied'
+        prerequisiteJobName: 'Schmied'
       },
       {
-        idSuffix: 'werkzeugmacher',
-        name: 'Werkzeugmacher & Nagelschmied',
+        idSuffix: 'werkzeugschmied',
+        name: 'Werkzeugschmied',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Beförderung & Spezialisierung',
+        rankTitle: 'Spezialisierung: Werkzeug',
         description: 'Präzisionsfertigung gehärteter Werkzeuge, Zangen, Meißel, Kessel, Drähte und Baunägel.',
         suggestedCompetencies: ['Werkzeugstähle', 'Drahtziehen', 'Kesselbau', 'Punzen & Meißel'],
         possibleRanks: ['Werkzeugmacher', 'Kesselschmied', 'Nagelschmied', 'Drahtzieher'],
         requiredExperienceYears: 2,
-        prerequisiteJobName: 'Schmied',
-        nextRankName: 'Meisterschmied'
+        prerequisiteJobName: 'Schmied'
       },
       {
-        idSuffix: 'runenschmied',
-        name: 'Runenschmied & Artefaktschmied',
+        idSuffix: 'schwertschmied',
+        name: 'Schwertschmied',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Magische Metallurgie & Artefakte',
-        description: 'Schmieden magischer Metalle wie Mithril oder Sterneneisen, Einbinden von Runen und arkaner Glut.',
-        suggestedCompetencies: ['Mithrilschmieden', 'Runengravur in Stahl', 'Arkanbindung', 'Sterneneisen'],
-        possibleRanks: ['Runenschmied', 'Artefaktschmied', 'Sternenschmied'],
+        rankTitle: 'Vertiefung: Schwertschmiedekunst',
+        description: 'Meisterliche Fertigung vollendeter Schwerter, zeremonieller Prunkwaffen und Klingenbalancierung.',
+        suggestedCompetencies: ['Klingenbalancierung', 'Damaszener-Faltkunst', 'Meisterklinge', 'Klingengravur'],
+        possibleRanks: ['Schwertmeister', 'Klingengroßmeister', 'Hofschwertschmied'],
         requiredExperienceYears: 3,
-        prerequisiteJobName: 'Waffenschmied',
-        nextRankName: 'Meisterschmied'
+        prerequisiteJobName: 'Waffenschmied'
+      },
+      {
+        idSuffix: 'plattner',
+        name: 'Plattner',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Vertiefung: Plattnerkunst & Vollharnisch',
+        description: 'Treiben anatomischer Prunkharnische, Turnierrüstungen und stichfester Schutzpanzer.',
+        suggestedCompetencies: ['Vollharnisch-Ergonomie', 'Kugel- und Stichhärtung', 'Prunkgravur in Plattenstahl'],
+        possibleRanks: ['Großplattner', 'Hofplattner', 'Turnierrüstmeister'],
+        requiredExperienceYears: 3,
+        prerequisiteJobName: 'Rüstungsschmied'
+      },
+      {
+        idSuffix: 'werkzeugmacher',
+        name: 'Werkzeugmacher',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Vertiefung: Werkzeugmacher & Präzisionsbau',
+        description: 'Präzisionsmechanik, Messwerkzeuge, Uhrenteile, Stanz- und Pressformen.',
+        suggestedCompetencies: ['Feinmechanik', 'Präzisionsmaße', 'Uhrwerk- & Zahnradtrieb'],
+        possibleRanks: ['Präzisionsschmied', 'Feinwerkzeugmeister'],
+        requiredExperienceYears: 3,
+        prerequisiteJobName: 'Werkzeugschmied'
       },
       {
         idSuffix: 'meisterschmied',
         name: 'Meisterschmied',
         tier: 'meister',
         rankOrder: 3,
-        rankTitle: 'Meisterstufe',
-        description: 'Höchste zünftige Meisterschaft in Metallverarbeitung, Legierungskunst und Damaszenerstahl.',
+        rankTitle: 'Meisterqualifikation',
+        description: 'Höchste zünftige Meisterschaft in Metallverarbeitung, Legierungskunst, Damaszenerstahl und Zunftführung.',
         suggestedCompetencies: ['Meisterstückfertigung', 'Metallurgische Meisterschaft', 'Prüfsiegelvergabe', 'Zunftführung'],
-        possibleRanks: ['Schmiedemeister', 'Zunftobermeister', 'Hofschmied', 'Großplattner'],
-        requiredExperienceYears: 4,
-        prerequisiteJobName: 'Waffenschmied'
-      },
-      {
-        idSuffix: 'schwertschmied',
-        name: 'Schwertschmied',
-        tier: 'meister',
-        rankOrder: 3,
-        rankTitle: 'Meisterstufe',
-        description: 'Meisterliche Fertigung vollendeter Schwerter, zeremonieller Prunkwaffen und Klingenbalancierung.',
-        suggestedCompetencies: ['Klingenbalancierung', 'Damaszener-Faltkunst', 'Meisterklinge', 'Klingengravur'],
-        possibleRanks: ['Schwertmeister', 'Klingengroßmeister', 'Hofschwertschmied', 'Meister-Artefaktschmied'],
-        requiredExperienceYears: 4,
-        prerequisiteJobName: 'Waffenschmied'
+        possibleRanks: ['Schmiedemeister', 'Zunftobermeister', 'Hofschmied', 'Großmeister'],
+        parentStepSuffixes: ['schwertschmied', 'plattner', 'werkzeugmacher'],
+        isMasterQualification: true,
+        prerequisites: [
+          {
+            type: 'competence',
+            label: 'Waffenschmied (min. 80 %)',
+            targetId: 'Waffenschmied',
+            minValue: 80,
+            required: true
+          },
+          {
+            type: 'competence',
+            label: 'Rüstungsschmied (min. 80 %)',
+            targetId: 'Rüstungsschmied',
+            minValue: 80,
+            required: true
+          },
+          {
+            type: 'competence',
+            label: 'Werkzeugschmied (min. 70 %)',
+            targetId: 'Werkzeugschmied',
+            minValue: 70,
+            required: true
+          },
+          {
+            type: 'experience_years',
+            label: '10 Jahre Berufserfahrung',
+            minValue: 10,
+            required: true
+          },
+          {
+            type: 'story_requirement',
+            label: 'Meisterprüfung vor der Zunft bestanden',
+            targetId: 'meisterpruefung',
+            required: true
+          }
+        ]
       }
     ]
   },
@@ -1188,6 +1235,150 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
   // ===========================================================================
   // MILITÄR & SCHUTZ (militaer_streitkraefte)
   // ===========================================================================
+  krieger: {
+    branchKey: 'krieger',
+    branchName: 'Krieger',
+    category: 'Krieger',
+    description: 'Meisterung von Blankwaffen, Schildwall, Kampfhaltung und Gefechtstaktik.',
+    ranks: [
+      {
+        idSuffix: 'rekrut',
+        name: 'Rekrut',
+        tier: 'einstieg',
+        rankOrder: 0,
+        rankTitle: 'Einstieg & Waffenausbildung',
+        description: 'Grundlegendes Waffentraining, Beinarbeit, Parieren und Schildhaltung.',
+        suggestedCompetencies: ['Grundangriff', 'Parade', 'Beinarbeit', 'Konditionstraining'],
+        possibleRanks: ['Rekrut', 'Waffenschüler', 'Knappe'],
+        nextRankName: 'Krieger'
+      },
+      {
+        idSuffix: 'krieger',
+        name: 'Krieger',
+        tier: 'beruf',
+        rankOrder: 1,
+        rankTitle: 'Gefecht & Waffenführung',
+        description: 'Kampferprobte Waffenführung im Nahkampf und taktische Haltungen.',
+        suggestedCompetencies: ['Schwertkampf', 'Schildkampf', 'Kampfrausch-Kontrolle', 'Taktik'],
+        possibleRanks: ['Krieger', 'Waffengefährte', 'Frontkämpfer'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Rekrut'
+      },
+      {
+        idSuffix: 'schwertkaempfer',
+        name: 'Schwertkämpfer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Fachrichtung: Klingen & Schwerter',
+        description: 'Präziser ein- und zweihändiger Schwertkampf, Finten und Riposten.',
+        suggestedCompetencies: ['Langschwert', 'Präzisionsstich', 'Zweihänderführung', 'Entwaffnen'],
+        possibleRanks: ['Schwertkämpfer', 'Klingenkämpfer', 'Großschwertkämpfer'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Krieger'
+      },
+      {
+        idSuffix: 'schwertmeister',
+        name: 'Schwertmeister',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Vertiefung: Schwertmeisterschaft',
+        description: 'Perfektionierte Klingenbeherrschung, Klingenreflexe und unüberwindbare Paraden.',
+        suggestedCompetencies: ['Klingenreflex', 'Vollendete Riposte', 'Schwertaura'],
+        possibleRanks: ['Schwertmeister', 'Klingenmeister', 'Großmeister des Langschwerts'],
+        requiredExperienceYears: 3,
+        prerequisiteJobName: 'Schwertkämpfer'
+      },
+      {
+        idSuffix: 'speerkaempfer',
+        name: 'Speerkämpfer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Fachrichtung: Stangenwaffen & Distanz',
+        description: 'Speer-, Lanzen- und Hellebardenkampf zur Beherrschung des Raumes und Reitersicherung.',
+        suggestedCompetencies: ['Speerstoß', 'Lanzenführung', 'Distanzkontrolle', 'Hellebardenhieb'],
+        possibleRanks: ['Speerkämpfer', 'Pikenier', 'Hellebardier'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Krieger'
+      },
+      {
+        idSuffix: 'speermeister',
+        name: 'Speermeister',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Vertiefung: Speermeisterschaft',
+        description: 'Blindes Führen von Stangenwaffen mit unerbittlicher Reichweitenbeherrschung.',
+        suggestedCompetencies: ['Wirbelnder Speer', 'Pfeilabwehr mit Lanze', 'Speerfokus'],
+        possibleRanks: ['Speermeister', 'Pikenmeister', 'Lanzenmeister'],
+        requiredExperienceYears: 3,
+        prerequisiteJobName: 'Speerkämpfer'
+      },
+      {
+        idSuffix: 'schildkaempfer',
+        name: 'Schildkämpfer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Fachrichtung: Schild & Verteidigung',
+        description: 'Festung auf zwei Beinen: Turmschild, Schildstoß und Schutz von Verbündeten.',
+        suggestedCompetencies: ['Turmschild-Festung', 'Schildstoß', 'Defensivparade', 'Beschützerinstinkt'],
+        possibleRanks: ['Schildkämpfer', 'Wächter', 'Bollwerk'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Krieger'
+      },
+      {
+        idSuffix: 'schildmeister',
+        name: 'Schildmeister',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Vertiefung: Schildmeisterschaft',
+        description: 'Unerreichbare Verteidigungskunst: Abprallen von Belagerungspfeilen und Wuchtangriffen.',
+        suggestedCompetencies: ['Unbezwingbare Deckung', 'Kinetischer Schildstoß', 'Eisenwall'],
+        possibleRanks: ['Schildmeister', 'Meisterwächter', 'Großbollwerk'],
+        requiredExperienceYears: 3,
+        prerequisiteJobName: 'Schildkämpfer'
+      },
+      {
+        idSuffix: 'waffenmeister',
+        name: 'Waffenmeister',
+        tier: 'meister',
+        rankOrder: 3,
+        rankTitle: 'Meisterqualifikation',
+        description: 'Vollendete Meisterschaft über alle Nahkampfwaffen, Stangenwaffen und Schilde im Gefecht.',
+        suggestedCompetencies: ['Universelle Waffenmeisterschaft', 'Taktische Gefechtsführung', 'Kampflehre'],
+        possibleRanks: ['Waffenmeister', 'Kriegsgroßmeister', 'Hofwaffenmeister'],
+        parentStepSuffixes: ['schwertmeister', 'speermeister', 'schildmeister'],
+        isMasterQualification: true,
+        prerequisites: [
+          {
+            type: 'competence',
+            label: 'Schwertkampf (min. 80 %)',
+            targetId: 'Schwertmeister',
+            minValue: 80,
+            required: true
+          },
+          {
+            type: 'competence',
+            label: 'Speerkampf (min. 80 %)',
+            targetId: 'Speermeister',
+            minValue: 80,
+            required: true
+          },
+          {
+            type: 'competence',
+            label: 'Schildkampf (min. 80 %)',
+            targetId: 'Schildmeister',
+            minValue: 80,
+            required: true
+          },
+          {
+            type: 'experience_years',
+            label: '10 Jahre Gefechtserfahrung',
+            minValue: 10,
+            required: true
+          }
+        ]
+      }
+    ]
+  },
   soldat: {
     branchKey: 'soldat',
     branchName: 'Soldat',
@@ -3346,7 +3537,16 @@ export function convertProgressionToNodes(
     const nextSteps = progression.ranks.filter(r => r.rankOrder === rankStep.rankOrder + 1);
 
     let parentIds: string[] = [];
-    if (rankStep.prerequisiteJobName) {
+    if (rankStep.parentStepSuffixes && rankStep.parentStepSuffixes.length > 0) {
+      parentIds = rankStep.parentStepSuffixes.map(s => `${fieldId}.${branchKey}_${s}`);
+    } else if (rankStep.prerequisiteJobNames && rankStep.prerequisiteJobNames.length > 0) {
+      rankStep.prerequisiteJobNames.forEach(pName => {
+        const match = progression.ranks.find(r => r.name.toLowerCase().trim() === pName.toLowerCase().trim());
+        if (match) {
+          parentIds.push(`${fieldId}.${branchKey}_${match.idSuffix}`);
+        }
+      });
+    } else if (rankStep.prerequisiteJobName) {
       const match = progression.ranks.find(r => r.name.toLowerCase().trim() === rankStep.prerequisiteJobName?.toLowerCase().trim());
       if (match) {
         parentIds = [`${fieldId}.${branchKey}_${match.idSuffix}`];
@@ -3453,7 +3653,21 @@ export function convertProgressionToNodes(
       ],
       suggestedCompetencies: rankStep.suggestedCompetencies,
       possibleRanks: rankStep.possibleRanks,
-      positionTitle: rankStep.positionTitle
+      positionTitle: rankStep.positionTitle,
+      isMasterQualification: rankStep.isMasterQualification || rankStep.tier === "meister",
+      isTitleQualification: rankStep.isTitleQualification,
+      professionType: rankStep.professionType,
+      categoryId: progression.category || progression.branchName
+    });
+  });
+
+  // Pass 2: Sync childIds from parentIds
+  nodes.forEach(child => {
+    (child.parentIds || []).forEach(pId => {
+      const parentNode = nodes.find(n => n.id === pId);
+      if (parentNode && !parentNode.childIds.includes(child.id)) {
+        parentNode.childIds.push(child.id);
+      }
     });
   });
 
