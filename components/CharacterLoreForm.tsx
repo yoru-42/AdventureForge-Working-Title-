@@ -2572,6 +2572,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
               onOfficesChange={val => updateDetail('offices', val)}
               positions={getDetail<any[]>('positions', [])}
               onPositionsChange={val => updateDetail('positions', val)}
+              socialStatus={getDetail('socialStatus', '')}
+              onSocialStatusChange={val => updateDetail('socialStatus', val)}
               craftingSkills={getDetail('craftingSkills', '')}
               onCraftingSkillsChange={val => updateDetail('craftingSkills', val)}
               jobTitle={getDetail('jobTitle', '')}

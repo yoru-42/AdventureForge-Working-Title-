@@ -16,7 +16,7 @@ import { TitlesAndPositionsSection } from './TitlesAndPositionsSection';
 import { getDutiesForProfessionAndLevel } from './professionDuties';
 import { STANDARD_AUTHORITIES, AUTHORITY_DUTIES_MAP } from './economy/EconomyPresets';
 import { EXPANDED_AUTHORITIES, getSuggestedAuthoritiesForProfession, AuthorityDefinition } from '../lib/professionAuthoritiesData';
-import { BookOpen, Plus, Trash2, ChevronDown, ChevronUp, Briefcase, Layers, Award, Compass, Shield, Check, X, Filter } from 'lucide-react';
+import { BookOpen, Plus, Trash2, ChevronDown, ChevronUp, Briefcase, Layers, Award, Compass, Shield, Check, X, Filter, Crown, Landmark } from 'lucide-react';
 
 const normalizeForCompare = (s: string) =>
   s.trim().toLowerCase().replace(/^[-*•]\s*/, '').replace(/\s+/g, ' ');
@@ -121,6 +121,8 @@ interface CompetenceProfileEditorProps {
   onOfficesChange?: (val: OfficeState[]) => void;
   positions?: PositionState[];
   onPositionsChange?: (val: PositionState[]) => void;
+  socialStatus?: string;
+  onSocialStatusChange?: (val: string) => void;
 
   // Secondary professions
   secondaryProfessions?: SecondaryProfession[];
@@ -186,6 +188,8 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
   onOfficesChange,
   positions = [],
   onPositionsChange,
+  socialStatus = '',
+  onSocialStatusChange,
 
   secondaryProfessions = [],
   onSecondaryProfessionsChange,
@@ -213,11 +217,13 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
   const [isSecondaryOpen, setIsSecondaryOpen] = useState<boolean>(true);
   const [isTitlesOpen, setIsTitlesOpen] = useState<boolean>(true);
 
-  // 4 Category Tabs navigation: Hauptberuf, Nebenberufe, Adelige Titel, Alltagskompetenzen
-  const [activeCategoryTab, setActiveCategoryTab] = useState<'hauptberuf' | 'nebenberufe' | 'adelstitel' | 'alltagskompetenzen' | 'alle'>('hauptberuf');
+  // 4 Category Tabs navigation: Hauptberuf, Nebenberufe, Titel, Ämter & Status, Alltagskompetenzen
+  const [activeCategoryTab, setActiveCategoryTab] = useState<'hauptberuf' | 'nebenberufe' | 'titel_aemter_status' | 'adelstitel' | 'alltagskompetenzen' | 'alle'>('hauptberuf');
+  const [activeTitleSubTag, setActiveTitleSubTag] = useState<'alle' | 'adelstitel' | 'position_amt' | 'lebenssituation'>('alle');
   const [authorityCategoryFilter, setAuthorityCategoryFilter] = useState<string>('all');
 
   const parsedEverydayCount = everydaySkills ? parseEverydaySkills(everydaySkills).length : 0;
+  const totalTitlesAndStatusCount = socialTitles.length + offices.length + positions.length + (socialStatus ? 1 : 0);
 
   const suggestedAuthorities = React.useMemo(() => {
     return getSuggestedAuthoritiesForProfession(profession, professionLevel || professionRank);
@@ -272,81 +278,85 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
   return (
     <div id="competence-profile-editor" className="flex flex-col gap-6 w-full">
       {/* ========================================================================= */}
-      {/* 4 BEREICHS-TAGS: HAUPTBERUF, NEBENBERUFE, ADELIGE TITEL, ALLTAGSKOMPETENZEN */}
+      {/* 4 BEREICHS-TAGS: HAUPTBERUF, NEBENBERUFE, TITEL, ÄMTER & STATUS, ALLTAGSKOMPETENZEN */}
       {/* ========================================================================= */}
-      <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-900/90 border border-slate-800 rounded-xl shadow-sm">
-        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2">
-          Kategorien:
-        </span>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-900/90 border border-slate-800 rounded-xl shadow-sm">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2">
+            Kategorien:
+          </span>
 
-        {/* Tag 1: Hauptberufe */}
-        <button
-          type="button"
-          onClick={() => setActiveCategoryTab('hauptberuf')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
-            activeCategoryTab === 'hauptberuf'
-              ? 'bg-amber-950/90 border-amber-500 text-amber-200 ring-1 ring-amber-500/50'
-              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-amber-500/50 hover:text-amber-200'
-          }`}
-        >
-          <Briefcase className="w-3.5 h-3.5 text-amber-400" />
-          <span>Hauptberuf{profession ? `: ${profession}` : ''}</span>
-        </button>
+          {/* Tag 1: Hauptberufe */}
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('hauptberuf')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+              activeCategoryTab === 'hauptberuf'
+                ? 'bg-amber-950/90 border-amber-500 text-amber-200 ring-1 ring-amber-500/50'
+                : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-amber-500/50 hover:text-amber-200'
+            }`}
+          >
+            <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+            <span>Hauptberuf{profession ? `: ${profession}` : ''}</span>
+          </button>
 
-        {/* Tag 2: Nebenberufe */}
-        <button
-          type="button"
-          onClick={() => setActiveCategoryTab('nebenberufe')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
-            activeCategoryTab === 'nebenberufe'
-              ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/50'
-              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-emerald-500/50 hover:text-emerald-200'
-          }`}
-        >
-          <Layers className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Nebenberufe {secondaryProfessions.length > 0 ? `(${secondaryProfessions.length})` : ''}</span>
-        </button>
+          {/* Tag 2: Nebenberufe */}
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('nebenberufe')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+              activeCategoryTab === 'nebenberufe'
+                ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/50'
+                : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-emerald-500/50 hover:text-emerald-200'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Nebenberufe {secondaryProfessions.length > 0 ? `(${secondaryProfessions.length})` : ''}</span>
+          </button>
 
-        {/* Tag 3: Adelige Titel */}
-        <button
-          type="button"
-          onClick={() => setActiveCategoryTab('adelstitel')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
-            activeCategoryTab === 'adelstitel'
-              ? 'bg-indigo-950/90 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500/50'
-              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-indigo-500/50 hover:text-indigo-200'
-          }`}
-        >
-          <Award className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Adelige Titel {socialTitles.length > 0 ? `(${socialTitles.length})` : ''}</span>
-        </button>
+          {/* Tag 3: Titel, Ämter & Status */}
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('titel_aemter_status')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+              activeCategoryTab === 'titel_aemter_status' || activeCategoryTab === 'adelstitel'
+                ? 'bg-indigo-950/90 border-indigo-500 text-indigo-200 ring-1 ring-indigo-500/50'
+                : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-indigo-500/50 hover:text-indigo-200'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Titel, Ämter & Status {totalTitlesAndStatusCount > 0 ? `(${totalTitlesAndStatusCount})` : ''}</span>
+          </button>
 
-        {/* Tag 4: Alltagskompetenzen */}
-        <button
-          type="button"
-          onClick={() => setActiveCategoryTab('alltagskompetenzen')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
-            activeCategoryTab === 'alltagskompetenzen'
-              ? 'bg-sky-950/90 border-sky-500 text-sky-200 ring-1 ring-sky-500/50'
-              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-sky-500/50 hover:text-sky-200'
-          }`}
-        >
-          <Compass className="w-3.5 h-3.5 text-sky-400" />
-          <span>Alltagskompetenzen {parsedEverydayCount > 0 ? `(${parsedEverydayCount})` : ''}</span>
-        </button>
+          {/* Tag 4: Alltagskompetenzen */}
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('alltagskompetenzen')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+              activeCategoryTab === 'alltagskompetenzen'
+                ? 'bg-sky-950/90 border-sky-500 text-sky-200 ring-1 ring-sky-500/50'
+                : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-sky-500/50 hover:text-sky-200'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5 text-sky-400" />
+            <span>Alltagskompetenzen {parsedEverydayCount > 0 ? `(${parsedEverydayCount})` : ''}</span>
+          </button>
 
-        {/* Option: Alle anzeigen */}
-        <button
-          type="button"
-          onClick={() => setActiveCategoryTab('alle')}
-          className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition cursor-pointer ${
-            activeCategoryTab === 'alle'
-              ? 'bg-slate-800 border-slate-600 text-white'
-              : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'
-          }`}
-        >
-          <span>Alle anzeigen</span>
-        </button>
+          {/* Option: Alle anzeigen */}
+          <button
+            type="button"
+            onClick={() => setActiveCategoryTab('alle')}
+            className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition cursor-pointer ${
+              activeCategoryTab === 'alle'
+                ? 'bg-slate-800 border-slate-600 text-white'
+                : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            <span>Alle anzeigen</span>
+          </button>
+        </div>
+
+
       </div>
 
       {/* ========================================================================= */}
@@ -881,9 +891,9 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
       )}
 
       {/* ========================================================================= */}
-      {/* 3. GESELLSCHAFTLICHE TITEL, ÄMTER & POSITIONEN (ADELSTITEL & STAND)        */}
+      {/* 3. GESELLSCHAFTLICHE TITEL, ÄMTER & POSITIONEN (TITEL, ÄMTER & STATUS)    */}
       {/* ========================================================================= */}
-      {(activeCategoryTab === 'adelstitel' || activeCategoryTab === 'alle') && onSocialTitlesChange && onOfficesChange && onPositionsChange && (
+      {(activeCategoryTab === 'titel_aemter_status' || activeCategoryTab === 'adelstitel' || activeCategoryTab === 'alle') && onSocialTitlesChange && onOfficesChange && onPositionsChange && (
         <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
           <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
             <button
@@ -896,10 +906,10 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
               </div>
               <div>
                 <h5 className="text-xs font-bold text-indigo-400 uppercase tracking-wider group-hover:text-indigo-300 transition">
-                  Adelstitel & Gesellschaftlicher Stand
+                  Titel, Ämter & Status
                 </h5>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Adelstitel, öffentliche Ämter, Ränge und gesellschaftliche Positionen (keine Berufe)
+                  Adelstitel, offizielle Ämter, Führungsrollen und gesellschaftliche Lebenssituation
                 </p>
               </div>
             </button>
@@ -910,9 +920,13 @@ export const CompetenceProfileEditor: React.FC<CompetenceProfileEditorProps> = (
               socialTitles={socialTitles}
               offices={offices}
               positions={positions}
+              socialStatus={socialStatus}
               onChangeSocialTitles={onSocialTitlesChange}
               onChangeOffices={onOfficesChange}
               onChangePositions={onPositionsChange}
+              onChangeSocialStatus={onSocialStatusChange}
+              activeSubTag={activeTitleSubTag}
+              onChangeActiveSubTag={setActiveTitleSubTag}
             />
           )}
         </div>

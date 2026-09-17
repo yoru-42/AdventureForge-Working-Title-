@@ -11,19 +11,34 @@ interface TitlesAndPositionsSectionProps {
   socialTitles?: SocialTitleState[];
   offices?: OfficeState[];
   positions?: PositionState[];
+  socialStatus?: string;
   onChangeSocialTitles: (titles: SocialTitleState[]) => void;
   onChangeOffices: (offices: OfficeState[]) => void;
   onChangePositions: (positions: PositionState[]) => void;
+  onChangeSocialStatus?: (status: string) => void;
+  activeSubTag?: 'alle' | 'adelstitel' | 'position_amt' | 'lebenssituation';
+  onChangeActiveSubTag?: (tag: 'alle' | 'adelstitel' | 'position_amt' | 'lebenssituation') => void;
 }
 
 export const TitlesAndPositionsSection: React.FC<TitlesAndPositionsSectionProps> = ({
   socialTitles = [],
   offices = [],
   positions = [],
+  socialStatus = '',
   onChangeSocialTitles,
   onChangeOffices,
-  onChangePositions
+  onChangePositions,
+  onChangeSocialStatus,
+  activeSubTag,
+  onChangeActiveSubTag
 }) => {
+  const [internalSubTag, setInternalSubTag] = useState<'alle' | 'adelstitel' | 'position_amt' | 'lebenssituation'>('alle');
+  const currentSubTag = activeSubTag !== undefined ? activeSubTag : internalSubTag;
+  const setSubTag = (tag: 'alle' | 'adelstitel' | 'position_amt' | 'lebenssituation') => {
+    if (onChangeActiveSubTag) onChangeActiveSubTag(tag);
+    setInternalSubTag(tag);
+  };
+
   // Modal states for creating / editing
   const [editingTitle, setEditingTitle] = useState<SocialTitleState | null>(null);
   const [isAddingTitle, setIsAddingTitle] = useState(false);
@@ -103,266 +118,430 @@ export const TitlesAndPositionsSection: React.FC<TitlesAndPositionsSectionProps>
     onChangePositions(positions.filter(p => p.id !== id));
   };
 
+  const STATUS_PRESETS = [
+    { label: 'Freibürger', desc: 'Freier Bürger mit vollen Stadt- oder Landrechten' },
+    { label: 'Zunftbürger / Meister', desc: 'Anerkanntes Zunftmitglied mit Gewerberecht' },
+    { label: 'Patrizier / Stadtadel', desc: 'Wohlhabende Oberschicht mit politischem Einfluss' },
+    { label: 'Adeliger Stand', desc: 'Geburtsadel oder erblicher Adelsstatus' },
+    { label: 'Leibeigener / Höriger', desc: 'An Grund und Boden oder Dienstherrn gebunden' },
+    { label: 'Schüler / Student / Novize', desc: 'In akademischer, magischer oder religiöser Ausbildung' },
+    { label: 'Ordensmitglied / Kleriker', desc: 'Geweihtes Mitglied einer religiösen Gemeinschaft' },
+    { label: 'Wandernder / Reisender', desc: 'Ohne festen Wohnsitz, fahrendes Volk' },
+    { label: 'Söldner / Freischaffender', desc: 'Vertraglich gebundene Schutzkraft oder freier Agent' },
+    { label: 'Vogelfrei / Gesetzlos', desc: 'Außerhalb des Rechtsfriedens stehend' }
+  ];
+
   return (
     <div id="titles-and-positions-container" className="flex flex-col gap-6">
+      {/* 3 SUB-TAGS: ADELIGE TITEL, POSITION / AMT, LEBENSSITUATION / STATUS */}
+      <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-900/90 border border-slate-800 rounded-xl shadow-sm">
+        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2">
+          Bereich:
+        </span>
+
+        {/* Tag 1: Adelige Titel */}
+        <button
+          type="button"
+          onClick={() => setSubTag('adelstitel')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+            currentSubTag === 'adelstitel'
+              ? 'bg-amber-950/90 border-amber-500 text-amber-200 ring-1 ring-amber-500/50'
+              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-amber-500/50 hover:text-amber-200'
+          }`}
+        >
+          <Crown className="w-3.5 h-3.5 text-amber-400" />
+          <span>Adelige Titel {socialTitles.length > 0 ? `(${socialTitles.length})` : ''}</span>
+        </button>
+
+        {/* Tag 2: Position / Amt */}
+        <button
+          type="button"
+          onClick={() => setSubTag('position_amt')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+            currentSubTag === 'position_amt'
+              ? 'bg-sky-950/90 border-sky-500 text-sky-200 ring-1 ring-sky-500/50'
+              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-sky-500/50 hover:text-sky-200'
+          }`}
+        >
+          <Landmark className="w-3.5 h-3.5 text-sky-400" />
+          <span>Position / Amt {(offices.length + positions.length) > 0 ? `(${offices.length + positions.length})` : ''}</span>
+        </button>
+
+        {/* Tag 3: Lebenssituation / Status */}
+        <button
+          type="button"
+          onClick={() => setSubTag('lebenssituation')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold text-xs transition cursor-pointer ${
+            currentSubTag === 'lebenssituation'
+              ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/50'
+              : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-emerald-500/50 hover:text-emerald-200'
+          }`}
+        >
+          <Shield className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Lebenssituation / Status {socialStatus ? '(1)' : ''}</span>
+        </button>
+
+        {/* Option: Alle 3 anzeigen */}
+        <button
+          type="button"
+          onClick={() => setSubTag('alle')}
+          className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition cursor-pointer ${
+            currentSubTag === 'alle'
+              ? 'bg-slate-800 border-slate-600 text-white'
+              : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'
+          }`}
+        >
+          <span>Alle 3 anzeigen</span>
+        </button>
+      </div>
+
       {/* Informational Banner */}
       <div className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl flex items-start gap-3 text-xs text-slate-300">
         <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
         <div className="flex flex-col gap-1 leading-relaxed">
           <span className="font-semibold text-white">
-            Systemische Trennung von Berufen, Titeln und Positionen:
+            Systemische Trennung von Berufen, Titeln, Ämtern und gesellschaftlichem Status:
           </span>
           <p className="text-slate-400">
-            Adelstitel, Ämter und aktuelle Führungsrollen sind eigenständige gesellschaftliche Ebenen. Sie beeinflussen das Ansehen in der Spielwelt, verändern jedoch nicht automatisch die handwerklichen oder nautischen Fachkompetenzen eines Charakters.
+            Adelstitel, offizielle Ämter, aktuelle Führungsrollen und die rechtliche Lebenssituation sind eigenständige gesellschaftliche Ebenen. Sie beeinflussen das Ansehen und Rechte in der Welt, ohne die handwerklichen Fachkompetenzen zu überschreiben.
           </p>
         </div>
       </div>
 
       {/* 1. ADELSTITEL & GESELLSCHAFTLICHE TITEL - TALENTBAUM */}
-      <div id="section-social-titles" className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Crown className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-white tracking-wide font-serif">
-                Adelstitel & Herrscherhäuser
-              </h4>
-              <p className="text-[11px] text-slate-400">
-                Talent- und Rangbaum der Adelsstände, Lehnsherrschaften und dynastischen Linien
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Nobility Talent Tree */}
-        <NobilitySkillTree
-          socialTitles={socialTitles}
-          onChangeSocialTitles={onChangeSocialTitles}
-          onOpenCustomTitleModal={() => {
-            setEditingTitle({
-              id: `title_${Date.now()}`,
-              title: '',
-              titleType: 'nobility',
-              inherited: false,
-              reason: ''
-            });
-            setIsAddingTitle(true);
-          }}
-        />
-      </div>
-
-      {/* 2. ÄMTER */}
-      <div id="section-offices" className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Landmark className="w-4 h-4 text-sky-400" />
-            <h4 className="text-sm font-bold text-white tracking-wide">
-              Offizielle Ämter & Funktionen
-            </h4>
-          </div>
-          <button
-            type="button"
-            id="add-office-btn"
-            onClick={() => {
-              setEditingOffice({
-                id: `off_${Date.now()}`,
-                name: '',
-                institution: '',
-                appointedBy: '',
-                term: '',
-                description: ''
-              });
-              setIsAddingOffice(true);
-            }}
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-sky-400" />
-            <span>Amt hinzufügen</span>
-          </button>
-        </div>
-
-        {offices.length === 0 ? (
-          <div className="py-4 text-center text-xs text-slate-500 italic bg-slate-950/20 rounded-lg border border-dashed border-slate-800">
-            Keine offiziellen Ämter hinterlegt.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {offices.map(office => (
-              <div
-                key={office.id}
-                id={`office-card-${office.id}`}
-                className="p-3 bg-slate-950/40 border border-slate-800/70 rounded-xl flex items-start justify-between gap-3"
-              >
-                <div className="flex flex-col gap-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold text-white">
-                      {office.name}
-                    </span>
-                    {office.institution && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-sky-950/40 text-sky-300 border border-sky-800/60">
-                        {office.institution}
-                      </span>
-                    )}
-                    {office.term && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                        Amtszeit: {office.term}
-                      </span>
-                    )}
-                  </div>
-                  {office.appointedBy && (
-                    <span className="text-[11px] text-slate-400">
-                      Ernannt durch: <strong className="text-slate-300 font-medium">{office.appointedBy}</strong>
-                    </span>
-                  )}
-                  {office.description && (
-                    <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">
-                      {office.description}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    id={`edit-office-${office.id}`}
-                    onClick={() => {
-                      setEditingOffice({ ...office });
-                      setIsAddingOffice(false);
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                    title="Bearbeiten"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    id={`delete-office-${office.id}`}
-                    onClick={() => handleDeleteOffice(office.id)}
-                    className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                    title="Entfernen"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+      {(currentSubTag === 'alle' || currentSubTag === 'adelstitel') && (
+        <div id="section-social-titles" className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm animate-in fade-in duration-150">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <Crown className="w-4 h-4" />
               </div>
-            ))}
+              <div>
+                <h4 className="text-sm font-bold text-white tracking-wide font-serif">
+                  Adelige Titel & Herrscherhäuser
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Talent- und Rangbaum der Adelsstände, Lehnsherrschaften und dynastischen Linien
+                </p>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* 3. AKTUELLE POSITIONEN & ROLLEN */}
-      <div id="section-positions" className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Shield className="w-4 h-4 text-emerald-400" />
-            <h4 className="text-sm font-bold text-white tracking-wide">
-              Aktuelle Positionen & Rollen
-            </h4>
-          </div>
-          <button
-            type="button"
-            id="add-position-btn"
-            onClick={() => {
-              setEditingPosition({
-                id: `pos_${Date.now()}`,
+          {/* Nobility Talent Tree */}
+          <NobilitySkillTree
+            socialTitles={socialTitles}
+            onChangeSocialTitles={onChangeSocialTitles}
+            onOpenCustomTitleModal={() => {
+              setEditingTitle({
+                id: `title_${Date.now()}`,
                 title: '',
-                acquisitionMethod: 'appointment',
-                voluntary: true,
-                appointedBy: [],
-                recognizedBy: [],
+                titleType: 'nobility',
+                inherited: false,
                 reason: ''
               });
-              setIsAddingPosition(true);
+              setIsAddingTitle(true);
             }}
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Position hinzufügen</span>
-          </button>
+          />
         </div>
+      )}
 
-        {positions.length === 0 ? (
-          <div className="py-4 text-center text-xs text-slate-500 italic bg-slate-950/20 rounded-lg border border-dashed border-slate-800">
-            Keine spezifischen Positionen oder Rollen erfasst.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {positions.map(pos => {
-              const methodLabel = ACQUISITION_METHODS[pos.acquisitionMethod] || pos.acquisitionMethod;
-              return (
-                <div
-                  key={pos.id}
-                  id={`position-card-${pos.id}`}
-                  className="p-3.5 bg-slate-950/40 border border-slate-800/70 rounded-xl flex items-start justify-between gap-3"
-                >
-                  <div className="flex flex-col gap-1.5 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-white">
-                        {pos.title}
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/60 font-medium">
-                        {methodLabel}
-                      </span>
-                      {pos.voluntary === false ? (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/40 text-amber-300 border border-amber-800/60">
-                          Pflichtübernahme / Zwang
+      {/* 2. ÄMTER & POSITIONEN (TAG: Position / Amt) */}
+      {(currentSubTag === 'alle' || currentSubTag === 'position_amt') && (
+        <div className="flex flex-col gap-4 animate-in fade-in duration-150">
+          {/* 2a. Offizielle Ämter */}
+          <div id="section-offices" className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Landmark className="w-4 h-4 text-sky-400" />
+                <h4 className="text-sm font-bold text-white tracking-wide">
+                  Offizielle Ämter & Funktionen
+                </h4>
+              </div>
+              <button
+                type="button"
+                id="add-office-btn"
+                onClick={() => {
+                  setEditingOffice({
+                    id: `off_${Date.now()}`,
+                    name: '',
+                    institution: '',
+                    appointedBy: '',
+                    term: '',
+                    description: ''
+                  });
+                  setIsAddingOffice(true);
+                }}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-sky-400" />
+                <span>Amt hinzufügen</span>
+              </button>
+            </div>
+
+            {offices.length === 0 ? (
+              <div className="py-4 text-center text-xs text-slate-500 italic bg-slate-950/20 rounded-lg border border-dashed border-slate-800">
+                Keine offiziellen Ämter hinterlegt.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {offices.map(office => (
+                  <div
+                    key={office.id}
+                    id={`office-card-${office.id}`}
+                    className="p-3 bg-slate-950/40 border border-slate-800/70 rounded-xl flex items-start justify-between gap-3"
+                  >
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-white">
+                          {office.name}
                         </span>
-                      ) : (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                          Freiwillig
+                        {office.institution && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-sky-950/40 text-sky-300 border border-sky-800/60">
+                            {office.institution}
+                          </span>
+                        )}
+                        {office.term && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                            Amtszeit: {office.term}
+                          </span>
+                        )}
+                      </div>
+                      {office.appointedBy && (
+                        <span className="text-[11px] text-slate-400">
+                          Ernannt durch: <strong className="text-slate-300 font-medium">{office.appointedBy}</strong>
                         </span>
+                      )}
+                      {office.description && (
+                        <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">
+                          {office.description}
+                        </p>
                       )}
                     </div>
-
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400">
-                      {pos.appointedBy && pos.appointedBy.length > 0 && (
-                        <span>
-                          Ernannt durch: <strong className="text-slate-300 font-medium">{pos.appointedBy.join(', ')}</strong>
-                        </span>
-                      )}
-                      {pos.recognizedBy && pos.recognizedBy.length > 0 && (
-                        <span>
-                          Anerkannt von: <strong className="text-slate-300 font-medium">{pos.recognizedBy.join(', ')}</strong>
-                        </span>
-                      )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        id={`edit-office-${office.id}`}
+                        onClick={() => {
+                          setEditingOffice({ ...office });
+                          setIsAddingOffice(false);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                        title="Bearbeiten"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        id={`delete-office-${office.id}`}
+                        onClick={() => handleDeleteOffice(office.id)}
+                        className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                        title="Entfernen"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-
-                    {pos.reason && (
-                      <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">
-                        {pos.reason}
-                      </p>
-                    )}
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 2b. Aktuelle Positionen & Führungsrollen */}
+          <div id="section-positions" className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-emerald-400" />
+                <h4 className="text-sm font-bold text-white tracking-wide">
+                  Aktuelle Positionen & Rollen
+                </h4>
+              </div>
+              <button
+                type="button"
+                id="add-position-btn"
+                onClick={() => {
+                  setEditingPosition({
+                    id: `pos_${Date.now()}`,
+                    title: '',
+                    acquisitionMethod: 'appointment',
+                    voluntary: true,
+                    appointedBy: [],
+                    recognizedBy: [],
+                    reason: ''
+                  });
+                  setIsAddingPosition(true);
+                }}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-medium rounded-lg border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Position hinzufügen</span>
+              </button>
+            </div>
+
+            {positions.length === 0 ? (
+              <div className="py-4 text-center text-xs text-slate-500 italic bg-slate-950/20 rounded-lg border border-dashed border-slate-800">
+                Keine spezifischen Positionen oder Rollen erfasst.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {positions.map(pos => {
+                  const methodLabel = ACQUISITION_METHODS[pos.acquisitionMethod] || pos.acquisitionMethod;
+                  return (
+                    <div
+                      key={pos.id}
+                      id={`position-card-${pos.id}`}
+                      className="p-3.5 bg-slate-950/40 border border-slate-800/70 rounded-xl flex items-start justify-between gap-3"
+                    >
+                      <div className="flex flex-col gap-1.5 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-white">
+                            {pos.title}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/60 font-medium">
+                            {methodLabel}
+                          </span>
+                          {pos.voluntary === false ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/40 text-amber-300 border border-amber-800/60">
+                              Pflichtübernahme / Zwang
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                              Freiwillig
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400">
+                          {pos.appointedBy && pos.appointedBy.length > 0 && (
+                            <span>
+                              Ernannt durch: <strong className="text-slate-300 font-medium">{pos.appointedBy.join(', ')}</strong>
+                            </span>
+                          )}
+                          {pos.recognizedBy && pos.recognizedBy.length > 0 && (
+                            <span>
+                              Anerkannt von: <strong className="text-slate-300 font-medium">{pos.recognizedBy.join(', ')}</strong>
+                            </span>
+                          )}
+                        </div>
+
+                        {pos.reason && (
+                          <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">
+                            {pos.reason}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          id={`edit-position-${pos.id}`}
+                          onClick={() => {
+                            setEditingPosition({ ...pos });
+                            setIsAddingPosition(false);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                          title="Bearbeiten"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          id={`delete-position-${pos.id}`}
+                          onClick={() => handleDeletePosition(pos.id)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                          title="Entfernen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 3. LEBENSSITUATION / STATUS */}
+      {(currentSubTag === 'alle' || currentSubTag === 'lebenssituation') && (
+        <div id="section-social-status" className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5 flex flex-col gap-4 shadow-sm animate-in fade-in duration-150">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <Shield className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white tracking-wide">
+                  Lebenssituation & Gesellschaftlicher Status
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Rechtlicher Stand, gesellschaftliche Klasse und persönliche Lebensbedingungen
+                </p>
+              </div>
+            </div>
+            {socialStatus && (
+              <button
+                type="button"
+                onClick={() => onChangeSocialStatus && onChangeSocialStatus('')}
+                className="text-xs text-slate-500 hover:text-rose-400 transition cursor-pointer"
+              >
+                Zurücksetzen
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className="text-xs font-semibold text-slate-300 block mb-1.5">
+                Schnellauswahl für gesellschaftlichen / rechtlichen Stand:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {STATUS_PRESETS.map(preset => {
+                  const isSelected = socialStatus.toLowerCase().includes(preset.label.toLowerCase());
+                  return (
                     <button
+                      key={preset.label}
                       type="button"
-                      id={`edit-position-${pos.id}`}
                       onClick={() => {
-                        setEditingPosition({ ...pos });
-                        setIsAddingPosition(false);
+                        if (onChangeSocialStatus) {
+                          if (isSelected) {
+                            onChangeSocialStatus('');
+                          } else {
+                            onChangeSocialStatus(preset.label);
+                          }
+                        }
                       }}
-                      className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                      title="Bearbeiten"
+                      title={preset.desc}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200'
+                          : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                      }`}
                     >
-                      <Edit3 className="w-3.5 h-3.5" />
+                      {preset.label}
                     </button>
-                    <button
-                      type="button"
-                      id={`delete-position-${pos.id}`}
-                      onClick={() => handleDeletePosition(pos.id)}
-                      className="p-1.5 text-slate-500 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition cursor-pointer"
-                      title="Entfernen"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Detaillierte Beschreibung der Lebenssituation / des Status:
+              </label>
+              <AutoExpandingTextarea
+                id="social-status-textarea"
+                value={socialStatus}
+                onChange={e => onChangeSocialStatus && onChangeSocialStatus(e.target.value)}
+                placeholder="z.B. Freibürger der Hafenstadt mit Zunftprivilegien, besitzt ein kleines Kontor..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-emerald-500 transition min-h-[70px]"
+              />
+              <span className="text-[10px] text-slate-500">
+                Definiert die rechtliche Stellung, gesellschaftliche Anerkennung und materielle Lebensumstände im Rollenspiel.
+              </span>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* MODAL: EDIT / ADD SOCIAL TITLE */}
       {editingTitle && typeof document !== 'undefined' && createPortal(

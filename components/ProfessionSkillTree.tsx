@@ -772,10 +772,30 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDragging) return;
-    setPan({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
+    
+    let newX = e.clientX - dragStart.x;
+    let newY = e.clientY - dragStart.y;
+    
+    if (canvasRef.current) {
+      const containerW = canvasRef.current.clientWidth;
+      const containerH = canvasRef.current.clientHeight;
+      const contentW = canvasWidth * zoom;
+      const contentH = canvasHeight * zoom;
+      
+      const paddingX = containerW * 0.5;
+      const paddingY = containerH * 0.5;
+      
+      const minX = -contentW + paddingX;
+      const maxX = containerW - paddingX;
+      
+      const minY = -contentH + paddingY;
+      const maxY = containerH - paddingY;
+      
+      newX = Math.max(minX, Math.min(maxX, newX));
+      newY = Math.max(minY, Math.min(maxY, newY));
+    }
+
+    setPan({ x: newX, y: newY });
   };
 
   const handleMouseUp = () => {

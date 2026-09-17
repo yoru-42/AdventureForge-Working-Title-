@@ -4903,6 +4903,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       onOfficesChange={val => setPlayer(prev => ({ ...prev, offices: val }))}
                       positions={player.positions || []}
                       onPositionsChange={val => setPlayer(prev => ({ ...prev, positions: val }))}
+                      socialStatus={player.socialStatus || ''}
+                      onSocialStatusChange={val => setPlayer(prev => ({ ...prev, socialStatus: val }))}
                       craftingSkills={player.craftingSkills || ''}
                       onCraftingSkillsChange={val => setPlayer(prev => ({ ...prev, craftingSkills: val }))}
                       jobTitle={player.jobTitle || ''}

@@ -722,6 +722,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Bäckermeister'
       },
       {
+        idSuffix: 'schiffsbaecker',
+        name: 'Schiffsbäcker & Hartbäcker',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Haltbarkeitsbrot & Proviant',
+        description: 'Backen von Zwieback, Dauerbrot und Pumpernickel für lange Schiffsreisen und Feldzüge.',
+        suggestedCompetencies: ['Dauerbackverfahren', 'Zwiebackherstellung', 'Trocknung', 'Schimmelprävention'],
+        possibleRanks: ['Schiffsbäcker', 'Hartbäcker', 'Proviantbäcker'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Bäcker',
+        nextRankName: 'Bäckermeister'
+      },
+      {
+        idSuffix: 'feinbaecker',
+        name: 'Feinbäcker',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Feingebäck & Weißbrot',
+        description: 'Herstellung von exklusivem Weißbrot, Croissants, Brioches und feinem Hefegebäck für gehobene Stände.',
+        suggestedCompetencies: ['Feinteigführung', 'Plunderteig', 'Weißmehlverarbeitung', 'Hefeteigkunst'],
+        possibleRanks: ['Feinbäcker', 'Weißbäcker', 'Hofbäcker'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Bäcker',
+        nextRankName: 'Bäckermeister'
+      },
+      {
         idSuffix: 'baeckermeister',
         name: 'Bäckermeister',
         tier: 'meister',
@@ -780,6 +806,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Braumeister'
       },
       {
+        idSuffix: 'maelzer',
+        name: 'Mälzer & Darrmeister',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Malzgewinnung & Röstung',
+        description: 'Spezialisierte Keimung und Röstung von Getreide zu dunklem oder hellem Malz für spezielle Biersorten.',
+        suggestedCompetencies: ['Getreidekeimung', 'Darren & Rösten', 'Malzmischungen', 'Feuchtigkeitskontrolle'],
+        possibleRanks: ['Mälzer', 'Darrmeister', 'Malzmeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Brauer',
+        nextRankName: 'Braumeister'
+      },
+      {
+        idSuffix: 'brennmeister',
+        name: 'Brennmeister',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Destillation & Schnapsbrennerei',
+        description: 'Destillieren hochprozentiger Brände, Obstschnäpse, Aquavite und medizinischer Alkohole.',
+        suggestedCompetencies: ['Destillationstechnik', 'Kühlrohrkontrolle', 'Obstmaische', 'Alkoholmessung'],
+        possibleRanks: ['Brenner', 'Destillateur', 'Schnapsbrenner'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Brauer',
+        nextRankName: 'Braumeister'
+      },
+      {
         idSuffix: 'braumeister',
         name: 'Braumeister',
         tier: 'meister',
@@ -833,6 +885,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         description: 'Rezepturen für Dauerwürste, Pasteten, Schinken und traditionelle Räucherverfahren.',
         suggestedCompetencies: ['Brätbereitung', 'Wurstabfüllung', 'Heiß- & Kalträuchern', 'Gewürzmischung'],
         possibleRanks: ['Wurstmacher', 'Räuchermeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Metzger',
+        nextRankName: 'Metzgermeister'
+      },
+      {
+        idSuffix: 'grossschlaechter',
+        name: 'Großschlächter',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Großvieh & Schlachthofleitung',
+        description: 'Fachmännische Tötung und grobe Zerlegung großen Viehs, Blutverarbeitung und Verwertung sämtlicher Teile.',
+        suggestedCompetencies: ['Schuss- & Stichführung', 'Tierphysiologie', 'Großzerlegung', 'Blutwurstherstellung'],
+        possibleRanks: ['Großschlächter', 'Schlachter', 'Knochenhauer'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Metzger',
+        nextRankName: 'Metzgermeister'
+      },
+      {
+        idSuffix: 'raeuchermeister',
+        name: 'Räuchermeister',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Pökeln & Konservierung',
+        description: 'Haltbarmachen von Fleisch für den Winter oder Seereisen durch Salzen, Pökeln und Kalträuchern.',
+        suggestedCompetencies: ['Kalträuchern', 'Pökellake', 'Holzspänekunde', 'Dörrfleisch'],
+        possibleRanks: ['Räuchermeister', 'Pökelmeister', 'Dörrmeister'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Metzger',
         nextRankName: 'Metzgermeister'
@@ -899,6 +977,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Haushofmeister'
       },
       {
+        idSuffix: 'mundschenk',
+        name: 'Mundschenk',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Weinkellerei & Vorkoster',
+        description: 'Auswahl erlesener Weine, Einschenken bei königlichen Banketten und Vorkosten auf Gift.',
+        suggestedCompetencies: ['Weinkunde', 'Vorkostung (Giftresistenz)', 'Servieretikette', 'Silberpflege'],
+        possibleRanks: ['Mundschenk', 'Weinschenk', 'Kredenzmeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Diener',
+        nextRankName: 'Haushofmeister'
+      },
+      {
+        idSuffix: 'tafeldiener',
+        name: 'Tafeldiener & Bankettaufseher',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Bankett- & Tafelservice',
+        description: 'Organisation der Speisefolge, meisterhaftes Servieren und Aufsicht über das Silberbesteck.',
+        suggestedCompetencies: ['Tranchieren', 'Bankettservice', 'Silberaufsicht', 'Ordnung bei Tische'],
+        possibleRanks: ['Tafeldiener', 'Silberdiener', 'Speisemeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Diener',
+        nextRankName: 'Haushofmeister'
+      },
+      {
         idSuffix: 'majordomus',
         name: 'Haushofmeister',
         tier: 'meister',
@@ -957,6 +1061,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Oberhofdame'
       },
       {
+        idSuffix: 'gesellschaftsdame',
+        name: 'Gesellschaftsdame',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Konversation & Begleitung',
+        description: 'Gehobene Konversation, Vorlesen von Literatur, Begleitung zu Bällen und gesellschaftliche Repräsentation.',
+        suggestedCompetencies: ['Höfische Konversation', 'Vorlesen', 'Etikette & Tanz', 'Diplomatie'],
+        possibleRanks: ['Gesellschaftsdame', 'Vorleserin', 'Begleitdame'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Zofe',
+        nextRankName: 'Oberhofdame'
+      },
+      {
+        idSuffix: 'garderobiere',
+        name: 'Garderobiere',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Kleiderpflege & Schneiderei',
+        description: 'Zuständig für die kostspielige Ballgarderobe, Reparatur von Seide und Organisation der Hofkleidung.',
+        suggestedCompetencies: ['Feinnähen', 'Seidenpflege', 'Garderobenverwaltung', 'Stoffkunde'],
+        possibleRanks: ['Garderobiere', 'Kleidermeisterin', 'Schatullenbewahrerin'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Zofe',
+        nextRankName: 'Oberhofdame'
+      },
+      {
         idSuffix: 'oberhofdame',
         name: 'Oberhofdame',
         tier: 'meister',
@@ -1010,6 +1140,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         description: 'Leitung der Diners, Weinreisekeller, Beaufsichtigung des herrschaftlichen Fuhrparks und Silberschatzes.',
         suggestedCompetencies: ['Jahrgangsweinkunde', 'Protokollarische Rangfolge', 'Silberkammervorsitz', 'VIP-Gästebetreuung'],
         possibleRanks: ['Chefbutler', 'Silberkämmerer'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Butler',
+        nextRankName: 'Großhofmeister'
+      },
+      {
+        idSuffix: 'zeremonienmeister',
+        name: 'Zeremonienmeister',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Empfänge & Protokoll',
+        description: 'Organisation formeller Bankette, Sitzordnungen, Ankündigung von Gästen und Überwachung des Hofprotokolls.',
+        suggestedCompetencies: ['Hofprotokoll', 'Sitzordnung', 'Gästeankündigung', 'Tanzball-Organisation'],
+        possibleRanks: ['Zeremonienmeister', 'Protokollchef', 'Empfangsleiter'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Butler',
+        nextRankName: 'Großhofmeister'
+      },
+      {
+        idSuffix: 'haus_majordomus',
+        name: 'Haus-Majordomus',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Wirtschafts- & Personalwesen',
+        description: 'Zuständig für die Haushaltskasse, Einstellung von Dienstpersonal und Instandhaltung des Anwesens.',
+        suggestedCompetencies: ['Haushaltsrechnung', 'Personaleinstellung', 'Inventur', 'Instandhaltungsplanung'],
+        possibleRanks: ['Hausverwalter', 'Personalchef des Hauses', 'Wirtschaftsleiter'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Butler',
         nextRankName: 'Großhofmeister'
@@ -1076,6 +1232,45 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Feldwebel'
       },
       {
+        idSuffix: 'fernkaempfer',
+        name: 'Fernkämpfer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Armbrust, Bogen & Arkebuse',
+        description: 'Spezialist für Distanzangriffe, Bogenschießen, Armbrustschießen oder Schwarzpulverwaffen.',
+        suggestedCompetencies: ['Bogen/Armbrust', 'Schwarzpulver', 'Scharfschütze', 'Ballistik'],
+        possibleRanks: ['Bogenschütze', 'Armbruster', 'Musketier', 'Arkebusier'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Infanterist',
+        nextRankName: 'Feldwebel'
+      },
+      {
+        idSuffix: 'soeldner',
+        name: 'Söldner & Freischärler',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Krieg für Gold & Überleben',
+        description: 'Verdingt sich bei Meistbietenden, erfahren im unkonventionellen Kampf und Überleben im Feld.',
+        suggestedCompetencies: ['Straßenkampf', 'Plündern', 'Taktischer Rückzug', 'Feldlagerbau'],
+        possibleRanks: ['Söldner', 'Freischärler', 'Söldnerveteran'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Infanterist',
+        nextRankName: 'Feldwebel'
+      },
+      {
+        idSuffix: 'kavallerist',
+        name: 'Kavallerist & Reiter',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Berittener Kampf',
+        description: 'Kampf zu Pferd, Sturmangriffe mit der Lanze und Flankenmanöver.',
+        suggestedCompetencies: ['Reiten', 'Lanzenstich', 'Pferdepflege', 'Formationsreiten'],
+        possibleRanks: ['Leichter Reiter', 'Kürassier', 'Husar'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Infanterist',
+        nextRankName: 'Feldwebel'
+      },
+      {
         idSuffix: 'hauptmann',
         name: 'Feldwebel',
         tier: 'meister',
@@ -1123,38 +1318,76 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         possibleRanks: ['Vollmatrose', 'Bootsmannsmaat', 'Seemann'],
         requiredExperienceYears: 1,
         prerequisiteJobName: 'Schiffsjunge',
-        nextRankName: 'Erfahrener Seemann'
-      },
-      {
-        idSuffix: 'erfahrener_seemann',
-        name: 'Erfahrener Seemann',
-        tier: 'spezialisierung',
-        nodeType: 'advanced_profession',
-        rankOrder: 2,
-        rankTitle: 'Befahrener Seemann',
-        description: 'Hochseeerprobter Seemann, Bootsmannsaufgaben, Loten bei Untiefen und Enterkampfführung.',
-        suggestedCompetencies: ['Hochseenavigation', 'Bootsmannsarbeit', 'Nautisches Loten', 'Enterabwehr'],
-        possibleRanks: ['Bootsmann', 'Schirrmeister', 'Altmatrose'],
-        requiredExperienceYears: 2,
-        prerequisiteJobName: 'Matrose / Seemann',
         nextRankName: 'Steuermann'
       },
       {
         idSuffix: 'steuermann',
         name: 'Steuermann',
         tier: 'spezialisierung',
-        nodeType: 'promotion',
+        nodeType: 'specialization',
         rankOrder: 2,
-        rankTitle: 'Navigation & Schiffssteuerung',
-        description: 'Kursberechnung mit Astrolabium und Kompass, Wind- und Strömungsanalyse und Wachführung.',
-        suggestedCompetencies: ['Astronavigation', 'Seekartenlesen', 'Kompasspeilung', 'Wachführung auf See'],
-        possibleRanks: ['Zweiter Steuermann', 'Erster Steuermann', 'Obersteuermann'],
-        requiredExperienceYears: 3,
-        prerequisites: [
-          { type: 'profession', label: 'Matrose / Seemann', targetId: 'Matrose', required: true },
-          { type: 'competence', label: 'Astronavigation & Peilung', targetId: 'Astronavigation', minValue: 50, required: true },
-          { type: 'experience_years', label: '3 Jahre Seefahrtserfahrung', minValue: 3, required: true }
-        ],
+        rankTitle: 'Schiffssteuerung, Ruderführung & Manöver',
+        description: 'Sichere Schiffssteuerung am Steuerrad, Gezeiten- und Windberechnung, Wachführung und Wendemanöver.',
+        suggestedCompetencies: ['Schiffssteuerung', 'Ruderdienst', 'Wachführung auf See', 'Koppelnavigation'],
+        possibleRanks: ['Ruder-Steuermann', 'Zweiter Steuermann', 'Erster Steuermann'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Matrose / Seemann',
+        nextRankName: 'Kapitän / Schiffsführer'
+      },
+      {
+        idSuffix: 'navigator',
+        name: 'Navigator',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Astronavigation, Seekarten & Geodäsie',
+        description: 'Berechnung von Standorten und Routen mit Astrolabium, Kompass, Sextant, Peilung nach Sternen und Kartographie.',
+        suggestedCompetencies: ['Astronavigation', 'Seekartenlesen', 'Kompasspeilung', 'Kartographie', 'Gesteins- & Strömungskunde'],
+        possibleRanks: ['Navigator', 'Schiffsastronom', 'Navigationsoffizier', 'Kartenmeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Matrose / Seemann',
+        nextRankName: 'Kapitän / Schiffsführer'
+      },
+      {
+        idSuffix: 'bootsmann',
+        name: 'Bootsmann / Takelmeister',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Decksführung, Takelage & Disziplin',
+        description: 'Aufsicht über Decksarbeiten, Takelage, Knotenkunde, Schiffsreparatur auf hoher See und Besatzungsdisziplin.',
+        suggestedCompetencies: ['Decksführung', 'Takelagereparatur', 'Knotenkunde', 'Borddisziplin'],
+        possibleRanks: ['Bootsmannsmaat', 'Bootsmann', 'Oberbootsmann', 'Takelmeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Matrose / Seemann',
+        nextRankName: 'Kapitän / Schiffsführer'
+      },
+      {
+        idSuffix: 'lotse',
+        name: 'Lotse & Küstenschiffer',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Revierkunde & Hafendurchfahrt',
+        description: 'Sichere Führung von Schiffen durch tückische Riffe, Sandbänke, Flussmündungen und Hafeneinfahrten.',
+        suggestedCompetencies: ['Untiefen peilen', 'Strömungslesen', 'Hafenlotsung', 'Revierkunde'],
+        possibleRanks: ['Hafenlotse', 'Revierlotse', 'Flusslotse'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Matrose / Seemann',
+        nextRankName: 'Kapitän / Schiffsführer'
+      },
+      {
+        idSuffix: 'harpunier',
+        name: 'Harpunier & Seejäger',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Meeresjagd & Ungeheuerabwehr',
+        description: 'Jagd auf Großfische, Robben, Walfische und gefährliche Meeresungeheuer mit Harpunen und Wurfgeschossen.',
+        suggestedCompetencies: ['Harpunenwurf', 'Ungeheuerkunde', 'Trangewinnung', 'Küstenschutz'],
+        possibleRanks: ['Harpunier', 'Oberharpunier', 'Seejäger'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Matrose / Seemann',
         nextRankName: 'Kapitän / Schiffsführer'
       },
       {
@@ -1163,12 +1396,25 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         tier: 'meister',
         nodeType: 'leadership',
         rankOrder: 3,
-        rankTitle: 'Kapitän / Schiffsführer',
-        description: 'Oberbefehl über Schiff und Besatzung, Schiffsgerichtsbarkeit, Routenwahl und Flottille.',
-        suggestedCompetencies: ['Schiffskommando', 'Reedereiwesen', 'Seekriegsführung', 'Internationales Seerecht'],
+        rankTitle: 'Schiffskommando & Oberbefehl',
+        description: 'Oberbefehl über Schiff, Ladung und Besatzung, Schiffsgerichtsbarkeit, Routenwahl und Reedereiverhandlung.',
+        suggestedCompetencies: ['Schiffskommando', 'Reedereiwesen', 'Internationales Seerecht', 'Gefechtsführung auf See'],
         possibleRanks: ['Schiffskapitän', 'Flottillenkapitän', 'Kommodore'],
         positionTitle: 'Schiffskommandant / Kapitän',
-        requiredExperienceYears: 5,
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Steuermann'
+      },
+      {
+        idSuffix: 'kaperkapitaen',
+        name: 'Kaperkapitän / Korsar',
+        tier: 'meister',
+        nodeType: 'leadership',
+        rankOrder: 3,
+        rankTitle: 'Seekriegsführung & Entertaktik',
+        description: 'Kommando über Kriegsschiffe und Kaperschiffe, Enterkampf, Prisenrecht und Seetaktik.',
+        suggestedCompetencies: ['Enterfechten', 'Prisenrecht', 'Kapergeschütz-Kommando', 'Korsarenführung'],
+        possibleRanks: ['Kaperkapitän', 'Korsarenhauptmann', 'Admiral der Beute'],
+        requiredExperienceYears: 4,
         prerequisiteJobName: 'Steuermann'
       }
     ]
@@ -1212,10 +1458,36 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         name: 'Elementarmagier',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Elementarbindung & Runenmatrix',
-        description: 'Herrschaft über Feuerstürme, Eiswälle, Teleportation und permanente magische Siegel.',
-        suggestedCompetencies: ['Elementare Großzauber', 'Runenmatrix weben', 'Telekinese', 'Dimensionsrisse schließen'],
-        possibleRanks: ['Elementarmagier', 'Siegelmeister', 'Arkanweber'],
+        rankTitle: 'Elementarbindung & Naturkräfte',
+        description: 'Herrschaft über Feuerstürme, Eiswälle, Blitzkanonen und elementare Druckwellen.',
+        suggestedCompetencies: ['Elementare Großzauber', 'Feuer- & Eisbeherrschung', 'Telekinese', 'Druckwellen'],
+        possibleRanks: ['Elementarmagier', 'Pyromant', 'Kryomant', 'Fulgurit'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Magier',
+        nextRankName: 'Erzmagier'
+      },
+      {
+        idSuffix: 'bannelementarist',
+        name: 'Bannelementarist & Siegelmagier',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Schutzschilde, Bannkreise & Runenmatrix',
+        description: 'Errichten undurchdringlicher Auren, Schutzkreise, Dämonenbannung und permanenter magischer Siegel.',
+        suggestedCompetencies: ['Bannkreis weben', 'Runenmatrix', 'Arkane Antimagie', 'Siegelbindung'],
+        possibleRanks: ['Siegelmeister', 'Bannmagier', 'Arkanweber'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Magier',
+        nextRankName: 'Erzmagier'
+      },
+      {
+        idSuffix: 'illusionist',
+        name: 'Illusionist & Schattenspinner',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Lichtbiegung, Trugbilder & Geistmagie',
+        description: 'Weben täuschend echter Trugbilder, Biegung von Licht und Schatten sowie Beeinflussung von Sinnen.',
+        suggestedCompetencies: ['Illusionen weben', 'Schattenbiegung', 'Gedankenmanipulation', 'Lichtspiegelung'],
+        possibleRanks: ['Illusionist', 'Schattenspinner', 'Phantasmagores'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Magier',
         nextRankName: 'Erzmagier'
@@ -1263,20 +1535,46 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         rankTitle: 'Warenverkehr & Ladengeschäft',
         description: 'Eigenständiges Führen eines Ladengeschäfts, Einkauf von Kolonial- und Zunftwaren.',
         suggestedCompetencies: ['Feilschkunst', 'Kalkulation & Gewinnspanne', 'Zollabwicklung', 'Kundenbetreuung'],
-        possibleRanks: ['Krämer', 'Kaufmann', 'Kontorist'],
+        possibleRanks: ['Krämer', 'Kaufmann', 'Einzelhändler', 'Marktverkäufer', 'Lebensmittelhändler', 'Stoffhändler', 'Waffenhändler', 'Antiquitätenhändler', 'Händler für magische Gegenstände'],
         requiredExperienceYears: 1,
         prerequisiteJobName: 'Kontorbursche',
         nextRankName: 'Fernhändler'
       },
       {
         idSuffix: 'fernhaendler',
-        name: 'Fernhändler',
+        name: 'Fernhändler & Großhändler',
         tier: 'spezialisierung',
         rankOrder: 2,
         rankTitle: 'Karawanenhandel & Großposten',
         description: 'Organisation von Handelskarawanen, Schiffsbefrachtung und Verwaltung von Übersee-Faktoreien.',
         suggestedCompetencies: ['Karawanenlogistik', 'Seefrachtverträge', 'Devisenhandel', 'Großhandelsrabatte'],
-        possibleRanks: ['Fernhändler', 'Faktoreileiter', 'Hanseat'],
+        possibleRanks: ['Fernhändler', 'Großhändler', 'Händler für Rohstoffe', 'Karawanenhändler', 'Viehhändler', 'Handelsvertreter', 'Gewürzhändler'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Kaufmann',
+        nextRankName: 'Handelsherr'
+      },
+      {
+        idSuffix: 'bankier',
+        name: 'Geldwechsler & Bankier',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Kreditwesen, Devisen & Wechselbriefe',
+        description: 'Ausstellung bargeldloser Wechselbriefe, Prüfung von Feingehalt alter Münzen und Großkredite.',
+        suggestedCompetencies: ['Wechselbriefrecht', 'Münzprüfung', 'Zinsrechnung', 'Kreditvergabe'],
+        possibleRanks: ['Geldwechsler', 'Bankier', 'Makler', 'Pfandleiher', 'Auktionator', 'Juwelier'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Kaufmann',
+        nextRankName: 'Handelsherr'
+      },
+      {
+        idSuffix: 'kontorist',
+        name: 'Kontorist & Börsenhändler',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Börsenhandel & Großlagerführung',
+        description: 'Leitung zentraler Warendepots, Warenterminhandel auf der Stadtbörse und Logistik.',
+        suggestedCompetencies: ['Großlagerführung', 'Börsenhandel', 'Warenterminverträge', 'Handelsrecht'],
+        possibleRanks: ['Kontorchef', 'Börsenmakler', 'Großhändler'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Kaufmann',
         nextRankName: 'Handelsherr'
@@ -1343,6 +1641,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Hofbesitzer'
       },
       {
+        idSuffix: 'viehzuechter',
+        name: 'Viehzüchter & Almwirt',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Rinder-, Pferdezucht & Milchwirtschaft',
+        description: 'Haltung edler Nutztiere, Weidemanagement, Käseherstellung und Tierheilkunde.',
+        suggestedCompetencies: ['Tierzucht & Genetik', 'Weidewirtschaft', 'Käserei & Sennerkunst', 'Veterinärpraxis'],
+        possibleRanks: ['Viehzüchter', 'Almwirt', 'Pferdezüchter', 'Sennemeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Bauer',
+        nextRankName: 'Hofbesitzer'
+      },
+      {
+        idSuffix: 'winzer',
+        name: 'Winzer & Obstbauzüchter',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Weinberg, Kelterei & Baumschulen',
+        description: 'Kultivierung edler Rebsorten, Kelterei, Fassreifung und Obstanbau.',
+        suggestedCompetencies: ['Rebenpflege', 'Keltertechnik', 'Weinverschnitt', 'Obstbaumschnitt'],
+        possibleRanks: ['Winzer', 'Keltermann', 'Obstzüchter'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Bauer',
+        nextRankName: 'Hofbesitzer'
+      },
+      {
         idSuffix: 'dorfschulze',
         name: 'Hofbesitzer',
         tier: 'meister',
@@ -1404,6 +1728,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Bischof'
       },
       {
+        idSuffix: 'inquisitor',
+        name: 'Inquisitor & Glaubenswächter',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Häresiebekämpfung & Fluchbannung',
+        description: 'Aufdeckung von Ketzerei, Exorzismus, Bannung dunkler Flüche und Wahrung des Reinheitsgebots.',
+        suggestedCompetencies: ['Exorzismus', 'Ketzerverhör', 'Schutzkreisweben', 'Glaubensgericht'],
+        possibleRanks: ['Inquisitor', 'Fluchbanner', 'Glaubenswächter'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Priester',
+        nextRankName: 'Bischof'
+      },
+      {
+        idSuffix: 'ordensgelehrter',
+        name: 'Mönch & Ordensgelehrter',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Skriptorium, Heilkräuter & Theologie',
+        description: 'Abschreiben heiliger Kodizes, Klosterheilkunde, Alchemie und theologische Forschung.',
+        suggestedCompetencies: ['Buchmalerei', 'Klosterheilkunde', 'Kirchenlatein', 'Theologische Studien'],
+        possibleRanks: ['Ordensmönch', 'Klosterschreiber', 'Bibliothekar'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Priester',
+        nextRankName: 'Bischof'
+      },
+      {
         idSuffix: 'bischof',
         name: 'Bischof',
         tier: 'meister',
@@ -1456,10 +1806,36 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         name: 'Fingerkünstler',
         tier: 'spezialisierung',
         rankOrder: 2,
-        rankTitle: 'Infiltration & Präzisionsdiebstahl',
-        description: 'Knacken komplizierter Vorhängeschlösser, Entwenden von Siegelringen vom schlafenden Finger.',
-        suggestedCompetencies: ['Dietrichführung', 'Schmuckentwendung', 'Schleichen im Dunkeln', 'Hehlerkontakte'],
-        possibleRanks: ['Fingerkünstler', 'Schlösserknacker', 'Schattenkriecher'],
+        rankTitle: 'Ablenkung & Präzisionsdiebstahl',
+        description: 'Feinste Beutel- und Ringentwendung mitten im Gespräch ohne geringstes Bemerken.',
+        suggestedCompetencies: ['Taschendiebstahl', 'Ablenkungsmanöver', 'Fingerfertigkeit', 'Gegenstandsraub'],
+        possibleRanks: ['Fingerkünstler', 'Schattenfinger', 'Ablenkungsmeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Taschendieb',
+        nextRankName: 'Meisterdieb'
+      },
+      {
+        idSuffix: 'einbrecher',
+        name: 'Fassadenkletterer & Einbrecher',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Einbruch, Schlösserkunst & Lautlosigkeit',
+        description: 'Klettern an Glattmauern, Knacken komplizierter Schlösser und lautlose Infiltration harter Tresore.',
+        suggestedCompetencies: ['Dietrichführung', 'Fassadenklettern', 'Fallenentschärfung', 'Lautloses Schleichen'],
+        possibleRanks: ['Einbrecher', 'Schlösserknacker', 'Schattenkriecher'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Taschendieb',
+        nextRankName: 'Meisterdieb'
+      },
+      {
+        idSuffix: 'hehler',
+        name: 'Hehler & Schattenschmuggler',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Schwarzmarkt & Beuteverwertung',
+        description: 'Verwertung gestohlener Ware, Fälschen von Besitzurkunden und Einschleusen verbotener Fracht.',
+        suggestedCompetencies: ['Hehlerkontakte', 'Beutebewertung', 'Schwarzmarkthandel', 'Urkundenfälschung'],
+        possibleRanks: ['Hehler', 'Schattenschmuggler', 'Passfälscher'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Taschendieb',
         nextRankName: 'Meisterdieb'
@@ -1521,6 +1897,32 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         description: 'Erlesene Minnelieder für Königinnen, heroische Skaldenepen und diplomatische Spottverse.',
         suggestedCompetencies: ['Minnelyrik', 'Heldenepos dichten', 'Harfenvirtuosität', 'Höfische Gunst'],
         possibleRanks: ['Minnesänger', 'Hofskalde', 'Troubadour'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Barde',
+        nextRankName: 'Oberbarde'
+      },
+      {
+        idSuffix: 'skalde',
+        name: 'Skalde & Kriegssänger',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Heldengesänge & Truppenmoral',
+        description: 'Verfasst mitreißende Heldenepen, singt auf Schlachtfeldern zur Stärkung der Truppenmoral und bewahrt alte Sagen.',
+        suggestedCompetencies: ['Kampfgesänge', 'Sagenkunde', 'Kriegshorn', 'Moralstärkung'],
+        possibleRanks: ['Skalde', 'Kriegssänger', 'Schlachtendichter'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Barde',
+        nextRankName: 'Oberbarde'
+      },
+      {
+        idSuffix: 'gaukler',
+        name: 'Gaukler & Spielmann',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Akrobatik & Straßenkunst',
+        description: 'Vielseitiger Unterhalter auf Märkten: Jonglage, Feuerspucken, Akrobatik und Taschenspielertricks.',
+        suggestedCompetencies: ['Jonglage', 'Akrobatik', 'Feuerspucken', 'Taschenspielerei'],
+        possibleRanks: ['Gaukler', 'Spielmann', 'Gauklerkönig'],
         requiredExperienceYears: 2,
         prerequisiteJobName: 'Barde',
         nextRankName: 'Oberbarde'
@@ -1708,6 +2110,34 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Leitender Chirurg'
       },
       {
+        idSuffix: 'feldscher',
+        name: 'Feldscher & Knochenbrecher',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Schlachtfeldchirurgie',
+        description: 'Brutale aber lebensrettende Chirurgie auf dem Schlachtfeld: Amputationen, Pfeilentfernung, Ausbrennen von Wunden.',
+        suggestedCompetencies: ['Amputation', 'Wundkauterisation', 'Schrapnellentfernung', 'Pfeilwunden'],
+        possibleRanks: ['Feldscher', 'Knochenbrecher', 'Armeechirurg'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Chirurg',
+        nextRankName: 'Leitender Chirurg'
+      },
+      {
+        idSuffix: 'nervenarzt',
+        name: 'Nervenarzt & Feinchirurg',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Feinchirurgie & Trepanation',
+        description: 'Präzise Eingriffe am Nervensystem, Trepanation des Schädels, Entfernung feiner Tumore und Rekonstruktion.',
+        suggestedCompetencies: ['Trepanation', 'Nervennaht', 'Feinmotorik', 'Tumorexzision'],
+        possibleRanks: ['Feinchirurg', 'Schädelöffner', 'Nervenarzt'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Chirurg',
+        nextRankName: 'Leitender Chirurg'
+      },
+      {
         idSuffix: 'leitender_chirurg',
         name: 'Leitender Chirurg',
         tier: 'meister',
@@ -1754,6 +2184,34 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         possibleRanks: ['Dorfheiler', 'Heilkundiger', 'Sanitäter'],
         requiredExperienceYears: 1,
         prerequisiteJobName: 'Kräuterheiler-Lehrling',
+        nextRankName: 'Feldheiler'
+      },
+      {
+        idSuffix: 'feldheiler',
+        name: 'Feldheiler & Wundpfleger',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Schlachtfeld & Notfallmedizin',
+        description: 'Versorgung von Wunden direkt an der Front, schnelle Triage und Anwendung von blutstillenden Kräutern.',
+        suggestedCompetencies: ['Schnellverband', 'Pfeilwunden', 'Schockbehandlung', 'Triage'],
+        possibleRanks: ['Feldheiler', 'Wundarzt', 'Armee-Sanitäter'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Heiler',
+        nextRankName: 'Meisterheiler'
+      },
+      {
+        idSuffix: 'krauterer',
+        name: 'Kräuterkundiger & Alchemist',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Pflanzenwissen & Essenzen',
+        description: 'Tiefes Wissen um seltene Heilpflanzen, Gifte, Antidote und das Brauen komplexer Heilelixiere.',
+        suggestedCompetencies: ['Seltene Kräuter', 'Giftextraktion', 'Elixierbrauen', 'Pflanzengifte'],
+        possibleRanks: ['Kräuterkundiger', 'Giftmischer', 'Elixierbrauer'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Heiler',
         nextRankName: 'Meisterheiler'
       },
       {
@@ -1802,6 +2260,34 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         possibleRanks: ['Apotheker', 'Offizin-Leiter', 'Provisor'],
         requiredExperienceYears: 1,
         prerequisiteJobName: 'Offizin-Gehilfe',
+        nextRankName: 'Giftmischer'
+      },
+      {
+        idSuffix: 'giftmischer',
+        name: 'Toxikologe & Giftmischer',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Gifte & Antidote',
+        description: 'Spezialisierung auf tödliche Substanzen, schleichende Gifte, Narkotika und die Herstellung hochwirksamer Gegengifte.',
+        suggestedCompetencies: ['Toxikologie', 'Antidotforschung', 'Schlafgifte', 'Säuren'],
+        possibleRanks: ['Toxikologe', 'Giftmischer', 'Schattenapotheker'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Apotheker',
+        nextRankName: 'Stadtapotheker'
+      },
+      {
+        idSuffix: 'alchemist',
+        name: 'Labor-Alchemist',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Transmutation & Destillation',
+        description: 'Forschung an der Veredelung von Elementen, hochkonzentrierten Säuren und mystischen Destillaten.',
+        suggestedCompetencies: ['Destillationskunst', 'Säurenmischung', 'Laboraufbau', 'Alchemistische Prozesse'],
+        possibleRanks: ['Alchemist', 'Laborant', 'Destillateurmeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Apotheker',
         nextRankName: 'Stadtapotheker'
       },
       {
@@ -1874,6 +2360,34 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         nextRankName: 'Zimmermeister'
       },
       {
+        idSuffix: 'muehlenbauer',
+        name: 'Mühlenbauer',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Wasserkraft & Windmühlen',
+        description: 'Bau von komplexen Holzmechaniken, Windmühlenflügeln, Wasserrädern und Getrieben aus Holz.',
+        suggestedCompetencies: ['Holzmechanik', 'Mühlenradbau', 'Windkraft', 'Getriebeschnitzen'],
+        possibleRanks: ['Mühlenbauer', 'Windmüller', 'Radbauer'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Zimmermann',
+        nextRankName: 'Zimmermeister'
+      },
+      {
+        idSuffix: 'brueckenbauer',
+        name: 'Brückenbauer',
+        tier: 'spezialisierung',
+        nodeType: 'specialization',
+        rankOrder: 2,
+        rankTitle: 'Brücken & Holzarchitektur',
+        description: 'Konstruktion von tragfähigen Holzbrücken, Gerüsten für Steinmetze und großen Fachwerkbauten.',
+        suggestedCompetencies: ['Brückenstatik', 'Tragwerksplanung', 'Großfachwerk', 'Gerüstbau'],
+        possibleRanks: ['Holzbrückenbauer', 'Gerüstmeister', 'Großzimmerer'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Zimmermann',
+        nextRankName: 'Zimmermeister'
+      },
+      {
         idSuffix: 'zimmermeister',
         name: 'Zimmermeister',
         tier: 'meister',
@@ -1888,8 +2402,376 @@ export const DETAILED_PROFESSION_PROGRESSIONS: Record<string, ProfessionBranchPr
         prerequisiteJobName: 'Zimmermann'
       }
     ]
+  },
+
+  // ===========================================================================
+  // NEUE BERUFE (Bauwesen, Textil, Transport, Nahrung)
+  // ===========================================================================
+  steinmetz: {
+    branchKey: 'steinmetz',
+    branchName: 'Steinmetz & Baumeister',
+    category: 'Bau & Handwerk',
+    description: 'Bearbeitung von Stein, Errichtung von Bauwerken, Festungen und Stadtplanung.',
+    ranks: [
+      {
+        idSuffix: 'bauarbeiter',
+        name: 'Bauarbeiter',
+        tier: 'einstieg',
+        rankOrder: 0,
+        rankTitle: 'Schwerstarbeit',
+        description: 'Schleppen von Steinen, Ausschachten von Kanälen und Pflastern von Straßen.',
+        suggestedCompetencies: ['Steineschleppen', 'Straßenbau', 'Kanalbau', 'Mörtel mischen'],
+        possibleRanks: ['Bauarbeiter', 'Straßenbauer', 'Kanalbauer'],
+        nextRankName: 'Steinmetz'
+      },
+      {
+        idSuffix: 'steinmetz',
+        name: 'Steinmetz & Maurer',
+        tier: 'beruf',
+        rankOrder: 1,
+        rankTitle: 'Handwerker',
+        description: 'Behauen von Quadern, Hochziehen von Mauern und Dacharbeiten.',
+        suggestedCompetencies: ['Steinbearbeitung', 'Maurerhandwerk', 'Dachdecken', 'Brunnenbau'],
+        possibleRanks: ['Steinmetz', 'Maurer', 'Dachdecker', 'Brunnenbauer'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Bauarbeiter',
+        nextRankName: 'Baumeister'
+      },
+      {
+        idSuffix: 'festungsbauer',
+        name: 'Festungs- & Minenbauer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Wehrarchitektur & Untertage',
+        description: 'Konstruktion von Festungsanlagen, Schanzen und das Treiben von Stollen und Minen.',
+        suggestedCompetencies: ['Wehrbauten', 'Stollenbau', 'Sprengstoffkunde', 'Erdwerke'],
+        possibleRanks: ['Festungsbauer', 'Minenbauer', 'Schanzmeister'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Steinmetz & Maurer',
+        nextRankName: 'Baumeister'
+      },
+      {
+        idSuffix: 'architekt',
+        name: 'Architekt & Bauingenieur',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Planung & Statik',
+        description: 'Planung komplexer Bauwerke, Berechnung der Statik und Landvermessung.',
+        suggestedCompetencies: ['Statik', 'Bauplanung', 'Vermessungswesen', 'Architekturzeichnung'],
+        possibleRanks: ['Architekt', 'Bauingenieur', 'Vermesser', 'Bauplaner'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Steinmetz & Maurer',
+        nextRankName: 'Baumeister'
+      },
+      {
+        idSuffix: 'baumeister',
+        name: 'Baumeister',
+        tier: 'meister',
+        rankOrder: 3,
+        rankTitle: 'Gildenmeister',
+        description: 'Oberste Leitung großer Kathedralenbauten und herrschaftlicher Residenzen.',
+        suggestedCompetencies: ['Bauleitung', 'Gildenführung', 'Stadtplanung', 'Materialwirtschaft'],
+        possibleRanks: ['Baumeister', 'Oberbaurat', 'Gildenmeister'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Architekt & Bauingenieur'
+      }
+    ]
+  },
+  schneider: {
+    branchKey: 'schneider',
+    branchName: 'Schneider & Weber',
+    category: 'Textil & Leder',
+    description: 'Verarbeitung von Garn, Stoffen und Pelzen zu Kleidung und Textilien.',
+    ranks: [
+      {
+        idSuffix: 'spinner',
+        name: 'Spinner & Näher',
+        tier: 'einstieg',
+        rankOrder: 0,
+        rankTitle: 'Garn- & Nadelarbeit',
+        description: 'Spinnen von Wolle zu Garn, einfache Flickarbeiten und Zuarbeit am Webstuhl.',
+        suggestedCompetencies: ['Spinnen', 'Einfaches Nähen', 'Wollverarbeitung', 'Flicken'],
+        possibleRanks: ['Spinner', 'Näher', 'Spuljunge'],
+        nextRankName: 'Weber'
+      },
+      {
+        idSuffix: 'weber',
+        name: 'Weber & Schneider',
+        tier: 'beruf',
+        rankOrder: 1,
+        rankTitle: 'Textilhandwerk',
+        description: 'Weben von Tuchen am Webstuhl und Schustern passgenauer Alltagskleidung.',
+        suggestedCompetencies: ['Weben', 'Schnittmuster', 'Maßnehmen', 'Gewandfertigung'],
+        possibleRanks: ['Weber', 'Schneider', 'Gewandschneider'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Spinner & Näher',
+        nextRankName: 'Tuchmacher'
+      },
+      {
+        idSuffix: 'tuchmacher',
+        name: 'Tuchmacher & Färber',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Edelstoffe & Farbe',
+        description: 'Herstellung von feinen Tuche, Seidenweberei und das meisterhafte Färben von Stoffen.',
+        suggestedCompetencies: ['Tuchfärben', 'Seidenweberei', 'Farbenchemie', 'Stoffveredelung'],
+        possibleRanks: ['Tuchmacher', 'Färber', 'Seidenweber'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Weber & Schneider',
+        nextRankName: 'Meisterschneider'
+      },
+      {
+        idSuffix: 'kuerschner',
+        name: 'Kürschner & Hutmacher',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Pelz & Kopfbedeckung',
+        description: 'Verarbeitung edler Pelze zu Mänteln und Fertigung von feinen Hüten und Kappen.',
+        suggestedCompetencies: ['Pelzverarbeitung', 'Hutformung', 'Lederzier', 'Fellkunde'],
+        possibleRanks: ['Kürschner', 'Hutmacher', 'Pelzhändler'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Weber & Schneider',
+        nextRankName: 'Meisterschneider'
+      },
+      {
+        idSuffix: 'meisterschneider',
+        name: 'Meisterschneider',
+        tier: 'meister',
+        rankOrder: 3,
+        rankTitle: 'Hofausstatter',
+        description: 'Leiter der Zunft, Ausstatter des Hofadels und Schöpfer neuer Modetrends.',
+        suggestedCompetencies: ['Hofmode', 'Zunftmeister', 'Luxusstoffe', 'Prunkgewänder'],
+        possibleRanks: ['Meisterschneider', 'Hofschneider', 'Zunftmeister'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Tuchmacher & Färber'
+      }
+    ]
+  },
+  lederhandwerker: {
+    branchKey: 'lederhandwerker',
+    branchName: 'Lederhandwerker',
+    category: 'Textil & Leder',
+    description: 'Verarbeitung von Leder zu Schuhen, Sätteln, Rüstungen und Riemen.',
+    ranks: [
+      {
+        idSuffix: 'gerbergehilfe',
+        name: 'Gerbergehilfe',
+        tier: 'einstieg',
+        rankOrder: 0,
+        rankTitle: 'Lederaufbereitung',
+        description: 'Schaben von Häuten, Einweichen in Lohe und schmutzige Gerberarbeiten.',
+        suggestedCompetencies: ['Häuten', 'Ledergerbung', 'Fettung', 'Tierkunde'],
+        possibleRanks: ['Gerbergehilfe', 'Häuteschaber', 'Lohbursche'],
+        nextRankName: 'Lederhandwerker'
+      },
+      {
+        idSuffix: 'lederhandwerker',
+        name: 'Lederhandwerker & Schuhmacher',
+        tier: 'beruf',
+        rankOrder: 1,
+        rankTitle: 'Gebrauchsleder',
+        description: 'Herstellung von robusten Schuhen, Stiefeln, Taschen und Alltagslederwaren.',
+        suggestedCompetencies: ['Schuhmacherei', 'Lederzuschnitt', 'Punziertechnik', 'Ledernaht'],
+        possibleRanks: ['Lederhandwerker', 'Schuhmacher', 'Taschner'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Gerbergehilfe',
+        nextRankName: 'Sattler'
+      },
+      {
+        idSuffix: 'sattler',
+        name: 'Sattler & Riemer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Reitbedarf & Schweres Leder',
+        description: 'Fertigung von Sätteln, Zaumzeug, schweren Lederriemen und Kutschenbedarf.',
+        suggestedCompetencies: ['Sattlerei', 'Riemenfertigung', 'Pferdegeschirr', 'Zaumzeug'],
+        possibleRanks: ['Sattler', 'Riemer', 'Geschirrmacher'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Lederhandwerker & Schuhmacher',
+        nextRankName: 'Lederermeister'
+      },
+      {
+        idSuffix: 'lederrustungsmacher',
+        name: 'Lederrüstungsmacher',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Gefechtsleder & Harnische',
+        description: 'Fertigung von gehärteten Lederpanzern, Brigantinen, Waffengurten und Scheiden.',
+        suggestedCompetencies: ['Lederhärtung', 'Schuppenpanzer', 'Waffenscheiden', 'Nieten & Beschläge'],
+        possibleRanks: ['Lederrüstungsmacher', 'Schwertfegergehilfe', 'Harnischmacher'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Lederhandwerker & Schuhmacher',
+        nextRankName: 'Lederermeister'
+      },
+      {
+        idSuffix: 'lederermeister',
+        name: 'Lederermeister',
+        tier: 'meister',
+        rankOrder: 3,
+        rankTitle: 'Meister des Leders',
+        description: 'Führt große Manufakturen für Reitbedarf, stattet Kavallerie-Regimenter aus.',
+        suggestedCompetencies: ['Manufakturleitung', 'Armeelieferant', 'Prunksättel', 'Zunftrecht'],
+        possibleRanks: ['Lederermeister', 'Hofsattler', 'Zunftvorsteher'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Sattler'
+      }
+    ]
+  },
+  mueller: {
+    branchKey: 'mueller',
+    branchName: 'Müller & Fischer',
+    category: 'Nahrung & Landwirtschaft',
+    description: 'Produktion von Lebensmitteln abseits des klassischen Ackerbaus, Fischerei und Bienenhaltung.',
+    ranks: [
+      {
+        idSuffix: 'hafenarbeiter',
+        name: 'Hafenarbeiter & Mühlenbursche',
+        tier: 'einstieg',
+        rankOrder: 0,
+        rankTitle: 'Einstieg & Schwerarbeit',
+        description: 'Netze flicken, Mehlsäcke schleppen, Boote teeren und Bienenstöcke räuchern.',
+        suggestedCompetencies: ['Netzeflicken', 'Kisten schleppen', 'Räuchern', 'Wassertauglichkeit'],
+        possibleRanks: ['Hafenarbeiter', 'Mühlenbursche', 'Käsegehilfe'],
+        nextRankName: 'Müller'
+      },
+      {
+        idSuffix: 'mueller',
+        name: 'Müller, Käser & Imker',
+        tier: 'beruf',
+        rankOrder: 1,
+        rankTitle: 'Nahrungsproduktion',
+        description: 'Betrieb von Wind/Wassermühlen, Milchverarbeitung zu Käse oder Honigernte.',
+        suggestedCompetencies: ['Mühlradbedienung', 'Käseherstellung', 'Imkerei', 'Getreidekunde'],
+        possibleRanks: ['Müller', 'Käser', 'Imker'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Hafenarbeiter & Mühlenbursche',
+        nextRankName: 'Fischer'
+      },
+      {
+        idSuffix: 'fischer',
+        name: 'Fischer',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Fluss- & Seefischerei',
+        description: 'Fangen von Fischen und Krustentieren auf Flüssen, Seen oder hoher See.',
+        suggestedCompetencies: ['Netzwerfen', 'Reusenbau', 'Seemannschaft', 'Fischkunde'],
+        possibleRanks: ['Fischer', 'Hochseefischer', 'Flussfischer'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Müller, Käser & Imker',
+        nextRankName: 'Meisterproduzent'
+      },
+      {
+        idSuffix: 'muehlenmeister',
+        name: 'Mühlenmeister & Hoflieferant',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Großproduktion',
+        description: 'Verwaltung großer Pachtmühlen, Honigweinherstellung in großen Mengen oder Großmolkereien.',
+        suggestedCompetencies: ['Wirtschaftsverwaltung', 'Großmüllerei', 'Metbrauen', 'Export'],
+        possibleRanks: ['Mühlenmeister', 'Großkäser', 'Meisterimker'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Müller, Käser & Imker',
+        nextRankName: 'Meisterproduzent'
+      },
+      {
+        idSuffix: 'meisterproduzent',
+        name: 'Gildenmeister der Nahrungsmacher',
+        tier: 'meister',
+        rankOrder: 3,
+        rankTitle: 'Zunftleitung',
+        description: 'Leitung von Fischereigilden, Mühlenkartellen oder Hofpächter für Spezialgüter.',
+        suggestedCompetencies: ['Gildenrecht', 'Preispolitik', 'Handelsmonopole', 'Zunftabzeichen'],
+        possibleRanks: ['Mühlenherr', 'Fischereimeister', 'Hoflieferant'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Fischer'
+      }
+    ]
+  },
+  fuhrmann: {
+    branchKey: 'fuhrmann',
+    branchName: 'Fuhrmann & Logistik',
+    category: 'Handel & Logistik',
+    description: 'Transport von Waren und Personen, Kurierdienste und Fahrzeuginstandhaltung.',
+    ranks: [
+      {
+        idSuffix: 'stallbursche',
+        name: 'Stallbursche',
+        tier: 'einstieg',
+        rankOrder: 0,
+        rankTitle: 'Pferde- & Wagenpflege',
+        description: 'Ausmisten von Ställen, Striegeln von Pferden und Fetten von Wagenachsen.',
+        suggestedCompetencies: ['Pferdepflege', 'Achsenfetten', 'Stallarbeit', 'Lastentragen'],
+        possibleRanks: ['Stallbursche', 'Knecht', 'Pferdebetreuer'],
+        nextRankName: 'Fuhrmann'
+      },
+      {
+        idSuffix: 'fuhrmann',
+        name: 'Fuhrmann & Kutscher',
+        tier: 'beruf',
+        rankOrder: 1,
+        rankTitle: 'Warentransport',
+        description: 'Lenken von Frachtwagen, Kutschen für Reisende und sichere Navigation auf Landstraßen.',
+        suggestedCompetencies: ['Kutschenlenken', 'Orientierung (Land)', 'Tierheilkunde', 'Ladungssicherung'],
+        possibleRanks: ['Fuhrmann', 'Kutscher', 'Gespannführer'],
+        requiredExperienceYears: 1,
+        prerequisiteJobName: 'Stallbursche',
+        nextRankName: 'Wagenbauer'
+      },
+      {
+        idSuffix: 'wagenbauer',
+        name: 'Wagenbauer & Stellmacher',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Fahrzeugtechnik',
+        description: 'Konstruktion und Reparatur von Wagenrädern, Achsen, Kutschenaufbauten und Reisewagen.',
+        suggestedCompetencies: ['Radmacherei', 'Wagenkonstruktion', 'Federung', 'Holzbiegen'],
+        possibleRanks: ['Wagenbauer', 'Stellmacher', 'Kutschenbauer'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Fuhrmann & Kutscher',
+        nextRankName: 'Fuhrunternehmer'
+      },
+      {
+        idSuffix: 'kurier',
+        name: 'Kurier & Postbote',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Eil- & Nachrichtendienst',
+        description: 'Schnelle Übermittlung von Briefen, wichtigen Depeschen und Paketen auf schnellen Pferden.',
+        suggestedCompetencies: ['Reiten (schnell)', 'Geländekunde', 'Nachrichtenschutz', 'Ausdauer'],
+        possibleRanks: ['Kurier', 'Postbote', 'Eilreiter'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Fuhrmann & Kutscher',
+        nextRankName: 'Fuhrunternehmer'
+      },
+      {
+        idSuffix: 'stallmeister',
+        name: 'Stallmeister & Karawanenhändler',
+        tier: 'spezialisierung',
+        rankOrder: 2,
+        rankTitle: 'Logistik & Pferdehandel',
+        description: 'Organisation großer Transportzüge, Zucht und Handel mit Zug- und Reitpferden.',
+        suggestedCompetencies: ['Pferdezucht', 'Karawanenführung', 'Logistik', 'Handelsrouten'],
+        possibleRanks: ['Stallmeister', 'Karawanenführer', 'Pferdehändler'],
+        requiredExperienceYears: 2,
+        prerequisiteJobName: 'Fuhrmann & Kutscher',
+        nextRankName: 'Fuhrunternehmer'
+      },
+      {
+        idSuffix: 'fuhrunternehmer',
+        name: 'Fuhrunternehmer',
+        tier: 'meister',
+        rankOrder: 3,
+        rankTitle: 'Logistik-Imperium',
+        description: 'Besitzer großer Fuhrparks, Verwalter von Postkutschennetzwerken und Großspediteur.',
+        suggestedCompetencies: ['Speditionsleitung', 'Routenmonopole', 'Wagenparkverwaltung', 'Diplomatisches Reisen'],
+        possibleRanks: ['Fuhrherr', 'Postmeister', 'Karawanenherr'],
+        requiredExperienceYears: 4,
+        prerequisiteJobName: 'Wagenbauer'
+      }
+    ]
   }
 };
+
 
 /**
  * Maps field IDs to their primary career branch keys.
