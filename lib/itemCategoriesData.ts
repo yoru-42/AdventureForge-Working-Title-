@@ -489,3 +489,231 @@ export const MILITARY_SUPPLY_ROLES = [
   'Belagerungsgerät & Munition'
 ];
 
+export type ItemBuilderType =
+  | 'Rohstoff'
+  | 'Material'
+  | 'Werkzeug'
+  | 'Waffe'
+  | 'Rüstung'
+  | 'Nahrung'
+  | 'Kleidung'
+  | 'Alltagsgegenstand'
+  | 'Tier'
+  | 'Transportmittel'
+  | 'Magischer Gegenstand'
+  | 'Handelsware'
+  | 'Dungeon-Fund'
+  | 'Quest-/Story-Gegenstand';
+
+export interface ItemBuilderTypeMeta {
+  type: ItemBuilderType;
+  label: string;
+  description: string;
+  category: ItemMainCategory;
+  defaultUnit: string;
+  defaultPrice: number;
+  subcategories: string[];
+}
+
+export const ITEM_BUILDER_TYPES: ItemBuilderTypeMeta[] = [
+  {
+    type: 'Rohstoff',
+    label: 'Rohstoff',
+    description: 'Natürliche Grundstoffe aus Bergbau, Natur, Forst, Steinbruch oder Jagd.',
+    category: 'Rohstoffe',
+    defaultUnit: 'kg',
+    defaultPrice: 5,
+    subcategories: ['Metallerze', 'Bau- & Nutzholz', 'Pflanzen & Kräuter', 'Tierische Rohstoffe', 'Steine & Mineralien', 'Harze & Naturstoffe']
+  },
+  {
+    type: 'Material',
+    label: 'Material',
+    description: 'Vorgefertigte Halbzeuge, Barren, Stoffe und veredelte Werkstoffe.',
+    category: 'Materialien & Zwischenprodukte',
+    defaultUnit: 'Stück',
+    defaultPrice: 15,
+    subcategories: ['Barren & Metallhalbzeuge', 'Bretter & Balken', 'Stoffe, Garne & Seile', 'Leder & Felle', 'Glas, Ton & Keramik', 'Legierungen']
+  },
+  {
+    type: 'Werkzeug',
+    label: 'Werkzeug',
+    description: 'Spezifisches Arbeitsgerät für Handwerk, Bergbau, Feldarbeit und Praxis.',
+    category: 'Werkzeuge',
+    defaultUnit: 'Stück',
+    defaultPrice: 20,
+    subcategories: ['Schmiedewerkzeuge', 'Holzbearbeitung', 'Steinbearbeitung', 'Bergbau & Steinbruch', 'Landwirtschaft & Ernte', 'Wundarztbesteck', 'Kochen & Küchenwerkzeuge']
+  },
+  {
+    type: 'Waffe',
+    label: 'Waffe',
+    description: 'Klingen, Wuchtwaffen, Stangenwaffen, Bögen, Armbrüste und Kampfgerät.',
+    category: 'Waffen',
+    defaultUnit: 'Stück',
+    defaultPrice: 50,
+    subcategories: ['Schwerter & Klingen', 'Dolche & Messer', 'Äxte & Beile', 'Hämmer & Streitkolben', 'Stangenwaffen & Speere', 'Bögen & Pfeile', 'Armbrüste & Bolzen', 'Magische & Runenwaffen']
+  },
+  {
+    type: 'Rüstung',
+    label: 'Rüstung',
+    description: 'Rüstungsteile, Schilde, Helme, Panzerungen und Schutzbekleidung.',
+    category: 'Rüstung & Schutzausrüstung',
+    defaultUnit: 'Stück',
+    defaultPrice: 75,
+    subcategories: ['Helme & Kopfschutz', 'Brustpanzer & Kürasse', 'Schilde & Parierschilde', 'Arm- & Handschutz', 'Bein- & Fußschienen', 'Leichte Rüstung (Leder/Stoff)', 'Mittlere Rüstung (Kette)', 'Schwere Rüstung (Platte)']
+  },
+  {
+    type: 'Nahrung',
+    label: 'Nahrung',
+    description: 'Lebensmittel, Rationen, Feldverpflegung, Backwaren und Getränke.',
+    category: 'Nahrung',
+    defaultUnit: 'Portionen',
+    defaultPrice: 2,
+    subcategories: ['Frischwaren & Feldfrüchte', 'Brot & Backwaren', 'Fleisch- & Wurstwaren', 'Fisch & Meeresfrüchte', 'Konserven & Dauerproviant', 'Getränke & Brauereiprodukte']
+  },
+  {
+    type: 'Kleidung',
+    label: 'Kleidung',
+    description: 'Alltagskleidung, Arbeitskluft, Schutzmäntel, Stiefel und Gewänder.',
+    category: 'Kleidung & Textilien',
+    defaultUnit: 'Stück',
+    defaultPrice: 12,
+    subcategories: ['Alltagskleidung', 'Arbeits- & Schutzkleidung', 'Mäntel & Wetterkleidung', 'Schuhe & Stiefel', 'Kopfbedeckungen', 'Fest- & Zeremoniengewänder']
+  },
+  {
+    type: 'Alltagsgegenstand',
+    label: 'Alltagsgegenstand',
+    description: 'Haushaltsgeräte, Geschirr, Beleuchtung, Möbel und Alltagsbedarf.',
+    category: 'Alltags- & Haushaltsgegenstände',
+    defaultUnit: 'Stück',
+    defaultPrice: 8,
+    subcategories: ['Geschirr & Kochgeschirr', 'Beleuchtung & Laternen', 'Möbel & Einrichtung', 'Behälter & Truhen', 'Hygiene & Reinigung', 'Schreib- & Dokumentenbedarf']
+  },
+  {
+    type: 'Tier',
+    label: 'Tier',
+    description: 'Nutztiere, Reittiere, Lasttiere, Jagdtiere und Arbeitstiere.',
+    category: 'Tiere',
+    defaultUnit: 'Tiere',
+    defaultPrice: 120,
+    subcategories: ['Nutztiere & Stallvieh', 'Reittiere', 'Lasttiere & Packtiere', 'Zugtiere', 'Wach- & Schutztiere', 'Jagd- & Arbeitstiere']
+  },
+  {
+    type: 'Transportmittel',
+    label: 'Transportmittel',
+    description: 'Karren, Wagen, Kutschen, Kähne, Schiffe und Reisezubehör.',
+    category: 'Transportmittel',
+    defaultUnit: 'Fahrzeuge',
+    defaultPrice: 250,
+    subcategories: ['Landfahrzeuge (Karren, Wagen, Kutsche)', 'Wasserfahrzeuge (Boot, Kahn, Schiff)', 'Schlitten & Winterfahrzeuge', 'Magische Transportmittel', 'Zugtier-Geschirre & Zubehör']
+  },
+  {
+    type: 'Magischer Gegenstand',
+    label: 'Magischer Gegenstand',
+    description: 'Verzauberte Artefakte, Relikte, Fokussteine, Schriftrollen und Elixiere.',
+    category: 'Magische Gegenstände',
+    defaultUnit: 'Stück',
+    defaultPrice: 300,
+    subcategories: ['Verzauberte Waffen & Rüstungen', 'Artefakte & Relikte', 'Fokussteine & Zauberstäbe', 'Schriftrollen & Zauberformeln', 'Zaubertränke & Alchemie', 'Amulette, Ringe & Talismane']
+  },
+  {
+    type: 'Handelsware',
+    label: 'Handelsware',
+    description: 'Wertvolle Güter für Fernhandel, Gewürze, Luxusgüter, Tuche und Kolonialwaren.',
+    category: 'Handelswaren',
+    defaultUnit: 'Ballen',
+    defaultPrice: 40,
+    subcategories: ['Gewürze & Kolonialwaren', 'Luxusgüter & Schmuck', 'Salz & Konservierungsgüter', 'Edeltuche, Seide & Samt', 'Tee, Kaffee & Genussmittel', 'Handelsballen']
+  },
+  {
+    type: 'Dungeon-Fund',
+    label: 'Dungeon-Fund',
+    description: 'Schatztruhenbeute, Krypta-Relikte, Erzader-Funde und Bosskammer-Belohnungen.',
+    category: 'Dungeon-Vorkommen & Funde',
+    defaultUnit: 'Stück',
+    defaultPrice: 35,
+    subcategories: ['Schatztruhen-Inhalte', 'Krypta- & Ruinenrelikte', 'Erzadern & Höhlenkristalle', 'Versteckte Lagerbeute', 'Bosskammer-Belohnungen']
+  },
+  {
+    type: 'Quest-/Story-Gegenstand',
+    label: 'Quest-/Story-Gegenstand',
+    description: 'Schlüssel, Siegel, Beweise, Pergamente und handlungsrelevante Unikate.',
+    category: 'Quest-/Story-Gegenstände',
+    defaultUnit: 'Stück',
+    defaultPrice: 0,
+    subcategories: ['Schlüssel & Öffnungswerkzeuge', 'Siegel, Wappen & Urkunden', 'Geheime Dokumente & Pergamente', 'Beweisstücke & Tatwerkzeuge', 'Familienerbstücke & Relikte', 'Story-Unikate']
+  }
+];
+
+export const ITEM_USE_DOMAINS = [
+  { id: 'alltag', label: 'Alltag', description: 'Haushalt, Kleidung, Ernährung, Hygiene und Wohnkomfort' },
+  { id: 'wirtschaft', label: 'Wirtschaft', description: 'Handel, Produktion, Transport, Betriebe und Landwirtschaft' },
+  { id: 'armee', label: 'Armee', description: 'Militärausrüstung, Bewaffnung, Garnisonsbedarf und Feldzug' },
+  { id: 'handwerk', label: 'Handwerk', description: 'Werkzeuge, Zwischenprodukte, Reparatur und Veredelung' },
+  { id: 'magie', label: 'Magie', description: 'Rituale, Zauberfokus, Alchemie und arkane Speicher' }
+] as const;
+
+export type ItemUseDomainId = (typeof ITEM_USE_DOMAINS)[number]['id'];
+
+export const ITEM_ORIGIN_TYPES = [
+  { id: 'normal_produziert', label: 'normal produziert', description: 'Handwerkliche Werkstatt, Manufaktur, Zunftbetrieb oder Siedlung' },
+  { id: 'natuerliches_vorkommen', label: 'natürliches Vorkommen', description: 'Wildnis, Bergbau, Flora & Fauna, Gewässer oder Sammeln' },
+  { id: 'dungeon', label: 'Dungeon', description: 'Ruinen, Katakomben, Schatztruhen, Krypten oder Gewölbe' },
+  { id: 'monster_drop', label: 'Monster-Drop', description: 'Beute, Trophäen, Drüsen oder Tierhäute erlegter Kreaturen' },
+  { id: 'quest', label: 'Quest', description: 'Missionsbelohnung, Auftraggeber-Geschenk oder Handlungsziel' },
+  { id: 'einzigartiger_fund', label: 'einzigartiger Fund', description: 'Uraltes Relikt, historische Ausgrabung oder legendäres Einzelstück' }
+] as const;
+
+export type ItemOriginTypeId = (typeof ITEM_ORIGIN_TYPES)[number]['id'];
+
+export function getBuilderTypeForCategory(cat?: string): ItemBuilderType {
+  if (!cat) return 'Rohstoff';
+  switch (cat) {
+    case 'Rohstoffe':
+    case 'Rohstoff':
+      return 'Rohstoff';
+    case 'Materialien & Zwischenprodukte':
+    case 'Material':
+    case 'Produkte':
+      return 'Material';
+    case 'Werkzeuge':
+    case 'Werkzeug':
+      return 'Werkzeug';
+    case 'Waffen':
+    case 'Waffe':
+      return 'Waffe';
+    case 'Rüstung & Schutzausrüstung':
+    case 'Rüstung':
+      return 'Rüstung';
+    case 'Nahrung':
+      return 'Nahrung';
+    case 'Kleidung & Textilien':
+    case 'Kleidung':
+      return 'Kleidung';
+    case 'Alltags- & Haushaltsgegenstände':
+    case 'Alltagsgegenstand':
+      return 'Alltagsgegenstand';
+    case 'Tiere':
+    case 'Tier':
+      return 'Tier';
+    case 'Transportmittel':
+      return 'Transportmittel';
+    case 'Magische Gegenstände':
+    case 'Magischer Gegenstand':
+      return 'Magischer Gegenstand';
+    case 'Handelswaren':
+    case 'Handelsware':
+    case 'Medizin':
+      return 'Handelsware';
+    case 'Dungeon-Vorkommen & Funde':
+    case 'Dungeon-Fund':
+    case 'Monster-Beute & Drops':
+    case 'Loot-Quellen & Trophäen':
+      return 'Dungeon-Fund';
+    case 'Quest-/Story-Gegenstände':
+    case 'Quest-/Story-Gegenstand':
+      return 'Quest-/Story-Gegenstand';
+    default:
+      return 'Rohstoff';
+  }
+}
+
