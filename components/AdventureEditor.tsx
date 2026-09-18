@@ -43,6 +43,7 @@ import {
 } from '../lib/progressionDefaults';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
+import { createStandardLoreEntries } from '../lib/standardItemsData';
 
 interface Props {
   onSave: (adventure: Adventure) => void;
@@ -421,7 +422,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     });
 
     // Migrate abilities for all lore entries as well (from 'Passive Fähigkeiten' or empty to 'Techniken')
-    return initialLore.map(entry => {
+    const migrated = initialLore.map(entry => {
       if (entry.details?.abilities && Array.isArray(entry.details.abilities)) {
         return {
           ...entry,
@@ -435,6 +436,27 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
             })
           }
         };
+      }
+      return entry;
+    });
+
+    // Seed standard items if no items are currently present in lore database
+    const hasItems = migrated.some(l => l.category === 'Gegenstände');
+    let finalEntries = migrated;
+    if (!hasItems) {
+      const standardItems = createStandardLoreEntries();
+      finalEntries = [...migrated, ...standardItems];
+    }
+
+    const seenIds = new Set<string>();
+    return finalEntries.map((entry, idx) => {
+      let entryId = entry.id;
+      if (!entryId || seenIds.has(entryId)) {
+        entryId = `${entry.id || 'entry'}-${idx}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+      }
+      seenIds.add(entryId);
+      if (entryId !== entry.id) {
+        return { ...entry, id: entryId };
       }
       return entry;
     });

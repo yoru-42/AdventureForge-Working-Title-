@@ -11,7 +11,8 @@ import { CharacterLoreForm } from './CharacterLoreForm';
 import { EnemyLoreForm } from './EnemyLoreForm';
 import { RaceLoreForm } from './RaceLoreForm';
 import { ItemLoreForm } from './ItemLoreForm';
-import { ITEM_MAIN_CATEGORIES } from '../lib/itemCategoriesData';
+import { ITEM_MAIN_CATEGORIES, ITEM_BUILDER_TYPES } from '../lib/itemCategoriesData';
+import { createStandardLoreEntries, STANDARD_ITEMS_CATALOG } from '../lib/standardItemsData';
 import TerritorySpecificFields from './TerritorySpecificFields';
 import WorldKnowledgeManager from './WorldKnowledgeManager';
 import { syncEconomyWithWorld, syncCodexItemsToEconomy } from '../lib/economySync';
@@ -333,12 +334,27 @@ const LoreDatabaseView: React.FC<Props> = ({
     }
   }, [rawLore, world, onUpdateWorld, onUpdateLore]);
 
-  // Auto-clean character names in rawLore if they mistakenly contain profession/title prefixes
-  // e.g. "Bauer Jochen" -> title: "Jochen", profession: "Bauer"
+  // Auto-clean character names in rawLore and ensure strictly unique entry IDs
   useEffect(() => {
     if (!rawLore || rawLore.length === 0) return;
-    let hasNameChange = false;
-    const sanitizedLore = rawLore.map(entry => {
+    let hasChanges = false;
+    const seenIds = new Set<string>();
+
+    const sanitizedLore = rawLore.map((entry, index) => {
+      let updatedEntry = entry;
+
+      // Deduplicate IDs
+      let entryId = entry.id;
+      if (!entryId || seenIds.has(entryId)) {
+        hasChanges = true;
+        entryId = `${entry.id || 'entry'}-${Date.now()}-${index}-${Math.random().toString(36).substring(2, 6)}`;
+      }
+      seenIds.add(entryId);
+
+      if (entryId !== entry.id) {
+        updatedEntry = { ...updatedEntry, id: entryId };
+      }
+
       if (entry.category === 'Charaktere' && entry.title) {
         const { cleanName, extractedProfession, callName } = sanitizeCharacterNameAndProfession(
           entry.title,
@@ -346,25 +362,25 @@ const LoreDatabaseView: React.FC<Props> = ({
           entry.details?.role
         );
         if (cleanName && cleanName !== entry.title) {
-          hasNameChange = true;
-          return {
-            ...entry,
+          hasChanges = true;
+          updatedEntry = {
+            ...updatedEntry,
             title: cleanName,
             details: {
-              ...(entry.details || {}),
-              profession: entry.details?.profession || extractedProfession,
-              role: entry.details?.role || extractedProfession,
-              jobTitle: entry.details?.jobTitle || extractedProfession,
-              callName: entry.details?.callName || callName,
-              rufName: entry.details?.rufName || callName
+              ...(updatedEntry.details || {}),
+              profession: updatedEntry.details?.profession || extractedProfession,
+              role: updatedEntry.details?.role || extractedProfession,
+              jobTitle: updatedEntry.details?.jobTitle || extractedProfession,
+              callName: updatedEntry.details?.callName || callName,
+              rufName: updatedEntry.details?.rufName || callName
             }
           };
         }
       }
-      return entry;
+      return updatedEntry;
     });
 
-    if (hasNameChange) {
+    if (hasChanges) {
       onUpdateLore(sanitizedLore);
     }
   }, [rawLore, onUpdateLore]);
@@ -475,6 +491,10 @@ const LoreDatabaseView: React.FC<Props> = ({
   const [keepExistingLoreDetails, setKeepExistingLoreDetails] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState<string | null>(null);
+  const [itemSubTab, setItemSubTab] = useState<'overview' | 'form'>('overview');
+  const [itemCategoryFilter, setItemCategoryFilter] = useState<string>('all');
+  const [itemSubCategoryFilter, setItemSubCategoryFilter] = useState<string>('all');
+  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(new Set());
   const [editForm, setEditForm] = useState<Partial<LoreEntry>>({ category: 'Charaktere' });
   const [isGeneratingImg, setIsGeneratingImg] = useState<boolean>(false);
   const [generatingExpression, setGeneratingExpression] = useState<string | null>(null);
@@ -2733,6 +2753,10 @@ const LoreDatabaseView: React.FC<Props> = ({
           }
         };
       }
+    }
+
+    if (entry.category === 'Gegenstände') {
+      setItemSubTab('form');
     }
 
     setEditForm(preparedEntry);
@@ -5266,132 +5290,582 @@ const LoreDatabaseView: React.FC<Props> = ({
           </div>
         ) : currentCategory === 'Gegenstände' ? (
           <div className="flex flex-col gap-6">
-            <ItemLoreForm
-              editForm={editForm}
-              setEditForm={setEditForm}
-              isEditing={isEditing}
-              setIsEditing={setIsEditing}
-              onSave={handleSave}
-              onDelete={handleDelete}
-              onCancel={() => {
-                setIsEditing(null);
-                setEditForm({ category: 'Gegenstände' });
-              }}
-              lore={lore}
-              onUpdateLore={onUpdateLore}
-              worldTitle={worldTitle}
-              isNsfw={isNsfw}
-              world={world}
-            />
+            {/* 2 Tabs (Tags): Neuer Gegenstand / Gegenstand bearbeiten & Gegenstandsübersicht */}
+            <div className="flex items-center justify-between flex-wrap gap-3 bg-slate-900/90 border border-slate-800/80 p-2 rounded-xl">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (itemSubTab !== 'form') {
+                      if (!isEditing) {
+                        setEditForm({ category: 'Gegenstände' });
+                      }
+                    }
+                    setItemSubTab('form');
+                  }}
+                  className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+                    itemSubTab === 'form'
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <i className={`fa-solid ${isEditing ? 'fa-pen-to-square' : 'fa-plus'} text-[11px]`}></i>
+                  <span>{isEditing ? 'Gegenstand bearbeiten' : 'Neuer Gegenstand'}</span>
+                </button>
 
-            {/* List of Existing Items in Codex */}
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                  Gespeicherte Gegenstände &amp; Waren ({filteredLore.length})
-                </span>
-
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                  placeholder="Gegenstände filtern..."
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 w-36 sm:w-48"
-                />
+                <button
+                  type="button"
+                  onClick={() => setItemSubTab('overview')}
+                  className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+                    itemSubTab === 'overview'
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-850/60'
+                  }`}
+                >
+                  <i className="fa-solid fa-boxes-stacked text-[11px]"></i>
+                  <span>Gegenstandsübersicht</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    itemSubTab === 'overview' ? 'bg-black/25 text-white' : 'bg-slate-800 text-slate-300'
+                  }`}>
+                    {lore.filter(l => l.category === 'Gegenstände').length}
+                  </span>
+                </button>
               </div>
 
-              {filteredLore.length === 0 ? (
-                <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 text-center text-xs text-slate-500 italic">
-                  Keine Gegenstände im Codex angelegt.
-                </div>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  {groupedLore.map(([groupName, items], gIdx) => (
-                    <div key={`items-group-${groupName}-${gIdx}`} className="flex flex-col gap-2">
-                      <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1">
-                        <span>{groupName}</span>
-                        <span className="text-slate-500 text-[10px]">({items.length})</span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                        {items.map((item, itemIdx) => {
-                          const d = item.details || {};
-                          return (
-                            <div
-                              key={`gegenstand-${item.id || 'item'}-${itemIdx}`}
-                              onClick={() => handleEdit(item)}
-                              className={`bg-slate-900 border px-4 py-3 rounded-xl flex flex-col gap-2 transition-all cursor-pointer ${
-                                isEditing === item.id 
-                                  ? 'border-amber-500 bg-amber-950/30 text-amber-300 font-bold shadow-md' 
-                                  : 'border-slate-800 hover:border-slate-700 hover:bg-slate-850 text-slate-200'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                  <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700/60 flex items-center justify-center shrink-0 text-amber-400 text-xs font-bold">
-                                    <i className="fa-solid fa-box"></i>
-                                  </div>
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="text-xs font-semibold truncate text-slate-100">
-                                      {item.title || 'Unbenannter Gegenstand'}
-                                    </span>
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      {d.subCategory && (
-                                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/40">
-                                          {d.subCategory}
-                                        </span>
-                                      )}
-                                      {d.rarity && (
-                                        <span className="text-[9px] text-slate-400 truncate">
-                                          {d.rarity}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDelete(item.id);
-                                    }}
-                                    className="text-slate-500 hover:text-rose-400 text-xs p-1 transition-colors cursor-pointer"
-                                    title="Gegenstand löschen"
-                                  >
-                                    <i className="fa-solid fa-trash"></i>
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Economic quick info */}
-                              <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/60 text-[10px] text-slate-400">
-                                <div className="flex items-center gap-2 truncate">
-                                  {d.pricePerUnit !== undefined && (
-                                    <span className="text-amber-400 font-semibold">
-                                      {d.pricePerUnit} Gold / {d.unit || 'Stück'}
-                                    </span>
-                                  )}
-                                  {d.producingHoldingName && (
-                                    <span className="text-emerald-400 truncate">
-                                      | {d.producingHoldingName}
-                                    </span>
-                                  )}
-                                </div>
-                                {d.stockAmount !== undefined && (
-                                  <span className="text-slate-400 shrink-0">
-                                    Lager: {d.stockAmount} {d.unit || ''}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {itemSubTab === 'overview' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(null);
+                    setEditForm({ category: 'Gegenstände' });
+                    setItemSubTab('form');
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                >
+                  <i className="fa-solid fa-plus text-[10px]"></i>
+                  <span>Neuer Gegenstand anlegen</span>
+                </button>
               )}
             </div>
+
+            {/* TAB 1: FORMULAR (Neuer Gegenstand oder Bearbeiten) */}
+            {itemSubTab === 'form' ? (
+              <div className="flex flex-col gap-4">
+                {isEditing && (
+                  <div className="bg-amber-950/40 border border-amber-500/50 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <i className="fa-solid fa-pen-to-square text-amber-400 text-sm shrink-0"></i>
+                      <span className="text-xs text-amber-200">
+                        Du bearbeitest gerade: <strong className="text-amber-100">{editForm.title || 'Unbenannter Gegenstand'}</strong>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditing(null);
+                        setEditForm({ category: 'Gegenstände' });
+                      }}
+                      className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-[11px] font-medium transition cursor-pointer"
+                    >
+                      Neuen Gegenstand anlegen
+                    </button>
+                  </div>
+                )}
+
+                <ItemLoreForm
+                  editForm={editForm}
+                  setEditForm={setEditForm}
+                  isEditing={isEditing}
+                  setIsEditing={setIsEditing}
+                  onSave={handleSave}
+                  onDelete={handleDelete}
+                  onCancel={() => {
+                    setIsEditing(null);
+                    setEditForm({ category: 'Gegenstände' });
+                    setItemSubTab('overview');
+                  }}
+                  lore={lore}
+                  onUpdateLore={onUpdateLore}
+                  worldTitle={worldTitle}
+                  isNsfw={isNsfw}
+                  world={world}
+                />
+              </div>
+            ) : (
+              /* TAB 2: GEGENSTANDSÜBERSICHT */
+              <div className="flex flex-col gap-5">
+                {/* Filter- & Suchleiste */}
+                <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-3.5 flex flex-col gap-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                    {/* Suchfeld */}
+                    <div className="relative flex-1">
+                      <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        placeholder="Gegenstände nach Name, Art oder Merkmal filtern..."
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+                      />
+                      {searchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchTerm('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs cursor-pointer"
+                        >
+                          <i className="fa-solid fa-xmark"></i>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Standard-Gegenstände Ergänzen */}
+                    {(() => {
+                      const standardEntries = createStandardLoreEntries();
+                      const existingTitles = new Set(lore.filter(l => l.category === 'Gegenstände').map(l => (l.title || '').trim().toLowerCase()));
+                      const existingIds = new Set(lore.map(l => l.id));
+                      const missingCount = standardEntries.filter(entry => !existingTitles.has((entry.title || '').trim().toLowerCase())).length;
+                      if (missingCount > 0) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const missingEntries = standardEntries
+                                .filter(entry => !existingTitles.has((entry.title || '').trim().toLowerCase()))
+                                .map(entry => {
+                                  let finalId = entry.id;
+                                  if (existingIds.has(finalId)) {
+                                    finalId = `${entry.id}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+                                  }
+                                  existingIds.add(finalId);
+                                  return { ...entry, id: finalId };
+                                });
+                              if (missingEntries.length > 0) {
+                                onUpdateLore([...lore, ...missingEntries]);
+                              }
+                            }}
+                            className="px-3 py-2 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 hover:text-indigo-100 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition shadow-sm shrink-0 cursor-pointer"
+                            title="Fügt alle fehlenden Standard-Rohstoffe, Metalle, Handwerkswaren und Ausrüstungen dem Codex hinzu"
+                          >
+                            <i className="fa-solid fa-plus text-[10px]"></i>
+                            Standard-Gegenstände ergänzen (+{missingCount})
+                          </button>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+
+                  {/* Gegenstandsart Filter Buttons */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-800/60 text-xs">
+                    <span className="text-[11px] font-semibold text-slate-400 mr-1 shrink-0">
+                      Gegenstandsart:
+                    </span>
+                    {[
+                      { id: 'all', label: 'Alle Arten' },
+                      { id: 'Rohstoff', label: 'Rohstoffe' },
+                      { id: 'Material', label: 'Materialien' },
+                      { id: 'Baustoff', label: 'Baustoffe' },
+                      { id: 'Bergbau & Erze', label: 'Bergbau & Erze' },
+                      { id: 'Landwirtschaft', label: 'Landwirtschaft' },
+                      { id: 'Saatgut & Pflanzen', label: 'Saatgut & Pflanzen' },
+                      { id: 'Nahrung', label: 'Nahrung' },
+                      { id: 'Medizin / Alchemie', label: 'Medizin & Alchemie' },
+                      { id: 'Tränke & Elixiere', label: 'Tränke & Elixiere' },
+                      { id: 'Werkzeug', label: 'Werkzeuge' },
+                      { id: 'Waffe', label: 'Waffen' },
+                      { id: 'Rüstung', label: 'Rüstungen' },
+                      { id: 'Kleidung', label: 'Kleidung' },
+                      { id: 'Militärbedarf', label: 'Militärbedarf' },
+                      { id: 'Tier', label: 'Tiere' },
+                      { id: 'Transportmittel', label: 'Transportmittel' },
+                      { id: 'Nautik & Seefahrt', label: 'Nautik & Seefahrt' },
+                      { id: 'Alltagsgegenstand', label: 'Alltag' },
+                      { id: 'Handelsware', label: 'Handelswaren' },
+                      { id: 'Schmuck & Kostbarkeiten', label: 'Schmuck' },
+                      { id: 'Kunst & Antiquitäten', label: 'Kunst & Antiquitäten' },
+                      { id: 'Buch & Schriftstück', label: 'Bücher & Schriften' },
+                      { id: 'Gifte & Fallen', label: 'Gifte & Fallen' },
+                      { id: 'Ritual- & Kultbedarf', label: 'Ritual & Kult' },
+                      { id: 'Magischer Gegenstand', label: 'Magie' },
+                      { id: 'Monster-Beute', label: 'Monster-Beute' },
+                      { id: 'Dungeon-Fund', label: 'Dungeon-Funde' },
+                      { id: 'Quest-/Story-Gegenstand', label: 'Quest & Story' }
+                    ].map(cat => (
+                      <button
+                        key={`art-filter-${cat.id}`}
+                        type="button"
+                        onClick={() => {
+                          setItemCategoryFilter(cat.id);
+                          setItemSubCategoryFilter('all');
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                          itemCategoryFilter === cat.id
+                            ? 'bg-amber-500/20 border border-amber-500/50 text-amber-300 font-semibold'
+                            : 'bg-slate-950/50 border border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Unterkategorie Filter Buttons (wenn Gegenstandsart gewählt) */}
+                  {(() => {
+                    if (itemCategoryFilter === 'all') return null;
+                    const activeBuilderMeta = ITEM_BUILDER_TYPES.find(b => b.type.toLowerCase() === itemCategoryFilter.toLowerCase());
+                    const activeMainMeta = ITEM_MAIN_CATEGORIES.find(m => 
+                      m.id.toLowerCase().includes(itemCategoryFilter.toLowerCase()) || 
+                      m.label.toLowerCase().includes(itemCategoryFilter.toLowerCase())
+                    );
+                    const subList = activeBuilderMeta?.subcategories || activeMainMeta?.subcategories || [];
+                    if (subList.length === 0) return null;
+
+                    return (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-slate-800/40 text-xs">
+                        <span className="text-[11px] font-semibold text-slate-400 mr-1 shrink-0">
+                          Unterkategorie:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setItemSubCategoryFilter('all')}
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition cursor-pointer ${
+                            itemSubCategoryFilter === 'all'
+                              ? 'bg-amber-400/20 border border-amber-400/60 text-amber-200 font-semibold'
+                              : 'bg-slate-950/40 border border-slate-800/70 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                          }`}
+                        >
+                          Alle
+                        </button>
+                        {subList.map(sub => (
+                          <button
+                            key={`sub-filter-${sub}`}
+                            type="button"
+                            onClick={() => setItemSubCategoryFilter(sub)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-medium transition cursor-pointer ${
+                              itemSubCategoryFilter === sub
+                                ? 'bg-amber-400/20 border border-amber-400/60 text-amber-200 font-semibold'
+                                : 'bg-slate-950/40 border border-slate-800/70 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                            }`}
+                          >
+                            {sub}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Items Übersicht Liste */}
+                {(() => {
+                  const allGegenstaende = lore.filter(l => l.category === 'Gegenstände');
+                  const filtered = allGegenstaende.filter(item => {
+                    const d = item.details || {};
+                    const bType = (d.builderType || d.mainCategory || d.itemType || '').toLowerCase();
+                    
+                    if (itemCategoryFilter !== 'all') {
+                      const fLower = itemCategoryFilter.toLowerCase();
+                      const matchBuilder = bType.includes(fLower);
+                      const matchMain = (d.mainCategory || '').toLowerCase().includes(fLower);
+                      const matchSub = (d.subCategory || '').toLowerCase().includes(fLower);
+                      if (!matchBuilder && !matchMain && !matchSub) return false;
+                    }
+
+                    if (itemSubCategoryFilter !== 'all') {
+                      const sLower = itemSubCategoryFilter.toLowerCase();
+                      const matchSub = (d.subCategory || '').toLowerCase().includes(sLower);
+                      if (!matchSub) return false;
+                    }
+
+                    if (searchTerm.trim()) {
+                      const s = searchTerm.toLowerCase();
+                      const matchTitle = (item.title || '').toLowerCase().includes(s);
+                      const matchDesc = (item.description || '').toLowerCase().includes(s);
+                      const matchSub = (d.subCategory || '').toLowerCase().includes(s);
+                      const matchMat = (d.primaryMaterial || d.materialQuality || '').toLowerCase().includes(s);
+                      const matchHolding = (d.producingHoldingName || '').toLowerCase().includes(s);
+                      if (!matchTitle && !matchDesc && !matchSub && !matchMat && !matchHolding) return false;
+                    }
+
+                    return true;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-8 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-3">
+                        <p className="text-slate-300 font-medium">Keine Gegenstände gefunden.</p>
+                        <p className="text-[11px] text-slate-500">
+                          {searchTerm || itemCategoryFilter !== 'all' 
+                            ? 'Passe den Filter oder Suchbegriff an, um Gegenstände anzuzeigen.' 
+                            : 'Erstelle einen neuen Gegenstand oder lade die Standard-Gegenstände.'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsEditing(null);
+                              setEditForm({ category: 'Gegenstände' });
+                              setItemSubTab('form');
+                            }}
+                            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <i className="fa-solid fa-plus"></i>
+                            Neuer Gegenstand anlegen
+                          </button>
+                          {allGegenstaende.length === 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const standardEntries = createStandardLoreEntries();
+                                onUpdateLore([...lore, ...standardEntries]);
+                              }}
+                              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
+                            >
+                              <i className="fa-solid fa-boxes-stacked"></i>
+                              Standardkatalog laden
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Group filtered items by builderType / mainCategory
+                  const groupsMap: { [group: string]: LoreEntry[] } = {};
+                  filtered.forEach(item => {
+                    const d = item.details || {};
+                    const groupName = d.builderType || d.mainCategory || d.itemType || 'Sonstige Gegenstände';
+                    if (!groupsMap[groupName]) groupsMap[groupName] = [];
+                    groupsMap[groupName].push(item);
+                  });
+
+                  Object.keys(groupsMap).forEach(key => {
+                    groupsMap[key].sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+                  });
+
+                  const sortedGroups = Object.entries(groupsMap).sort(([a], [b]) => a.localeCompare(b));
+
+                  return (
+                    <div className="flex flex-col gap-6">
+                      {sortedGroups.map(([groupName, items], gIdx) => {
+                        const allGroupExpanded = items.every(it => expandedItemIds.has(it.id));
+                        return (
+                          <div key={`group-${groupName}-${gIdx}`} className="flex flex-col gap-3">
+                            <div className="text-xs font-bold text-amber-400 uppercase tracking-wider px-1 flex items-center justify-between border-b border-slate-800/80 pb-1.5">
+                              <span className="flex items-center gap-2">
+                                <i className="fa-solid fa-folder-open text-amber-500/80 text-[11px]"></i>
+                                {groupName}
+                              </span>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setExpandedItemIds(prev => {
+                                      const next = new Set(prev);
+                                      if (allGroupExpanded) {
+                                        items.forEach(it => next.delete(it.id));
+                                      } else {
+                                        items.forEach(it => next.add(it.id));
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  className="text-[11px] text-slate-400 hover:text-amber-300 font-normal transition cursor-pointer flex items-center gap-1"
+                                  title={allGroupExpanded ? "Alle in dieser Gruppe einklappen" : "Alle in dieser Gruppe ausklappen"}
+                                >
+                                  <i className={`fa-solid ${allGroupExpanded ? 'fa-compress' : 'fa-expand'} text-[10px]`}></i>
+                                  <span>{allGroupExpanded ? 'Alle einklappen' : 'Alle ausklappen'}</span>
+                                </button>
+                                <span className="text-slate-400 text-[11px] font-normal">
+                                  {items.length} {items.length === 1 ? 'Eintrag' : 'Einträge'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                              {items.map((item, itemIdx) => {
+                                const d = item.details || {};
+                                const isExpanded = expandedItemIds.has(item.id);
+
+                                return (
+                                  <div
+                                    key={`item-card-${gIdx}-${item.id || 'item'}-${itemIdx}`}
+                                    className={`bg-slate-900/90 border rounded-xl p-3 flex flex-col gap-2.5 transition-all ${
+                                      isEditing === item.id
+                                        ? 'border-amber-500 bg-amber-950/20 ring-1 ring-amber-500/50'
+                                        : isExpanded
+                                        ? 'border-slate-700/90 bg-slate-850/90 shadow-md'
+                                        : 'border-slate-800/90 hover:border-slate-700/80 hover:bg-slate-850/70'
+                                    }`}
+                                  >
+                                    {/* Kompakter Header: Icon, Name und Aktions-Icons */}
+                                    <div className="flex items-center justify-between gap-2.5">
+                                      <div
+                                        onClick={() => {
+                                          setExpandedItemIds(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(item.id)) {
+                                              next.delete(item.id);
+                                            } else {
+                                              next.add(item.id);
+                                            }
+                                            return next;
+                                          });
+                                        }}
+                                        className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer select-none group"
+                                        title={isExpanded ? "Details einklappen" : "Details ausklappen"}
+                                      >
+                                        <div className="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700/80 flex items-center justify-center shrink-0 text-amber-400 text-xs font-bold shadow-inner group-hover:border-amber-500/50 transition">
+                                          <i className="fa-solid fa-box"></i>
+                                        </div>
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <span className="text-xs sm:text-sm font-bold text-slate-100 break-words whitespace-normal leading-snug group-hover:text-amber-300 transition">
+                                            {item.title || 'Unbenannter Gegenstand'}
+                                          </span>
+                                          {d.professionMatch && (
+                                            <span className="hidden sm:inline-block text-[9px] px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60 font-medium shrink-0">
+                                              {d.professionMatch}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* Aktions-Icons: Details Toggle, Bearbeiten, Löschen */}
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpandedItemIds(prev => {
+                                              const next = new Set(prev);
+                                              if (next.has(item.id)) {
+                                                next.delete(item.id);
+                                              } else {
+                                                next.add(item.id);
+                                              }
+                                              return next;
+                                            });
+                                          }}
+                                          className={`w-7 h-7 rounded-lg border flex items-center justify-center text-xs transition cursor-pointer ${
+                                            isExpanded
+                                              ? 'bg-amber-500/20 border-amber-500/50 text-amber-300'
+                                              : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700/80 text-slate-400 hover:text-slate-200'
+                                          }`}
+                                          title={isExpanded ? 'Details verbergen' : 'Details anzeigen'}
+                                          aria-label={isExpanded ? 'Details verbergen' : 'Details anzeigen'}
+                                        >
+                                          <i className={`fa-solid ${isExpanded ? 'fa-chevron-up' : 'fa-chevron-down'} text-[10px]`}></i>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleEdit(item)}
+                                          className="w-7 h-7 bg-slate-800/80 hover:bg-amber-600 hover:text-white border border-slate-700/80 text-slate-300 rounded-lg flex items-center justify-center text-xs transition cursor-pointer"
+                                          title="Gegenstand bearbeiten"
+                                          aria-label="Gegenstand bearbeiten"
+                                        >
+                                          <i className="fa-solid fa-pen-to-square text-[10px]"></i>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDelete(item.id)}
+                                          className="w-7 h-7 bg-slate-800/80 hover:bg-rose-600 hover:text-white border border-slate-700/80 text-slate-400 hover:text-rose-200 rounded-lg flex items-center justify-center text-xs transition cursor-pointer"
+                                          title="Gegenstand löschen"
+                                          aria-label="Gegenstand löschen"
+                                        >
+                                          <i className="fa-solid fa-trash text-[10px]"></i>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Ausklappbare Details */}
+                                    {isExpanded && (
+                                      <div className="flex flex-col gap-2.5 pt-2.5 border-t border-slate-800/80 text-xs">
+                                        {/* Merkmale / Badges */}
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          {d.subCategory && (
+                                            <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-950/90 text-indigo-300 border border-indigo-800/50 font-medium">
+                                              {d.subCategory}
+                                            </span>
+                                          )}
+                                          {d.professionMatch && (
+                                            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60 font-medium">
+                                              Beruf: {d.professionMatch}
+                                            </span>
+                                          )}
+                                          {d.clothingSlot && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/60">
+                                              {d.clothingSlot}
+                                            </span>
+                                          )}
+                                          {d.rarity && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/60">
+                                              {d.rarity}
+                                            </span>
+                                          )}
+                                          {d.materialQuality && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/60">
+                                              {d.materialQuality}
+                                            </span>
+                                          )}
+                                          {d.condition && (
+                                            <span className="text-[10px] text-slate-400">
+                                              Zustand: {d.condition}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Set-Bestandteile (bei Outfits & Sets) */}
+                                        {d.setPieces && (
+                                          <div className="text-xs bg-amber-950/25 border border-amber-800/40 rounded-lg p-2.5 text-amber-200/90 break-words whitespace-normal leading-relaxed">
+                                            <span className="font-semibold text-amber-300 block mb-0.5">
+                                              <i className="fa-solid fa-layer-group text-amber-400 mr-1.5 text-[11px]"></i>
+                                              Enthaltene Set-Bestandteile:
+                                            </span>
+                                            {d.setPieces}
+                                          </div>
+                                        )}
+
+                                        {/* Beschreibung */}
+                                        {item.description && (
+                                          <p className="text-xs text-slate-300/90 leading-relaxed bg-slate-950/40 border border-slate-800/50 rounded-lg p-2.5 break-words whitespace-normal">
+                                            {item.description}
+                                          </p>
+                                        )}
+
+                                        {/* Preise & Attribute */}
+                                        <div className="flex items-center gap-3 flex-wrap text-[11px] text-slate-400 pt-1">
+                                          {d.pricePerUnit !== undefined && (
+                                            <span className="text-amber-400 font-semibold flex items-center gap-1">
+                                              <i className="fa-solid fa-coins text-[10px]"></i>
+                                              {d.pricePerUnit} Gold / {d.unit || 'Stück'}
+                                            </span>
+                                          )}
+                                          {d.weightKg !== undefined && (
+                                            <span className="text-slate-400">
+                                              Gewicht: {d.weightKg} kg
+                                            </span>
+                                          )}
+                                          {d.producingHoldingName && (
+                                            <span className="text-emerald-400 flex items-center gap-1">
+                                              <i className="fa-solid fa-building text-[10px]"></i>
+                                              {d.producingHoldingName}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-6">
