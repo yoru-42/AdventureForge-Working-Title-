@@ -10,6 +10,7 @@
 import { LoreEntry } from '../types';
 import { ItemBuilderType } from './itemCategoriesData';
 import { PROFESSION_ITEMS_CATALOG } from './professionItemsCatalog';
+import { ALL_WEAPONS } from './weaponTypesData';
 
 export interface StandardItemDefinition {
   id: string;
@@ -1872,6 +1873,771 @@ const BASE_STANDARD_ITEMS_CATALOG: StandardItemDefinition[] = [
       applicationArea: 'abenteuer, kampf'
     }
   },
+  {
+    id: 'std-food-beer-dunkel',
+    title: 'Dunkles Bauernbier',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Krug',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Trübes, dunkles Bier aus Gerstenmalz. Sättigend, herzhaft und beliebt in jeder Schänke.',
+    details: {
+      nutritionValue: 'Nahrhaft, 100 kcal',
+      spoilTime: '2-3 Tage haltbar',
+      tasteNote: 'Malzig, herb',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-beer-hell',
+    title: 'Helles Lagerbier',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Krug',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Süffiges, golden leuchtendes Bier mit feinporiger Schaumkrone. Erfrischend und leicht hopfig.',
+    details: {
+      nutritionValue: 'Erfrischend, 90 kcal',
+      spoilTime: '3-5 Tage haltbar',
+      tasteNote: 'Frisch, leicht hopfig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-starkbier',
+    title: 'Zwergen-Starkbier',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Steinzeugkrug',
+    pricePerUnit: 3,
+    materialQuality: 'Meisterhaft / Veredelt',
+    rarity: 'Ungewöhnlich / Regional',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Pechschwarzes, hochprozentiges Starkbier nach traditionellem Zwergenrezept. Wärmt Magen und Gemüt.',
+    details: {
+      nutritionValue: 'Sättigend & Wärmend',
+      spoilTime: '2 Wochen haltbar',
+      tasteNote: 'Röstmalzig, intensiv, süßlich',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'abenteuer'],
+      applicationArea: 'alltag, abenteuer'
+    }
+  },
+  {
+    id: 'std-food-wine-red',
+    title: 'Roter Landwein',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Flasche',
+    pricePerUnit: 3,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Ein kräftiger, rubinroter Landwein aus sonnigen Hängen. Passt zu Fleischgerichten und festlichen Anlässen.',
+    details: {
+      nutritionValue: 'Leicht stärkend',
+      spoilTime: '1 Monat haltbar',
+      tasteNote: 'Trocken, fruchtig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-wine-white',
+    title: 'Edler Riesling (Weißwein)',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Flasche',
+    pricePerUnit: 5,
+    materialQuality: 'Meisterhaft / Veredelt',
+    rarity: 'Ungewöhnlich / Regional',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Feinfruchtiger Weißwein mit eleganter Säure. Sehr beliebt bei Händlern, Adligen und gehobenen Schänken.',
+    details: {
+      nutritionValue: 'Erfrischend & Belebend',
+      spoilTime: '6 Monate haltbar',
+      tasteNote: 'Spritzig, pfirsichnote',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-hypocras',
+    title: 'Gewürzwein (Hypocras)',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Karaffe',
+    pricePerUnit: 6,
+    materialQuality: 'Meisterhaft / Veredelt',
+    rarity: 'Selten / Importiert',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Gesüßter Rotwein mit Zimt, Nelken, Ingwer und Honig. Wird warm serviert und gilt als erlesenes Wermutgetränk.',
+    details: {
+      nutritionValue: 'Belebend & Magenschonend',
+      spoilTime: '2 Monate haltbar',
+      tasteNote: 'Würzig, süß, warm',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-mead',
+    title: 'Nordischer Honigmet',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Krug',
+    pricePerUnit: 2,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Goldener Honigwein, vergoren aus edlem Blütenhonig. Kraftvoll und wohlschmeckend.',
+    details: {
+      nutritionValue: 'Stärkend & Energetisch',
+      spoilTime: '6 Monate haltbar',
+      tasteNote: 'Süß, blumig, süffig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-cider',
+    title: 'Apfelmost (Cider)',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Krug',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Vergorener Fruchtmost aus Saftäpfeln. Erfrischend säuerlich und ein ideales Getränk für die Feldarbeit.',
+    details: {
+      nutritionValue: 'Durstlöschend, Vitamine',
+      spoilTime: '1-2 Wochen haltbar',
+      tasteNote: 'Fruchtig-sauer',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-schnaps',
+    title: 'Kornbrand & Schnaps',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Fläschchen',
+    pricePerUnit: 4,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'neu',
+    description: 'Hochprozentiger Destillatbrand aus Getreidemaische. Brennt im Hals und betäubt leichten Schmerz.',
+    details: {
+      nutritionValue: 'Stark alkoholisch',
+      spoilTime: 'Jahre haltbar',
+      tasteNote: 'Scharf, brennend',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'abenteuer'],
+      applicationArea: 'alltag, abenteuer'
+    }
+  },
+  {
+    id: 'std-food-water-pouch',
+    title: 'Frisches Quellwasser (Leder-Schlauch)',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Wasserschlauch',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Klares, kühlendes Bergquellwasser in einem wasserdicht gefetteten Lederschlauch. Überlebensnotwendig auf Reisen.',
+    details: {
+      nutritionValue: 'Vitalisierender Durstlöscher',
+      spoilTime: '3-4 Tage im Schlauch frisch',
+      tasteNote: 'Geschmacksneutral, kühl',
+      originSourceType: 'natuerliches_vorkommen',
+      useDomains: ['abenteuer', 'alltag'],
+      applicationArea: 'abenteuer, alltag'
+    }
+  },
+  {
+    id: 'std-food-herbal-tea',
+    title: 'Erfrischender Kräuteraufguss (Tee)',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Becher',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Heiße Zubereitung aus Pfefferminze, Kamille und Lindenblüten. Beruhigt den Magen und vertreibt Kälte.',
+    details: {
+      nutritionValue: 'Wohltuend & Verdauungsfördernd',
+      spoilTime: 'Sofort verzehren',
+      tasteNote: 'Kräutrig, erfrischend',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'abenteuer'],
+      applicationArea: 'alltag, abenteuer'
+    }
+  },
+  {
+    id: 'std-food-milk',
+    title: 'Frische Landmilch',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Getränke, Bier & Wein',
+    unit: 'Krug',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Nahrhafte Vollmilch von Weidekühen oder Ziegen. Sättigend und reich an Fett.',
+    details: {
+      nutritionValue: 'Reich an Fett & Kalzium',
+      spoilTime: '1-2 Tage genießbar',
+      tasteNote: 'Sahnig, mild',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+
+  // --- Frischwaren & Feldfrüchte ---
+  {
+    id: 'std-food-apple-basket',
+    title: 'Korb rote Äpfel',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Frischwaren & Feldfrüchte',
+    unit: 'Holzkorb',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Frisch geerntete, rote Streuobst-Äpfel. Knackig, saftig und ideal als kleiner Snack.',
+    details: {
+      nutritionValue: 'Vitaminreich & Erfrischend',
+      spoilTime: '2-3 Wochen haltbar',
+      tasteNote: 'Süß-säuerlich',
+      originSourceType: 'natuerliches_vorkommen',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-potato-sack',
+    title: 'Sack Speisekartoffeln',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Frischwaren & Feldfrüchte',
+    unit: 'Jutesack',
+    pricePerUnit: 2,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'gut',
+    description: 'Lagerfähige Acker-Erdäpfel. Ein unverzichtbares Grundnahrungsmittel für Suppen, Brei und Eintöpfe.',
+    details: {
+      nutritionValue: 'Kohlenhydratreich & Sättigend',
+      spoilTime: '3-4 Monate im kühlen Keller',
+      tasteNote: 'Erdig, mehlig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-cabbage',
+    title: 'Frischer Weißkohl',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Frischwaren & Feldfrüchte',
+    unit: 'Kopf',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Fester, schwerer Weißkohlkopf vom Acker. Perfekt für krautige Eintöpfe oder zur Sauerkrautherstellung.',
+    details: {
+      nutritionValue: 'Reich an Vitamin C & Ballaststoffen',
+      spoilTime: '1 Monat haltbar',
+      tasteNote: 'Knackig, herzhaft',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+
+  // --- Mehl & Mahlerzeugnisse ---
+  {
+    id: 'std-food-rye-flour',
+    title: 'Sack Roggenmehl (Mühlenware)',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Mehl & Mahlerzeugnisse',
+    unit: 'Sack (10kg)',
+    pricePerUnit: 3,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'trocken',
+    description: 'Fein gemahlenes Roggenmehl aus der Wassermühle. Die wichtigste Grundlage für Bäcker und Haushalte.',
+    details: {
+      nutritionValue: 'Mehlrohstoff',
+      spoilTime: '6 Monate trocken lagern',
+      tasteNote: 'Getreidig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['wirtschaft', 'alltag'],
+      applicationArea: 'wirtschaft, alltag'
+    }
+  },
+  {
+    id: 'std-food-wheat-flour',
+    title: 'Feines Weizenmehl (Siebmehl)',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Mehl & Mahlerzeugnisse',
+    unit: 'Sack (10kg)',
+    pricePerUnit: 4,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'trocken',
+    description: 'Mehrfach gesiebtes, helles Weizenmehl. Ideal für feines Weißbrot, Kuchen und Teigwaren.',
+    details: {
+      nutritionValue: 'Hochwertiges Backmehl',
+      spoilTime: '6 Monate trocken lagern',
+      tasteNote: 'Mild',
+      originSourceType: 'normal_produziert',
+      useDomains: ['wirtschaft', 'alltag'],
+      applicationArea: 'wirtschaft, alltag'
+    }
+  },
+  {
+    id: 'std-food-oatmeal',
+    title: 'Hafergrütze & Haferflocken',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Mehl & Mahlerzeugnisse',
+    unit: 'Stoffbeutel',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'trocken',
+    description: 'Gestampfte Haferkörner für nahrhaften Frühstücksbrei. Gibt Kraft für schwere körperliche Arbeit.',
+    details: {
+      nutritionValue: 'Lang anhaltende Energie',
+      spoilTime: '8 Monate haltbar',
+      tasteNote: 'Nussig, getreidig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'abenteuer'],
+      applicationArea: 'alltag, abenteuer'
+    }
+  },
+
+  // --- Brot & Backwaren ---
+  {
+    id: 'std-food-white-roll',
+    title: 'Ofenfrische Semmel',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Brot & Backwaren',
+    unit: 'Stück',
+    pricePerUnit: 1,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Goldgelb gebackenes Weizenbrötchen mit krosser Kruste und weichem Inneren.',
+    details: {
+      nutritionValue: 'Leichte Kohlenhydrate',
+      spoilTime: '1-2 Tage frisch',
+      tasteNote: 'Fluffig, milde Kruste',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-pretzels',
+    title: 'Laugenbrezeln & Salzgebäck',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Brot & Backwaren',
+    unit: 'Korb (5 Stk)',
+    pricePerUnit: 2,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Mit grobem Siedesalz bestreute Laugengebäcke. Der perfekte Schankhappen zum Bier in der Taverne.',
+    details: {
+      nutritionValue: 'Herzhafter Imbiss',
+      spoilTime: '1 Tag haltbar',
+      tasteNote: 'Laugig, salzig, knusprig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-apple-tart',
+    title: 'Feiner Apfelkuchen mit Zimt',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Brot & Backwaren',
+    unit: 'Blechkuchen-Stück',
+    pricePerUnit: 2,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Mürbeteigboden belegt mit geschnittenen Äpfeln, Rosinen und braunem Zucker.',
+    details: {
+      nutritionValue: 'Süße Energie (350 kcal)',
+      spoilTime: '2-3 Tage haltbar',
+      tasteNote: 'Süß, zimtig, fruchtig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+
+  // --- Fleisch- & Wurstwaren ---
+  {
+    id: 'std-food-sausage-smoke',
+    title: 'Geräucherte Mettwurst',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Fleisch- & Wurstwaren',
+    unit: 'Paar',
+    pricePerUnit: 2,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'gut',
+    description: 'Kräftig im Buchenrauch gereifte Schweinemettwurst. Haltbar, würzig und ideal für den Rucksack.',
+    details: {
+      nutritionValue: 'Proteine & Fette',
+      spoilTime: '3-4 Wochen haltbar',
+      tasteNote: 'Rauchig, pfeffrig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['abenteuer', 'alltag'],
+      applicationArea: 'abenteuer, alltag'
+    }
+  },
+  {
+    id: 'std-food-roast-pork',
+    title: 'Krustenbraten vom Schwein',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Fleisch- & Wurstwaren',
+    unit: 'Portion',
+    pricePerUnit: 4,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Saftiges Stück Schweinebraten mit kross gebackener Schwarte und Kümmelsoße.',
+    details: {
+      nutritionValue: 'Festmahl (700 kcal)',
+      spoilTime: '2 Tage im kühlen Schrank',
+      tasteNote: 'Herzhaft, kross, saftig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-bacon',
+    title: 'Durchwachsener Räucherspeck',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Fleisch- & Wurstwaren',
+    unit: 'Seitensegment',
+    pricePerUnit: 3,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'gut',
+    description: 'Pökelspeck mit harter Fettschicht und feinen Fleischstreifen. Gibt Suppen und Bratkartoffeln den Geschmack.',
+    details: {
+      nutritionValue: 'Sehr energiereich',
+      spoilTime: '2 Monate haltbar',
+      tasteNote: 'Salzig, stark rauchig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['wirtschaft', 'abenteuer'],
+      applicationArea: 'wirtschaft, abenteuer'
+    }
+  },
+
+  // --- Fisch & Meeresfrüchte ---
+  {
+    id: 'std-food-salted-herring',
+    title: 'Salzhering im Holzfass',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Fisch & Meeresfrüchte',
+    unit: 'Fass (10 Fische)',
+    pricePerUnit: 5,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'gut',
+    description: 'Stark eingesalzene Ostseeheringe. Nach dem Wässern ein geschätztes, lange haltbares Gericht.',
+    details: {
+      nutritionValue: 'Reich an Omega-3 & Eiweiß',
+      spoilTime: '6 Monate im Salzlakenfass',
+      tasteNote: 'Intensiv salzig, fischig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['wirtschaft', 'alltag'],
+      applicationArea: 'wirtschaft, alltag'
+    }
+  },
+  {
+    id: 'std-food-smoked-trout',
+    title: 'Geräucherte Flussforelle',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Fisch & Meeresfrüchte',
+    unit: 'Stück',
+    pricePerUnit: 3,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Über Erlenholz goldbraun geräucherte Bachforelle mit zartem, rosafarbenem Fleisch.',
+    details: {
+      nutritionValue: 'Leicht bekömmliches Eiweiß',
+      spoilTime: '5-7 Tage kühl haltbar',
+      tasteNote: 'Rauchig, mild, zart',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+
+  // --- Milch- & Käseprodukte ---
+  {
+    id: 'std-food-hard-cheese',
+    title: 'Kräftiger Bergkäse (Laib)',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Milch- & Käseprodukte',
+    unit: 'Laib',
+    pricePerUnit: 6,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'gut',
+    description: 'Mindestens 6 Monate gereifter Hartkäse aus Rohmilch. Feste Rinde, würziger Teig.',
+    details: {
+      nutritionValue: 'Fett & Eiweißreich',
+      spoilTime: '4 Monate kellerhaltbar',
+      tasteNote: 'Nussig, kräftig, pikant',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+  {
+    id: 'std-food-butter-pot',
+    title: 'Fassbutter im Tontopf',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Milch- & Käseprodukte',
+    unit: 'Tontopf',
+    pricePerUnit: 2,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Im Butterfass aus süßem Rahm geschlagene Butter, leicht gesalzen und in Ton eingetopft.',
+    details: {
+      nutritionValue: 'Reines Speisefett',
+      spoilTime: '2-3 Wochen kühl lagern',
+      tasteNote: 'Rahmige Frische',
+      originSourceType: 'normal_produziert',
+      useDomains: ['wirtschaft', 'alltag'],
+      applicationArea: 'wirtschaft, alltag'
+    }
+  },
+
+  // --- Konserven & Dauerproviant ---
+  {
+    id: 'std-food-dried-fruit',
+    title: 'Dörrobst-Mischung',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Konserven & Dauerproviant',
+    unit: 'Beutel',
+    pricePerUnit: 2,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'trocken',
+    description: 'Schonend getrocknete Apfelscheiben, Pflaumen und Rosinen. Beliebter Proviant für lange Reisen.',
+    details: {
+      nutritionValue: 'Schnelle Fruchtzucker-Energie',
+      spoilTime: '1 Jahr haltbar',
+      tasteNote: 'Fruchtig-süß, zäh',
+      originSourceType: 'normal_produziert',
+      useDomains: ['abenteuer', 'alltag'],
+      applicationArea: 'abenteuer, alltag'
+    }
+  },
+  {
+    id: 'std-food-hardtack',
+    title: 'Schiffszwieback',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Konserven & Dauerproviant',
+    unit: 'Beutel (10 Stk)',
+    pricePerUnit: 1,
+    materialQuality: 'Minderwertig / Einfach',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'trocken',
+    description: 'Mehrfach gebackener, steinharter Mehlfladen. Muss vor dem Verzehr in Suppe oder Tee eingeweicht werden.',
+    details: {
+      nutritionValue: 'Notfall-Kohlenhydrate',
+      spoilTime: 'Jahre haltbar (wenn trocken)',
+      tasteNote: 'Troken, fad, mehlend',
+      originSourceType: 'normal_produziert',
+      useDomains: ['abenteuer', 'wirtschaft'],
+      applicationArea: 'abenteuer, wirtschaft'
+    }
+  },
+
+  // --- Gewürze & Delikatessen ---
+  {
+    id: 'std-food-rock-salt',
+    title: 'Grobes Siederfellsalz',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Gewürze & Delikatessen',
+    unit: 'Salzsäckchen',
+    pricePerUnit: 2,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'trocken',
+    description: 'Aus Salzsieden gewonnenes weißes Siedesalz. Essenziell zum Würzen, Pökeln und Verfeinern.',
+    details: {
+      nutritionValue: 'Mineralstoff / Würze',
+      spoilTime: 'Unbegrenzt haltbar',
+      tasteNote: 'Rein salzig',
+      originSourceType: 'natuerliches_vorkommen',
+      useDomains: ['wirtschaft', 'alltag'],
+      applicationArea: 'wirtschaft, alltag'
+    }
+  },
+  {
+    id: 'std-food-black-pepper',
+    title: 'Schwarze Pfefferkörner',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Gewürze & Delikatessen',
+    unit: 'Döschen',
+    pricePerUnit: 8,
+    materialQuality: 'Meisterhaft / Veredelt',
+    rarity: 'Selten / Importiert',
+    isUnique: false,
+    condition: 'trocken',
+    description: 'Getrocknete Pfefferbeeren aus den Südlanden. Kostbares Luxusgewürz für adlige Tafeln.',
+    details: {
+      nutritionValue: 'Scharfe Würze',
+      spoilTime: '2 Jahre haltbar',
+      tasteNote: 'Scharf, feurig, aromatisch',
+      originSourceType: 'normal_produziert',
+      useDomains: ['wirtschaft', 'alltag'],
+      applicationArea: 'wirtschaft, alltag'
+    }
+  },
+  {
+    id: 'std-food-honey-comb',
+    title: 'Blütenhonig in der Wabe',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Gewürze & Delikatessen',
+    unit: 'Wabenstück',
+    pricePerUnit: 3,
+    materialQuality: 'Solide / Gehoben',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Naturreiner Bienenhonig direkt im Wachs. Süßungsmittel für Tränke, Gebäck und Met.',
+    details: {
+      nutritionValue: 'Reiner Naturzucker',
+      spoilTime: 'Nahezu unbegrenzt haltbar',
+      tasteNote: 'Intensiv blumig, süß',
+      originSourceType: 'natuerliches_vorkommen',
+      useDomains: ['wirtschaft', 'alltag'],
+      applicationArea: 'wirtschaft, alltag'
+    }
+  },
+  {
+    id: 'std-food-mustard',
+    title: 'Würziger Steinmühlen-Senf',
+    builderType: 'Nahrung',
+    mainCategory: 'Nahrung',
+    subCategory: 'Gewürze & Delikatessen',
+    unit: 'Tontöpfchen',
+    pricePerUnit: 2,
+    materialQuality: 'Gewöhnlich / Standard',
+    rarity: 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'frisch',
+    description: 'Aus vermahlenen Senfkörnern, Essig und Gewürzen hergestellte Paste. Passt hervorragend zu Braten und Wurst.',
+    details: {
+      nutritionValue: 'Appetitanregende Würze',
+      spoilTime: '6 Monate haltbar',
+      tasteNote: 'Mittelscharf, würzig',
+      originSourceType: 'normal_produziert',
+      useDomains: ['alltag', 'wirtschaft'],
+      applicationArea: 'alltag, wirtschaft'
+    }
+  },
+
 
   // =========================================================================
   // 7. ALLTAGSGEGENSTÄNDE (Pechfackel, Zunderbüchse, Lederrucksack)
@@ -2636,11 +3402,120 @@ const BASE_STANDARD_ITEMS_CATALOG: StandardItemDefinition[] = [
   }
 ];
 
-// Merge base items with profession items (ensuring unique IDs)
+// Helper mapping for weapon category to item subcategory in Lore Database
+function mapWeaponCategoryToSubCategory(categoryId: string): string {
+  switch (categoryId) {
+    case 'schwerter_einhaendig':
+    case 'schwerter_zweihanendig':
+      return 'Schwerter & Klingen';
+    case 'dolche_messer':
+      return 'Dolche & Messer';
+    case 'aexte_beile':
+      return 'Äxte & Beile';
+    case 'haemmer_keulen':
+      return 'Hämmer & Streitkolben';
+    case 'stangenwaffen_speere':
+      return 'Stangenwaffen & Speere';
+    case 'boegen_sehnenwaffen':
+      return 'Bögen & Pfeile';
+    case 'armbrueste':
+      return 'Armbrüste & Bolzen';
+    case 'wurfwaffen_schleudern':
+      return 'Wurfwaffen';
+    case 'faust_exotisch':
+      return 'Faust- & Exotenwaffen';
+    case 'schilde':
+      return 'Schilde & Parierschilde';
+    case 'schwarzpulver':
+      return 'Feuerwaffen & Schwarzpulver';
+    case 'magisch_fokus':
+      return 'Magische & Runenwaffen';
+    default:
+      return 'Schwerter & Klingen';
+  }
+}
+
+function estimateWeaponPrice(categoryId: string, id: string): number {
+  switch (categoryId) {
+    case 'dolche_messer': return 12;
+    case 'wurfwaffen_schleudern': return 8;
+    case 'schwerter_einhaendig': return 35;
+    case 'schwerter_zweihanendig': return 75;
+    case 'aexte_beile': return 25;
+    case 'haemmer_keulen': return 30;
+    case 'stangenwaffen_speere': return 22;
+    case 'boegen_sehnenwaffen': return 40;
+    case 'armbrueste': return 65;
+    case 'faust_exotisch': return 20;
+    case 'schilde': return 25;
+    case 'schwarzpulver': return 150;
+    case 'magisch_fokus': return 90;
+    default: return 30;
+  }
+}
+
+function estimateWeaponDamage(weapon: typeof ALL_WEAPONS[0]): string {
+  const cat = weapon.categoryId;
+  if (cat === 'dolche_messer' || cat === 'wurfwaffen_schleudern' || cat === 'faust_exotisch') {
+    return '1W4+1 / 1W6+1';
+  }
+  if (cat === 'schwerter_einhaendig' || cat === 'aexte_beile' || cat === 'haemmer_keulen') {
+    return '1W8+2 / 1W10+2';
+  }
+  if (cat === 'schwerter_zweihanendig' || cat === 'stangenwaffen_speere') {
+    return '2W6+3 / 1W12+2';
+  }
+  if (cat === 'boegen_sehnenwaffen' || cat === 'armbrueste') {
+    return '1W8+3 (Fernkampf)';
+  }
+  if (cat === 'schwarzpulver') {
+    return '2W8+4 (Schwarzpulver-Durchschlag)';
+  }
+  if (cat === 'magisch_fokus') {
+    return '1W8+2 (Arkan / Magisch)';
+  }
+  if (cat === 'schilde') {
+    return '1W4+1 (Schildstoß) / Abwehr +2';
+  }
+  return '1W8+2';
+}
+
+export const WEAPON_MASTERY_STANDARD_ITEMS: StandardItemDefinition[] = ALL_WEAPONS.map(wpn => {
+  const isExoticOrMagic = wpn.categoryId === 'schwarzpulver' || wpn.categoryId === 'magisch_fokus';
+  const subCategory = mapWeaponCategoryToSubCategory(wpn.categoryId);
+  
+  return {
+    id: `std-wpn-${wpn.id}`,
+    title: wpn.name,
+    builderType: (wpn.categoryId === 'schilde' ? 'Rüstung' : 'Waffe') as ItemBuilderType,
+    mainCategory: wpn.categoryId === 'schilde' ? 'Rüstung & Schutzausrüstung' : 'Waffen',
+    subCategory: subCategory,
+    unit: 'Stück',
+    pricePerUnit: estimateWeaponPrice(wpn.categoryId, wpn.id),
+    materialQuality: isExoticOrMagic ? 'Meisterhaft / Veredelt' : 'Solide / Gehoben',
+    rarity: isExoticOrMagic ? 'Selten / Importiert' : 'Gewöhnlich / Alltäglich',
+    isUnique: false,
+    condition: 'neu',
+    description: wpn.description,
+    details: {
+      weaponType: wpn.name,
+      damageType: wpn.damageTypes.join(', '),
+      damageValue: estimateWeaponDamage(wpn),
+      rangeCategory: wpn.rangeCategory,
+      effects: `Führungsstile: ${wpn.wieldingStyles.join(', ')} | Manöver: ${wpn.maneuvers.join(', ')}`,
+      requiredWeaponMasteryName: wpn.categoryName,
+      originSourceType: 'normal_produziert',
+      useDomains: ['kampf', 'abenteuer'],
+      applicationArea: 'kampf, abenteuer'
+    }
+  };
+});
+
+// Merge base items, weapon mastery items, and profession items (ensuring unique IDs)
 const seenItemIds = new Set<string>();
 const mergedItems: StandardItemDefinition[] = [];
 
-for (const item of [...BASE_STANDARD_ITEMS_CATALOG, ...PROFESSION_ITEMS_CATALOG]) {
+for (const item of [...BASE_STANDARD_ITEMS_CATALOG, ...WEAPON_MASTERY_STANDARD_ITEMS, ...PROFESSION_ITEMS_CATALOG]) {
   if (!seenItemIds.has(item.id)) {
     seenItemIds.add(item.id);
     mergedItems.push(item);

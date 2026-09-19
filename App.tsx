@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Adventure, GameViewMode, UserProfile } from './types';
+import { auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from './lib/firebaseService';
 import AdventureEditor from './components/AdventureEditor';
 import GameView from './components/GameView';
 import UserProfileEditor from './components/UserProfileEditor';
@@ -186,6 +187,24 @@ const App: React.FC = () => {
   const [abilitiesSubTab, setAbilitiesSubTab] = useState<'all' | 'favoriten' | 'techniken' | 'ultimative' | 'transformationen'>('all');
   const [newWeaponName, setNewWeaponName] = useState("");
   const [newItemName, setNewItemName] = useState("");
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      console.error("Login failed", e);
+    }
+  };
 
   // Initiales Laden
   useEffect(() => {
@@ -832,15 +851,32 @@ const App: React.FC = () => {
                 </div>
               </button>
               
-              <button 
-                onClick={() => setViewMode(GameViewMode.PROFILE)}
-                className="group relative overflow-hidden p-6 rounded-3xl bg-slate-800 text-white font-bold shadow-2xl transition-all hover:scale-[1.02] border border-slate-700"
-              >
-                <div className="relative z-10 flex flex-col items-center justify-center text-center gap-2">
-                  <i className="fa-solid fa-user-gear text-2xl text-amber-500"></i>
-                  <span className="block text-sm">Mein Profil</span>
-                </div>
-              </button>
+              <div className="flex flex-col gap-4">
+                <button 
+                  onClick={() => setViewMode(GameViewMode.PROFILE)}
+                  className="group relative overflow-hidden p-6 rounded-3xl bg-slate-800 text-white font-bold shadow-2xl transition-all hover:scale-[1.02] border border-slate-700"
+                >
+                  <div className="relative z-10 flex flex-col items-center justify-center text-center gap-2">
+                    <i className="fa-solid fa-user-gear text-2xl text-amber-500"></i>
+                    <span className="block text-sm">Mein Profil</span>
+                  </div>
+                </button>
+                {!user ? (
+                  <button 
+                    onClick={handleLogin}
+                    className="p-3 rounded-2xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-500 transition-all"
+                  >
+                    Google Login
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => signOut(auth)}
+                    className="p-3 rounded-2xl bg-slate-700 text-slate-300 text-xs hover:bg-slate-600 transition-all"
+                  >
+                    Logout
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Suchfeld */}

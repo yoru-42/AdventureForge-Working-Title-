@@ -1575,12 +1575,15 @@ const LoreDatabaseView: React.FC<Props> = ({
   }, [activeCategory, lore, onUpdateLore]);
 
   const handleSave = () => {
-    if (!editForm.title || !editForm.description) return;
-    
     const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Weltregeln' : activeCategory) as LoreCategory;
     const targetCategory = editForm.category || safeCategory;
 
+    if (!editForm.title || (targetCategory !== 'Gegenstände' && !editForm.description)) return;
+
     let finalForm = { ...editForm };
+    if (targetCategory === 'Gegenstände') {
+      finalForm.description = finalForm.description || '';
+    }
     if (targetCategory === 'Fraktionen') {
       const cleanMembers: FactionMember[] = effectiveMembers.map(m => {
         const { isAutoDetected, codexEntry, ...cleanMember } = m;
@@ -5572,7 +5575,13 @@ const LoreDatabaseView: React.FC<Props> = ({
 
                     if (itemSubCategoryFilter !== 'all') {
                       const sLower = itemSubCategoryFilter.toLowerCase();
-                      const matchSub = (d.subCategory || '').toLowerCase().includes(sLower);
+                      const itemSubLower = (d.subCategory || '').toLowerCase();
+                      let matchSub = itemSubLower.includes(sLower) || sLower.includes(itemSubLower);
+                      if (!matchSub) {
+                        const fWords = sLower.split(/[\s,&/]+/).filter(w => w.length > 2);
+                        const iWords = itemSubLower.split(/[\s,&/]+/).filter(w => w.length > 2);
+                        matchSub = fWords.some(fw => iWords.some(iw => iw.includes(fw) || fw.includes(iw)));
+                      }
                       if (!matchSub) return false;
                     }
 
@@ -5595,10 +5604,10 @@ const LoreDatabaseView: React.FC<Props> = ({
                         <p className="text-slate-300 font-medium">Keine Gegenstände gefunden.</p>
                         <p className="text-[11px] text-slate-500">
                           {searchTerm || itemCategoryFilter !== 'all' 
-                            ? 'Passe den Filter oder Suchbegriff an, um Gegenstände anzuzeigen.' 
-                            : 'Erstelle einen neuen Gegenstand oder lade die Standard-Gegenstände.'}
+                            ? 'Passe den Filter oder Suchbegriff an, um Gegenstände anzuzeigen, oder ergänze den Standardkatalog.' 
+                            : 'Erstelle einen neuen Gegenstand oder lade/ergänze die Standard-Gegenstände.'}
                         </p>
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="flex items-center gap-2 mt-2 flex-wrap justify-center">
                           <button
                             type="button"
                             onClick={() => {
@@ -5611,19 +5620,33 @@ const LoreDatabaseView: React.FC<Props> = ({
                             <i className="fa-solid fa-plus"></i>
                             Neuer Gegenstand anlegen
                           </button>
-                          {allGegenstaende.length === 0 && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const standardEntries = createStandardLoreEntries();
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const standardEntries = createStandardLoreEntries();
+                              const existingTitles = new Set(lore.filter(l => l.category === 'Gegenstände').map(l => (l.title || '').trim().toLowerCase()));
+                              const existingIds = new Set(lore.map(l => l.id));
+                              const missingEntries = standardEntries
+                                .filter(entry => !existingTitles.has((entry.title || '').trim().toLowerCase()))
+                                .map(entry => {
+                                  let finalId = entry.id;
+                                  if (existingIds.has(finalId)) {
+                                    finalId = `${entry.id}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+                                  }
+                                  existingIds.add(finalId);
+                                  return { ...entry, id: finalId };
+                                });
+                              if (missingEntries.length > 0) {
+                                onUpdateLore([...lore, ...missingEntries]);
+                              } else {
                                 onUpdateLore([...lore, ...standardEntries]);
-                              }}
-                              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
-                            >
-                              <i className="fa-solid fa-boxes-stacked"></i>
-                              Standardkatalog laden
-                            </button>
-                          )}
+                              }
+                            }}
+                            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <i className="fa-solid fa-boxes-stacked"></i>
+                            Standard-Gegenstände ergänzen / laden
+                          </button>
                         </div>
                       </div>
                     );
@@ -5787,43 +5810,37 @@ const LoreDatabaseView: React.FC<Props> = ({
                                               {d.subCategory}
                                             </span>
                                           )}
-                                          {d.professionMatch && (
+                                          {d.weaponMastery && (
                                             <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800/60 font-medium">
-                                              Beruf: {d.professionMatch}
+                                              Beherrschung: {d.weaponMastery}
                                             </span>
                                           )}
-                                          {d.clothingSlot && (
+                                          {d.weaponType && d.weaponType !== item.title && (
                                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/60">
-                                              {d.clothingSlot}
+                                              Typ: {d.weaponType}
                                             </span>
                                           )}
-                                          {d.rarity && (
+                                          {d.damageType && (
                                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/60">
-                                              {d.rarity}
+                                              Schaden: {d.damageType}
                                             </span>
                                           )}
-                                          {d.materialQuality && (
+                                          {d.rangeCategory && (
                                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/60">
-                                              {d.materialQuality}
+                                              {d.rangeCategory}
                                             </span>
                                           )}
-                                          {d.condition && (
-                                            <span className="text-[10px] text-slate-400">
-                                              Zustand: {d.condition}
+                                          {d.material && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700/60">
+                                              Material: {d.material}
+                                            </span>
+                                          )}
+                                          {d.isUpgradeable && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 font-medium">
+                                              Entwicklungsfähig (Artefakt)
                                             </span>
                                           )}
                                         </div>
-
-                                        {/* Set-Bestandteile (bei Outfits & Sets) */}
-                                        {d.setPieces && (
-                                          <div className="text-xs bg-amber-950/25 border border-amber-800/40 rounded-lg p-2.5 text-amber-200/90 break-words whitespace-normal leading-relaxed">
-                                            <span className="font-semibold text-amber-300 block mb-0.5">
-                                              <i className="fa-solid fa-layer-group text-amber-400 mr-1.5 text-[11px]"></i>
-                                              Enthaltene Set-Bestandteile:
-                                            </span>
-                                            {d.setPieces}
-                                          </div>
-                                        )}
 
                                         {/* Beschreibung */}
                                         {item.description && (
@@ -5832,26 +5849,15 @@ const LoreDatabaseView: React.FC<Props> = ({
                                           </p>
                                         )}
 
-                                        {/* Preise & Attribute */}
-                                        <div className="flex items-center gap-3 flex-wrap text-[11px] text-slate-400 pt-1">
-                                          {d.pricePerUnit !== undefined && (
-                                            <span className="text-amber-400 font-semibold flex items-center gap-1">
-                                              <i className="fa-solid fa-coins text-[10px]"></i>
-                                              {d.pricePerUnit} Gold / {d.unit || 'Stück'}
+                                        {/* Besondere Eigenschaften */}
+                                        {d.specialProperties && (
+                                          <div className="text-xs bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5 text-slate-300 break-words whitespace-normal leading-relaxed">
+                                            <span className="font-semibold text-slate-400 block mb-0.5 text-[11px]">
+                                              Besondere Eigenschaften:
                                             </span>
-                                          )}
-                                          {d.weightKg !== undefined && (
-                                            <span className="text-slate-400">
-                                              Gewicht: {d.weightKg} kg
-                                            </span>
-                                          )}
-                                          {d.producingHoldingName && (
-                                            <span className="text-emerald-400 flex items-center gap-1">
-                                              <i className="fa-solid fa-building text-[10px]"></i>
-                                              {d.producingHoldingName}
-                                            </span>
-                                          )}
-                                        </div>
+                                            {d.specialProperties}
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                   </div>

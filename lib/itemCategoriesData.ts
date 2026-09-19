@@ -150,14 +150,15 @@ export const ITEM_MAIN_CATEGORIES: ItemCategoryMeta[] = [
     description: 'Lebensmittel, Rationen, Feldverpflegung, Frischwaren und Getränke.',
     hasSubcategories: true,
     subcategories: [
-      'Frischwaren & Grundnahrungsmittel',
+      'Frischwaren & Feldfrüchte',
+      'Mehl & Mahlerzeugnisse',
       'Brot & Backwaren',
       'Fleisch- & Wurstwaren',
       'Fisch & Meeresfrüchte',
       'Milch- & Käseprodukte',
       'Konserven & Dauerproviant',
-      'Getränke & Brauereiprodukte',
-      'Gewürzte Speisen & Delikatessen'
+      'Getränke, Bier & Wein',
+      'Gewürze & Delikatessen'
     ],
     defaultUnit: 'Portionen',
     defaultPrice: 2,
@@ -196,8 +197,10 @@ export const ITEM_MAIN_CATEGORIES: ItemCategoryMeta[] = [
       'Stangenwaffen & Speere',
       'Bögen & Pfeile',
       'Armbrüste & Bolzen',
-      'Feuerwaffen & Schwarzpulverwaffen',
       'Wurfwaffen',
+      'Faust- & Exotenwaffen',
+      'Schilde & Parierschilde',
+      'Feuerwaffen & Schwarzpulverwaffen',
       'Belagerungswaffen & Geschütze',
       'Magische & Runenwaffen'
     ],

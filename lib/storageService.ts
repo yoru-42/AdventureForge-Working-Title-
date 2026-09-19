@@ -18,6 +18,9 @@ const MAX_LOCAL_STORAGE_CHAR_LENGTH = 200 * 1024; // 200 KB
 let dbPromise: Promise<IDBDatabase> | null = null;
 const memoryCache = new Map<string, any>();
 
+import { db, auth } from './firebaseService';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+
 function getDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
 
@@ -59,6 +62,16 @@ export class StorageService {
   static async setItem<T>(key: string, value: T): Promise<boolean> {
     // 1. Immediate in-memory cache update for zero-latency synchronous reads
     memoryCache.set(key, value);
+
+    // Sync to Firestore if authenticated
+    if (auth.currentUser) {
+      try {
+        const userDocRef = doc(db, 'users', auth.currentUser.uid, 'data', key);
+        await setDoc(userDocRef, { data: value }, { merge: true });
+      } catch (e) {
+        console.error(`Firestore sync failed for key "${key}":`, e);
+      }
+    }
 
     const stringValue = JSON.stringify(value);
 
@@ -127,7 +140,22 @@ export class StorageService {
       return memoryCache.get(key) as T;
     }
 
-    // 2. Try IndexedDB (Primary store)
+    // 2. Try Firestore if authenticated (Remote store)
+    if (auth.currentUser) {
+      try {
+        const userDocRef = doc(db, 'users', auth.currentUser.uid, 'data', key);
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data().data as T;
+          memoryCache.set(key, data);
+          return data;
+        }
+      } catch (e) {
+        console.error(`Firestore getItem failed for key "${key}":`, e);
+      }
+    }
+
+    // 3. Try IndexedDB (Primary store)
     try {
       const db = await getDB();
       const resultStr = await new Promise<string | null>((resolve, reject) => {

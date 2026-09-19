@@ -1360,7 +1360,7 @@ export const PROFESSION_ITEMS_CATALOG: StandardItemDefinition[] = [
     title: 'Helles Bier',
     builderType: 'Nahrung',
     mainCategory: 'Nahrung',
-    subCategory: 'Getränke & Brauereiprodukte',
+    subCategory: 'Getränke, Bier & Wein',
     unit: 'Krug',
     pricePerUnit: 1,
     materialQuality: 'Gewöhnlich / Standard',

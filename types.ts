@@ -1106,6 +1106,9 @@ export interface EconomyResource {
   id: string;
   name: string;
   category?: EconomyResourceCategory;
+  builderType?: string; // Gegenstandsart (z.B. "Nahrung", "Waffe", "Rohstoff", "Werkzeug")
+  subCategory?: string; // Unterkategorie (z.B. "Getränke, Bier & Wein", "Schwerter & Klingen")
+  loreItemId?: string;  // Verknüpfte Lore-Eintrags-ID aus dem Codex
   amount: number;
   maxCapacity: number;
   unit: string; // e.g. "Münzen", "Fässer", "Tonnen", "Kisten", "Köpfe", "Sätze", "Hektar"
@@ -2465,6 +2468,42 @@ export interface LoreEntry {
   sourceType?: FactSourceType;
   factStatus?: FactStatus;
   knowledgeType?: KnowledgeType;
+}
+
+/**
+ * ItemDefinition: Beschreibt was ein Gegenstand grundsätzlich ist (Gegenstands-Codex).
+ * Beantwortet die Frage: „Was ist das?“
+ * Enthält keine Marktpreise, Händler, Produktionsketten oder konkrete Zustände.
+ */
+export interface ItemDefinition {
+  id: string;
+  name: string;
+  category: string; // Gegenstandsart (z. B. 'Waffe', 'Rohstoff', 'Nahrung', 'Tier')
+  subcategory: string; // Unterkategorie (z. B. 'Schwert', 'Metallerz', 'Brot')
+  description?: string; // Grundbeschreibung
+  properties?: string; // Besondere Eigenschaften, falls vorhanden
+  material?: string; // Material / grundlegende Beschaffenheit (optional)
+  weaponType?: string; // z. B. 'Langschwert' (optional)
+  weaponMastery?: string; // Referenz auf Waffenbeherrschung (z. B. 'Schwertkampf')
+  isUpgradeable?: boolean; // Nur falls ausdrücklich entwicklungsfähiger Gegenstand / Artefakt
+  progressionRef?: string; // Referenz auf globale Progressionslogik (optional)
+}
+
+/**
+ * ItemInstance: Beschreibt ein konkretes Exemplar in der Spielwelt (Inventar, Lager, Fundort).
+ * Beantwortet die Frage: „Welches konkrete Exemplar existiert gerade und in welchem Zustand?“
+ * Überschreibt niemals die permanente Codex-Definition.
+ */
+export interface ItemInstance {
+  id: string;
+  itemDefinitionId: string; // Referenz auf ItemDefinition
+  name?: string;
+  condition?: string; // z. B. 'alt / stark verrostet', 'neuwertig', 'beschädigt', 'hervorragend erhalten'
+  quality?: string; // optional, z. B. 'aus besonders hochwertigem Stahl'
+  owner?: string; // Besitzer / Charakter / Betrieb
+  location?: string; // Aufenthaltsort / Inventar / Dachboden
+  quantity?: number;
+  currentState?: string;
 }
 
 export interface CombatState {

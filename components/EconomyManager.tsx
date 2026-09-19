@@ -1201,6 +1201,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                     holding={activeHolding}
                     currencyIcon={economy.currencyIcon}
                     onUpdateHolding={handleUpdateHolding}
+                    loreDatabase={loreDatabase}
                   />
                 )}
 
