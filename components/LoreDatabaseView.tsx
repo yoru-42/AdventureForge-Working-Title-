@@ -1159,6 +1159,108 @@ const LoreDatabaseView: React.FC<Props> = ({
   const [isSyncingMap, setIsSyncingMap] = useState(false);
   const [activeStepTab, setActiveStepTab] = useState<'story' | 'quest'>('story');
 
+  // Verfügbare Charaktere (Nutzer & Charaktere/Gegner aus dem Codex)
+  const availableCharacters = useMemo(() => {
+    const list: { id: string; name: string; subtitle?: string; group: 'user' | 'codex' | 'enemy' }[] = [];
+    
+    // 1. Der Nutzer / Hauptfigur
+    const userName = (playerName || player?.name || '').trim();
+    const userSub = (playerRole || player?.profession || player?.role || 'Hauptfigur').trim();
+    list.push({
+      id: '__user__',
+      name: userName || 'Nutzer (Hauptfigur)',
+      subtitle: userSub ? `${userSub}` : 'Hauptfigur',
+      group: 'user'
+    });
+
+    // 2. Charaktere aus dem Codex
+    lore.filter(l => l.category === 'Charaktere' && l.title?.trim()).forEach(c => {
+      const sub = c.details?.profession || c.details?.role || c.details?.faction || '';
+      list.push({
+        id: c.id,
+        name: c.title.trim(),
+        subtitle: sub ? String(sub) : undefined,
+        group: 'codex'
+      });
+    });
+
+    // 3. Gegner aus dem Codex
+    lore.filter(l => l.category === 'Gegner' && l.title?.trim()).forEach(g => {
+      list.push({
+        id: g.id,
+        name: g.title.trim(),
+        subtitle: 'Gegner',
+        group: 'enemy'
+      });
+    });
+
+    return list;
+  }, [playerName, player, playerRole, lore]);
+
+  // Gespeicherte Gebiete (Territorien der Welt & Orte aus dem Codex)
+  const savedLocationsList = useMemo(() => {
+    const result: { id: string; name: string; type?: string; parentName?: string; label: string }[] = [];
+    const territories = (world?.territories || []) as any[];
+    
+    const territoryMap = new Map<string, string>();
+    territories.forEach((t: any) => {
+      if (t.id && t.name) territoryMap.set(t.id, t.name);
+    });
+
+    territories.forEach((t: any) => {
+      if (!t.name) return;
+      const parentName = t.parentId ? territoryMap.get(t.parentId) : undefined;
+      const typeLabel = t.type ? String(t.type) : 'Gebiet';
+      const label = parentName 
+        ? `${t.name} (${typeLabel}, in ${parentName})`
+        : `${t.name} (${typeLabel})`;
+      result.push({
+        id: t.id || t.name,
+        name: t.name,
+        type: t.type,
+        parentName,
+        label
+      });
+    });
+
+    // Ergänze Orte aus dem Lore-Codex, falls vorhanden
+    const lorePlaces = lore.filter(l => l.category === 'Orte');
+    lorePlaces.forEach(p => {
+      if (!p.title) return;
+      const alreadyExists = result.some(r => r.name.toLowerCase() === p.title.toLowerCase());
+      if (!alreadyExists) {
+        result.push({
+          id: p.id,
+          name: p.title,
+          type: p.details?.mapLevel || 'Ort',
+          label: `${p.title} (Ort)`
+        });
+      }
+    });
+
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [world?.territories, lore]);
+
+  const selectedCastNames = useMemo(() => {
+    if (!newEventStepCast.trim()) return [];
+    return newEventStepCast.split(',').map(s => s.trim()).filter(Boolean);
+  }, [newEventStepCast]);
+
+  const handleAddCharacterToCast = (charName: string) => {
+    if (!charName) return;
+    const current = newEventStepCast.split(',').map(s => s.trim()).filter(Boolean);
+    if (!current.some(c => c.toLowerCase() === charName.toLowerCase())) {
+      const updated = [...current, charName].join(', ');
+      setNewEventStepCast(updated);
+    }
+  };
+
+  const handleRemoveCharacterFromCast = (charName: string) => {
+    const current = newEventStepCast.split(',').map(s => s.trim()).filter(Boolean);
+    const updated = current.filter(c => c.toLowerCase() !== charName.toLowerCase()).join(', ');
+    setNewEventStepCast(updated);
+  };
+
   const [listSearchTerm, setListSearchTerm] = useState('');
   const [listLevelFilter, setListLevelFilter] = useState<'all' | 'macro' | 'meso' | 'micro'>('all');
   const [listTypeFilter, setListTypeFilter] = useState<'all' | 'story' | 'checkpoint'>('all');
@@ -6696,6 +6798,111 @@ const LoreDatabaseView: React.FC<Props> = ({
                       </div>
                     </div>
 
+                    {/* Menü für Gespeicherte Gebiete (Ort / Schauplatz) & Beteiligte Charaktere (Nutzer & Codex) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Gespeichertes Gebiet / Ort */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-slate-400 font-bold uppercase">
+                          Ort / Schauplatz (Gespeicherte Gebiete)
+                        </label>
+                        <select
+                          value=""
+                          onChange={e => {
+                            if (e.target.value) {
+                              setNewEventStepSetting(e.target.value);
+                            }
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+                        >
+                          <option value="">-- Gespeichertes Gebiet wählen ({savedLocationsList.length}) --</option>
+                          {savedLocationsList.map(loc => (
+                            <option key={`saved-loc-${loc.id}`} value={loc.name}>
+                              {loc.label}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          value={newEventStepSetting}
+                          onChange={e => setNewEventStepSetting(e.target.value)}
+                          placeholder="Ort oder Schauplatz bestimmen (z.B. Hafenviertel oder Taverne)..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      {/* Beteiligte Charaktere (Nutzer & Codex) */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-slate-400 font-bold uppercase">
+                          Beteiligte Charaktere (Nutzer & Codex)
+                        </label>
+                        <select
+                          value=""
+                          onChange={e => {
+                            if (e.target.value) {
+                              handleAddCharacterToCast(e.target.value);
+                            }
+                          }}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+                        >
+                          <option value="">-- Charakter hinzufügen --</option>
+                          <optgroup label="Nutzer / Hauptfigur">
+                            {availableCharacters.filter(c => c.group === 'user').map(c => (
+                              <option key={`char-opt-${c.id}`} value={c.name}>
+                                {c.name} {c.subtitle ? `(${c.subtitle})` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                          {availableCharacters.filter(c => c.group === 'codex').length > 0 && (
+                            <optgroup label={`Codex-Charaktere (${availableCharacters.filter(c => c.group === 'codex').length})`}>
+                              {availableCharacters.filter(c => c.group === 'codex').map(c => (
+                                <option key={`char-opt-${c.id}`} value={c.name}>
+                                  {c.name} {c.subtitle ? `(${c.subtitle})` : ''}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {availableCharacters.filter(c => c.group === 'enemy').length > 0 && (
+                            <optgroup label={`Gegner aus Codex (${availableCharacters.filter(c => c.group === 'enemy').length})`}>
+                              {availableCharacters.filter(c => c.group === 'enemy').map(c => (
+                                <option key={`char-opt-${c.id}`} value={c.name}>
+                                  {c.name} (Gegner)
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+
+                        {selectedCastNames.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 py-0.5">
+                            {selectedCastNames.map((name, cIdx) => (
+                              <span
+                                key={`cast-tag-${name}-${cIdx}`}
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-[11px] text-slate-200"
+                              >
+                                <span>{name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCharacterFromCast(name)}
+                                  className="text-slate-400 hover:text-rose-400 text-[10px] cursor-pointer"
+                                  title="Entfernen"
+                                >
+                                  <i className="fa-solid fa-xmark"></i>
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <input
+                          type="text"
+                          value={newEventStepCast}
+                          onChange={e => setNewEventStepCast(e.target.value)}
+                          placeholder="Beteiligte Personen und Begleiter (kommagetrennt)..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
                     <div>
                       <label className="text-[10px] text-slate-400 font-bold uppercase">Ereignis-Beschreibung</label>
                       <AutoExpandingTextarea
@@ -6729,11 +6936,11 @@ const LoreDatabaseView: React.FC<Props> = ({
                           step.status === 'happened' ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'
                         }`}
                       >
-                        <div className="flex items-center gap-3 flex-1">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
                           <button
                             type="button"
                             onClick={() => handleToggleStepStatus(step.id)}
-                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs border ${
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs border shrink-0 ${
                               step.status === 'happened'
                                 ? 'bg-emerald-600 border-emerald-400 text-white'
                                 : 'bg-slate-900 border-slate-700 text-slate-500'
@@ -6742,9 +6949,39 @@ const LoreDatabaseView: React.FC<Props> = ({
                             <i className="fa-solid fa-check"></i>
                           </button>
 
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold text-slate-200">{idx + 1}. {step.title}</span>
-                            <span className="text-[11px] text-slate-400">{step.description}</span>
+                          <div className="flex flex-col gap-1 min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-slate-200">{idx + 1}. {step.title}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                                step.stepType === 'quest' ? 'bg-amber-950/70 border-amber-800/60 text-amber-300' : 'bg-blue-950/70 border-blue-800/60 text-blue-300'
+                              }`}>
+                                {step.stepType === 'quest' ? 'Quest' : 'Story'}
+                              </span>
+                              {step.branch && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded border bg-slate-900 border-slate-700 text-slate-400">
+                                  {step.branch === 'main' ? 'Hauptstrang' : 'Nebenstrang'}
+                                </span>
+                              )}
+                            </div>
+
+                            <span className="text-[11px] text-slate-400 break-words whitespace-normal leading-relaxed">{step.description}</span>
+
+                            {(step.setting || step.cast) && (
+                              <div className="flex items-center gap-2 flex-wrap pt-0.5 text-[11px]">
+                                {step.setting && (
+                                  <span className="inline-flex items-center gap-1 text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                    <span className="text-slate-500 text-[10px] font-semibold uppercase">Ort:</span>
+                                    <span className="text-slate-200">{step.setting}</span>
+                                  </span>
+                                )}
+                                {step.cast && (
+                                  <span className="inline-flex items-center gap-1 text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                                    <span className="text-slate-500 text-[10px] font-semibold uppercase">Charaktere:</span>
+                                    <span className="text-slate-200">{step.cast}</span>
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
