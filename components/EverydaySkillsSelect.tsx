@@ -67,7 +67,33 @@ export function getCategoryForSkill(skillName: string): string {
   return fromMapped ? fromMapped.category : 'Eigene Fertigkeiten';
 }
 
-export function parseEverydaySkills(text: string): EverydaySkillItem[] {
+export function parseEverydaySkills(rawInput: any): EverydaySkillItem[] {
+  if (!rawInput) return [];
+
+  if (Array.isArray(rawInput)) {
+    return rawInput.map(item => {
+      if (typeof item === 'string') {
+        const match = item.match(/^([^(]+)(?:\(([^)]+)\))?/);
+        if (!match) {
+          return { name: item.trim(), score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0 };
+        }
+        return { name: match[1].trim(), score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0 };
+      } else if (item && typeof item === 'object') {
+        return {
+          name: item.name || '',
+          score: typeof item.score === 'number' ? item.score : 0,
+          label: item.label || 'Anfänger',
+          xp: item.xp || 0,
+          trainingUnits: item.trainingUnits || 0,
+          points: item.points || 0,
+          note: item.note || ''
+        };
+      }
+      return { name: String(item), score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0 };
+    }).filter(i => i.name && i.name.trim().length > 0);
+  }
+
+  const text = typeof rawInput === 'string' ? rawInput : String(rawInput);
   if (!text || !text.trim()) return [];
 
   const parts: string[] = [];

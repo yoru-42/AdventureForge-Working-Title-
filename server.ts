@@ -137,6 +137,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+  let activeConfig = { ...(config || {}) };
   let lastError: any = null;
   
   // Phase 1: Try candidate models in order.
@@ -147,7 +148,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
         model: currentModel,
         contents: sanitizedContents,
         config: {
-          ...config,
+          ...activeConfig,
           safetySettings: isNsfw ? getSafetySettings() : undefined
         }
       });
@@ -163,25 +164,25 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
       const isSchemaError = (
         rawMsg.toLowerCase().includes('schema') ||
         rawMsg.toLowerCase().includes('too many states') ||
-        rawMsg.toLowerCase().includes('invalid_argument') ||
         rawMsg.toLowerCase().includes('constraint') ||
-        rawMsg.toLowerCase().includes('produce a constraint')
+        rawMsg.toLowerCase().includes('produce a constraint') ||
+        rawMsg.toLowerCase().includes('invalid_argument')
       );
 
       // Instant recovery for schema DFA state constraint limits
-      if (isSchemaError) {
-        console.log(`[Gemini Server] Schema constraint limit encountered on ${currentModel}. Retrying with responseMimeType: application/json without strict responseSchema...`);
+      if (isSchemaError && activeConfig?.responseSchema) {
+        console.log(`[Gemini Server] Schema constraint limit encountered on ${currentModel}. Retrying immediately with responseMimeType: application/json without strict responseSchema...`);
+        activeConfig = {
+          ...activeConfig,
+          responseSchema: undefined,
+          responseMimeType: 'application/json'
+        };
         try {
-          const simplifiedConfig = {
-            ...config,
-            responseSchema: undefined,
-            responseMimeType: 'application/json'
-          };
           const fallbackRes = await getAiClient().models.generateContent({
             model: currentModel,
             contents: sanitizedContents,
             config: {
-              ...simplifiedConfig,
+              ...activeConfig,
               safetySettings: isNsfw ? getSafetySettings() : undefined
             }
           });
@@ -247,7 +248,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
           model: retryModel,
           contents: sanitizedContents,
           config: {
-            ...config,
+            ...activeConfig,
             safetySettings: isNsfw ? getSafetySettings() : undefined
           }
         });
@@ -258,25 +259,13 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
         }
       } catch (retryErr: any) {
         lastError = retryErr;
-        // Also try JSON-only fallback during Phase 2 if schema error
-        if (config?.responseSchema) {
-          try {
-            const recoveryResponse = await getAiClient().models.generateContent({
-              model: retryModel,
-              contents: sanitizedContents,
-              config: {
-                ...config,
-                responseSchema: undefined,
-                responseMimeType: 'application/json',
-                safetySettings: isNsfw ? getSafetySettings() : undefined
-              }
-            });
-            const text = extractResponseText(recoveryResponse);
-            if (text.trim().length > 0) {
-              console.log(`[Gemini Server] Cooldown recovery (without strict schema) succeeded with ${retryModel}!`);
-              return { response: recoveryResponse, text };
-            }
-          } catch (_) {}
+        const rawMsg = retryErr?.message || (retryErr ? String(retryErr) : '');
+        if ((rawMsg.toLowerCase().includes('schema') || rawMsg.toLowerCase().includes('too many states') || rawMsg.toLowerCase().includes('constraint')) && activeConfig?.responseSchema) {
+          activeConfig = {
+            ...activeConfig,
+            responseSchema: undefined,
+            responseMimeType: 'application/json'
+          };
         }
       }
     }

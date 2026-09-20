@@ -451,6 +451,9 @@ export interface MotivationCore {
   valuesPrinciples?: string; // Werte / Prinzipien (Grundsätze, die das Verhalten bestimmen)
   methodsAndMeans?: string; // Mittel und Vorgehensweise (Diplomatie, Manipulation, Gewalt, Täuschung, Handel, Einschüchterung, langfristige Planung, etc.)
   changeTriggers?: string; // Veränderbarkeit (Welche Ereignisse können Ziele oder Prioritäten verändern?)
+  shortTermPlan?: string; // Kurzfristige Etappen / Sofortmaßnahmen
+  mediumTermPlan?: string; // Mittelfristige Etappen / Meilensteine
+  longTermPlan?: string; // Langfristige Etappen / Vollendung
 }
 
 export type GoalTimeframe = 'langfristig' | 'mittelfristig' | 'kurzfristig';
@@ -473,6 +476,9 @@ export interface CharacterGoal {
   status?: GoalStatus;
   motivation?: string;
   activePlan?: string;
+  shortTermPlan?: string;
+  mediumTermPlan?: string;
+  longTermPlan?: string;
   alternativePlans?: string[];
   obstacles?: string[];
   progress?: number;
@@ -2473,7 +2479,7 @@ export interface LoreEntry {
 /**
  * ItemDefinition: Beschreibt was ein Gegenstand grundsätzlich ist (Gegenstands-Codex).
  * Beantwortet die Frage: „Was ist das?“
- * Enthält keine Marktpreise, Händler, Produktionsketten oder konkrete Zustände.
+ * Enthält keine Marktpreise, Händler, Produktionsketten, Bestände oder konkrete Zustände.
  */
 export interface ItemDefinition {
   id: string;
@@ -2487,6 +2493,17 @@ export interface ItemDefinition {
   weaponMastery?: string; // Referenz auf Waffenbeherrschung (z. B. 'Schwertkampf')
   isUpgradeable?: boolean; // Nur falls ausdrücklich entwicklungsfähiger Gegenstand / Artefakt
   progressionRef?: string; // Referenz auf globale Progressionslogik (optional)
+  
+  // Feste physische & funktionale Grundmerkmale
+  baseWeight?: string | number;
+  combatStats?: {
+    damageType?: string;
+    armorClass?: string;
+    range?: string;
+  };
+  craftingDiscipline?: string;
+  nutritionSaturation?: string;
+  magicSchoolAffinity?: string;
 }
 
 /**
@@ -2504,6 +2521,34 @@ export interface ItemInstance {
   location?: string; // Aufenthaltsort / Inventar / Dachboden
   quantity?: number;
   currentState?: string;
+  durability?: number;
+  maxDurability?: number;
+}
+
+/**
+ * InventoryEntry: Repräsentiert den Besitz- und Ausrüstungs-Status im Charakter-Inventar oder Lager.
+ */
+export interface InventoryEntry {
+  id: string;
+  itemDefinitionId: string;
+  itemInstanceId?: string; // Referenz auf ein spezifisches ItemInstance
+  quantity?: number;
+  slot?: 'weapon' | 'shield' | 'head' | 'chest' | 'hands' | 'legs' | 'feet' | 'finger' | 'neck' | 'wrist' | 'waist' | 'back' | 'pocket' | 'bag' | 'inventory';
+  equipped?: boolean;
+}
+
+/**
+ * ProductionRelation: Beschreibt Herstellungs- und Verarbeitungsbeziehungen im Wirtschaftssystem.
+ */
+export interface ProductionRelation {
+  id: string;
+  inputItemIds: string[];
+  outputItemIds: string[];
+  facilityId?: string;
+  professionId?: string;
+  process?: string;
+  duration?: string;
+  quantity?: number;
 }
 
 export interface CombatState {
@@ -2813,6 +2858,61 @@ export interface CustomInventoryItem {
   staticTalentCost?: string | number;
   staticRequirements?: string;
   isFixedStats?: boolean;
+}
+
+/**
+ * Migration Helper: Konvertiert ein altes CustomInventoryItem in saubere getrennte Objekte
+ * (ItemDefinition, ItemInstance, InventoryEntry).
+ */
+export function migrateCustomItemToNewModel(item: CustomInventoryItem, defaultOwner?: string): {
+  definition: ItemDefinition;
+  instance: ItemInstance;
+  entry: InventoryEntry;
+} {
+  const defId = item.codexItemId || `def_${item.id}`;
+  const instId = `inst_${item.id}`;
+
+  const definition: ItemDefinition = {
+    id: defId,
+    name: item.name,
+    category: item.category || 'Waffen',
+    subcategory: item.subCategory || 'Ausrüstung',
+    description: item.description || '',
+    properties: item.specialEffects || '',
+    material: item.material || '',
+    baseWeight: item.weight,
+    combatStats: item.combatStats ? {
+      damageType: item.combatStats.damageType,
+      armorClass: item.combatStats.armorClass,
+      range: item.combatStats.range
+    } : undefined,
+    craftingDiscipline: item.craftingDiscipline,
+    nutritionSaturation: item.nutritionSaturation,
+    magicSchoolAffinity: item.magicSchoolAffinity
+  };
+
+  const instance: ItemInstance = {
+    id: instId,
+    itemDefinitionId: defId,
+    name: item.name,
+    condition: item.spoilageState || 'neuwertig',
+    quality: item.quality || item.rarity || 'Gewöhnlich',
+    owner: defaultOwner || '',
+    quantity: typeof item.stackSize === 'number' ? item.stackSize : 1,
+    durability: typeof item.durability === 'number' ? item.durability : 100,
+    maxDurability: 100
+  };
+
+  const entry: InventoryEntry = {
+    id: item.id,
+    itemDefinitionId: defId,
+    itemInstanceId: instId,
+    quantity: typeof item.stackSize === 'number' ? item.stackSize : 1,
+    slot: item.slot || 'inventory',
+    equipped: !!item.equipped
+  };
+
+  return { definition, instance, entry };
 }
 
 export interface StructuredInventory {

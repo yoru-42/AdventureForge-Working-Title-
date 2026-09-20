@@ -5,6 +5,7 @@ import {
   CharacterRelationship, 
   CharacterPowerSource, 
   StructuredInventory, 
+  CustomInventoryItem,
   PersonalityTraits, 
   CampaignPowerParameter,
   WorldSetting,
@@ -109,6 +110,15 @@ const TARGET_SECTIONS = [
   { id: 'inventory', label: '5. Besitz & Inventar' }
 ];
 
+const toSafeString = (val: any): string => {
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val)) return val.map(item => (typeof item === 'string' ? item : JSON.stringify(item))).filter(Boolean).join(', ');
+  if (val !== null && val !== undefined && typeof val === 'object') {
+    return Object.entries(val).map(([k, v]) => `${k}: ${v}`).join(', ');
+  }
+  return val ? String(val) : '';
+};
+
 export const CharacterLoreForm: React.FC<Props> = ({
   editForm,
   setEditForm,
@@ -136,7 +146,6 @@ export const CharacterLoreForm: React.FC<Props> = ({
   const [smartFillError, setSmartFillError] = useState<string | null>(null);
   const [keepExistingDetails, setKeepExistingDetails] = useState<boolean>(true);
   const [smartFillSelectedChar, setSmartFillSelectedChar] = useState<string>('new');
-  const [smartFillNewCharName, setSmartFillNewCharName] = useState<string>('');
   const [smartFillTargetSection, setSmartFillTargetSection] = useState<string>('all');
 
   const savedCharacters = useMemo(() => {
@@ -158,9 +167,11 @@ export const CharacterLoreForm: React.FC<Props> = ({
     setSmartFillSelectedChar(val);
     if (val === 'new') {
       setIsEditing(null);
+      setKeepExistingDetails(false);
       setEditForm({
         category: 'Charaktere',
-        title: smartFillNewCharName || '',
+        title: '',
+        description: '',
         details: {
           appearance: {
             gender: 'Unbekannt',
@@ -173,7 +184,14 @@ export const CharacterLoreForm: React.FC<Props> = ({
     } else if (val === 'player') {
       const playerEntry = lore.find(l => (l.category === 'Charaktere' || l.category === 'Gegner') && l.title?.trim().toLowerCase() === playerName?.trim().toLowerCase());
       if (playerEntry) {
-        setEditForm(JSON.parse(JSON.stringify(playerEntry)));
+        let entryToSet = JSON.parse(JSON.stringify(playerEntry));
+        if (entryToSet.details) {
+          const d = entryToSet.details;
+          if ((d.profession || d.role || d.jobTitle) && (!d.positions || !d.professionField || !d.professionProgress)) {
+            entryToSet.details = { ...d, ...migrateLegacyProfessionData(d as any) };
+          }
+        }
+        setEditForm(entryToSet);
         setIsEditing(playerEntry.id);
       } else if (playerName) {
         setIsEditing(null);
@@ -189,7 +207,14 @@ export const CharacterLoreForm: React.FC<Props> = ({
     } else {
       const found = lore.find(l => l.id === val);
       if (found) {
-        setEditForm(JSON.parse(JSON.stringify(found)));
+        let entryToSet = JSON.parse(JSON.stringify(found));
+        if (entryToSet.details) {
+          const d = entryToSet.details;
+          if ((d.profession || d.role || d.jobTitle) && (!d.positions || !d.professionField || !d.professionProgress)) {
+            entryToSet.details = { ...d, ...migrateLegacyProfessionData(d as any) };
+          }
+        }
+        setEditForm(entryToSet);
         setIsEditing(found.id);
       }
     }
@@ -236,30 +261,29 @@ export const CharacterLoreForm: React.FC<Props> = ({
   const [customFactionInput, setCustomFactionInput] = useState<string>('');
   const [openApplicationsDropdown, setOpenApplicationsDropdown] = useState<string | null>(null);
 
-  // Automatic V2 Migration for legacy character data
-  useEffect(() => {
-    if (editForm.details) {
-      const details = editForm.details;
-      const needsMigration =
-        (details.profession || details.role || details.jobTitle) &&
-        (!details.positions || !details.professionField || !details.professionProgress);
+  // Safe legacy data access for character profession v2 without triggering render-phase state updates
+  const migratedLegacyDetails = useMemo(() => {
+    if (!editForm.details) return {};
+    const details = editForm.details;
+    const needsMigration =
+      (details.profession || details.role || details.jobTitle) &&
+      (!details.positions || !details.professionField || !details.professionProgress);
 
-      if (needsMigration) {
-        const migrated = migrateLegacyProfessionData(details as any);
-        setEditForm(prev => ({
-          ...prev,
-          details: {
-            ...(prev.details || {}),
-            ...migrated
-          }
-        }));
-      }
+    if (needsMigration) {
+      return migrateLegacyProfessionData(details as any);
     }
-  }, [isEditing]);
+    return {};
+  }, [editForm.details]);
 
   // Helper to get and update appearance/details
   const getDetail = <T = string,>(key: string, defaultVal: T = '' as any): T => {
-    return editForm.details?.[key] !== undefined ? editForm.details[key] : defaultVal;
+    if (editForm.details?.[key] !== undefined) {
+      return editForm.details[key];
+    }
+    if ((migratedLegacyDetails as any)[key] !== undefined) {
+      return (migratedLegacyDetails as any)[key];
+    }
+    return defaultVal;
   };
 
   const updateDetail = (key: string, value: any) => {
@@ -352,7 +376,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
     if (activeTransformation && activeTransformation.transformArchetype !== undefined) {
       return activeTransformation.transformArchetype;
     }
-    return editForm.details?.archetype || '-';
+    return editForm.details?.archetype || editForm.details?.personalityArchetype || '-';
   };
 
   const updatePersonalityArchetype = (archetype: string) => {
@@ -370,11 +394,15 @@ export const CharacterLoreForm: React.FC<Props> = ({
       });
       updateDetail('abilities', updatedAbilities);
     } else {
-      updateDetail('archetype', archetype);
-      if (archetype && archetype !== '-') {
-        const currentTraits = editForm.details?.personalityTraits || {};
-        updateDetail('personalityTraits', applyArchetypeToTraits(currentTraits, archetype));
-      }
+      const currentTraits = editForm.details?.personalityTraits || {};
+      const updatedTraits = archetype && archetype !== '-' 
+        ? applyArchetypeToTraits(currentTraits, archetype) 
+        : currentTraits;
+      updateMultipleDetails({
+        archetype: archetype,
+        personalityArchetype: archetype,
+        personalityTraits: updatedTraits
+      });
     }
   };
 
@@ -487,14 +515,150 @@ export const CharacterLoreForm: React.FC<Props> = ({
     setActivePowerSourceIdx(Math.max(0, currentPowerIdx - 1));
   };
 
-  // Structured Inventory
-  const structuredInventory: StructuredInventory = editForm.details?.inventory || {
-    armor: { head: '', chest: '', hands: '', legs: '', feet: '' },
-    accessories: { finger: '', neck: '', wrist: '', waist: '', back: '' },
-    weapons: [],
-    money: 100,
-    currencyLabel: 'Goldstücke'
+  const buildInventoryFromData = (sourceInv: any, existingInv?: any, keepExisting: boolean = false): StructuredInventory => {
+    const s = sourceInv || {};
+    const e = existingInv || {};
+
+    const extractedCustomItems: CustomInventoryItem[] = Array.isArray(e.customItems) ? [...e.customItems] : [];
+
+    const helperAddCustomItem = (itemObj: any, defaultSlot: 'weapon' | 'head' | 'chest' | 'hands' | 'legs' | 'feet' | 'finger' | 'neck' | 'wrist' | 'waist' | 'back' | 'inventory', defaultCategory: string) => {
+      if (!itemObj || typeof itemObj !== 'object' || !itemObj.name) return;
+      const itemName = String(itemObj.name).trim();
+      if (!itemName) return;
+      if (extractedCustomItems.some(ci => (ci.name || '').toLowerCase() === itemName.toLowerCase())) return;
+
+      extractedCustomItems.push({
+        id: 'custom_item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        name: itemName,
+        category: itemObj.category || defaultCategory,
+        subCategory: itemObj.type || itemObj.subCategory || (defaultSlot === 'weapon' ? 'Nahkampfwaffe' : defaultCategory),
+        slot: (itemObj.slot as any) || defaultSlot,
+        equipped: itemObj.equipped !== undefined ? !!itemObj.equipped : true,
+        rarity: (itemObj.rarity as any) || 'Selten',
+        quality: itemObj.quality || 'Meisterlich geschmiedet',
+        material: itemObj.material || '',
+        durability: itemObj.durability || '100 / 100',
+        weight: itemObj.weight || '',
+        value: typeof itemObj.value === 'number' ? itemObj.value : 350,
+        description: itemObj.description || '',
+        specialEffects: itemObj.properties || itemObj.specialEffects || '',
+        enchantments: itemObj.enchantments || '',
+        combatStats: {
+          damage: typeof itemObj.damage === 'object' ? JSON.stringify(itemObj.damage) : (itemObj.damage || itemObj.combatStats?.damage || ''),
+          damageType: itemObj.damageType || itemObj.combatStats?.damageType || '',
+          defense: typeof itemObj.defense === 'object' ? JSON.stringify(itemObj.defense) : (itemObj.defense || itemObj.combatStats?.defense || ''),
+          range: itemObj.range || itemObj.combatStats?.range || (defaultSlot === 'weapon' ? 'Nahkampf' : ''),
+          scalingStat: itemObj.scalingStat || itemObj.combatStats?.scalingStat || ''
+        }
+      });
+    };
+
+    let weapons: string[] = [];
+    if (Array.isArray(s.weapons)) {
+      s.weapons.forEach((w: any) => {
+        if (typeof w === 'string' && w.trim()) {
+          weapons.push(w.trim());
+        } else if (w && typeof w === 'object' && w.name) {
+          const wName = String(w.name).trim();
+          if (wName) {
+            weapons.push(wName);
+            helperAddCustomItem(w, 'weapon', 'Waffen');
+          }
+        }
+      });
+    } else if (typeof s.weapons === 'string' && s.weapons.trim()) {
+      weapons = s.weapons.split(',').map((w: string) => w.trim()).filter(Boolean);
+    }
+
+    let generalItems: string[] = [];
+    if (Array.isArray(s.generalItems)) {
+      s.generalItems.forEach((item: any) => {
+        if (typeof item === 'string' && item.trim()) {
+          generalItems.push(item.trim());
+        } else if (item && typeof item === 'object' && item.name) {
+          const itmName = String(item.name).trim();
+          if (itmName) {
+            generalItems.push(itmName);
+            helperAddCustomItem(item, 'inventory', 'Gegenstände');
+          }
+        }
+      });
+    } else if (typeof s.generalItems === 'string' && s.generalItems.trim()) {
+      generalItems = s.generalItems.split(',').map((item: string) => item.trim()).filter(Boolean);
+    }
+
+    const cleanSlotVal = (val: any, defaultSlot: any, defaultCat: string): string => {
+      if (!val) return '';
+      if (typeof val === 'string') return val.trim();
+      if (typeof val === 'object' && val.name) {
+        helperAddCustomItem(val, defaultSlot, defaultCat);
+        return String(val.name).trim();
+      }
+      return '';
+    };
+
+    const existingWeapons: string[] = Array.isArray(e.weapons)
+      ? e.weapons.map((w: any) => {
+          if (typeof w === 'string') return w.trim();
+          if (w && typeof w === 'object' && w.name) {
+            helperAddCustomItem(w, 'weapon', 'Waffen');
+            return String(w.name).trim();
+          }
+          return '';
+        }).filter(Boolean)
+      : [];
+
+    const existingGeneral: string[] = Array.isArray(e.generalItems)
+      ? e.generalItems.map((g: any) => {
+          if (typeof g === 'string') return g.trim();
+          if (g && typeof g === 'object' && g.name) {
+            helperAddCustomItem(g, 'inventory', 'Gegenstände');
+            return String(g.name).trim();
+          }
+          return '';
+        }).filter(Boolean)
+      : [];
+
+    const finalWeapons = keepExisting && existingWeapons.length > 0
+      ? Array.from(new Set([...existingWeapons, ...weapons]))
+      : (weapons.length > 0 ? weapons : existingWeapons);
+
+    const finalGeneral = keepExisting && existingGeneral.length > 0
+      ? Array.from(new Set([...existingGeneral, ...generalItems]))
+      : (generalItems.length > 0 ? generalItems : existingGeneral);
+
+    const sArmor = s.armor || {};
+    const eArmor = e.armor || {};
+    const sAcc = s.accessories || {};
+    const eAcc = e.accessories || {};
+
+    return {
+      money: keepExisting && e.money !== undefined ? Number(e.money) : (s.money !== undefined ? Number(s.money) : (e.money ?? 100)),
+      currencyLabel: keepExisting && e.currencyLabel ? String(e.currencyLabel) : String(s.currencyLabel || e.currencyLabel || 'Goldstücke'),
+      weapons: finalWeapons,
+      armor: {
+        head: keepExisting && eArmor.head ? cleanSlotVal(eArmor.head, 'head', 'Rüstung') : cleanSlotVal(sArmor.head || eArmor.head, 'head', 'Rüstung'),
+        chest: keepExisting && eArmor.chest ? cleanSlotVal(eArmor.chest, 'chest', 'Rüstung') : cleanSlotVal(sArmor.chest || eArmor.chest, 'chest', 'Rüstung'),
+        hands: keepExisting && eArmor.hands ? cleanSlotVal(eArmor.hands, 'hands', 'Rüstung') : cleanSlotVal(sArmor.hands || eArmor.hands, 'hands', 'Rüstung'),
+        legs: keepExisting && eArmor.legs ? cleanSlotVal(eArmor.legs, 'legs', 'Rüstung') : cleanSlotVal(sArmor.legs || eArmor.legs, 'legs', 'Rüstung'),
+        feet: keepExisting && eArmor.feet ? cleanSlotVal(eArmor.feet, 'feet', 'Rüstung') : cleanSlotVal(sArmor.feet || eArmor.feet, 'feet', 'Rüstung')
+      },
+      accessories: {
+        finger: keepExisting && eAcc.finger ? cleanSlotVal(eAcc.finger, 'finger', 'Schmuck & Accessoires') : cleanSlotVal(sAcc.finger || eAcc.finger, 'finger', 'Schmuck & Accessoires'),
+        wrist: keepExisting && eAcc.wrist ? cleanSlotVal(eAcc.wrist, 'wrist', 'Schmuck & Accessoires') : cleanSlotVal(sAcc.wrist || eAcc.wrist, 'wrist', 'Schmuck & Accessoires'),
+        waist: keepExisting && eAcc.waist ? cleanSlotVal(eAcc.waist, 'waist', 'Schmuck & Accessoires') : cleanSlotVal(sAcc.waist || eAcc.waist, 'waist', 'Schmuck & Accessoires'),
+        back: keepExisting && eAcc.back ? cleanSlotVal(eAcc.back, 'back', 'Schmuck & Accessoires') : cleanSlotVal(sAcc.back || eAcc.back, 'back', 'Schmuck & Accessoires'),
+        neck: keepExisting && eAcc.neck ? cleanSlotVal(eAcc.neck, 'neck', 'Schmuck & Accessoires') : cleanSlotVal(sAcc.neck || eAcc.neck, 'neck', 'Schmuck & Accessoires')
+      },
+      generalItems: finalGeneral,
+      customItems: extractedCustomItems
+    };
   };
+
+  // Structured Inventory
+  const structuredInventory: StructuredInventory = useMemo(() => {
+    return buildInventoryFromData(editForm.details?.inventory, editForm.details?.inventory, false);
+  }, [editForm.details?.inventory]);
 
   const setStructuredInventory = (inv: StructuredInventory) => {
     updateDetail('inventory', inv);
@@ -502,8 +666,9 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
   // AI Generation Handlers
   const handleSmartFill = async () => {
-    const promptText = smartFillSelectedChar === 'new' && smartFillNewCharName.trim()
-      ? (smartFillText.trim() ? `Charakter: ${smartFillNewCharName.trim()}\n\n${smartFillText.trim()}` : `Erstelle den Charakter: ${smartFillNewCharName.trim()}`)
+    const isNewCharMode = smartFillSelectedChar === 'new';
+    const promptText = isNewCharMode
+      ? (smartFillText.trim() ? `Erstelle einen neuen Charakter basierend auf folgender Beschreibung: ${smartFillText.trim()}` : '')
       : (smartFillText.trim() || `Vervollständige und verfeinere die Daten für den Charakter "${editForm.title || 'Charakter'}".`);
 
     if (!promptText.trim()) return;
@@ -538,12 +703,13 @@ export const CharacterLoreForm: React.FC<Props> = ({
           relationships: l.details?.relationships || []
         }));
 
-      const existingCharForMerge = (keepExistingDetails || smartFillTargetSection !== 'all') ? {
+      const existingCharForMerge = (!isNewCharMode && (keepExistingDetails || smartFillTargetSection !== 'all')) ? {
         name: editForm.title || '',
         role: editForm.details?.role || '',
         bio: editForm.description || '',
         personality: editForm.details?.personality || '',
-        personalityArchetype: editForm.details?.personalityArchetype || '',
+        personalityArchetype: editForm.details?.personalityArchetype || editForm.details?.archetype || '',
+        archetype: editForm.details?.archetype || editForm.details?.personalityArchetype || '',
         personalityTraits: editForm.details?.personalityTraits,
         appearance: {
           gender: editForm.details?.gender || 'Unbekannt',
@@ -556,22 +722,30 @@ export const CharacterLoreForm: React.FC<Props> = ({
           looks: editForm.details?.looks || '',
           height: editForm.details?.height || '',
           measurements: editForm.details?.measurements || '',
+          weight: editForm.details?.weight || '',
+          bodyFat: editForm.details?.bodyFat || '',
+          muscleMass: editForm.details?.muscleMass || '',
           origin: editForm.details?.origin || '',
           family: editForm.details?.family || '',
           faction: editForm.details?.faction || '',
+          currentLocation: editForm.details?.currentLocation || '',
           race: editForm.details?.race || '',
-          raceFeatures: editForm.details?.raceFeatures || '',
-          personalityArchetype: editForm.details?.personalityArchetype
+          raceFeatures: editForm.details?.raceFeatures || ''
         },
+        weight: editForm.details?.weight || '',
+        bodyFat: editForm.details?.bodyFat || '',
+        muscleMass: editForm.details?.muscleMass || '',
+        currentLocation: editForm.details?.currentLocation || '',
         relationships: editForm.details?.relationships || [],
         abilities: editForm.details?.abilities || [],
         powerSource: editForm.details?.powerSource || '',
         powerCost: editForm.details?.powerCost || '',
         techniques: editForm.details?.techniques || '',
-        campaignPowerLevels: editForm.details?.campaignPowerLevels || {},
+        campaignPowerLevels: editForm.details?.campaignPowerLevels || editForm.details?.campaignPowerData || {},
         goal: editForm.details?.goal,
         motivationCore: editForm.details?.motivationCore,
-        goals: editForm.details?.goals
+        goals: editForm.details?.goals,
+        inventory: editForm.details?.inventory
       } as any : undefined;
 
       const data = await GeminiService.autofillCharacter(
@@ -581,17 +755,23 @@ export const CharacterLoreForm: React.FC<Props> = ({
         world,
         existingFactions,
         existingCodexCharacters,
-        smartFillTargetSection
+        isNewCharMode ? 'all' : smartFillTargetSection
       );
 
       if (data) {
+        if (isNewCharMode) {
+          setIsEditing(null);
+        }
         setEditForm(prev => {
-          const currentDetails = prev.details || {};
-          const generatedName = (data.name?.trim()) || (data.callName?.trim()) || (data.rufName?.trim()) || '';
-          let rawTitle = prev.title || 'Neuer Charakter';
-          if (smartFillSelectedChar === 'new') {
-            rawTitle = smartFillNewCharName.trim() || generatedName || (prev.title && prev.title.length < 50 ? prev.title : 'Neuer Charakter');
-          } else if (!keepExistingDetails && generatedName && smartFillTargetSection === 'all') {
+          const currentDetails = isNewCharMode ? {} : (prev.details || {});
+          const getSafeStr = (val: any): string => {
+            if (typeof val === 'string') return val.trim();
+            if (val && typeof val === 'object') return (val.name || val.title || val.callName || '').toString().trim();
+            return val ? String(val).trim() : '';
+          };
+          const generatedName = getSafeStr(data.name) || getSafeStr(data.callName) || getSafeStr(data.rufName);
+          let rawTitle = isNewCharMode ? (generatedName || 'Neuer Charakter') : (prev.title || 'Neuer Charakter');
+          if (!isNewCharMode && !keepExistingDetails && generatedName && smartFillTargetSection === 'all') {
             rawTitle = generatedName;
           }
 
@@ -600,14 +780,14 @@ export const CharacterLoreForm: React.FC<Props> = ({
             data.profession || currentDetails.profession,
             data.role || currentDetails.role
           );
-          const finalTitle = cleanName || rawTitle;
+          const finalTitle = isNewCharMode ? (generatedName || cleanName || rawTitle) : (cleanName || rawTitle);
 
-          const finalBio = (keepExistingDetails || smartFillTargetSection !== 'all') && prev.description ? prev.description : (data.bio || '');
-          const finalArchetype = data.personalityArchetype || data.archetype || (keepExistingDetails ? (currentDetails.personalityArchetype || currentDetails.archetype || '') : '');
-          const rawTraits = data.personalityTraits || (keepExistingDetails ? currentDetails.personalityTraits : undefined);
+          const finalBio = (!isNewCharMode && (keepExistingDetails || smartFillTargetSection !== 'all') && prev.description) ? prev.description : (data.bio || '');
+          const finalArchetype = data.personalityArchetype || data.archetype || (!isNewCharMode && keepExistingDetails ? (currentDetails.personalityArchetype || currentDetails.archetype || '') : '');
+          const rawTraits = data.personalityTraits || (!isNewCharMode && keepExistingDetails ? currentDetails.personalityTraits : undefined);
           const finalTraits = finalArchetype && finalArchetype !== '-' ? applyArchetypeToTraits(rawTraits, finalArchetype) : (rawTraits || {});
 
-          let generatedAbilities = keepExistingDetails ? (currentDetails.abilities || []) : [];
+          let generatedAbilities = (!isNewCharMode && keepExistingDetails) ? (currentDetails.abilities || []) : [];
           if (data.abilities && Array.isArray(data.abilities)) {
             const mappedAbilities = data.abilities.map((abil: any, aIndex: number) => {
               let cat = abil.category;
@@ -673,6 +853,38 @@ export const CharacterLoreForm: React.FC<Props> = ({
           const finalRole = data.role || data.profession || extractedProfession || currentDetails.role || currentDetails.profession || '';
           const finalProfession = data.profession || data.role || extractedProfession || currentDetails.profession || currentDetails.role || '';
 
+          const mapGoalWithStages = (g: any, fallbackMainTitle?: string, motivationCore?: any): any => {
+            const shortPlan = g.shortTermPlan || motivationCore?.shortTermPlan || '';
+            const medPlan = g.mediumTermPlan || motivationCore?.mediumTermPlan || '';
+            const longPlan = g.longTermPlan || motivationCore?.longTermPlan || '';
+            const why = g.motivation || (motivationCore?.whyGoal ? toSafeString(motivationCore.whyGoal) : '');
+            const activePlan = g.activePlan || (motivationCore?.methodsAndMeans ? toSafeString(motivationCore.methodsAndMeans) : '') || shortPlan;
+
+            return {
+              id: g.id || `goal-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              title: g.title || fallbackMainTitle || 'Unbenanntes Ziel',
+              description: g.description || '',
+              timeframe: ['langfristig', 'mittelfristig', 'kurzfristig'].includes(g.timeframe) ? g.timeframe : 'mittelfristig',
+              targetType: ['self', 'character', 'faction', 'world'].includes(g.targetType) ? g.targetType : 'self',
+              targetName: g.targetName || (g.targetType === 'self' ? 'Selbst' : ''),
+              targetId: g.targetId || undefined,
+              priority: ['kritisch', 'hoch', 'normal', 'niedrig'].includes(g.priority) ? g.priority : 'normal',
+              status: ['aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben'].includes(g.status) ? g.status : 'aktiv',
+              motivation: why,
+              activePlan: activePlan,
+              shortTermPlan: shortPlan || undefined,
+              mediumTermPlan: medPlan || undefined,
+              longTermPlan: longPlan || undefined,
+              alternativePlans: Array.isArray(g.alternativePlans) ? g.alternativePlans : (g.alternativePlans ? [g.alternativePlans] : []),
+              obstacles: Array.isArray(g.obstacles) ? g.obstacles : (g.obstacles ? [g.obstacles] : (motivationCore?.fears ? [toSafeString(motivationCore.fears)] : [])),
+              progress: typeof g.progress === 'number' ? Math.max(0, Math.min(100, g.progress)) : 0,
+              mainGoalTitle: g.mainGoalTitle || fallbackMainTitle || undefined,
+              parentGoalId: g.parentGoalId || undefined,
+              isMainGoal: g.isMainGoal !== undefined ? g.isMainGoal : undefined,
+              createdAt: g.createdAt || new Date().toISOString()
+            };
+          };
+
           let newDetails: any = { ...currentDetails };
 
           if (smartFillTargetSection === 'appearance') {
@@ -688,6 +900,13 @@ export const CharacterLoreForm: React.FC<Props> = ({
               cupSize: data.appearance?.cupSize || currentDetails.cupSize || '-',
               height: data.appearance?.height || currentDetails.height || '',
               measurements: data.appearance?.measurements || currentDetails.measurements || '',
+              weight: data.appearance?.weight || currentDetails.weight || '',
+              bodyFat: data.appearance?.bodyFat || currentDetails.bodyFat || '',
+              muscleMass: data.appearance?.muscleMass || currentDetails.muscleMass || '',
+              origin: data.appearance?.origin || currentDetails.origin || '',
+              family: data.appearance?.family || currentDetails.family || '',
+              faction: data.appearance?.faction || currentDetails.faction || '',
+              currentLocation: data.appearance?.currentLocation || currentDetails.currentLocation || '',
               outfit: data.appearance?.outfit || currentDetails.outfit || '',
               looks: data.appearance?.looks || currentDetails.looks || '',
               appearance: {
@@ -698,7 +917,6 @@ export const CharacterLoreForm: React.FC<Props> = ({
                 ? generatedAbilities
                 : (currentDetails.abilities || [])
             };
-            setCharTab('profil');
           } else if (smartFillTargetSection === 'personality') {
             newDetails = {
               ...currentDetails,
@@ -707,7 +925,6 @@ export const CharacterLoreForm: React.FC<Props> = ({
               archetype: finalArchetype,
               personalityTraits: finalTraits
             };
-            setCharTab('profil');
           } else if (smartFillTargetSection === 'bio') {
             newDetails = {
               ...currentDetails,
@@ -715,77 +932,85 @@ export const CharacterLoreForm: React.FC<Props> = ({
               origin: data.appearance?.origin || data.origin || currentDetails.origin || '',
               family: data.appearance?.family || data.family || currentDetails.family || ''
             };
-            setCharTab('profil');
           } else if (smartFillTargetSection === 'situation') {
             newDetails = {
               ...currentDetails,
-              currentSituation: data.currentSituation || currentDetails.currentSituation || ''
+              currentSituation: data.currentSituation || currentDetails.currentSituation || '',
+              currentLocation: data.appearance?.currentLocation || currentDetails.currentLocation || ''
             };
-            setCharTab('profil');
           } else if (smartFillTargetSection === 'motivation') {
-            const genGoals = Array.isArray(data.goals) ? data.goals : [];
+            const rawGenGoals = Array.isArray(data.goals) ? data.goals : [];
+            const mappedGenGoals = rawGenGoals.map((g: any) => mapGoalWithStages(g, data.goal || data.motivationCore?.mainGoal, data.motivationCore));
             const existingGoals = currentDetails.goals || [];
             let nextGoals = existingGoals;
-            if (genGoals.length > 0) {
+            if (mappedGenGoals.length > 0) {
               if (keepExistingDetails) {
                 const existingIds = new Set(existingGoals.map((g: any) => g.id));
                 nextGoals = [...existingGoals];
-                for (const g of genGoals) {
+                for (const g of mappedGenGoals) {
                   if (!existingIds.has(g.id)) {
                     nextGoals.push(g);
                   }
                 }
               } else {
-                nextGoals = genGoals;
+                nextGoals = mappedGenGoals;
               }
-            } else if (data.goal && existingGoals.length === 0) {
-              nextGoals = [{
+            } else if ((data.goal || data.motivationCore?.mainGoal) && existingGoals.length === 0) {
+              nextGoals = [mapGoalWithStages({
                 id: `goal-${Date.now()}`,
-                title: data.goal,
-                description: '',
+                title: data.goal || data.motivationCore?.mainGoal,
                 timeframe: 'langfristig',
                 targetType: 'self',
                 targetName: 'Selbst',
                 priority: 'hoch',
                 status: 'aktiv',
-                motivation: data.motivationCore?.whyGoal || '',
-                activePlan: data.motivationCore?.methodsAndMeans || '',
-                alternativePlans: [],
-                obstacles: data.motivationCore?.fears ? [data.motivationCore.fears] : [],
-                progress: 0,
-                createdAt: new Date().toISOString()
-              }];
+                shortTermPlan: data.motivationCore?.shortTermPlan || data.shortTermPlan || '',
+                mediumTermPlan: data.motivationCore?.mediumTermPlan || data.mediumTermPlan || '',
+                longTermPlan: data.motivationCore?.longTermPlan || data.longTermPlan || '',
+              }, data.goal || data.motivationCore?.mainGoal, data.motivationCore)];
             }
             newDetails = {
               ...currentDetails,
-              goal: data.goal || currentDetails.goal || '',
+              goal: data.goal || data.motivationCore?.mainGoal || currentDetails.goal || '',
               motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
               goals: nextGoals
             };
-            setCharTab('beziehungen');
           } else if (smartFillTargetSection === 'goals') {
-            const genGoals = Array.isArray(data.goals) ? data.goals : [];
+            const rawGenGoals = Array.isArray(data.goals) ? data.goals : [];
+            const mappedGenGoals = rawGenGoals.map((g: any) => mapGoalWithStages(g, data.goal || data.motivationCore?.mainGoal, data.motivationCore));
             const existingGoals = currentDetails.goals || [];
             let nextGoals = existingGoals;
-            if (genGoals.length > 0) {
+            if (mappedGenGoals.length > 0) {
               if (keepExistingDetails) {
                 const existingIds = new Set(existingGoals.map((g: any) => g.id));
                 nextGoals = [...existingGoals];
-                for (const g of genGoals) {
+                for (const g of mappedGenGoals) {
                   if (!existingIds.has(g.id)) {
                     nextGoals.push(g);
                   }
                 }
               } else {
-                nextGoals = genGoals;
+                nextGoals = mappedGenGoals;
               }
+            } else if ((data.goal || data.motivationCore?.mainGoal) && existingGoals.length === 0) {
+              nextGoals = [mapGoalWithStages({
+                id: `goal-${Date.now()}`,
+                title: data.goal || data.motivationCore?.mainGoal,
+                timeframe: 'langfristig',
+                targetType: 'self',
+                targetName: 'Selbst',
+                priority: 'hoch',
+                status: 'aktiv',
+                shortTermPlan: data.motivationCore?.shortTermPlan || data.shortTermPlan || '',
+                mediumTermPlan: data.motivationCore?.mediumTermPlan || data.mediumTermPlan || '',
+                longTermPlan: data.motivationCore?.longTermPlan || data.longTermPlan || '',
+              }, data.goal || data.motivationCore?.mainGoal, data.motivationCore)];
             }
             newDetails = {
               ...currentDetails,
               goals: nextGoals,
-              goal: nextGoals[0]?.title || currentDetails.goal || ''
+              goal: nextGoals[0]?.title || data.goal || currentDetails.goal || ''
             };
-            setCharTab('beziehungen');
           } else if (smartFillTargetSection === 'secrets') {
             newDetails = {
               ...currentDetails,
@@ -794,7 +1019,6 @@ export const CharacterLoreForm: React.FC<Props> = ({
               secretsStage3: nextSecrets3,
               knowledge: nextKnowledge
             };
-            setCharTab('profil');
           } else if (smartFillTargetSection === 'relationships') {
             newDetails = {
               ...currentDetails,
@@ -802,7 +1026,6 @@ export const CharacterLoreForm: React.FC<Props> = ({
               conduct: data.conduct || currentDetails.conduct || '',
               relationships: normalizeRelationships(data.relationships || currentDetails.relationships)
             };
-            setCharTab('beziehungen');
           } else if (smartFillTargetSection === 'combat') {
             newDetails = {
               ...currentDetails,
@@ -811,9 +1034,9 @@ export const CharacterLoreForm: React.FC<Props> = ({
               powerCost: data.powerCost || currentDetails.powerCost || '',
               techniques: data.techniques || currentDetails.techniques || '',
               abilities: generatedAbilities,
-              campaignPowerLevels: data.campaignPowerLevels || currentDetails.campaignPowerLevels || {}
+              campaignPowerLevels: data.campaignPowerLevels || data.campaignPowerData || currentDetails.campaignPowerLevels || currentDetails.campaignPowerData || {},
+              campaignPowerData: data.campaignPowerData || data.campaignPowerLevels || currentDetails.campaignPowerData || currentDetails.campaignPowerLevels || {}
             };
-            setCharTab('kampffaehigkeiten');
           } else if (smartFillTargetSection === 'professions') {
             newDetails = {
               ...currentDetails,
@@ -829,15 +1052,15 @@ export const CharacterLoreForm: React.FC<Props> = ({
               talents: data.talents || currentDetails.talents || '',
               everydaySkills: data.everydaySkills || currentDetails.everydaySkills || ''
             };
-            setCharTab('beruf_talente');
           } else if (smartFillTargetSection === 'inventory') {
-            if (data.structuredInventory) {
-              setStructuredInventory(data.structuredInventory);
-            }
-            setCharTab('besitz_inventar');
+            const nextInv = buildInventoryFromData(data.structuredInventory, currentDetails.inventory, keepExistingDetails && !isNewCharMode);
+            newDetails = {
+              ...currentDetails,
+              inventory: nextInv
+            };
           } else {
             // 'all'
-            newDetails = keepExistingDetails ? {
+            newDetails = (!isNewCharMode && keepExistingDetails) ? {
               ...currentDetails,
               callName: generatedName || currentDetails.callName || finalTitle,
               nickname: data.nickname || currentDetails.nickname || '',
@@ -853,6 +1076,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
               craftingSkills: data.craftingSkills || currentDetails.craftingSkills || '',
               talents: data.talents || currentDetails.talents || '',
               everydaySkills: data.everydaySkills || currentDetails.everydaySkills || '',
+              professionRank: data.professionRank || data.professionLevel || currentDetails.professionRank || '',
+              toolsAndEquipment: data.toolsAndEquipment || currentDetails.toolsAndEquipment || '',
               gender: data.appearance?.gender || currentDetails.gender || 'Unbekannt',
               age: data.appearance?.age || currentDetails.age || '',
               build: data.appearance?.build || currentDetails.build || '',
@@ -863,11 +1088,19 @@ export const CharacterLoreForm: React.FC<Props> = ({
               cupSize: data.appearance?.cupSize || currentDetails.cupSize || '-',
               height: data.appearance?.height || currentDetails.height || '',
               measurements: data.appearance?.measurements || currentDetails.measurements || '',
+              weight: data.appearance?.weight || currentDetails.weight || '',
+              bodyFat: data.appearance?.bodyFat || currentDetails.bodyFat || '',
+              muscleMass: data.appearance?.muscleMass || currentDetails.muscleMass || '',
+              currentLocation: data.appearance?.currentLocation || currentDetails.currentLocation || '',
               origin: data.appearance?.origin || currentDetails.origin || '',
               family: data.appearance?.family || currentDetails.family || '',
               faction: data.appearance?.faction || currentDetails.faction || '',
               outfit: data.appearance?.outfit || currentDetails.outfit || '',
               looks: data.appearance?.looks || currentDetails.looks || '',
+              appearance: {
+                ...(currentDetails.appearance || {}),
+                ...(data.appearance || {})
+              },
               personality: data.personality || currentDetails.personality || '',
               personalityArchetype: finalArchetype,
               archetype: finalArchetype,
@@ -876,12 +1109,30 @@ export const CharacterLoreForm: React.FC<Props> = ({
               goal: data.goal || currentDetails.goal || '',
               motivationCore: data.motivationCore || currentDetails.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
               goals: (() => {
-                const genGoals = Array.isArray(data.goals) ? data.goals : [];
-                if (genGoals.length === 0) return currentDetails.goals || [];
+                const rawGenGoals = Array.isArray(data.goals) ? data.goals : [];
+                const mappedGenGoals = rawGenGoals.map((g: any) => mapGoalWithStages(g, data.goal || data.motivationCore?.mainGoal, data.motivationCore));
+                if (mappedGenGoals.length === 0) {
+                  if (currentDetails.goals && currentDetails.goals.length > 0) return currentDetails.goals;
+                  if (data.goal || data.motivationCore?.mainGoal) {
+                    return [mapGoalWithStages({
+                      id: `goal-${Date.now()}`,
+                      title: data.goal || data.motivationCore?.mainGoal,
+                      timeframe: 'langfristig',
+                      targetType: 'self',
+                      targetName: 'Selbst',
+                      priority: 'hoch',
+                      status: 'aktiv',
+                      shortTermPlan: data.motivationCore?.shortTermPlan || data.shortTermPlan || '',
+                      mediumTermPlan: data.motivationCore?.mediumTermPlan || data.mediumTermPlan || '',
+                      longTermPlan: data.motivationCore?.longTermPlan || data.longTermPlan || '',
+                    }, data.goal || data.motivationCore?.mainGoal, data.motivationCore)];
+                  }
+                  return [];
+                }
                 const existing = currentDetails.goals || [];
                 const existingIds = new Set(existing.map((g: any) => g.id));
                 const merged = [...existing];
-                for (const g of genGoals) {
+                for (const g of mappedGenGoals) {
                   if (!existingIds.has(g.id)) {
                     merged.push(g);
                   }
@@ -896,8 +1147,11 @@ export const CharacterLoreForm: React.FC<Props> = ({
               powerCost: data.powerCost || currentDetails.powerCost || '',
               techniques: data.techniques || currentDetails.techniques || '',
               abilities: generatedAbilities,
+              techniqueList: Array.isArray(data.techniqueList) ? data.techniqueList : (currentDetails.techniqueList || []),
               relationships: normalizeRelationships(data.relationships || currentDetails.relationships),
-              campaignPowerLevels: data.campaignPowerLevels || currentDetails.campaignPowerLevels || {},
+              campaignPowerLevels: data.campaignPowerLevels || data.campaignPowerData || currentDetails.campaignPowerLevels || currentDetails.campaignPowerData || {},
+              campaignPowerData: data.campaignPowerData || data.campaignPowerLevels || currentDetails.campaignPowerData || currentDetails.campaignPowerLevels || {},
+              inventory: buildInventoryFromData(data.structuredInventory, currentDetails.inventory, true),
               secretsStage1: nextSecrets1,
               secretsStage2: nextSecrets2,
               secretsStage3: nextSecrets3,
@@ -910,6 +1164,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               profession: data.profession || data.role || '',
               professionField: data.professionField || '',
               professionSpecialization: data.professionSpecialization || '',
+              professionRank: data.professionRank || data.professionLevel || '',
               professionLevel: data.professionLevel || '',
               secondaryProfessions: data.secondaryProfessions || [],
               jobTitle: data.jobTitle || '',
@@ -917,6 +1172,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               craftingSkills: data.craftingSkills || '',
               talents: data.talents || '',
               everydaySkills: data.everydaySkills || '',
+              toolsAndEquipment: data.toolsAndEquipment || '',
               gender: data.appearance?.gender || 'Unbekannt',
               age: data.appearance?.age || '',
               build: data.appearance?.build || '',
@@ -927,11 +1183,16 @@ export const CharacterLoreForm: React.FC<Props> = ({
               cupSize: data.appearance?.cupSize || '-',
               height: data.appearance?.height || '',
               measurements: data.appearance?.measurements || '',
+              weight: data.appearance?.weight || '',
+              bodyFat: data.appearance?.bodyFat || '',
+              muscleMass: data.appearance?.muscleMass || '',
+              currentLocation: data.appearance?.currentLocation || '',
               origin: data.appearance?.origin || '',
               family: data.appearance?.family || '',
               faction: data.appearance?.faction || '',
               outfit: data.appearance?.outfit || '',
               looks: data.appearance?.looks || '',
+              appearance: data.appearance || {},
               personality: data.personality || '',
               personalityArchetype: finalArchetype,
               archetype: finalArchetype,
@@ -939,7 +1200,27 @@ export const CharacterLoreForm: React.FC<Props> = ({
               bio: finalBio,
               goal: data.goal || '',
               motivationCore: data.motivationCore || (data.goal ? { mainGoal: data.goal } : undefined),
-              goals: Array.isArray(data.goals) && data.goals.length > 0 ? data.goals : (currentDetails.goals || []),
+              goals: (() => {
+                const rawGenGoals = Array.isArray(data.goals) ? data.goals : [];
+                const mappedGenGoals = rawGenGoals.map((g: any) => mapGoalWithStages(g, data.goal || data.motivationCore?.mainGoal, data.motivationCore));
+                if (mappedGenGoals.length > 0) return mappedGenGoals;
+                if (currentDetails.goals && currentDetails.goals.length > 0) return currentDetails.goals;
+                if (data.goal || data.motivationCore?.mainGoal) {
+                  return [mapGoalWithStages({
+                    id: `goal-${Date.now()}`,
+                    title: data.goal || data.motivationCore?.mainGoal,
+                    timeframe: 'langfristig',
+                    targetType: 'self',
+                    targetName: 'Selbst',
+                    priority: 'hoch',
+                    status: 'aktiv',
+                    shortTermPlan: data.motivationCore?.shortTermPlan || data.shortTermPlan || '',
+                    mediumTermPlan: data.motivationCore?.mediumTermPlan || data.mediumTermPlan || '',
+                    longTermPlan: data.motivationCore?.longTermPlan || data.longTermPlan || '',
+                  }, data.goal || data.motivationCore?.mainGoal, data.motivationCore)];
+                }
+                return [];
+              })(),
               currentSituation: data.currentSituation || '',
               relationship: data.relationship || '',
               conduct: data.conduct || '',
@@ -948,18 +1229,23 @@ export const CharacterLoreForm: React.FC<Props> = ({
               powerCost: data.powerCost || '',
               techniques: data.techniques || '',
               abilities: generatedAbilities,
+              techniqueList: Array.isArray(data.techniqueList) ? data.techniqueList : [],
               relationships: normalizeRelationships(data.relationships),
-              campaignPowerLevels: data.campaignPowerLevels || {},
+              campaignPowerLevels: data.campaignPowerLevels || data.campaignPowerData || {},
+              campaignPowerData: data.campaignPowerData || data.campaignPowerLevels || {},
               powerSources: (data.powerSource || data.powerCost)
                 ? [{ id: `${Date.now()}-ps-0`, name: data.powerSource || 'Hauptkraft', source: data.powerSource || '', cost: data.powerCost || '', powerName: data.powerSource || '' }]
                 : [],
-              inventory: data.inventory || [],
+              inventory: buildInventoryFromData(data.structuredInventory, currentDetails.inventory, false),
               secretsStage1: nextSecrets1,
               secretsStage2: nextSecrets2,
               secretsStage3: nextSecrets3,
               knowledge: nextKnowledge,
               expressions: {}
             };
+
+            const { powerSources: normalizedPs, baseAbilities: normalizedBa, techniques: normalizedTech } = normalizeAbilityHierarchy(newDetails);
+            newDetails = syncCharacterAbilityTree(newDetails, normalizedPs, normalizedBa, normalizedTech);
           }
 
           return {
@@ -973,6 +1259,22 @@ export const CharacterLoreForm: React.FC<Props> = ({
             details: newDetails
           };
         });
+
+        let targetTab: 'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar' = 'profil';
+        if (['appearance', 'personality', 'bio', 'situation', 'secrets'].includes(smartFillTargetSection)) {
+          targetTab = 'profil';
+        } else if (['motivation', 'goals', 'relationships'].includes(smartFillTargetSection)) {
+          targetTab = 'beziehungen';
+        } else if (smartFillTargetSection === 'combat') {
+          targetTab = 'kampffaehigkeiten';
+        } else if (smartFillTargetSection === 'professions') {
+          targetTab = 'beruf_talente';
+        } else if (smartFillTargetSection === 'inventory') {
+          targetTab = 'besitz_inventar';
+        } else {
+          targetTab = 'profil';
+        }
+        setCharTab(targetTab);
       }
     } catch (e: any) {
       console.error("Smart Fill Error:", e);
@@ -1042,10 +1344,24 @@ export const CharacterLoreForm: React.FC<Props> = ({
   };
 
   const codexCharactersForGoals = useMemo(() => {
-    return lore
+    const chars: { id: string; title: string }[] = [];
+    const effectivePlayerName = playerName?.trim() || world?.playerCharacter?.name?.trim();
+    const isEditingPlayer = effectivePlayerName && editForm.title?.trim().toLowerCase() === effectivePlayerName.toLowerCase();
+
+    if (!isEditingPlayer) {
+      chars.push({
+        id: 'player_user',
+        title: effectivePlayerName ? `Spieler: ${effectivePlayerName}` : 'Spieler / Nutzer'
+      });
+    }
+
+    const otherChars = lore
       .filter(item => item.category === 'Charaktere' && item.title?.trim().toLowerCase() !== editForm.title?.trim().toLowerCase())
+      .filter(item => !effectivePlayerName || item.title?.trim().toLowerCase() !== effectivePlayerName.toLowerCase())
       .map(c => ({ id: c.id, title: c.title }));
-  }, [lore, editForm.title]);
+
+    return [...chars, ...otherChars];
+  }, [lore, editForm.title, playerName, world?.playerCharacter?.name]);
 
   const codexFactionsForGoals = useMemo(() => {
     return lore
@@ -1433,7 +1749,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
           <button 
             type="button"
             onClick={handleSmartFill}
-            disabled={isSmartFilling || (!smartFillText.trim() && !smartFillNewCharName.trim() && !editForm.title?.trim())}
+            disabled={isSmartFilling || (!smartFillText.trim() && !editForm.title?.trim())}
             className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md shrink-0"
           >
             <i className={`fa-solid ${isSmartFilling ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
@@ -1489,30 +1805,9 @@ export const CharacterLoreForm: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Freitext-Eingabefeld für neuen Charakter */}
-        {smartFillSelectedChar === 'new' && (
-          <div>
-            <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
-              Name / Freitext (Neuer Charakter)
-            </label>
-            <AutoExpandingTextarea
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-indigo-500"
-              placeholder="Name oder Kurzbeschreibung des neuen Charakters eingeben..."
-              value={smartFillNewCharName}
-              onChange={e => {
-                const val = e.target.value;
-                setSmartFillNewCharName(val);
-                if (!isEditing) {
-                  setEditForm(prev => ({ ...prev, title: val }));
-                }
-              }}
-            />
-          </div>
-        )}
-
         <AutoExpandingTextarea 
           className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
-          placeholder={getSmartFillPlaceholder()} 
+          placeholder={smartFillSelectedChar === 'new' ? 'Name und Beschreibung des neuen Charakters eingeben (z. B. Rolle, Aussehen, Persönlichkeit, Kräfte, Herkunft, Beziehungen)...' : getSmartFillPlaceholder()} 
           value={smartFillText} 
           onChange={e => setSmartFillText(e.target.value)} 
         />
@@ -1533,18 +1828,20 @@ export const CharacterLoreForm: React.FC<Props> = ({
           </div>
         )}
 
-        <div className="flex items-center gap-2 px-1 select-none">
-          <input 
-            type="checkbox" 
-            id="keepExistingCharacterDetailsCheckbox"
-            checked={keepExistingDetails} 
-            onChange={e => setKeepExistingDetails(e.target.checked)}
-            className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-4 h-4 accent-indigo-600"
-          />
-          <label htmlFor="keepExistingCharacterDetailsCheckbox" className="text-[11px] text-slate-300 font-medium cursor-pointer">
-            <span className="text-emerald-400 font-bold">Ergänzungs-Modus:</span> Bestehende Charakter-Daten behalten und neue Informationen hinzufügen
-          </label>
-        </div>
+        {smartFillSelectedChar !== 'new' && (
+          <div className="flex items-center gap-2 px-1 select-none">
+            <input 
+              type="checkbox" 
+              id="keepExistingCharacterDetailsCheckbox"
+              checked={keepExistingDetails} 
+              onChange={e => setKeepExistingDetails(e.target.checked)}
+              className="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer w-4 h-4 accent-indigo-600"
+            />
+            <label htmlFor="keepExistingCharacterDetailsCheckbox" className="text-[11px] text-slate-300 font-medium cursor-pointer">
+              <span className="text-emerald-400 font-bold">Ergänzungs-Modus:</span> Bestehende Charakter-Daten behalten und neue Informationen hinzufügen
+            </label>
+          </div>
+        )}
       </div>
 
       {/* TAB 1: PROFIL & AUSSEHEN */}
@@ -2365,7 +2662,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
             motivationCore={editForm.details?.motivationCore}
             codexCharacters={codexCharactersForGoals}
             codexFactions={codexFactionsForGoals}
+            relationships={getRelationships()}
+            playerName={playerName || world?.playerCharacter?.name}
             characterName={editForm.title || editForm.details?.callName || 'Charakter'}
+            sourceCharacterName={editForm.title || editForm.details?.callName || 'Charakter'}
             onGenerateAI={handleGenerateGoalsAI}
             onGenerateMainGoalAI={handleGenerateGoalsForMainGoal}
             isGeneratingAI={isGeneratingGoalsAI}
@@ -2489,9 +2789,14 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   <span>Macht- &amp; Kampfeinstufung (Power-Level)</span>
                 </div>
                 <CharacterPowerRadar
-                  worldPowerSettings={worldPowerSettings}
-                  characterData={editForm.details?.campaignPowerData || {}}
-                  onChange={newData => updateDetail('campaignPowerData', newData)}
+                  worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
+                  characterData={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
+                  onChange={newData => {
+                    updateMultipleDetails({
+                      campaignPowerData: newData,
+                      campaignPowerLevels: newData
+                    });
+                  }}
                 />
               </div>
             )}

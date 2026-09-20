@@ -3525,29 +3525,39 @@ for (const item of [...BASE_STANDARD_ITEMS_CATALOG, ...WEAPON_MASTERY_STANDARD_I
 export const STANDARD_ITEMS_CATALOG: StandardItemDefinition[] = mergedItems;
 
 /**
- * Wandelt die Standard-Gegenstandsdefinitionen in vollwertige LoreEntry-Objekte um.
+ * Wandelt die Standard-Gegenstandsdefinitionen in reine Gegenstands-Codex LoreEntry-Objekte um.
+ * Entfernt instanz- und wirtschaftsspezifische Daten (Preise, Zustände, Bestände) aus der Codex-Definition.
  */
 export function createStandardLoreEntries(): LoreEntry[] {
-  return STANDARD_ITEMS_CATALOG.map(item => ({
-    id: item.id,
-    category: 'Gegenstände',
-    title: item.title,
-    description: item.description,
-    isUnlocked: true,
-    details: {
-      builderType: item.builderType,
-      mainCategory: item.mainCategory,
-      subCategory: item.subCategory,
-      itemType: item.builderType,
-      unit: item.unit,
-      pricePerUnit: item.pricePerUnit,
-      materialQuality: item.materialQuality,
-      rarity: item.rarity,
-      isUnique: item.isUnique,
-      condition: item.condition,
-      ...item.details
-    }
-  }));
+  return STANDARD_ITEMS_CATALOG.map(item => {
+    const rawDetails = item.details || {};
+    // Dynamic instance / economic fields stripped from Codex definition
+    const {
+      pricePerUnit: _p,
+      condition: _c,
+      stockAmount: _s,
+      marketValue: _m,
+      owner: _o,
+      location: _l,
+      ...cleanDetails
+    } = rawDetails;
+
+    return {
+      id: item.id,
+      category: 'Gegenstände',
+      title: item.title,
+      description: item.description,
+      isUnlocked: true,
+      details: {
+        builderType: item.builderType,
+        mainCategory: item.mainCategory,
+        subCategory: item.subCategory,
+        itemType: item.builderType,
+        recommendedUnit: item.unit,
+        ...cleanDetails
+      }
+    };
+  });
 }
 
 /**

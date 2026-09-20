@@ -35,7 +35,13 @@ const baseEmotions = [
   'lächelnd', 'böse', 'traurig', 'verlegen', 'überrascht', 'wütend', 'emotionslos', 'ernst', 
   'ängstlich', 'arrogant', 'verwirrt', 'glücklich', 'stolz', 'nachdenklich', 'schadenfroh', 
   'erschöpft', 'schockiert', 'skeptisch', 'entschlossen', 'geheimnisvoll', 'erleichtert', 
-  'aufgeregt', 'schüchtern', 'besorgt', 'mitleidig', 'angewidert'
+  'aufgeregt', 'schüchtern', 'besorgt', 'mitleidig', 'angewidert', 'verzweifelt', 'panisch',
+  'zornig', 'überheblich', 'hoffnungsvoll', 'misstrauisch', 'entrückt', 'ehrfürchtig',
+  'euphorisch', 'wehmütig', 'sehnsüchtig', 'fasziniert', 'provokant', 'spöttisch',
+  'verächtlich', 'traumatisiert', 'angespannt', 'furchtlos', 'grimmig', 'melancholisch',
+  'belustigt', 'besessen', 'hasserfüllt', 'reuevoll', 'siegessicher', 'ausdruckslos',
+  'erschüttert', 'nachgiebig', 'versteinert', 'begeistert', 'überwältigt', 'demütig',
+  'gleichgültig', 'verbittert', 'nervös', 'ruhig', 'fokussiert'
 ];
 
 const baseTones = [
@@ -43,7 +49,12 @@ const baseTones = [
   'kalt', 'ironisch', 'laut', 'leise', 'bestimmend', 'gelangweilt', 'zärtlich', 'respektvoll', 
   'spöttisch', 'heiser', 'enthusiastisch', 'monoton', 'drohend', 'flehend', 'stotternd', 
   'geheimnisvoll', 'nachdenklich', 'nervös', 'selbstbewusst', 'erhaben', 'verspielt', 
-  'melancholisch', 'schreiend', 'geknickt'
+  'melancholisch', 'schreiend', 'geknickt', 'befehlend', 'autoritär', 'brüllend',
+  'zischend', 'wimmernd', 'keuchend', 'belegt', 'verächtlich', 'herablassend',
+  'einschmeichelnd', 'verführerisch', 'höhnisch', 'verzerrt', 'unterwürfig',
+  'herzlich', 'gebrochen', 'brüchig', 'streng', 'sachlich', 'nüchtern', 'sanft',
+  'melodisch', 'zornig', 'düster', 'frostig', 'gemurmelt', 'atemlos', 'ungeduldig',
+  'besorgt', 'entschlossen', 'verzagt'
 ];
 
 const calculateCombatPower = (char?: any) => {
@@ -475,6 +486,8 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmotionMenu, setShowEmotionMenu] = useState(false);
   const [showToneMenu, setShowToneMenu] = useState(false);
+  const [emotionSearch, setEmotionSearch] = useState('');
+  const [toneSearch, setToneSearch] = useState('');
   const [showFavoritesMenu, setShowFavoritesMenu] = useState(false);
   const [showWorkMenu, setShowWorkMenu] = useState(false);
   const [showNavigationModal, setShowNavigationModal] = useState(false);
@@ -485,6 +498,23 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const entities = adventure.storyState?.storyEntities || [];
     return entities.filter(e => !e.promotedToCodex).length;
   }, [adventure.storyState?.storyEntities]);
+
+  const sanitizeCodexDetails = (category: string, details: Record<string, any> = {}) => {
+    if (category === 'Gegenstände' || category === 'Waren' || category === 'Ressourcen') {
+      const {
+        owner: _o,
+        location: _l,
+        condition: _c,
+        quality: _q,
+        pricePerUnit: _p,
+        durability: _d,
+        stockAmount: _s,
+        ...cleanDetails
+      } = details;
+      return cleanDetails;
+    }
+    return details;
+  };
 
   const handlePromoteEntityToCodex = (entity: StoryEntityItem) => {
     const currentLore = adventure.loreDatabase || [];
@@ -498,7 +528,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         title: entity.title,
         description: entity.description,
         isUnlocked: true,
-        details: entity.details || {}
+        details: sanitizeCodexDetails(entity.category, entity.details || {})
       });
     }
 
@@ -539,7 +569,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
           title: entity.title,
           description: entity.description,
           isUnlocked: true,
-          details: entity.details || {}
+          details: sanitizeCodexDetails(entity.category, entity.details || {})
         });
       }
     });
@@ -831,7 +861,6 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [selectedEnemyId, setSelectedEnemyId] = useState<string>(() => adventure.combatState?.selectedEnemyId ?? '');
   const [selectedEnemyIds, setSelectedEnemyIds] = useState<string[]>(() => adventure.combatState?.selectedEnemyIds ?? (adventure.combatState?.selectedEnemyId ? [adventure.combatState.selectedEnemyId] : []));
   const [customEnemyName, setCustomEnemyName] = useState(() => adventure.combatState?.customEnemyName ?? '');
-  const [customAttackText, setCustomAttackText] = useState('');
   const [drawnWeapon, setDrawnWeapon] = useState<string | null>(null);
 
   const [scannedOpponents, setScannedOpponents] = useState<Record<string, {
@@ -1489,7 +1518,9 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     return regex.test(combinedText);
   };
 
-  const parseGroupCountFromText = (groupName: string, text: string): number | undefined => {
+  const parseGroupCountFromText = (groupName: string, rawText: any): number | undefined => {
+    if (!rawText) return undefined;
+    const text = typeof rawText === 'string' ? rawText : (typeof rawText === 'object' ? (rawText.text || rawText.content || '') : String(rawText));
     if (!text || !text.trim()) return undefined;
 
     // 0. Check if the text explicitly describes a single individual
@@ -1999,14 +2030,21 @@ Text:
     const armor = adventure.structuredInventory?.armor;
     if (!armor) return adventure.player.appearance?.outfit || 'Standard';
     
+    const getVal = (val: any) => typeof val === 'string' ? val : (val?.name || '');
+    const head = getVal(armor.head);
+    const chest = getVal(armor.chest);
+    const legs = getVal(armor.legs);
+    const feet = getVal(armor.feet);
+    const hands = getVal(armor.hands);
+
     const pieces: string[] = [];
-    if (armor.chest) pieces.push(armor.chest);
+    if (chest) pieces.push(chest);
     else if (adventure.player.appearance?.outfit) pieces.push(adventure.player.appearance.outfit);
     
-    if (armor.legs) pieces.push(armor.legs);
-    if (armor.head) pieces.push(`auf dem Kopf: ${armor.head}`);
-    if (armor.feet) pieces.push(`an den Füßen: ${armor.feet}`);
-    if (armor.hands) pieces.push(`an den Händen: ${armor.hands}`);
+    if (legs) pieces.push(legs);
+    if (head) pieces.push(`auf dem Kopf: ${head}`);
+    if (feet) pieces.push(`an den Füßen: ${feet}`);
+    if (hands) pieces.push(`an den Händen: ${hands}`);
     
     return pieces.length > 0 ? pieces.join(', ') : (adventure.player.appearance?.outfit || 'Standard');
   };
@@ -2424,7 +2462,8 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
 
   const getInventoryAndEquipmentSummary = () => {
     const structuredInv = adventure.structuredInventory;
-    const inventoryList = adventure.inventory || [];
+    const getVal = (val: any) => typeof val === 'string' ? val : (val?.name || '');
+    const inventoryList = (adventure.inventory || []).map(getVal).filter(Boolean);
     
     if (!structuredInv) {
       if (inventoryList.length > 0) {
@@ -2438,11 +2477,11 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     // Armor/Clothing
     const armor = structuredInv.armor || {};
     const armorParts: string[] = [];
-    if (armor.head) armorParts.push(`Kopf: ${armor.head}`);
-    if (armor.chest) armorParts.push(`Torso/Kleidung: ${armor.chest}`);
-    if (armor.hands) armorParts.push(`Hände: ${armor.hands}`);
-    if (armor.legs) armorParts.push(`Beine: ${armor.legs}`);
-    if (armor.feet) armorParts.push(`Füße: ${armor.feet}`);
+    if (armor.head) armorParts.push(`Kopf: ${getVal(armor.head)}`);
+    if (armor.chest) armorParts.push(`Torso/Kleidung: ${getVal(armor.chest)}`);
+    if (armor.hands) armorParts.push(`Hände: ${getVal(armor.hands)}`);
+    if (armor.legs) armorParts.push(`Beine: ${getVal(armor.legs)}`);
+    if (armor.feet) armorParts.push(`Füße: ${getVal(armor.feet)}`);
     if (armorParts.length > 0) {
       parts.push(`Getragene Rüstung/Kleidung: ${armorParts.join(', ')}`);
     } else if (adventure.player.appearance?.outfit) {
@@ -2452,23 +2491,23 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     // Accessories
     const acc = structuredInv.accessories || {};
     const accParts: string[] = [];
-    if (acc.finger) accParts.push(`Finger: ${acc.finger}`);
-    if (acc.neck) accParts.push(`Hals: ${acc.neck}`);
-    if (acc.wrist) accParts.push(`Handgelenk: ${acc.wrist}`);
-    if (acc.waist) accParts.push(`Taille: ${acc.waist}`);
-    if (acc.back) accParts.push(`Rücken: ${acc.back}`);
+    if (acc.finger) accParts.push(`Finger: ${getVal(acc.finger)}`);
+    if (acc.neck) accParts.push(`Hals: ${getVal(acc.neck)}`);
+    if (acc.wrist) accParts.push(`Handgelenk: ${getVal(acc.wrist)}`);
+    if (acc.waist) accParts.push(`Taille: ${getVal(acc.waist)}`);
+    if (acc.back) accParts.push(`Rücken: ${getVal(acc.back)}`);
     if (accParts.length > 0) {
       parts.push(`Angelegte Accessoires: ${accParts.join(', ')}`);
     }
 
     // Weapons
-    const weapons = structuredInv.weapons || [];
+    const weapons = (structuredInv.weapons || []).map(getVal).filter(Boolean);
     if (weapons.length > 0) {
       parts.push(`Ausgerüstete Waffen: ${weapons.join(', ')}`);
     }
 
     // General items
-    const general = structuredInv.generalItems || [];
+    const general = (structuredInv.generalItems || []).map(getVal).filter(Boolean);
     const allItems = [...general, ...inventoryList];
     if (allItems.length > 0) {
       parts.push(`Im Besitz (Tasche/Verbrauchsgüter): ${allItems.join(', ')}`);
@@ -4782,6 +4821,7 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
             if (sLabel === kLabel) return true;
             if ((sLabel === 'zeit' || sLabel === 'uhrzeit') && (kLabel === 'zeit' || kLabel === 'uhrzeit')) return true;
             if ((sLabel.includes('körper') && sLabel.includes('zustand')) && (kLabel.includes('körper') && kLabel.includes('zustand'))) return true;
+            if ((sLabel.includes('standort') || sLabel.includes('ort')) && (kLabel.includes('standort') || kLabel.includes('ort') || kLabel.includes('currentlocation'))) return true;
             return false;
           });
           if (index !== -1) {
@@ -5251,6 +5291,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
          - Der absolute Schwerpunkt deiner Nachricht MUSS auf aktiven Ereignissen, Handlungen, Entscheidungen, dynamischen Interaktionen und spürbarem Plot-Fortschritt liegen!
          - Vermeide lange, statische oder passive Beschreibungen von Räumen, Wänden, Böden, Möbeln, Lichtstimmungen oder Stille. Maximal 1-2 kurze, wirkungsvolle Sätze zur Szenerie genügen völlig.
          - Der gesamte Rest deiner Antwort muss aus lebendiger Handlung, Reaktionen von Charakteren und neuen Vorfällen bestehen. Beschreibe Kleidung und Körpersprache dynamisch im Fluss der Aktion, niemals als statischen Stillstand.
+      1b. AUTOMATISCHE STANDORT-SYNCHRONISATION: Wenn sich die Szene, der Raum oder die Handlung an einen konkreten neuen Ort verlagert (z. B. Getreidespeicher, Anwesen, Taverne, Schloss, Hafen), aktualisiere zwingend den Standort im HUD per [[STATUS: Standort=Neuer Ortsname]]! Behalte niemals veraltete Startgebiete oder alte Ortsnamen im HUD bei, wenn der Erzähltext an einem neuen Ort spielt.
       2. Beziehe die VERGANGENHEIT der Figuren mit ein (Andeutungen oder direkte Referenzen).
       3. Lass die NPCs ihre ZIELE verfolgen. Sie sollten nicht nur passiv sein, sondern eigene Agenden haben.
       4. Nutze das HUD für Änderungen der AKTUELLEN WERTE: [[STATUS: Feld1=Wert1, Feld2=Wert2]]. Trenne mehrere Änderungen zwingend mit einem Komma! Du KANNST und SOLLST Werte anpassen, wenn die Handlung es erfordert. WICHTIG: Nutze AUSSCHLIESSLICH die exakten Feldnamen, die dir unter \"AKTUELLE WERTE\" übergeben wurden! Erfinde NIEMALS neue HUD-Felder, die nicht in den aktuellen Werten stehen.
@@ -5944,7 +5985,6 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
             }
             return o;
           }));
-          setCustomAttackText('');
         } else if (actionType === 'skill') {
           if (isHeal) {
             currentHp = Math.min(playerMaxHp, currentHp + dmgDealt);
@@ -6014,7 +6054,6 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
           }
           return o;
         }));
-        setCustomAttackText('');
       } else if (actionType === 'skill') {
         if (isHeal) {
           nextHp = Math.min(playerMaxHp, playerHp + dmgDealt);
@@ -6585,6 +6624,12 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       const trimmed = prevText.trim();
       if (!trimmed) {
         return actionStr;
+      }
+      if (trimmed === actionDetail) {
+        return actionStr;
+      }
+      if (trimmed.endsWith(actionStr) || trimmed.endsWith(actionDetail)) {
+        return trimmed;
       }
       return `${trimmed} ${actionStr}`;
     });
@@ -7328,6 +7373,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
          - Der absolute Schwerpunkt deiner Nachricht MUSS auf aktiven Ereignissen, Handlungen, Entscheidungen, dynamischen Interaktionen und spürbarem Plot-Fortschritt liegen!
          - Vermeide lange, statische oder passive Beschreibungen von Räumen, Wänden, Böden, Möbeln, Lichtstimmungen oder Stille. Maximal 1-2 kurze, wirkungsvolle Sätze zur Szenerie genügen völlig.
          - Der gesamte Rest deiner Antwort muss aus lebendiger Handlung, Reaktionen von Charakteren und neuen Vorfällen bestehen. Beschreibe Kleidung und Körpersprache dynamisch im Fluss der Aktion, niemals als statischen Stillstand.
+      1b. AUTOMATISCHE STANDORT-SYNCHRONISATION: Wenn sich die Szene, der Raum oder die Handlung an einen konkreten neuen Ort verlagert (z. B. Getreidespeicher, Anwesen, Taverne, Schloss, Hafen), aktualisiere zwingend den Standort im HUD per [[STATUS: Standort=Neuer Ortsname]]! Behalte niemals veraltete Startgebiete oder alte Ortsnamen im HUD bei, wenn der Erzähltext an einem neuen Ort spielt.
       2. Beziehe die VERGANGENHEIT der Figuren mit ein (Andeutungen oder direkte Referenzen).
       3. Lass die NPCs ihre ZIELE verfolgen. Sie sollten nicht nur passiv sein, sondern eigene Agenden haben.
       4. Nutze das HUD für Änderungen der AKTUELLEN WERTE: [[STATUS: Feld1=Wert1, Feld2=Wert2]]. Trenne mehrere Änderungen zwingend mit einem Komma! Du KANNST und SOLLST Werte anpassen, wenn die Handlung es erfordert. WICHTIG: Nutze AUSSCHLIESSLICH die exakten Feldnamen, die dir unter \"AKTUELLE WERTE\" übergeben wurden! Erfinde NIEMALS neue HUD-Felder, die nicht in den aktuellen Werten stehen.
@@ -8865,38 +8911,59 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               
               <div className="relative">
                 <button
-                  onClick={() => { setShowEmotionMenu(!showEmotionMenu); setShowToneMenu(false); setShowFavoritesMenu(false); }}
+                  onClick={() => { 
+                    setShowEmotionMenu(!showEmotionMenu); 
+                    setShowToneMenu(false); 
+                    setShowFavoritesMenu(false); 
+                    setEmotionSearch('');
+                  }}
                   className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
                   title="Gesichtsausdruck beschreiben"
                 >
                   <i className="fa-regular fa-face-smile group-hover:-translate-y-0.5 transition-transform"></i>
                 </button>
                 {showEmotionMenu && (
-                  <div className="absolute bottom-full left-0 mb-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
+                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
                     <div className="p-1.5 px-3 text-[10px] uppercase font-bold text-slate-400 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
                       <span>Emotion</span>
                       <span className="text-[8px] text-slate-500 lowercase">oft benutzt oben</span>
                     </div>
-                    <div className="max-h-56 overflow-y-auto">
-                      {sortedEmotions.map(e => {
-                        const count = emotionUsage[e] || 0;
-                        return (
-                          <button
-                            key={e}
-                            onClick={() => {
-                              insertFormatting(`[schaut ${e}] `, '');
-                              handleSelectEmotion(e);
-                              setShowEmotionMenu(false);
-                            }}
-                            className="block w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-                          >
-                            <span className="flex items-center justify-between w-full">
-                              <span>{e}</span>
-                              {count > 0 && <span className="text-[9px] text-amber-500 font-extrabold flex items-center gap-0.5 font-mono"> {count}</span>}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <div className="p-1.5 bg-slate-900/60 border-b border-slate-700/80">
+                      <input
+                        type="text"
+                        value={emotionSearch}
+                        onChange={(e) => setEmotionSearch(e.target.value)}
+                        placeholder="Emotion suchen..."
+                        className="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/80"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                      {sortedEmotions
+                        .filter(e => e.toLowerCase().includes(emotionSearch.toLowerCase().trim()))
+                        .map(e => {
+                          const count = emotionUsage[e] || 0;
+                          return (
+                            <button
+                              key={e}
+                              onClick={() => {
+                                insertFormatting(`[schaut ${e}] `, '');
+                                handleSelectEmotion(e);
+                                setShowEmotionMenu(false);
+                                setEmotionSearch('');
+                              }}
+                              className="block w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                            >
+                              <span className="flex items-center justify-between w-full">
+                                <span>{e}</span>
+                                {count > 0 && <span className="text-[9px] text-amber-500 font-extrabold flex items-center gap-0.5 font-mono"> {count}</span>}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      {sortedEmotions.filter(e => e.toLowerCase().includes(emotionSearch.toLowerCase().trim())).length === 0 && (
+                        <div className="p-3 text-xs text-slate-500 text-center">Keine passenden Begriffe</div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -8904,38 +8971,59 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               
               <div className="relative">
                 <button
-                  onClick={() => { setShowToneMenu(!showToneMenu); setShowEmotionMenu(false); setShowFavoritesMenu(false); }}
+                  onClick={() => { 
+                    setShowToneMenu(!showToneMenu); 
+                    setShowEmotionMenu(false); 
+                    setShowFavoritesMenu(false); 
+                    setToneSearch('');
+                  }}
                   className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
                   title="Stimme/Tonart beschreiben"
                 >
                   <i className="fa-solid fa-microphone-lines group-hover:-translate-y-0.5 transition-transform"></i>
                 </button>
                 {showToneMenu && (
-                  <div className="absolute bottom-full left-0 mb-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
+                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
                     <div className="p-1.5 px-3 text-[10px] uppercase font-bold text-slate-400 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
                       <span>Tonart</span>
                       <span className="text-[8px] text-slate-500 lowercase">oft benutzt oben</span>
                     </div>
-                    <div className="max-h-56 overflow-y-auto">
-                      {sortedTones.map(e => {
-                        const count = toneUsage[e] || 0;
-                        return (
-                          <button
-                            key={e}
-                            onClick={() => {
-                              insertFormatting(`[spricht ${e}] `, '');
-                              handleSelectTone(e);
-                              setShowToneMenu(false);
-                            }}
-                            className="block w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-                          >
-                            <span className="flex items-center justify-between w-full">
-                              <span>{e}</span>
-                              {count > 0 && <span className="text-[9px] text-amber-500 font-extrabold flex items-center gap-0.5 font-mono"> {count}</span>}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <div className="p-1.5 bg-slate-900/60 border-b border-slate-700/80">
+                      <input
+                        type="text"
+                        value={toneSearch}
+                        onChange={(e) => setToneSearch(e.target.value)}
+                        placeholder="Tonart suchen..."
+                        className="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/80"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                      {sortedTones
+                        .filter(t => t.toLowerCase().includes(toneSearch.toLowerCase().trim()))
+                        .map(e => {
+                          const count = toneUsage[e] || 0;
+                          return (
+                            <button
+                              key={e}
+                              onClick={() => {
+                                insertFormatting(`[spricht ${e}] `, '');
+                                handleSelectTone(e);
+                                setShowToneMenu(false);
+                                setToneSearch('');
+                              }}
+                              className="block w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                            >
+                              <span className="flex items-center justify-between w-full">
+                                <span>{e}</span>
+                                {count > 0 && <span className="text-[9px] text-amber-500 font-extrabold flex items-center gap-0.5 font-mono"> {count}</span>}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      {sortedTones.filter(t => t.toLowerCase().includes(toneSearch.toLowerCase().trim())).length === 0 && (
+                        <div className="p-3 text-xs text-slate-500 text-center">Keine passenden Begriffe</div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -10081,20 +10169,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
                   {/* High Quality freeform text box front & center */}
                   <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3 flex flex-col gap-3 shadow-inner">
-                    <div className="space-y-1">
-                      <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                        <i className="fa-solid fa-pen-nib text-red-500"></i> Beschreibe deinen Angriff/Spezialaktion:
-                      </label>
-                      <AutoExpandingTextarea
-                        value={customAttackText}
-                        onChange={(e) => setCustomAttackText(e.target.value)}
-                        placeholder="z.B. Ich entfessle meinen Eis-Atem gegen die Marine-Soldaten x50, friere einen Teil ein und weiche geschickt rückwärts aus..."
-                        disabled={isLoading}
-                        rows={3}
-                        className="w-full bg-slate-950/95 border border-slate-800 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/30 rounded-lg p-2.5 text-xs text-slate-200 placeholder:text-slate-600 outline-none transition-all font-sans resize-none"
-                      />
-                    </div>
-
                     {/* Weapons list from inventory */}
                     {adventure.structuredInventory?.weapons && adventure.structuredInventory.weapons.length > 0 && (
                       <div className="space-y-1.5 border-t border-slate-800/40 pt-2 bg-slate-950/20 px-1 rounded-lg">
@@ -10103,19 +10177,28 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           <span className="text-[8px] text-slate-500 font-normal lowercase italic">(Anklicken zum Ziehen / Erneut zum Wegstecken)</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
-                          {adventure.structuredInventory.weapons.map((weapon, idx) => {
+                          {adventure.structuredInventory.weapons.map((rawWeapon, idx) => {
+                            const weapon = typeof rawWeapon === 'string' ? rawWeapon : (((rawWeapon as any)?.name) || String(rawWeapon));
                             const isDrawn = drawnWeapon === weapon;
                             return (
                               <button
-                                key={`${weapon}-${idx}`}
+                                key={`weapon-btn-${weapon}-${idx}`}
                                 type="button"
                                 onClick={() => {
                                   if (isDrawn) {
                                     setDrawnWeapon(null);
-                                    setCustomAttackText(`Ich stecke ${weapon} wieder weg.`);
+                                    setInputText(prev => {
+                                      const text = `Ich stecke ${weapon} wieder weg.`;
+                                      const trimmed = prev.trim();
+                                      return trimmed ? `${trimmed} ${text}` : text;
+                                    });
                                   } else {
                                     setDrawnWeapon(weapon);
-                                    setCustomAttackText(`Ich ziehe und benutze ${weapon}!`);
+                                    setInputText(prev => {
+                                      const text = `Ich ziehe und benutze ${weapon}!`;
+                                      const trimmed = prev.trim();
+                                      return trimmed ? `${trimmed} ${text}` : text;
+                                    });
                                   }
                                 }}
                                 className={`px-2.5 py-1 rounded text-[10px] font-semibold transition-all flex items-center gap-1.5 active:scale-95 ${
@@ -10146,17 +10229,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {/* Consumables */}
-                          {adventure.inventory?.map((item, idx) => {
-                            const isSelected = customAttackText === `Ich nutze ${item}!`;
+                          {adventure.inventory?.map((rawItem, idx) => {
+                            const item = typeof rawItem === 'string' ? rawItem : (((rawItem as any)?.name) || String(rawItem));
+                            const isSelected = inputText.includes(`Ich nutze ${item}!`);
                             return (
                               <button
                                 key={`consumable-btn-${item}-${idx}`}
                                 type="button"
                                 onClick={() => {
                                   if (isSelected) {
-                                    setCustomAttackText('');
+                                    setInputText(prev => prev.replace(`Ich nutze ${item}!`, '').replace(/\s+/g, ' ').trim());
                                   } else {
-                                    setCustomAttackText(`Ich nutze ${item}!`);
+                                    setInputText(prev => {
+                                      const text = `Ich nutze ${item}!`;
+                                      const trimmed = prev.trim();
+                                      return trimmed ? `${trimmed} ${text}` : text;
+                                    });
                                   }
                                 }}
                                 className={`px-2 py-0.5 rounded text-[9.5px] font-semibold transition-all flex items-center gap-1 active:scale-95 ${
@@ -10170,17 +10258,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                             );
                           })}
                           {/* General items */}
-                          {adventure.structuredInventory?.generalItems?.map((item, idx) => {
-                            const isSelected = customAttackText === `Ich verwende ${item}!`;
+                          {adventure.structuredInventory?.generalItems?.map((rawItem, idx) => {
+                            const item = typeof rawItem === 'string' ? rawItem : (((rawItem as any)?.name) || String(rawItem));
+                            const isSelected = inputText.includes(`Ich verwende ${item}!`);
                             return (
                               <button
                                 key={`general-btn-${item}-${idx}`}
                                 type="button"
                                 onClick={() => {
                                   if (isSelected) {
-                                    setCustomAttackText('');
+                                    setInputText(prev => prev.replace(`Ich verwende ${item}!`, '').replace(/\s+/g, ' ').trim());
                                   } else {
-                                    setCustomAttackText(`Ich verwende ${item}!`);
+                                    setInputText(prev => {
+                                      const text = `Ich verwende ${item}!`;
+                                      const trimmed = prev.trim();
+                                      return trimmed ? `${trimmed} ${text}` : text;
+                                    });
                                   }
                                 }}
                                 className={`px-2 py-0.5 rounded text-[9.5px] font-semibold transition-all flex items-center gap-1 active:scale-95 ${
@@ -10202,7 +10295,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       <button
                         type="button"
                         onClick={() => {
-                          const actionText = customAttackText.trim() || (drawnWeapon ? `Ich greife mit ${drawnWeapon} an!` : '');
+                          const actionText = inputText.trim() || (drawnWeapon ? `Ich greife mit ${drawnWeapon} an!` : '');
                           if (!actionText) return;
                           const isHero = adventure.world.isHeroic !== false;
                           const minDmg = isHero ? 18 : 10;
@@ -10210,7 +10303,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           const dmg = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
                           handleCombatAction('attack', actionText, dmg, 0);
                         }}
-                        disabled={isLoading || (!customAttackText.trim() && !drawnWeapon)}
+                        disabled={isLoading || (!inputText.trim() && !drawnWeapon)}
                         className="p-2.5 bg-red-950/15 hover:bg-red-900/30 border border-red-900/40 text-left text-slate-200 rounded-lg transition-all flex flex-col justify-between h-14 disabled:opacity-40 disabled:hover:bg-transparent disabled:border-slate-850 group active:scale-95 text-xs"
                         title="Einfacher physischer Angriff (0 MP)"
                       >
@@ -10221,7 +10314,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       <button
                         type="button"
                         onClick={() => {
-                          const actionText = customAttackText.trim() || (drawnWeapon ? `Ich nutze meine Spezialkraft mit ${drawnWeapon}` : '');
+                          const actionText = inputText.trim() || (drawnWeapon ? `Ich nutze meine Spezialkraft mit ${drawnWeapon}` : '');
                           if (!actionText) return;
                           const isHero = adventure.world.isHeroic !== false;
                           const minDmg = isHero ? 32 : 18;
@@ -10229,7 +10322,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           const dmg = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
                           handleCombatAction('attack', `Spezialtechnik entfesselt: "${actionText}"`, dmg, 15);
                         }}
-                        disabled={isLoading || (!customAttackText.trim() && !drawnWeapon) || playerMp < 15}
+                        disabled={isLoading || (!inputText.trim() && !drawnWeapon) || playerMp < 15}
                         className="p-2.5 bg-indigo-950/15 hover:bg-indigo-900/30 border border-indigo-900/40 text-left text-slate-200 rounded-lg transition-all flex flex-col justify-between h-14 disabled:opacity-40 disabled:hover:bg-transparent disabled:border-slate-850 group active:scale-95 text-xs"
                         title="Starke Spezialkraft / Teufelsfrucht / Jutsu (15 MP)"
                       >
@@ -10240,7 +10333,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       <button
                         type="button"
                         onClick={() => {
-                          const actionText = customAttackText.trim() || (drawnWeapon ? `Ich wende einen Flächenangriff mit ${drawnWeapon} an` : '');
+                          const actionText = inputText.trim() || (drawnWeapon ? `Ich wende einen Flächenangriff mit ${drawnWeapon} an` : '');
                           if (!actionText) return;
                           const isHero = adventure.world.isHeroic !== false;
                           const minDmg = isHero ? 22 : 12;
@@ -10248,7 +10341,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           const dmg = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
                           handleCombatAction('attack', `Flächenangriff gewirkt: "${actionText}"`, dmg, 12);
                         }}
-                        disabled={isLoading || (!customAttackText.trim() && !drawnWeapon) || playerMp < 12}
+                        disabled={isLoading || (!inputText.trim() && !drawnWeapon) || playerMp < 12}
                         className="p-2.5 bg-amber-950/15 hover:bg-amber-900/30 border border-amber-900/40 text-left text-slate-200 rounded-lg transition-all flex flex-col justify-between h-14 disabled:opacity-40 disabled:hover:bg-transparent disabled:border-slate-850 group active:scale-95 text-xs"
                         title="Optimal gegen Soldatentrupps / Kanonenfutter (12 MP)"
                       >
@@ -10259,7 +10352,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       <button
                         type="button"
                         onClick={() => {
-                          const actionText = customAttackText.trim() || (drawnWeapon ? `Ich nehme eine defensive Haltung mit ${drawnWeapon} ein` : 'Ich weiche geschickt aus und gehe in Deckung');
+                          const actionText = inputText.trim() || (drawnWeapon ? `Ich nehme eine defensive Haltung mit ${drawnWeapon} ein` : 'Ich weiche geschickt aus und gehe in Deckung');
                           handleCombatAction('defend', actionText, 0, -10);
                         }}
                         disabled={isLoading}
@@ -10273,11 +10366,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
                     {/* Backing label & send row */}
                     <div className="flex justify-between items-center bg-slate-950/40 px-3 py-1.5 rounded-lg border border-slate-850">
-                      <span className="text-[9px] text-slate-500 italic">Tippe oben ein Manöver und klicke einen der 4 Aktionstypen zum Ausführen!</span>
+                      <span className="text-[9px] text-slate-500 italic">Tippe dein Manöver im Chat-Eingabefeld und klicke einen der 4 Aktionstypen zum Ausführen!</span>
                       <button
                         type="button"
                         onClick={() => {
-                          const actionText = customAttackText.trim() || (drawnWeapon ? `Ich greife mit ${drawnWeapon} an!` : '');
+                          const actionText = inputText.trim() || (drawnWeapon ? `Ich greife mit ${drawnWeapon} an!` : '');
                           if (!actionText) return;
                           const isHero = adventure.world.isHeroic !== false;
                           const minDmg = isHero ? 18 : 10;
@@ -10285,7 +10378,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           const dmg = Math.floor(Math.random() * (maxDmg - minDmg + 1)) + minDmg;
                           handleCombatAction('attack', actionText, dmg, 0);
                         }}
-                        disabled={isLoading || (!customAttackText.trim() && !drawnWeapon)}
+                        disabled={isLoading || (!inputText.trim() && !drawnWeapon)}
                         className="px-3.5 py-1.5 bg-red-850 hover:bg-red-700 disabled:bg-slate-800 disabled:opacity-45 text-slate-200 disabled:text-slate-500 font-extrabold rounded-lg text-[10px] uppercase tracking-wider transition-all flex items-center gap-1.5 shadow select-none active:scale-95"
                       >
                         Manöver entfesseln
@@ -10930,26 +11023,32 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <div className="space-y-3">
                   {/* Local Inventory Category Tabs */}
                   {(() => {
-                    const weaponsList = adventure.structuredInventory?.weapons || [];
-                    const generalItemsList = adventure.structuredInventory?.generalItems || [];
+                    const toItemString = (val: any): string => {
+                      if (!val) return '';
+                      if (typeof val === 'string') return val;
+                      if (typeof val === 'object' && val.name) return String(val.name);
+                      return '';
+                    };
+                    const weaponsList = (adventure.structuredInventory?.weapons || []).map(toItemString).filter(Boolean);
+                    const generalItemsList = (adventure.structuredInventory?.generalItems || []).map(toItemString).filter(Boolean);
                     const armorObj = adventure.structuredInventory?.armor || {};
                     const accessoriesObj = adventure.structuredInventory?.accessories || {};
                     const armorList = [
-                      armorObj.head,
-                      armorObj.chest,
-                      armorObj.hands,
-                      armorObj.legs,
-                      armorObj.feet,
-                    ].filter(Boolean) as string[];
+                      toItemString(armorObj.head),
+                      toItemString(armorObj.chest),
+                      toItemString(armorObj.hands),
+                      toItemString(armorObj.legs),
+                      toItemString(armorObj.feet),
+                    ].filter(Boolean);
                     const accessoriesList = [
-                      accessoriesObj.finger,
-                      accessoriesObj.wrist,
-                      accessoriesObj.waist,
-                      accessoriesObj.neck,
-                      accessoriesObj.back,
-                    ].filter(Boolean) as string[];
+                      toItemString(accessoriesObj.finger),
+                      toItemString(accessoriesObj.wrist),
+                      toItemString(accessoriesObj.waist),
+                      toItemString(accessoriesObj.neck),
+                      toItemString(accessoriesObj.back),
+                    ].filter(Boolean);
                     const equipmentList = [...armorList, ...accessoriesList];
-                    const consumablesList = adventure.inventory || [];
+                    const consumablesList = (adventure.inventory || []).map(toItemString).filter(Boolean);
                     const moneyAmount = adventure.structuredInventory?.money || 0;
                     const currencyLabel = adventure.structuredInventory?.currencyLabel || 'Goldstücke';
 

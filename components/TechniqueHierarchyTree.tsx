@@ -99,13 +99,26 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 }) => {
   // 1. Sichere Standard-Kraftquelle falls Liste leer
   const safePowerSources = useMemo(() => {
-    if (powerSources && powerSources.length > 0) return powerSources;
+    if (powerSources && powerSources.length > 0) {
+      return powerSources.map(ps => {
+        // Falls Altbestand noch die automatische "Standard-Kraftquelle" enthält, leeren wir die Felder
+        if (ps.powerName === 'Standard-Kraftquelle' || ps.source === 'Standard-Kraftquelle') {
+          return {
+            ...ps,
+            source: ps.source === 'Standard-Kraftquelle' ? '' : ps.source,
+            powerName: ps.powerName === 'Standard-Kraftquelle' ? '' : ps.powerName,
+            cost: ps.cost === 'Mana' ? '' : ps.cost
+          };
+        }
+        return ps;
+      });
+    }
     if (readOnly) return [];
     return [{
       id: 'ps_default_main',
-      source: 'Standard-Kraftquelle',
-      powerName: 'Standard-Kraftquelle',
-      cost: 'Mana',
+      source: '',
+      powerName: '',
+      cost: '',
       powerDescription: ''
     }];
   }, [powerSources, readOnly]);
@@ -147,74 +160,40 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return found || safePowerSources[0] || null;
   }, [safePowerSources, activePowerSourceId]);
 
-  // Dynamische Optionen aus Schritt 3 von 9
-  const step3PowerNames = useMemo(() => {
-    const set = new Set<string>();
-
-    if (worldPowerSettings) {
-      Object.keys(worldPowerSettings).forEach(k => set.add(k));
-    }
-    if (world?.campaignPowerSettings) {
-      Object.keys(world.campaignPowerSettings).forEach(k => set.add(k));
-    }
-
+  // Nur die in Schritt 3 von 9 registrierten Kraftquellen für Techniken (aus world.customResourceMappings)
+  const registeredStep3PowerSources = useMemo(() => {
+    const list: { id: string; name: string; effect?: string; description?: string }[] = [];
     if (world?.customResourceMappings && Array.isArray(world.customResourceMappings)) {
       world.customResourceMappings.forEach((m: any) => {
-        if (m.name) set.add(m.name);
+        if (m && typeof m.name === 'string' && m.name.trim().length > 0) {
+          list.push(m);
+        }
       });
     }
-
-    if (world?.healthPowerNames && Array.isArray(world.healthPowerNames)) {
-      world.healthPowerNames.forEach((n: string) => set.add(n));
+    if (world?.campaignPowerSettings?.customResourceMappings && Array.isArray(world.campaignPowerSettings.customResourceMappings)) {
+      world.campaignPowerSettings.customResourceMappings.forEach((m: any) => {
+        if (m && typeof m.name === 'string' && m.name.trim().length > 0 && !list.some(existing => existing.id === m.id || existing.name === m.name)) {
+          list.push(m);
+        }
+      });
     }
-    if (world?.costPowerNames && Array.isArray(world.costPowerNames)) {
-      world.costPowerNames.forEach((n: string) => set.add(n));
-    }
+    return list;
+  }, [world?.customResourceMappings, world?.campaignPowerSettings]);
 
-    if (activePowerSource?.powerName) {
-      set.add(activePowerSource.powerName);
-    }
-    if (activePowerSource?.source) {
-      set.add(activePowerSource.source);
-    }
-
-    if (set.size === 0) {
-      ['Standard-Kraftquelle', 'Magie', 'Körperkraft', 'Teufelskräfte', 'Haki', 'Ki / Chi'].forEach(n => set.add(n));
-    }
-
-    return Array.from(set);
-  }, [worldPowerSettings, world, activePowerSource]);
-
-  const step3CostResources = useMemo(() => {
-    const set = new Set<string>();
-
+  // Nur die unter "Kosten-Ressourcen" eingetragenen Ressourcen anzeigen
+  const registeredCostResources = useMemo(() => {
+    const list: string[] = [];
     const resList = costResources || world?.costResources;
     if (Array.isArray(resList)) {
       resList.forEach((r: any) => {
-        if (typeof r === 'string') set.add(r);
-        else if (r && r.name) set.add(r.name);
+        const name = typeof r === 'string' ? r.trim() : (r && r.name ? String(r.name).trim() : '');
+        if (name && !list.includes(name)) {
+          list.push(name);
+        }
       });
     }
-
-    const cNames = costPowerNames || world?.costPowerNames;
-    if (Array.isArray(cNames)) {
-      cNames.forEach((n: string) => set.add(n));
-    }
-
-    if (world?.costPowerName) {
-      set.add(world.costPowerName);
-    }
-
-    if (activePowerSource?.cost) {
-      set.add(activePowerSource.cost);
-    }
-
-    if (set.size === 0) {
-      ['Mana', 'Ausdauer', 'MP', 'SP', 'Wut', 'Fokus', 'Qi', 'Chakra', 'Seelenkraft', 'Keine Kosten'].forEach(r => set.add(r));
-    }
-
-    return Array.from(set);
-  }, [costResources, costPowerNames, world, activePowerSource]);
+    return list;
+  }, [costResources, world?.costResources]);
 
   // Wenn activePowerSourceId ungültig ist, auf erste Kraftquelle zurücksetzen
   useEffect(() => {
@@ -307,9 +286,9 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     const newId = `ps_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
     const newPs: CharacterPowerSource = {
       id: newId,
-      source: 'Neue Kraftquelle',
-      powerName: 'Neue Kraftquelle',
-      cost: 'Mana',
+      source: '',
+      powerName: '',
+      cost: '',
       powerDescription: ''
     };
     const updatedPs = [...safePowerSources, newPs];
@@ -326,24 +305,24 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         return {
           ...ps,
           ...updates,
-          powerName: updates.powerName || updates.source || ps.powerName,
-          source: updates.source || updates.powerName || ps.source
+          powerName: updates.powerName !== undefined ? updates.powerName : (updates.source !== undefined ? updates.source : ps.powerName),
+          source: updates.source !== undefined ? updates.source : (updates.powerName !== undefined ? updates.powerName : ps.source)
         };
       }
       return ps;
     });
 
     // Namen in verknüpften Grundfähigkeiten und Techniken synchron nachziehen
-    const newPowerName = updates.powerName || updates.source;
+    const newPowerName = updates.powerName !== undefined ? updates.powerName : updates.source;
     const updatedBa = baseAbilities.map(ba => {
-      if (ba.powerSourceId === psId && newPowerName) {
+      if (ba.powerSourceId === psId && newPowerName !== undefined) {
         return { ...ba, powerSourceName: newPowerName };
       }
       return ba;
     });
 
     const updatedTech = techniques.map(tech => {
-      if (tech.powerSourceId === psId && newPowerName) {
+      if (tech.powerSourceId === psId && newPowerName !== undefined) {
         return { ...tech, powerSourceName: newPowerName };
       }
       return tech;
@@ -769,54 +748,113 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
         {/* Inline-Konfiguration der aktuell aktiven Kraftquelle */}
         {!readOnly && activePowerSource && (
-          <div className="mt-1 pt-2 border-t border-slate-800/60 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-bold text-slate-400 uppercase">
-                Name der Kraftquelle
-              </label>
-              <select
-                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                value={activePowerSource.powerName || activePowerSource.source || ''}
-                onChange={e => handleUpdatePowerSource(activePowerSource.id, { 
-                  powerName: e.target.value,
-                  source: e.target.value
-                })}
-              >
-                {step3PowerNames.map(pName => (
-                  <option key={pName} value={pName} className="bg-slate-950 text-white">
-                    {pName}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="mt-1 pt-2.5 border-t border-slate-800/60 flex flex-col gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+              {/* 1. Name der Kraftquelle: Gut sichtbares Eingabefeld für Nutzer & KI */}
+              <div className="sm:col-span-5 flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
+                  Name der Kraftquelle
+                </label>
+                <input
+                  type="text"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs font-semibold outline-none focus:border-amber-500 h-[34px] placeholder:text-slate-600 transition-colors"
+                  placeholder="Name der Kraftquelle eintragen..."
+                  value={activePowerSource.powerName || activePowerSource.source || ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    handleUpdatePowerSource(activePowerSource.id, { 
+                      powerName: val,
+                      source: val
+                    });
+                  }}
+                />
+              </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[9px] font-bold text-slate-400 uppercase">
-                Ressource / Kosten
-              </label>
-              <select
-                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                value={activePowerSource.cost || ''}
-                onChange={e => handleUpdatePowerSource(activePowerSource.id, { cost: e.target.value })}
-              >
-                {step3CostResources.map(cRes => (
-                  <option key={cRes} value={cRes} className="bg-slate-950 text-white">
-                    {cRes}
-                  </option>
-                ))}
-              </select>
-            </div>
+              {/* 2. Menü: Zeigt Kraftquellen an */}
+              <div className="sm:col-span-4 flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
+                  Kraftquellen
+                </label>
+                <select
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[34px] cursor-pointer"
+                  value={
+                    registeredStep3PowerSources.some(m => m.name === (activePowerSource.powerName || activePowerSource.source))
+                      ? (activePowerSource.powerName || activePowerSource.source)
+                      : ''
+                  }
+                  onChange={e => {
+                    const chosen = e.target.value;
+                    if (chosen) {
+                      const mapping = registeredStep3PowerSources.find(m => m.name === chosen);
+                      handleUpdatePowerSource(activePowerSource.id, { 
+                        powerName: chosen,
+                        source: chosen,
+                        powerDescription: mapping?.description || activePowerSource.powerDescription || ''
+                      });
+                    } else {
+                      handleUpdatePowerSource(activePowerSource.id, {
+                        powerName: '',
+                        source: ''
+                      });
+                    }
+                  }}
+                >
+                  <option value="">-- Kraftquelle wählen --</option>
+                  {registeredStep3PowerSources.length > 0 ? (
+                    registeredStep3PowerSources.map(mapping => (
+                      <option key={mapping.id} value={mapping.name} className="bg-slate-950 text-white">
+                        {mapping.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled className="bg-slate-950 text-slate-500">
+                      Keine Kraftquellen vorhanden
+                    </option>
+                  )}
+                </select>
+              </div>
 
-            <div className="flex items-end justify-end">
-              <button
-                type="button"
-                onClick={() => handleDeletePowerSource(activePowerSource.id)}
-                className="px-2.5 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[30px] flex items-center gap-1 cursor-pointer"
-                title="Diese Kraftquelle löschen"
-              >
-                <LucideIcons.Trash2 className="w-3 h-3" />
-                <span>Löschen</span>
-              </button>
+              {/* 3. Ressource / Kosten: Zeigt ausschließlich registrierte Kosten-Ressourcen */}
+              <div className="sm:col-span-2 flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
+                  Ressource / Kosten
+                </label>
+                <select
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[34px] cursor-pointer"
+                  value={activePowerSource.cost || ''}
+                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { cost: e.target.value })}
+                >
+                  <option value="">-- Ressource wählen --</option>
+                  {registeredCostResources.map(cRes => (
+                    <option key={cRes} value={cRes} className="bg-slate-950 text-white">
+                      {cRes}
+                    </option>
+                  ))}
+                  {activePowerSource.cost && !registeredCostResources.includes(activePowerSource.cost) && (
+                    <option value={activePowerSource.cost} className="bg-slate-950 text-white">
+                      {activePowerSource.cost}
+                    </option>
+                  )}
+                  {registeredCostResources.length === 0 && !activePowerSource.cost && (
+                    <option value="" disabled className="bg-slate-950 text-slate-500">
+                      Keine Kosten-Ressourcen definiert
+                    </option>
+                  )}
+                </select>
+              </div>
+
+              {/* 4. Löschen */}
+              <div className="sm:col-span-1 flex items-end justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleDeletePowerSource(activePowerSource.id)}
+                  className="w-full px-2 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[34px] flex items-center justify-center gap-1 cursor-pointer"
+                  title="Diese Kraftquelle löschen"
+                >
+                  <LucideIcons.Trash2 className="w-3.5 h-3.5" />
+                  <span className="sm:hidden">Löschen</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -955,7 +993,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           {CATEGORY_TABS.map((tab, tabIdx) => {
             const isTabActive = activeCategory === tab;
             const count = categoryCounts[tab] || 0;
@@ -964,14 +1002,14 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 key={`cat-tab-${tab}-${tabIdx}`}
                 type="button"
                 onClick={() => setActiveCategory(tab)}
-                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer border ${
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1.5 cursor-pointer border min-w-0 ${
                   isTabActive
                     ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
                     : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
                 }`}
               >
-                <span className="text-left leading-snug break-words">{tab}</span>
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ml-2 shrink-0 ${
+                <span className="text-left leading-tight truncate">{tab}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
                   isTabActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800/80 text-slate-400'
                 }`}>
                   {count}

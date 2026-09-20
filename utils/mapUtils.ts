@@ -1260,7 +1260,21 @@ export function formatDisplayLocationName(locStr: string): string {
     .replace(/[\(\[]\s*\d+\s*,\s*\d+\s*[\)\]]/g, '')
     .trim();
 
-  // 2. Breadcrumb hierarchy arrow delimiters: ➔, ->, →, ⇒, >, etc.
+  // 2. Remove duplicate consecutive or repeated parenthetical terms (e.g. "(Inselgras) (Inselgras) (Inselgras)")
+  const seenParens = new Set<string>();
+  clean = clean.replace(/\(([^)]+)\)/g, (match, inner) => {
+    const key = inner.trim().toLowerCase();
+    if (seenParens.has(key)) {
+      return '';
+    }
+    seenParens.add(key);
+    return `(${inner.trim()})`;
+  });
+
+  // Collapse multiple spaces
+  clean = clean.replace(/\s+/g, ' ').trim();
+
+  // 3. Breadcrumb hierarchy arrow delimiters: ➔, ->, →, ⇒, >, etc.
   const arrowRegex = /[\u2794\u2192\u21D2➔→⇒>]+|->/g;
   if (arrowRegex.test(clean)) {
     const parts = clean.split(arrowRegex);
@@ -1268,7 +1282,7 @@ export function formatDisplayLocationName(locStr: string): string {
     if (last) clean = last;
   }
 
-  // 3. Path separators like "/"
+  // 4. Path separators like "/"
   if (clean.includes('/') && !clean.startsWith('http')) {
     const parts = clean.split('/');
     const last = parts[parts.length - 1].trim();

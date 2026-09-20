@@ -2421,7 +2421,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-hat-cowboy text-slate-600"></i> Kopf
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{armor.head || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{armor.head || 'Keine'}</span>
                           </div>
 
                           {/* Brust/Torso */}
@@ -2429,7 +2429,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-vest text-slate-600"></i> Brust / Torso
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{armor.chest || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{armor.chest || 'Keine'}</span>
                           </div>
 
                           {/* Hände */}
@@ -2437,7 +2437,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-hand text-slate-600"></i> Hände
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{armor.hands || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{armor.hands || 'Keine'}</span>
                           </div>
 
                           {/* Beine */}
@@ -2445,7 +2445,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-socks text-slate-600"></i> Beine
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{armor.legs || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{armor.legs || 'Keine'}</span>
                           </div>
 
                           {/* Füße */}
@@ -2453,14 +2453,14 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-shoe-prints text-slate-600"></i> Füße
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{armor.feet || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{armor.feet || 'Keine'}</span>
                           </div>
                         </div>
 
                         {/* Schmuck & Accessoires */}
                         <div className="space-y-3 bg-slate-950/60 p-4 rounded-2xl border border-slate-850 shadow-inner">
                           <h5 className="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                            <i className="fa-solid fa-gem"></i> Schmuck & Accessoires
+                            <i className="fa-solid fa-gem"></i> Schmuck &amp; Accessoires
                           </h5>
                           
                           {/* Finger */}
@@ -2468,7 +2468,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-ring text-slate-600"></i> Finger
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{accessories.finger || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{accessories.finger || 'Keine'}</span>
                           </div>
 
                           {/* Hals */}
@@ -2476,7 +2476,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-gem text-slate-600"></i> Hals
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{accessories.neck || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{accessories.neck || 'Keine'}</span>
                           </div>
 
                           {/* Handgelenke */}
@@ -2484,7 +2484,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-clock text-slate-600"></i> Handgelenke
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{accessories.wrist || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{accessories.wrist || 'Keine'}</span>
                           </div>
 
                           {/* Taille */}
@@ -2492,7 +2492,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-ring text-slate-600"></i> Taille
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{accessories.waist || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{accessories.waist || 'Keine'}</span>
                           </div>
 
                           {/* Rücken */}
@@ -2500,7 +2500,7 @@ const App: React.FC = () => {
                             <span className="text-[9px] text-slate-500 font-bold uppercase flex items-center gap-1">
                               <i className="fa-solid fa-shield text-slate-600"></i> Rücken
                             </span>
-                            <span className="text-xs text-slate-200 font-medium">{accessories.back || 'Keine'}</span>
+                            <span className="text-xs text-slate-200 font-medium break-words whitespace-pre-wrap">{accessories.back || 'Keine'}</span>
                           </div>
                         </div>
                       </div>

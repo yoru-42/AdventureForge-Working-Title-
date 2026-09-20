@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as LucideIcons from 'lucide-react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { CampaignPowerParameter, CustomResourceMapping, CostResource, CustomStatAllocation } from '../types';
 import { 
@@ -6,7 +7,8 @@ import {
   EP_DEFAULT_STAT_ALLOCATIONS, 
   EP_DEFAULT_COST_RESOURCES, 
   EP_DEFAULT_HEALTH_NAMES, 
-  EP_DEFAULT_COST_NAMES 
+  EP_DEFAULT_COST_NAMES,
+  EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS 
 } from '../lib/progressionDefaults';
 
 interface Props {
@@ -236,6 +238,11 @@ const CampaignPowerSettings: React.FC<Props> = ({
   const handleAddCostResource = () => {
     if (!costResName.trim()) return;
 
+    let finalSources = [...costResSources];
+    if (costResName.trim().toUpperCase() === 'SP' || editingCostResId === 'res-sp') {
+      finalSources = finalSources.filter(p => p !== 'Geschicklichkeit');
+    }
+
     if (editingCostResId) {
       const updated = costResources.map(r => {
         if (r.id === editingCostResId) {
@@ -243,7 +250,7 @@ const CampaignPowerSettings: React.FC<Props> = ({
             ...r,
             name: costResName.trim(),
             radarPowerName: costResRadar || undefined,
-            sourcePowers: costResSources,
+            sourcePowers: finalSources,
             baseMax: costResBaseMax
           };
         }
@@ -256,7 +263,7 @@ const CampaignPowerSettings: React.FC<Props> = ({
         id: Math.random().toString(36).substr(2, 9),
         name: costResName.trim(),
         radarPowerName: costResRadar || undefined,
-        sourcePowers: costResSources,
+        sourcePowers: finalSources,
         baseMax: costResBaseMax
       };
       onCostResourcesChange?.([...costResources, newRes]);
@@ -274,7 +281,11 @@ const CampaignPowerSettings: React.FC<Props> = ({
     setEditingCostResId(res.id);
     setCostResName(res.name);
     setCostResRadar(res.radarPowerName || "");
-    setCostResSources(res.sourcePowers || []);
+    let sources = res.sourcePowers || [];
+    if (res.name?.toUpperCase() === 'SP' || res.id === 'res-sp') {
+      sources = sources.filter(p => p !== 'Geschicklichkeit');
+    }
+    setCostResSources(sources);
     setCostResBaseMax(res.baseMax || 100);
     setShowCostResForm(true);
   };
@@ -476,6 +487,34 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
       onCustomStatAllocationsChange(defaults);
     }
   }, [customStatAllocations.length, onCustomStatAllocationsChange, categories]);
+
+  // Pre-populate default custom resource mappings (Magie & Körperkraft) if empty
+  useEffect(() => {
+    if (customResourceMappings.length === 0 && onCustomResourceMappingsChange) {
+      const defaults: CustomResourceMapping[] = JSON.parse(JSON.stringify(EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS));
+      onCustomResourceMappingsChange(defaults);
+    }
+  }, [customResourceMappings.length, onCustomResourceMappingsChange]);
+
+  // Standardmäßig sicherstellen, dass SP immer nur Stärke und Konstitution als Einfluss-Parameter besitzt
+  useEffect(() => {
+    if (costResources && costResources.length > 0 && onCostResourcesChange) {
+      let changed = false;
+      const updated = costResources.map(r => {
+        if ((r.name?.toUpperCase() === 'SP' || r.id === 'res-sp') && r.sourcePowers?.includes('Geschicklichkeit')) {
+          changed = true;
+          return {
+            ...r,
+            sourcePowers: r.sourcePowers.filter(p => p !== 'Geschicklichkeit')
+          };
+        }
+        return r;
+      });
+      if (changed) {
+        onCostResourcesChange(updated);
+      }
+    }
+  }, [costResources, onCostResourcesChange]);
 
   const saveAllocLabel = (id: string) => {
     if (!tempAllocLabel.trim()) return;
@@ -1137,7 +1176,8 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                 <div>
                   <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                     <label className="text-xs text-slate-200 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
-                      <span className="text-cyan-400 text-sm">⚡</span> Kosten-Ressourcen (MP/SP)
+                      <LucideIcons.Zap className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Kosten-Ressourcen (MP/SP)</span>
                     </label>
                     {!showCostResForm && !editingCostResId && (
                       <button
@@ -1146,7 +1186,8 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                         className="p-1 px-2 text-slate-400 hover:text-cyan-400 rounded hover:bg-slate-800 transition-all text-[10px] flex items-center gap-1 font-extrabold uppercase tracking-wider bg-slate-950/30 border border-slate-800"
                         title="Neue Kosten-Ressource erstellen"
                       >
-                        <i className="fa-solid fa-plus"></i> Hinzufügen
+                        <LucideIcons.Plus className="w-3 h-3" />
+                        <span>Hinzufügen</span>
                       </button>
                     )}
                   </div>
@@ -1185,7 +1226,7 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                               className="p-1 text-slate-400 hover:text-amber-400 rounded hover:bg-slate-850 transition-all text-[10px]"
                               title="Bearbeiten"
                             >
-                              <i className="fa-solid fa-edit"></i>
+                              <LucideIcons.Edit3 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               type="button"
@@ -1193,7 +1234,7 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                               className="p-1 text-slate-400 hover:text-red-400 rounded hover:bg-slate-850 transition-all text-[10px]"
                               title="Löschen"
                             >
-                              <i className="fa-solid fa-trash"></i>
+                              <LucideIcons.Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
@@ -1205,14 +1246,26 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                   {(showCostResForm || editingCostResId) && (
                     <div className="bg-slate-950/40 border border-slate-850 rounded-lg p-3 space-y-3 mt-4 animate-in fade-in slide-in-from-top-2 duration-200">
                       <div className="text-[10px] text-slate-300 font-bold uppercase tracking-wider border-b border-slate-850 pb-1.5 flex items-center justify-between">
-                        <span>{editingCostResId ? '✍️ Bearbeiten' : '➕ Neue Ressource'}</span>
+                        <span className="flex items-center gap-1.5">
+                          {editingCostResId ? (
+                            <>
+                              <LucideIcons.Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Bearbeiten</span>
+                            </>
+                          ) : (
+                            <>
+                              <LucideIcons.Plus className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>Neue Ressource</span>
+                            </>
+                          )}
+                        </span>
                         <button
                           type="button"
                           onClick={handleCancelEditCostRes}
                           className="text-slate-500 hover:text-red-400 text-xs p-1 rounded hover:bg-red-500/10 transition-all"
                           title="Schließen"
                         >
-                          <i className="fa-solid fa-times"></i>
+                          <LucideIcons.X className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
@@ -1225,7 +1278,16 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                           type="text"
                           placeholder="z.B. MP, SP, Ausdauer..."
                           value={costResName}
-                          onChange={(e) => setCostResName(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCostResName(val);
+                            if (val.trim().toUpperCase() === 'SP' && costResSources.length === 0) {
+                              setCostResSources(['Stärke', 'Konstitution']);
+                              if (!costResRadar && categories.includes('Stärke')) {
+                                setCostResRadar('Stärke');
+                              }
+                            }
+                          }}
                           className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-white text-xs outline-none focus:border-cyan-500"
                         />
                       </div>
@@ -1267,7 +1329,13 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                               selected={costResSources}
                               accentColorClass="cyan"
                               placeholder="Einfluss-Parameter wählen..."
-                              onChange={(next) => setCostResSources(next)}
+                              onChange={(next) => {
+                                if (costResName.trim().toUpperCase() === 'SP' || editingCostResId === 'res-sp') {
+                                  setCostResSources(next.filter(p => p !== 'Geschicklichkeit'));
+                                } else {
+                                  setCostResSources(next);
+                                }
+                              }}
                             />
                           </div>
                         )}
@@ -1292,9 +1360,19 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                         type="button"
                         onClick={handleAddCostResource}
                         disabled={!costResName.trim()}
-                        className="w-full py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-850 disabled:opacity-40 disabled:text-slate-500 text-slate-100 font-bold rounded text-xs uppercase tracking-wider transition-all"
+                        className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-850 disabled:opacity-40 disabled:text-slate-500 text-slate-100 font-bold rounded text-xs uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5"
                       >
-                        {editingCostResId ? '💾 Änderungen speichern' : '➕ Ressource hinzufügen'}
+                        {editingCostResId ? (
+                          <>
+                            <LucideIcons.Save className="w-3.5 h-3.5" />
+                            <span>Änderungen speichern</span>
+                          </>
+                        ) : (
+                          <>
+                            <LucideIcons.Plus className="w-3.5 h-3.5" />
+                            <span>Ressource hinzufügen</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   )}
@@ -1312,7 +1390,8 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
               <div className="bg-slate-950/40 border border-slate-850 border-dashed rounded-xl p-4 space-y-3 flex flex-col justify-between hover:border-slate-700 transition-colors">
                 <div>
                   <div className="text-xs text-slate-400 font-extrabold uppercase tracking-wider border-b border-slate-850 pb-2 flex items-center gap-1.5">
-                    <span>➕</span> Neue Kampfeigenschaft
+                    <LucideIcons.Plus className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Neue Kampfeigenschaft</span>
                   </div>
                   
                   <p className="text-[10px] text-slate-500 leading-normal mt-2">
@@ -1379,7 +1458,8 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
         {/* Part 2: Custom Resource Mappings list */}
         <div>
           <h4 className="text-xs font-extrabold text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-            <span>🔮</span> Registrierte Kraftquellen für Techniken ({customResourceMappings.length})
+            <LucideIcons.Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>Registrierte Kraftquellen für Techniken ({customResourceMappings.length})</span>
           </h4>
           
           {customResourceMappings.length === 0 ? (
@@ -1397,8 +1477,8 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg bg-slate-950 p-1.5 rounded-lg border border-slate-800 w-8 h-8 flex items-center justify-center">
-                        {mapping.icon || "⚡"}
+                      <span className="text-xs bg-slate-950 p-1.5 rounded-lg border border-slate-800 w-8 h-8 flex items-center justify-center font-bold text-amber-400">
+                        <LucideIcons.Zap className="w-4 h-4 text-amber-400" />
                       </span>
                       <div>
                         <h4 className="text-xs font-extrabold text-slate-200">{mapping.name}</h4>
@@ -1414,7 +1494,7 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                         className="text-slate-500 hover:text-amber-400 p-1.5 rounded hover:bg-amber-500/10 transition-all text-[11px]"
                         title="Kraftquelle bearbeiten"
                       >
-                        <i className="fa-solid fa-edit"></i>
+                        <LucideIcons.Edit3 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         type="button"
@@ -1422,7 +1502,7 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                         className="text-slate-500 hover:text-red-400 p-1.5 rounded hover:bg-red-500/10 transition-all text-[11px]"
                         title="Kraftquelle löschen"
                       >
-                        <i className="fa-solid fa-trash"></i>
+                        <LucideIcons.Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -1453,12 +1533,12 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
           <h4 className="text-xs font-bold uppercase tracking-wider text-amber-500/90 flex items-center gap-1.5">
             {editingMappingId ? (
               <>
-                <span>🔮</span> 
+                <LucideIcons.Edit3 className="w-3.5 h-3.5" /> 
                 <span>Kraftquelle &ldquo;{custMapName}&rdquo; bearbeiten</span>
               </>
             ) : (
               <>
-                <span>🆕</span> 
+                <LucideIcons.Plus className="w-3.5 h-3.5" /> 
                 <span>Neue Kraftquelle entwerfen</span>
               </>
             )}
@@ -1505,8 +1585,9 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
 
           {/* Source powers checklist */}
           <div className="space-y-1.5">
-            <label className="text-[10px] text-slate-300 font-extrabold uppercase tracking-wider block">
-              🔗 An Kampagnen-Parameter koppeln (Summiert sich für das Maximum)
+            <label className="text-[10px] text-slate-300 font-extrabold uppercase tracking-wider flex items-center gap-1.5">
+              <LucideIcons.Link2 className="w-3.5 h-3.5 text-cyan-400" />
+              <span>An Kampagnen-Parameter koppeln (Summiert sich für das Maximum)</span>
             </label>
             <p className="text-[9.5px] text-slate-500 leading-tight">
               Wähle die Parameter aus, die das maximale Limit dieser Kraftquelle bestimmen sollen. Wenn nichts gewählt ist, gilt das Basis-Maximum.

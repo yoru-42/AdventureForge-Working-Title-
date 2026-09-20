@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { jsonrepair } from "jsonrepair";
 import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
-import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
+import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
 import { enrichAndCompleteLoreEntry, sanitizeCharacterNameAndProfession, sanitizeRulerNameAndTitle } from "../lib/loreSanitizer";
 import {
   executeDrawingPlan,
@@ -11,6 +11,7 @@ import {
   DrawingExecutionResult
 } from "../components/worldmap/worldMapDrawingEngine";
 import { HOLDING_TYPES, getHoldingPresets } from "../components/economy/EconomyPresets";
+import { getArchetypeDefinition, applyArchetypeToTraits } from "../components/personalityArchetypesData";
 
 export const audioUtils = {
   encode: (bytes: Uint8Array): string => {
@@ -362,8 +363,16 @@ export class GeminiService {
     } as any;
   }
 
-  private static parseJSONSafely(text: string, defaultValue: any) {
-    if (!text) return defaultValue;
+  private static parseJSONSafely(text: any, defaultValue: any) {
+    if (text === null || text === undefined) return defaultValue;
+    if (typeof text === 'object') return text;
+    if (typeof text !== 'string') {
+      try {
+        text = String(text);
+      } catch {
+        return defaultValue;
+      }
+    }
     
     let cleanedText = text.trim();
 
@@ -469,11 +478,11 @@ export class GeminiService {
       // The systemInstruction already contains all world, player and NPC profile info.
       const maxHistoryCount = 12;
       let historyToPass = history;
-      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}`;
+      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}\n${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
 
       if (history.length > maxHistoryCount) {
         if (history[0] && history[0].text) {
-          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
+          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}\n${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
         }
         historyToPass = history.slice(-maxHistoryCount);
       }
@@ -677,8 +686,9 @@ WICHTIG: Antworte NUR mit dem generierten Prologtext. Keinen JSON-Wrapper, kein 
         contents: contextPrompt,
       });
 
-      const text = response.text || '';
-      return text.trim();
+      const rawText = response.text;
+      const text = (typeof rawText === 'string' ? rawText : (typeof rawText === 'function' ? rawText() : (rawText ? String(rawText) : ''))).trim();
+      return text;
     });
   }
 
@@ -788,7 +798,8 @@ ANWEISUNGEN:
   Interessant bedeutet nicht automatisch außergewöhnlich. Bevorzuge glaubwürdige, alltägliche und unspektakuläre Hintergründe. Erzeuge keine geheimen Mächte, uralten Wesen, verborgenen Blutlinien, großen Prophezeiungen oder dramatischen Geheimnisse, sofern sie nicht durch Charakterdaten, Weltgeschichte oder tatsächliche Ereignisse begründet oder ausdrücklich für diesen Charakter vorgesehen sind.
   Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
 - WISSENSISOLATION BEZÜGLICH ZUKÜNFTIGER ABSICHTEN & PLÄNE (KEIN WISSEN OHNE LAUT GESAGTES WORT IM PROLOG/SPIELSTART UND NUR BEI PHYSISCHER ANWESENHEIT):
-  Charaktere und NPCs besitzen KEINERLEI Vorwissen über die zukünftigen Absichten, Pläne, geheimen Vorhaben oder Zielsetzungen des Spielers oder anderer Figuren! Ein Charakter kann und darf von einer zukünftigen Absicht oder einem Plan AUSSCHLIESSLICH DANN wissen, wenn diese im Prolog oder beim Spielstart / in der Ersten Szene EXPLIZIT laut ausgesprochen wurde UND der betreffende Charakter zu diesem Zeitpunkt WIRKLICH PHYSISCH ANWESEND war. Charaktere, die nicht persönlich anwesend waren, wissen absolut nichts davon!`;
+  Charaktere und NPCs besitzen KEINERLEI Vorwissen über die zukünftigen Absichten, Pläne, geheimen Vorhaben oder Zielsetzungen des Spielers oder anderer Figuren! Ein Charakter kann und darf von einer zukünftigen Absicht oder einem Plan AUSSCHLIESSLICH DANN wissen, wenn diese im Prolog oder beim Spielstart / in der Ersten Szene EXPLIZIT laut ausgesprochen wurde UND der betreffende Charakter zu diesem Zeitpunkt WIRKLICH PHYSISCH ANWESEND war. Charaktere, die nicht persönlich anwesend waren, wissen absolut nichts davon!
+${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -901,7 +912,7 @@ ANWEISUNGEN:
             bond: { type: Type.INTEGER, description: "Emotionale Bindung von Selbst zu Ziel (0 bis 100)" },
             hostility: { type: Type.INTEGER, description: "Feindseligkeit von Selbst zu Ziel (0 bis 100)" }
           },
-          required: ["affection", "trust", "respect", "loyalty", "familiarity", "fear", "bond", "hostility"]
+          required: ["affection", "trust"]
         },
         valuesTargetToSelf: {
           type: Type.OBJECT,
@@ -915,7 +926,7 @@ ANWEISUNGEN:
             bond: { type: Type.INTEGER, description: "Emotionale Bindung von Ziel zu Selbst (0 bis 100)" },
             hostility: { type: Type.INTEGER, description: "Feindseligkeit von Ziel zu Selbst (0 bis 100)" }
           },
-          required: ["affection", "trust", "respect", "loyalty", "familiarity", "fear", "bond", "hostility"]
+          required: ["affection", "trust"]
         },
         keyEvents: {
           type: Type.ARRAY,
@@ -950,9 +961,12 @@ ANWEISUNGEN:
         fears: { type: Type.STRING, description: "Ängste / Gefahren und Situationen, die Entscheidungen leiten oder vermieden werden sollen." },
         valuesPrinciples: { type: Type.STRING, description: "Werte und moralische Grundsätze, die das Verhalten bestimmen." },
         methodsAndMeans: { type: Type.STRING, description: "Bevorzugte Mittel und Vorgehensweisen (z.B. Diplomatie, List, Gewalt, Verhandlung, Täuschung)." },
-        changeTriggers: { type: Type.STRING, description: "Welche Ereignisse oder Enthüllungen können Ziele oder Prioritäten verändern?" }
+        changeTriggers: { type: Type.STRING, description: "Welche Ereignisse oder Enthüllungen können Ziele oder Prioritäten verändern?" },
+        shortTermPlan: { type: Type.STRING, description: "Kurzfristige Schritte / Sofortmaßnahmen / Erste Schritte zur Erreichung des Hauptziels." },
+        mediumTermPlan: { type: Type.STRING, description: "Mittelfristiger Meilenstein / Zwischenetappe / Durchbruch zur Erreichung des Hauptziels." },
+        longTermPlan: { type: Type.STRING, description: "Langfristige Vollendung / finale Meisterung / dauerhafte Etablierung des Hauptziels." }
       },
-      required: ["mainGoal", "whyGoal", "currentPriorities", "needs", "fears", "valuesPrinciples", "methodsAndMeans", "changeTriggers"]
+      required: ["mainGoal"]
     };
   }
 
@@ -968,27 +982,26 @@ ANWEISUNGEN:
           description: { type: Type.STRING, description: "Kontext und nähere Beschreibung des Ziels" },
           timeframe: { 
             type: Type.STRING, 
-            description: "Zeithorizont: 'langfristig', 'mittelfristig' oder 'kurzfristig'",
-            enum: ["langfristig", "mittelfristig", "kurzfristig"]
+            description: "Zeithorizont: 'langfristig', 'mittelfristig' oder 'kurzfristig'"
           },
           targetType: {
             type: Type.STRING,
-            description: "Art des Zielobjekts: 'self' (persönlich), 'character' (Zielperson), 'faction' (Fraktion), 'world' (Welt)",
-            enum: ["self", "character", "faction", "world"]
+            description: "Art des Zielobjekts: 'self' (persönlich), 'character' (Zielperson), 'faction' (Fraktion), 'world' (Welt)"
           },
           targetName: { type: Type.STRING, description: "Name des Zielobjekts (Person, Fraktion oder 'Selbst')" },
           priority: { 
             type: Type.STRING, 
-            description: "Priorität des Ziels",
-            enum: ["kritisch", "hoch", "normal", "niedrig"]
+            description: "Priorität des Ziels ('kritisch', 'hoch', 'normal', 'niedrig')"
           },
           status: { 
             type: Type.STRING, 
-            description: "Status des Ziels",
-            enum: ["aktiv", "pausiert", "erreicht", "gescheitert", "aufgegeben"]
+            description: "Status des Ziels ('aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben')"
           },
           motivation: { type: Type.STRING, description: "Warum verfolgt der Charakter dieses Ziel? (Verbindung zum Motivationskern)" },
-          activePlan: { type: Type.STRING, description: "Aktiver Plan (WIE will der Charakter das Ziel erreichen? Schrittfolge)" },
+          activePlan: { type: Type.STRING, description: "Aktiver Plan (WIE will der Charakter das Ziel erreichen? Nummerierte Schrittfolge)" },
+          shortTermPlan: { type: Type.STRING, description: "Etappe 1: Kurzfristiger Schritt / Sofortmaßnahme / Erste Schritte zur Erreichung des Ziels" },
+          mediumTermPlan: { type: Type.STRING, description: "Etappe 2: Mittelfristiger Meilenstein / Zwischenetappe zur Erreichung des Ziels" },
+          longTermPlan: { type: Type.STRING, description: "Etappe 3: Langfristige Vollendung / finale Meisterung / dauerhafte Sicherung des Ziels" },
           alternativePlans: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
@@ -1004,7 +1017,7 @@ ANWEISUNGEN:
           mainGoalTitle: { type: Type.STRING, description: "Titel des Hauptziels, zu dem dieses Etappenziel gehört" },
           isMainGoal: { type: Type.BOOLEAN, description: "Gibt an, ob dies das Hauptziel selbst ist" }
         },
-        required: ["id", "title", "timeframe", "targetType", "priority", "status", "activePlan"]
+        required: ["id", "title"]
       }
     };
   }
@@ -1051,7 +1064,7 @@ ANWEISUNGEN:
         nickname: { type: Type.STRING, description: "Spitzname, Alias, Titel, Epitheton oder Codename des Charakters (z.B. 'Akainu' bei Sakazuki, 'Aokiji' bei Kuzan, 'Falkenauge' bei Mihawk, 'Helden-Marine' bei Garp)." },
         role: { type: Type.STRING },
         personality: { type: Type.STRING },
-        personalityArchetype: { type: Type.STRING, description: "Der passende Persönlichkeits-Archetyp oder Typus (z.B. Tsundere, Kuudere, Dandere, Deredere, Yandere, Kamidere, Himedere, Bakadere, Mayadere, Oujidere, Sadodere, Yangire, Bokukko, Nyandere, Chuunibyou, Dojikko, Gyaru, Tomboy, Yamato Nadeshiko, Genki, Kuudere-Typ, Ojou-sama, Femme Fatale, Anti-Held, Mentor, Trickster, Beschützer, Stratege, Rebell, Loyaler Ritter, Einzelgänger, Idealist, Melancholiker, Exzentriker) oder '-' falls neutral." },
+        personalityArchetype: { type: Type.STRING, description: "Der passende Persönlichkeits-Archetyp oder Typus aus der AdventureForge Archetypen-Liste (z.B. Tsundere, Kuudere, Dandere, Deredere, Yandere, Kamidere, Himedere, Bakadere, Mayadere, Western:Oujidere, Western:Smugdere, Western:Teasedere, Western:Thugdere, Western:Kanedere, Western:Kekkondere, Western:Nemuidere, Western:Nipadere, Western:Oujodere, Western:Bocchandere, Western:Byoukidere, Amadere, Biridere, Bokodere, Butsudere, Chindere, Darudere, Deretsun, Dorodere, Erodere, Gandere, Gesudere, Gou-dere, Gundere, Gurodere, Hajidere, Hamedere, Hinedere, Kamidere (Bite), Kichidere, Kiredere, Kiridere, Kundere, Kurodere, Kuzudere, M Dere, Megadere, Nyandere, Ojoudere, Onidere, Osadere, Rindere, Roshidere, S Dere, Sashidere, Shindere, Shittodere, Shundere, Sunao Cool, Sunao Heat, Sunao Surreal, Teredere, Tomedere, Tsuyodere, Undere, Usodere, Utsudere, Uzadere, Yandere (Yankii), Yoidere, Zondere) oder '-' falls neutral." },
         personalityTraits: this.getPersonalityTraitsSchema(),
         bio: { 
           type: Type.STRING, 
@@ -1094,16 +1107,16 @@ ANWEISUNGEN:
             type: Type.OBJECT,
             properties: {
               name: { type: Type.STRING, description: "Name der Technik." },
-              type: { type: Type.STRING, enum: ["Angriff", "Transformation", "Verteidigung", "Support"], description: "Fähigkeits-Typ: 'Angriff' für direkte Attacken, 'Transformation' für Gestaltwandel/Boosts, 'Verteidigung' für Schilde/Schutz, 'Support' für Heilung/Buffs." },
+              type: { type: Type.STRING, description: "Fähigkeits-Typ: 'Angriff' für direkte Attacken, 'Transformation' für Gestaltwandel/Boosts, 'Verteidigung' für Schilde/Schutz, 'Support' für Heilung/Buffs." },
               description: { type: Type.STRING, description: "Detaillierte Erläuterung, was genau die Technik bewirkt." },
               subtype: { type: Type.STRING, description: "Untertyp, z.B. Einzelschuss, Flächenangriff, Absorber/Schild, Evasion/Ausweichen, Parade/Konter, Vollständig, Teilweise, Formwechsel/Stellung, Heilung/Regen." },
-              tier: { type: Type.STRING, enum: ["Tier 1", "Tier 2", "Tier 3", "Tier 4"], description: "Die Stufe der Technik." },
+              tier: { type: Type.STRING, description: "Die Stufe der Technik ('Tier 1', 'Tier 2', 'Tier 3', 'Tier 4')." },
               baseValue: { type: Type.INTEGER, description: "Der numerische Basiswert (z.B. 15 für Schaden, 20 für Heilung, 10 für Barriere)." },
-              costFormula: { type: Type.STRING, enum: ["absolut", "proz."], description: "Ob der Ressourcen-Abzug absolut oder prozentual erfolgt." },
+              costFormula: { type: Type.STRING, description: "Ob der Ressourcen-Abzug absolut ('absolut') oder prozentual ('proz.') erfolgt." },
               costValue: { type: Type.INTEGER, description: "Die Menge an verbrauchter Ressource für diese Technik." },
               costResourceName: { type: Type.STRING, description: "Name der verbrauchten Ressource (z.B. Mana, Chakra, Ausdauer, Wut)." }
             },
-            required: ["name", "type", "description", "subtype", "tier", "baseValue", "costFormula", "costValue", "costResourceName"]
+            required: ["name", "type", "description"]
           },
           description: "Eine Liste von konkreten Techniken mit Name, Typ, Untertyp, Tier, Basiswert, Kosten-Formel, Kostenwert und Energiequelle, basierend auf der Fähigkeit."
         },
@@ -1116,7 +1129,7 @@ ANWEISUNGEN:
               value: { type: Type.INTEGER, description: "Aktueller Startwert des Charakters." },
               potentialMax: { type: Type.INTEGER, description: "Das maximale Potenzial des Charakters." }
             },
-            required: ["parameterName", "value", "potentialMax"]
+            required: ["parameterName", "value"]
           },
           description: "Die Machtstufen des Charakters für jeden der generierten Kampagnen-Parameter."
         },
@@ -1133,13 +1146,17 @@ ANWEISUNGEN:
             cupSize: { type: Type.STRING, description: "Nur für weibliche Charaktere: Körbchengröße (z.B. 'C', 'D', 'DD', 'J'), bei männlichen '-'. WICHTIG: Falls es sich um einen bekannten Franchise-Charakter handelt (z.B. Nami, Robin, etc.), verwende zwingend ihre offizielle kanonische Körbchengröße (z.B. 'J', 'I' etc.)!" },
             height: { type: Type.STRING, description: "Größe des Charakters (z.B. '175 cm'). WICHTIG: Falls es sich um einen bekannten Franchise-Charakter handelt (z.B. Monkey D. Garp, Son Goku, etc.), MUSST du zwingend seine offizielle/kanonische Original-Größe eintragen (z.B. Monkey D. Garp ist '287 cm', Son Goku ist '175 cm', Charlotte Katakuri ist '509 cm', Whitebeard ist '666 cm', Kaido ist '710 cm', Big Mom ist '880 cm', Nico Robin ist '188 cm'). Verwende NIEMALS standardisierte oder geschätzte Werte, sondern immer die echten kanonischen Werte!" },
             measurements: { type: Type.STRING, description: "Körpermaße, z.B. 90-60-90. Bei männlichen '-'. WICHTIG: Falls es sich um einen bekannten Franchise-Charakter handelt (z.B. Nami, Robin, etc.), verwende zwingend die offiziellen kanonischen Körpermaße (z.B. Nami hat '98-58-88', Nico Robin hat '100-60-90')!" },
+            weight: { type: Type.STRING, description: "Körpergewicht des Charakters (z.B. '72 kg', '110 kg')." },
+            bodyFat: { type: Type.STRING, description: "Körperfettanteil / KFA (z.B. '12%', '18%')." },
+            muscleMass: { type: Type.STRING, description: "Muskelmasse / Muskeltonus (z.B. 'Normal', 'Athletisch', 'Sehr muskulös', 'Definiert')." },
             origin: { type: Type.STRING, description: "Herkunftsort oder Land" },
             family: { type: Type.STRING, description: "Familie oder Clan" },
             faction: { type: Type.STRING, description: "Zugehörige Fraktion oder Gilde" },
+            currentLocation: { type: Type.STRING, description: "Aktueller Standort oder Aufenthaltsort des Charakters (z.B. Hafenstadt, Taverne, Schloss)." },
             race: { type: Type.STRING, description: "Rasse des Charakters, z.B. Mensch, Elf, Vampir" },
             raceFeatures: { type: Type.STRING, description: "Rassemerkmale wie Katzenohren, Schweif, Krallen, geschlitzte Augen, Fell (Farbe, Muster, Verteilung am Körper), ein Katzenkopf oder andere nicht-menschliche, tierische oder fantastische körperliche Abweichungen von der menschlichen Norm. Falls der Charakter ein gewöhnlicher Mensch ist, trage 'keine' ein." }
           },
-          required: ["hairColor", "eyeColor", "age", "build", "gender", "outfit", "looks", "cupSize", "height", "measurements", "origin", "family", "faction", "race", "raceFeatures"]
+          required: ["looks"]
         },
         relationship: { type: Type.STRING, description: "Beziehungen des Charakters zu anderen Charakteren oder Gruppierungen. WICHTIG: Er darf den Hauptcharakter/Spieler noch nicht getroffen haben (es sei denn, sie haben eine gemeinsame Vergangenheit wie Familie). Er darf absolut KEINERLEI Wissen über die aktuelle, gegenwärtige Situation des Spielers haben!" },
         conduct: { type: Type.STRING, description: "Das Verhalten des Charakters, wie er sich anderen gegenüber verhält." },
@@ -1156,7 +1173,6 @@ ANWEISUNGEN:
               name: { type: Type.STRING, description: "Name der Fähigkeit, Technik oder Transformation (z.B. 'Elementarmanipulation', 'Schutzbarrieren', 'Dimensionsrisse', 'Reine Esper-Form')." },
               category: { 
                 type: Type.STRING, 
-                enum: ["Passive Fähigkeiten", "Techniken", "Ultimative Techniken", "Transformationen", "Talente"], 
                 description: "Die genaue Kategorie der Fähigkeit: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen' oder 'Talente'." 
               },
               source: { type: Type.STRING, description: "Die Kraftquelle für diese Fähigkeit (z.B. Willenskraft, Mana, Ausdauer)." },
@@ -1192,12 +1208,12 @@ ANWEISUNGEN:
                   type: Type.OBJECT,
                   properties: {
                     name: { type: Type.STRING, description: "Name der Technik." },
-                    type: { type: Type.STRING, enum: ["Angriff", "Transformation", "Verteidigung", "Support"], description: "Typ der Technik." },
+                    type: { type: Type.STRING, description: "Typ der Technik ('Angriff', 'Transformation', 'Verteidigung', 'Support')." },
                     description: { type: Type.STRING, description: "Beschreibung der Technik." },
                     subtype: { type: Type.STRING, description: "Untertyp." },
-                    tier: { type: Type.STRING, enum: ["Tier 1", "Tier 2", "Tier 3", "Tier 4"] },
+                    tier: { type: Type.STRING, description: "Stufe der Technik ('Tier 1', 'Tier 2', 'Tier 3', 'Tier 4')." },
                     baseValue: { type: Type.INTEGER },
-                    costFormula: { type: Type.STRING, enum: ["absolut", "proz."] },
+                    costFormula: { type: Type.STRING, description: "Kosten-Formel ('absolut' oder 'proz.')." },
                     costValue: { type: Type.INTEGER },
                     costResourceName: { type: Type.STRING }
                   },
@@ -1205,16 +1221,58 @@ ANWEISUNGEN:
                 }
               }
             },
-            required: ["name", "category", "source", "cost", "description"]
+            required: ["name", "category", "description"]
           },
           description: "Eine Liste aller Fähigkeiten des Charakters. Standard-Fähigkeiten sowie spezielle Transformations-Fähigkeiten (Gestaltwechsel / Formänderungen / Power-ups) gehören hierhin."
         },
         secretsStage1: { type: Type.STRING, description: "Stufe 1 (Öffentliches Wissen): Allgemeine Gerüchte, Legenden oder oberflächliches Wissen aus der HISTORISCHEN VERGANGENHEIT. Muss zur Gesinnung und Rolle passen (z.B. verzerrte Wahrnehmungen von Außenstehenden). Es darf sich auf KEINEN Fall auf aktuelle Vorkommnisse oder das Geheimnis des Spielers beziehen." },
         secretsStage2: { type: Type.STRING, description: "Stufe 2 (Indizien & Verdacht): Begründete Gerüchte, versteckte Vorbereitungen oder Indizien aus der VORGESCHICHTE. Darf NIEMALS ohne Anlass böse Klischees (wie Gehirnwäscher/Opferkulte) erfinden, wenn die Person beschützende oder edle Ziele hat!" },
         secretsStage3: { type: Type.STRING, description: "Stufe 3 (Absolutes Geheimnis - Blackbox): Das tiefe, wahre Geheimnis aus der VORGESCHICHTE. MUSS zwingend im Einklang mit dem Hauptziel (goal) und der Gesinnung stehen (z.B. bei Beschützern ein geheimer Schutzbund/Zufluchtsort; bei Schurken finstere Pläne). Zu Spielbeginn niemandem bekannt." },
-        knowledge: { type: Type.STRING, description: "Verhüllung & Geteiltes Wissen: Wer weiß was über wen? Beschreibe, welche Techniken, Aussehen oder Vergangenheitsaspekte andere Charaktere (oder der Spieler) aktuell voneinander wissen. WICHTIG: Zu Beginn der Kampagne wissen Charaktere meistens nur das Offensichtliche voneinander." }
+        knowledge: { type: Type.STRING, description: "Verhüllung & Geteiltes Wissen: Wer weiß was über wen? Beschreibe, welche Techniken, Aussehen oder Vergangenheitsaspekte andere Charaktere (oder der Spieler) aktuell voneinander wissen. WICHTIG: Zu Beginn der Kampagne wissen Charaktere meistens nur das Offensichtliche voneinander." },
+        structuredInventory: {
+          type: Type.OBJECT,
+          description: "Strukturiertes Inventar und Besitz des Charakters (Waffen, Kleidung & Rüstung, Accessoires & Schmuck, Startgeld, Währung und sonstige Gegenstände).",
+          properties: {
+            money: { type: Type.INTEGER, description: "Startgeld des Charakters (z.B. 100)" },
+            currencyLabel: { type: Type.STRING, description: "Währungsbezeichnung passend zum Setting (z.B. 'Goldstücke', 'Berry', 'Credits')" },
+            weapons: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Liste aller Waffen oder Kampfwerkzeuge (z.B. ['Stahlschwert', 'Kurzbogen'])"
+            },
+            armor: {
+              type: Type.OBJECT,
+              description: "Getragene Kleidung & Rüstungsteile",
+              properties: {
+                head: { type: Type.STRING, description: "Kopfbedeckung (z.B. Hut, Bandana, Helm)" },
+                chest: { type: Type.STRING, description: "Oberbekleidung / Rüstung (z.B. Rotes Hemd, Lederrüstung, Robe)" },
+                hands: { type: Type.STRING, description: "Handschuhe oder Armbandagen" },
+                legs: { type: Type.STRING, description: "Beinkleidung / Hose" },
+                feet: { type: Type.STRING, description: "Schuhwerk / Stiefel" }
+              }
+            },
+            accessories: {
+              type: Type.OBJECT,
+              description: "Schmuck & getragene Accessoires",
+              properties: {
+                finger: { type: Type.STRING, description: "Ringe" },
+                wrist: { type: Type.STRING, description: "Armbänder oder Armreife" },
+                waist: { type: Type.STRING, description: "Gürtel oder Schärpe" },
+                back: { type: Type.STRING, description: "Umhang oder Rucksack" },
+                neck: { type: Type.STRING, description: "Halskette, Amulett oder Halstuch" }
+              }
+            },
+            generalItems: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Sonstige nützliche Gebrauchsgegenstände, Werkzeuge, Tränke oder Vorräte im Rucksack"
+            }
+          }
+        }
       },
-      required: ["name", "nickname", "role", "personality", "bio", "currentSituation", "goal", "motivationCore", "powerSource", "powerCost", "skills", "techniques", "techniqueList", "appearance", "relationship", "conduct", "relationships", "abilities", "secretsStage1", "secretsStage2", "secretsStage3", "knowledge"]
+      required: [
+        "name", "role", "personality", "bio", "goal"
+      ]
     };
     
     if (powerSettings && Object.keys(powerSettings).length > 0) {
@@ -1909,15 +1967,12 @@ ANWEISUNGEN:
                     secretsStage3: { type: Type.STRING, description: "Stufe 3 (Absolutes Geheimnis): Das tiefe, wahre Geheimnis (Blackbox), das zwingend im Einklang mit dem Hauptziel (goal) und der wahren Motivation steht." },
                     knowledge: { type: Type.STRING, description: "Verhüllung & Geteiltes Wissen: Wer weiß was über wen? Beschreibe, welche Techniken, Aussehen oder Vergangenheitsaspekte andere Charaktere (oder der Spieler) aktuell voneinander wissen. WICHTIG: Zu Beginn der Kampagne wissen Charaktere meistens nur das Offensichtliche voneinander." }
                   },
-                  required: ["category", "title", "description", "isUnlocked", "secretsStage1", "secretsStage2", "secretsStage3", "knowledge"]
+                  required: ["category", "title", "description"]
                 }
               }
             },
             required: [
-              "title", "description", "tone", "player", "npcs", "prologue", "firstMessage", "loreDatabase",
-              "campaignParametersList", "healthLabel", "costLabel", "healthPowerNames", "costPowerNames",
-              "costResources", "customResourceMappings", "techniqueProgressionLogic", "techniqueProgressionRate",
-              "techniqueRulesList"
+              "title", "description", "player", "npcs", "prologue", "firstMessage"
             ]
           },
           safetySettings: isNsfw ? this.getSafetySettings() : undefined
@@ -4271,8 +4326,26 @@ Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.
 - Herkunft & Familie: "${playerApp.origin || ''}" / "${playerApp.family || playerObj.family || ''}"
 WICHTIG: Falls dieser Charakter ein Familienmitglied des Spielers ist (z.B. Mutter, Vater, Sohn, Tochter, Schwester, Bruder), MUSS sein Aussehen dem Aussehen des Spielers genetisch gleichen bzw. daraus vererbt sein!` : '';
 
-      let contextPrompt = `Leite aus dem folgenden Freitext die Charakter-Werte für ein RPG ab.
-WICHTIGSTE DIRECTIVE: Erfinde detailreich alle Details, Kräfte und Fähigkeiten, die fehlen oder nicht genau im Freitext beschrieben sind, passend für ein RPG. Jedes einzelne Feld MUSS befüllt werden!
+      const customMappings = Array.isArray(worldContext?.customResourceMappings) && worldContext.customResourceMappings.length > 0
+        ? worldContext.customResourceMappings
+        : (Array.isArray(worldContext?.costPowerNames) && worldContext.costPowerNames.length > 0
+          ? worldContext.costPowerNames.map((name: string, i: number) => ({
+              name,
+              resourceName: (worldContext?.costResources && worldContext.costResources[i]) || 'Ausdauer'
+            }))
+          : [
+              { name: 'Körperkraft', resourceName: 'Ausdauer', description: 'Physischer Nahkampf, Waffenkampf, Athletik' },
+              { name: 'Magie', resourceName: 'Mana', description: 'Arkane Zauber, Elementarmagie, Verwandlungen' }
+            ]);
+
+      const powerSourcesListStr = customMappings.map((m: any) => 
+        `- Kraftquelle: "${m.name}" -> Zugeordnete Ressource / Kosten: "${m.resourceName || 'Ausdauer'}"${m.description ? ` (${m.description})` : ''}`
+      ).join('\n');
+
+      let contextPrompt = `Leite aus dem folgenden Freitext die Charakter-Werte für einen NEUEN CODEX-CHARAKTER (NPC, Begleiter, Antagonist, Verwandter, Herrscher oder Bewohner der Welt) für ein RPG ab.
+WICHTIGSTE DIRECTIVE: Erstelle das Profil, den Namen, das Geschlecht, Aussehen, Bio, Ziele und Kräfte für DIESEN im Freitext beschriebenen Charakter!
+WICHTIGE KLARSTELLUNG: Der Protagonist / Spieler der Kampagne heißt "${playerObj.name || 'Spieler'}". Falls der Freitext den Charakter als Verwandten, Rivalen oder Bekannten des Spielers beschreibt (z.B. "Seraphina die jüngere Schwester von Theron"), erstelle das Profil für DIESEN NEUEN CHARAKTER (z.B. Name: "Seraphina", Geschlecht: Weiblich, Ziel: Herrscherin werden), und erstelle NICHT das Profil des Spielers!
+Jedes einzelne Feld MUSS befüllt werden!
 
 ### STRIKTE REGEL: TRENNUNG VON NAME UND BERUF / TITEL / STAND:
 - Trage als Name ('name', 'callName', 'rufName') NIEMALS den Beruf oder Titel ein!
@@ -4324,8 +4397,40 @@ Falls es sich bei der Person um einen bekannten fiktiven/Franchise-Charakter han
 - ALTER (age), RASSE (race), Haare/Augen, Persönlichkeit & Bio: Alles muss präzise auf den echten kanonischen Stand gebracht werden!
 - STRUKTURIERTE BEZIEHUNGEN & RÄNGE (relationships): Achte peinlichst genau darauf, wer wem weisungsbefugt oder überlegen ist! Garp ist ein Vizeadmiral (Vice Admiral) und Sakazuki (Akainu) als Admiral bzw. Großadmiral (Fleet Admiral) im Rang UNTERGEBEN. Garp ist also ein respektierter Kollege oder Untergebener, NIEMALS ein Vorgesetzter von Sakazuki! Mihawk ist ein Pirat und Shichibukai (Samurai der Meere) und steht absolut außerhalb der Marine-Hierarchie, er ist auf keinen Fall ein Vorgesetzter von Sakazuki oder der Marine! Überprüfe deine gesamte Wissensdatenbank zu dem jeweiligen Franchise, um extrem authentische, kanonisch korrekte Beziehungen zu erzeugen!
 
-Erfinde spannende Fähigkeiten & Kräfte (skills), Herkunft der Kraft (powerSource) und Kosten/Limitierung (powerCost).
-Achte penibel darauf, Fähigkeiten & Kräfte (skills) und Kosten/Verbrauch sowie Kraftquelle stimmig an das Setting anzupassen. Falls bereits passende Fähigkeiten existieren, ERWEITERE und ergänze diese, anstatt neue, redundante hinzuzufügen. Es reicht völlig, eine Kraft/Fähigkeit nur einmal hinzuzufügen und auszubauen, anstatt mehrere Kopien zu erstellen.
+### STRIKTE REGELN FÜR KRAFTQUELLEN, GRUNDFÄHIGKEITEN & ALLTAGSKOMPETENZEN:
+1. ABSOLUTER KAMPF- & KRAFTFOKUS FÜR FÄHIGKEITEN (KEINE ERFUNDENEN ALLTAGS-KRAFTQUELLEN):
+   - Die Sektion "Fähigkeiten, Kräfte & Kampfeinstufung" ('powerSource', 'powerCost', 'skills', 'abilities', 'techniqueList') dient AUSSCHLIESSLICH echten Kampffähigkeiten, Magiesystemen, übernatürlichen Kräften, Kampfsportarten, Waffenbeherrschung oder physischen Kampftechniken!
+   - STRENGSTES VERBOT VON ERFUNDENEN SOZIALEN/ALLTÄGLICHEN "PSEUDO-KRAFTQUELLEN": Erfinde NIEMALS abstrakte soziale, diplomatische oder alltägliche Eigenschaften (wie "Intellekt & Charisma", "Hofintrigen", "Manipulation", "Geduld") als Kraftquelle, und NIEMALS metaphorische Kosten (wie "Emotionale Distanz" oder "Wachsamkeit") als Ressourcen!
+   - Alle sozialen, diplomatischen, intellektuellen, kaufmännischen, handwerklichen und lebenspraktischen Fertigkeiten gehören ZWINGEND in:
+     * 'everydaySkills': Alltagskompetenzen mit Prozentwert von 0% bis 100% (z.B. "Diplomatie (80%)", "Menschenkenntnis (75%)", "Verhandlungsgeschick (70%)", "Kräutersammeln (40%)", "Reiten (60%)", "Kochen (50%)", "Schwimmen (30%)")
+     * 'talents': Spezielle Talente & Fachwissen (z.B. "Schlösser knacken", "Feilschen", "Kartografie", "Giftkunde")
+     * 'craftingSkills': Handwerkskünste & Fertigung (z.B. "Schmieden", "Trankbrauen", "Schneiderei")
+     * 'profession' & 'professionField': Hauptberuf und Berufsfeld
+     * 'toolsAndEquipment': Berufswerkzeuge und Ausrüstung
+
+2. KRAFTQUELLEN-AUSWAHL (BEREITS VORHANDEN ODER ECHTE NEUE KRAFTQUELLE):
+   - Wähle PRIMÄR eine der BEREITS IN DER WELT REGISTRIERTEN Kraftquellen:
+${powerSourcesListStr}
+   - Ist der Charakter ein nicht-magischer physischer Kämpfer, Waffenträger, Gardist, Schütze, Spion (im Nahkampf) oder Soldat ohne Magie/Superkräfte? -> Wähle als Kraftquelle "Körperkraft" oder "Waffenkampf" mit Ressource "Ausdauer"!
+   - Besitzt der Charakter magische oder übernatürliche Kräfte des Welten-Settings (z.B. Magie, Mana, Chakra, Haki, Teufelsfrucht, Quirk, Psionik, Fluchkraft)? -> Wähle die entsprechende Welt-Kraftquelle (z.B. "Magie", "Haki", "Teufelsfrucht", "Chakra") und deren echte Ressource (z.B. "Mana", "Ausdauer", "Chakra")!
+   - Falls zwingend eine NEUE Kraftquelle für ein spezielles Kampfsystem entworfen werden muss, muss es sich um ein echtes Kampf-/Energiesystem handeln (z.B. "Schattenmagie", "Blutkinese", "Gravitationskontrolle", "Psi-Energie") mit einer messbaren Ressource (z.B. "Mana", "Ausdauer", "Psi-Punkte", "Energie", "Blutessenz").
+
+3. LOGISCHE GRUNDFÄHIGKEITEN (Base Abilities) DER KRAFTQUELLE:
+   - Eine Grundfähigkeit ist die fundamentale Manifestation, Kinese, Schule oder Form der Kraftquelle (1 bis maximal 3 fokussierte Grundfähigkeiten pro Kraftquelle).
+   - Beispiele für logische Grundfähigkeiten:
+     * Bei Kraftquelle "Teufelsfrucht": Die konkrete Fruchtkraft (z.B. "Feuer-Logia (Mera Mera)" mit Element "Feuer", "Gummikörper (Gomu Gomu)" oder "Leoparden-Zoan Gestalt").
+     * Bei Kraftquelle "Haki": Die Haki-Grundarten (z.B. "Rüstungshaki (Busoshoku)", "Beobachtungshaki (Kenbunshoku)", "Königshaki (Haoshoku)").
+     * Bei Kraftquelle "Magie": Die konkrete Magieschule/Kinese (z.B. "Pyrokinese (Feuermagie)", "Kryokinese (Eismagie)", "Heilmagie", "Schutzmagie").
+     * Bei Kraftquelle "Körperkraft / Waffenkampf": Die Kampfkunst oder Waffenfertigkeit (z.B. "Schwertkunst (Ein-Schwert-Stil)", "Waffenloser Faustkampf", "Bogenkunst").
+     * Bei Kraftquelle "Quirk / Esper": Die Kern-Begabung (z.B. "Telekinese / Psychokinese", "Explosion", "Gravitationskontrolle").
+
+4. STRUKTURIERTER AUFBAU IM 'abilities'-ARRAY:
+   Jeder Eintrag im 'abilities'-Array repräsentiert eine konkrete Kampf-Fähigkeit, passive Eigenschaft, Technik oder Transformation mit einer der 5 Kategorien:
+   - 'Passive Fähigkeiten': Passive Kampf-Eigenschaften, Schärfe der Sinne, Immunitäten, Körperhärte (z.B. "Hitzeimmunität", "Eiserne Zähigkeit", "Gefahreninstinkt", "Fester Stand").
+   - 'Techniken': Aktive Manöver, Angriffe, Zauber, Schilde, Heilung (z.B. "Feuerstrahl", "Schwertstoß", "Schildschlag", "Barriere", "Wundheilung").
+   - 'Ultimative Techniken': Mächtige Finisher, geheime Großangriffe (z.B. "Großer Feuerkaiser", "Drachenspalter-Klingenhieb").
+   - 'Transformationen': Echte Formwechsel, Verstärkungsmodi, Erweckungen (z.B. "Bestienform", "Raserei-Modus", "Gear-Stufe").
+   - 'Talente': Spezielle Kampf-Begabungen oder energetischer Fokus.
 
 ### AUSSEHEN (MANDATORISCH):
 Befülle im 'appearance'-Objekt das Feld 'looks' detailliert mit dem Gesichtsaussehen, Haarstil und besonderen Merkmalen im untransformierten Zustand. Grenzer dies sauber von 'outfit' (Kleidung) und 'raceFeatures' (nicht-menschliche physische Rassemerkmale) ab!
@@ -4336,13 +4441,6 @@ Befülle zwingend die 'abilities'-Liste mit ALLEN Kräften, Fähigkeiten, Standa
 WICHTIGSTE DIRECTIVE FÜR DIE ERSTELLUNG:
 - JEDE EINZELNE genannte oder ableitbare Kraft, Kampftechnik, Barriere, Fähigkeit oder Gestalt (z.B. "Elementarmanipulation", "Heilende Berührung", "Begrenzte Telekinese", "Empathie", "Schutzbarrieren", "Vollständige Elementarkontrolle", "Dimensionsrisse", "Levitation", "Absorption", "Unterdrückung", "Gewaltige Energieexplosionen", "Vollständige körperliche Wiederherstellung", "Reine Esper-Form") MUSS ALS EIGENSTÄNDIGER EINTRAG im Array 'abilities' mit der jeweils passenden Kategorie existieren!
 - STRENGES VERBOT: Fasse die Kampftechniken NICHT nur als Text in einem einzigen Sammelblock oder nur innerhalb einer Transformation zusammen. Wenn 8 Techniken genannt werden, MÜSSEN 8 separate Einträge im 'abilities'-Array mit ihren eigenen Namen, Beschreibungen und Kosten erstellt werden!
-
-KATEGORIE-ZUORDNUNG FÜR JEDEN EINTRAG IM 'abilities'-ARRAY ('category'):
-1. 'Passive Fähigkeiten': Für passive Eigenschaften, dauerhafte Wahrnehmung, Empathie, Sinneswahrnehmung, Immunitäten oder Regeneration (z.B. "Empathie", "Vollständige körperliche Wiederherstellung").
-2. 'Techniken': Für aktive Grundkräfte, Fertigkeiten, Zauber, Barrieren, Heilung, Telekinese, Elementarmanipulation, Levitation, Absorption, Unterdrückung.
-3. 'Ultimative Techniken': Für mächtige Finisher, verheerende Großangriffe oder Extremkräfte (z.B. "Gewaltige Energieexplosionen", "Dimensionsrisse", "Vollständige Elementarkontrolle").
-4. 'Transformationen': Für echte Verwandlungen, Metamorphosen, Formen oder Erschöpfungszustände (z.B. "Reine Esper-Form").
-5. 'Talente': Für spezielle Begabungen, Esper-Fokus, Meditation.
 
 BEI TRANSFORMATIONEN (FORMEN & GESTALTWECHSEL):
 Falls ein Charakter die Fähigkeit besitzt, sich zu verwandeln, seine Gestalt zu ändern oder der Text Verwandlungen/Formen beschreibt (z.B. "Reine Esper-Form", "Kinder-Form" bei Erschöpfung):
@@ -4357,7 +4455,32 @@ Falls ein Charakter die Fähigkeit besitzt, sich zu verwandeln, seine Gestalt zu
    - ERSTELLE TECHNIKEN DER FORM: Jede Transformation MUSS unter 'techniqueList' Techniken zur Aktivierung (Typ 'Transformation'), die spezifischen Spezialkräfte während der Form und eine Zurückverwandlungs-Technik besitzen!
    - Trage in 'currentSituation' ein, wie der Charakter heute mit dieser Verwandlung lebt.
 
-Befülle zudem für jede Ability und für den Charakter das Feld 'techniqueList' mit konkreten Techniken/Attacken und 'techniques' mit kommagetrennten Namen!`;
+Befülle zudem für jede Ability und für den Charakter das Feld 'techniqueList' mit konkreten Techniken/Attacken und 'techniques' mit kommagetrennten Namen!
+
+### VOLLSTÄNDIGKEIT ALLER CHARAKTER-BEREICHE (STRENGSTE DIRECTIVE):
+Der SMART FILL muss ALLE Bereiche des Charakters lückenlos und detailreich ausfüllen:
+1. PROFIL & AUSSEHEN:
+   - Vollständiger Name ('name'), Rufname ('rufName'), Spitzname/Alias ('nickname'), Rolle ('role'), Beruf ('profession').
+   - 'appearance': Geschlecht ('gender'), Alter ('age'), Statur ('build'), Haarfarbe ('hairColor'), Augenfarbe ('eyeColor'), Körbchengröße ('cupSize'), Größe ('height'), Maße ('measurements'), Gewicht ('weight'), KFA ('bodyFat'), Muskelmasse ('muscleMass'), Rasse ('race'), Rassemerkmale ('raceFeatures'), Herkunft ('origin'), Familie ('family'), Fraktion ('faction'), Aktueller Aufenthaltsort ('currentLocation'), Gesichtszüge & Haare ('looks'), Kleidung & Outfit ('outfit').
+   - Persönlichkeit: Fließtext ('personality'), Archetyp ('personalityArchetype'), alle 24 Merkmale in 'personalityTraits' (0-100).
+   - Vergangenheit/Biografie ('bio') chronologisch nach den 8 Leitfragen.
+   - Aktuelle Situation ('currentSituation').
+   - Geheimnisse: Stufe 1 ('secretsStage1'), Stufe 2 ('secretsStage2'), Stufe 3 ('secretsStage3'), Verborgenes Wissen ('knowledge').
+2. BEZIEHUNGEN, MOTIVATION & ZIELE:
+   - Motivationskern ('motivationCore'): Hauptziel ('mainGoal'), Warum ('whyGoal'), Aktuelle Prioritäten ('currentPriorities'), Bedürfnisse ('needs'), Ängste ('fears'), Werte & Prinzipien ('valuesPrinciples'), Mittel & Wege ('methodsAndMeans'), Veränderungstrigger ('changeTriggers'), Etappen zur Erreichung des Hauptziels ('shortTermPlan', 'mediumTermPlan', 'longTermPlan') und 'goal'.
+   - Ziele & Pläne ('goals'): Generiere 2 bis 4 konkrete, strukturierte Ziele mit ID, Titel, Beschreibung, Zeithorizont, Zielobjekt, Priorität, Status, Motivation, aktiver Plan, Alternativpläne, Hindernisse und Fortschritt. WICHTIG: FÜR JEDES ZIEL (und insbesondere das Hauptziel) MÜSSEN zwingend auch die Etappen zur Erreichung des Hauptziels ('shortTermPlan', 'mediumTermPlan', 'longTermPlan') mit konkreten, logisch aufeinander aufbauenden Inhalten ausgefüllt werden!
+   - Beziehungen ('relationships'): Generiere strukturierte Beziehungen zu anderen Charakteren oder Gruppen der Welt mit Beziehungsstatus, Werten (affection, trust, respect, loyalty, familiarity, fear, bond, hostility), Verhalten, Regieanweisungen, gemeinsamen Erinnerungen und Schlüsselereignissen; plus Fließtexte 'relationship' und 'conduct'.
+3. KAMPFFÄHIGKEITEN & EINSTUFUNG:
+   - Kraftquelle ('powerSource'), Kraftkosten ('powerCost'), Grundfähigkeiten/Spezialfähigkeit ('skills'), konkrete Techniken ('techniques' und 'techniqueList'), Fähigkeiten-Array ('abilities') mit vollständigen Kategorien, und Macht-Einstufungen ('campaignPowerLevelsList').
+4. BERUFE & TALENTE:
+   - Hauptberuf ('profession', 'professionField', 'professionSpecialization', 'professionLevel'), Nebenberufe ('secondaryProfessions'), Position/Titel ('jobTitle'), Berufsbeschreibung ('professionDescription'), Handwerk ('craftingSkills'), Talente ('talents'), Alltagskompetenzen ('everydaySkills' mit 0-100% Werten), Berufswerkzeuge & Ausrüstung ('toolsAndEquipment').
+5. BESITZ & INVENTAR ('structuredInventory'):
+   - Befülle 'structuredInventory' VOLLSTÄNDIG mit:
+     * Startgeld ('money') und Währungsbezeichnung ('currencyLabel', passend zur Welt)
+     * Waffen ('weapons'): Liste aller Waffen oder Kampfwerkzeuge
+     * Kleidung & Rüstung ('armor'): head, chest, hands, legs, feet
+     * Accessoires & Schmuck ('accessories'): finger, wrist, waist, back, neck
+     * Gebrauchsgegenstände ('generalItems'): Liste nützlicher Gegenstände im Beutel/Rucksack.`;
 
       if (worldContext) {
         contextPrompt = `### WELTBESCHREIBUNG ODER ZEITLINIEN-PROMPT (Kontext für die Erstellung):
@@ -4455,15 +4578,17 @@ ${existingCodexCharacters.map(c => `- Name: "${c.name}"
 
       if (targetSection && targetSection !== 'all') {
         const sectionDescriptions: Record<string, string> = {
-          appearance: 'Statur & Erscheinung (Geschlecht, Alter, Statur, Haare, Augen, Kleidung, Looks, Rasse, Rassemerkmale, Maße, Körbchengröße und Verwandlungen)',
+          appearance: 'Statur & Erscheinung (Geschlecht, Alter, Statur, Haare, Augen, Kleidung, Looks, Rasse, Rassemerkmale, Maße, Körbchengröße, Gewicht, KFA, Muskelmasse, Standort und Verwandlungen)',
           personality: 'Persönlichkeit (Wesenszüge, Archetyp, Eigenschaften, Vorlieben/Abneigungen, Temperament)',
           bio: 'Vergangenheit / Biografie (Lebenslauf, Herkunft, Kindheit, prägende Ereignisse, Familie)',
           situation: 'Aktuelle Situation (Gegenwärtiger Aufenthaltsort, aktuelle Lebenslage, Herausforderungen)',
           motivation: 'Motivationskern & Handlungsantrieb (Hauptziel/Goal, innere Antriebe, Ideale, Schwüre, Ängste, Werte)',
+          goals: 'Ziele & Pläne (Hauptziel, mittelfristige & kurzfristige Etappenziele, Aktive Pläne, Hindernisse)',
           secrets: 'Geheimnis-Stufen / Verborgenes Wissen (secretsStage1: Öffentliches Wissen, secretsStage2: Gerüchte & Indizien, secretsStage3: Verborgenes Geheimnis, knowledge)',
           relationships: 'Beziehungen (Verhältnis zu anderen Charakteren, Gilden, Familie, Anredeformen, Verhalten)',
           combat: 'Kampffähigkeiten & Techniken (Kräfte, Spezialfähigkeiten, Techniken, Kraftquelle, Kraftkosten, Machtlevel)',
-          professions: 'Berufe & Talente (Hauptberuf, Berufsrang, Nebenberufe, Handwerkskünste, Talente, Alltagsfertigkeiten)'
+          professions: 'Berufe & Talente (Hauptberuf, Berufsrang, Nebenberufe, Handwerkskünste, Talente, Alltagsfertigkeiten)',
+          inventory: 'Besitz & Inventar (Waffen, Kleidung/Rüstung, Accessoires/Schmuck, Geld/Währung, Werkzeuge und Gegenstände im Rucksack)'
         };
         const desc = sectionDescriptions[targetSection] || targetSection;
         contextPrompt += `\n\n### GEZIELTER BEARBEITUNGS-FOKUS: "${desc}"
@@ -4486,6 +4611,64 @@ Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend 
       if (data.appearance?.gender) {
         data.appearance.gender = data.appearance.gender.charAt(0).toUpperCase() + data.appearance.gender.slice(1).toLowerCase();
       }
+
+      // 1. Process Personality Archetype & Traits
+      if (data.personalityArchetype && data.personalityArchetype !== '-') {
+        const def = getArchetypeDefinition(data.personalityArchetype);
+        if (def) {
+          data.personalityArchetype = def.name;
+          data.archetype = def.name;
+        } else {
+          data.archetype = data.personalityArchetype;
+        }
+      } else if (data.archetype && data.archetype !== '-') {
+        const def = getArchetypeDefinition(data.archetype);
+        if (def) {
+          data.personalityArchetype = def.name;
+          data.archetype = def.name;
+        }
+      }
+
+      if (data.personalityArchetype && data.personalityArchetype !== '-') {
+        data.personalityTraits = applyArchetypeToTraits(data.personalityTraits, data.personalityArchetype);
+      } else if (!data.personalityTraits || Object.keys(data.personalityTraits).length === 0) {
+        data.personalityTraits = applyArchetypeToTraits(undefined, '-');
+      }
+
+      // 2. Process Campaign Power Levels & Data
+      const levels: Record<string, { value: number; potentialMax: number }> = {};
+      if (Array.isArray(data.campaignPowerLevelsList) && data.campaignPowerLevelsList.length > 0) {
+        data.campaignPowerLevelsList.forEach((item: any) => {
+          if (item && item.parameterName) {
+            levels[item.parameterName] = {
+              value: typeof item.value === 'number' ? item.value : 0,
+              potentialMax: typeof item.potentialMax === 'number' ? item.potentialMax : (typeof item.value === 'number' ? Math.max(item.value, 100) : 100)
+            };
+          }
+        });
+      }
+
+      const activePowerSettings = powerSettings || worldContext?.campaignPowerSettings || worldContext?.powerSettings;
+      if (activePowerSettings && typeof activePowerSettings === 'object') {
+        Object.entries(activePowerSettings).forEach(([paramName, paramVal]: [string, any]) => {
+          const sMin = typeof paramVal === 'number' ? Math.floor(paramVal * 0.4) : (typeof paramVal?.scaleMin === 'number' ? paramVal.scaleMin : (typeof paramVal?.min === 'number' ? paramVal.min : 0));
+          const sMax = typeof paramVal === 'number' ? paramVal : (typeof paramVal?.scaleMax === 'number' ? paramVal.scaleMax : (typeof paramVal?.max === 'number' ? paramVal.max : 100));
+          
+          if (!levels[paramName] || levels[paramName].value === 0) {
+            const baseVal = Math.max(sMin, Math.min(sMax, Math.floor(sMin + (sMax - sMin) * 0.55)));
+            levels[paramName] = {
+              value: baseVal,
+              potentialMax: sMax
+            };
+          }
+        });
+      }
+
+      if (Object.keys(levels).length > 0) {
+        data.campaignPowerLevels = { ...(data.campaignPowerLevels || {}), ...levels };
+        data.campaignPowerData = { ...(data.campaignPowerData || {}), ...levels };
+      }
+
       return this.sanitizeAndRepairTransformations(data);
     });
   }
@@ -4902,9 +5085,12 @@ WICHTIGE DIRECTIVEN:
    - 'character': Ziel gegenüber einer konkreten Zielperson aus der Welt (z.B. Vertrauen gewinnen, Rivalen übertrumpfen, jemanden beschützen).
    - 'faction': Ziel bezüglich einer Gilde, Fraktion oder Gruppe (z.B. beitreten, Rang aufsteigen, Einfluss schwächen).
    - 'world': Übergreifendes Ziel bezüglich der Spielwelt oder eines Ortes.
-4. STRUKTUR JEDES ZIELS (WAS vs. WIE):
+4. STRUKTUR JEDES ZIELS (WAS vs. WIE & ETAPPEN):
    - 'title': Klares Ziel (WAS will er erreichen?).
    - 'activePlan': Nummerierte konkrete Handlungsschritte (WIE geht er vor?).
+   - 'shortTermPlan': Konkrete erste Schritte, Vorbereitung, Informationsbeschaffung und Sofortmaßnahmen (Kurzfristig).
+   - 'mediumTermPlan': Mittelfristiger Meilenstein, Zwischenetappe, Prüfung oder Bündnis (Mittelfristig).
+   - 'longTermPlan': Finale Vollendung, Meisterung und dauerhafte Etablierung (Langfristig).
    - 'alternativePlans': Mindestens 1-2 Ausweichpläne (Plan B, Plan C), falls der Hauptplan scheitert.
    - 'obstacles': Konkrete Hindernisse, Risiken und Loyalitätskonflikte.
    - 'priority': 'kritisch', 'hoch', 'normal' oder 'niedrig'.
@@ -4992,6 +5178,9 @@ ${JSON.stringify(existingGoals, null, 2)}\n`;
         status: ['aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben'].includes(g.status) ? g.status : 'aktiv',
         motivation: g.motivation || '',
         activePlan: g.activePlan || '',
+        shortTermPlan: g.shortTermPlan || '',
+        mediumTermPlan: g.mediumTermPlan || '',
+        longTermPlan: g.longTermPlan || '',
         alternativePlans: Array.isArray(g.alternativePlans) ? g.alternativePlans : (g.alternativePlans ? [g.alternativePlans] : []),
         obstacles: Array.isArray(g.obstacles) ? g.obstacles : (g.obstacles ? [g.obstacles] : []),
         progress: typeof g.progress === 'number' ? Math.max(0, Math.min(100, g.progress)) : 0,
@@ -5116,6 +5305,9 @@ ${JSON.stringify(params.relationships.map(r => ({ target: r.targetCharacter, typ
         status: ['aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben'].includes(g.status) ? g.status : 'aktiv',
         motivation: g.motivation || '',
         activePlan: g.activePlan || '',
+        shortTermPlan: g.shortTermPlan || '',
+        mediumTermPlan: g.mediumTermPlan || '',
+        longTermPlan: g.longTermPlan || '',
         alternativePlans: Array.isArray(g.alternativePlans) ? g.alternativePlans : (g.alternativePlans ? [g.alternativePlans] : []),
         obstacles: Array.isArray(g.obstacles) ? g.obstacles : (g.obstacles ? [g.obstacles] : []),
         progress: typeof g.progress === 'number' ? Math.max(0, Math.min(100, g.progress)) : 0,
@@ -6567,7 +6759,28 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
         }
       });
 
-      return this.parseJSONSafely(response.text || '{}', {});
+      const parsed = this.parseJSONSafely(response.text || '{}', {});
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.weapons)) {
+          parsed.weapons = parsed.weapons.map((w: any) => typeof w === 'string' ? w.trim() : (w?.name || '')).filter(Boolean);
+        }
+        if (Array.isArray(parsed.generalItems)) {
+          parsed.generalItems = parsed.generalItems.map((g: any) => typeof g === 'string' ? g.trim() : (g?.name || '')).filter(Boolean);
+        }
+        if (parsed.armor && typeof parsed.armor === 'object') {
+          for (const key of Object.keys(parsed.armor)) {
+            const val = parsed.armor[key];
+            parsed.armor[key] = typeof val === 'string' ? val.trim() : (val?.name || '');
+          }
+        }
+        if (parsed.accessories && typeof parsed.accessories === 'object') {
+          for (const key of Object.keys(parsed.accessories)) {
+            const val = parsed.accessories[key];
+            parsed.accessories[key] = typeof val === 'string' ? val.trim() : (val?.name || '');
+          }
+        }
+      }
+      return parsed;
     });
   }
 
@@ -6584,8 +6797,7 @@ Gib ein strukturiertes JSON-Objekt zurück, das dem geforderten Schema entsprich
 ${worldContext}
 ${charContext}
 
-Aufgabe: Entwirf einen detaillierten, maßgeschneiderten Gegenstand (z.B. ein besonderes Katana wie Muramasa oder Kiku-ichimonji, magische Rüstung, Schmuckstücke, Relikte oder Spezialwaffen).
-Benutzer-Wunsch / Konzept: "${itemPrompt || 'Ein besonderer, meisterhafter Gegenstand'}"
+Aufgabe: Entwirf einen detaillierten, maßgeschneiderten Gegenstand (z.B. ein besonderes Katana wie Muramasa oder Kiku-ichimonji, magische Rüstung, Schmuckstücke, Relikte oder Spezialwaffen). Trenne sauber zwischen Gegenstandsdefinition (Codex) und Instanzeigenschaften (konkretes Exemplar). Erfinde keine ungefragten Marktpreise, Händler, Betriebe oder Bestandszahlen.
 
 Gib ein valides JSON-Objekt mit folgendem Schema zurück:
 {
@@ -6593,23 +6805,22 @@ Gib ein valides JSON-Objekt mit folgendem Schema zurück:
   "category": "Waffen",
   "subCategory": "z.B. Katana, Langschwert, Amulett, Plattenharnisch, Robe",
   "slot": "weapon",
-  "rarity": "Selten",
-  "quality": "z.B. Meisterlich geschmiedet, Makellos, Uralt",
   "material": "z.B. Gefalteter Tamahagane-Stahl, Sternensilber, Drachenleder",
   "weight": "1.2 kg",
-  "value": 500,
-  "durability": "100 / 100",
-  "description": "Detaillierte Beschreibung des Aussehens, Klingenform/Verarbeitung und Haptik.",
-  "specialEffects": "Besondere Effekte, Schnittwind, Status-Effekte oder Boni.",
+  "description": "Detaillierte Grundbeschreibung der physischen Beschaffenheit und Form.",
+  "specialEffects": "Feste Eigenschaften, besondere Fähigkeiten oder magische Resonanz.",
   "combatStats": {
-    "damage": "z.B. 1d10+4 (Schlitzen & Schatten)",
+    "damage": "z.B. 1d10+4 (Schlitzen)",
     "damageType": "z.B. Schlitzen / Dunkelheit",
     "defense": "z.B. +8 Rüstung",
     "range": "z.B. Nahkampf (1.2m)",
-    "scalingStat": "z.B. Geschicklichkeit & Schärfe"
+    "scalingStat": "z.B. Geschicklichkeit"
   },
   "enchantments": "Verzauberungen, Runen oder magische Eigenschaften.",
-  "originHistory": "Herkunft, Schmied oder Legende hinter dem Gegenstand.",
+  "quality": "z.B. Meisterlich geschmiedet, Makellos, Uralt",
+  "condition": "z.B. neuwertig",
+  "durability": "100 / 100",
+  "originHistory": "Herkunft oder Legende dieses konkreten Exemplars.",
   "requirements": "Bedingungen zur Nutzung (z.B. Geschick 14 oder Schwertmeister)"
 }`;
 
@@ -7031,7 +7242,8 @@ WICHTIG: Antworte AUSSCHLIESSLICH mit dem validen JSON-Array. Keine Einleitung, 
           }
         });
 
-        const text = (response.text || '').trim();
+        const rawText = response.text;
+        const text = (typeof rawText === 'string' ? rawText : (typeof rawText === 'function' ? rawText() : (rawText ? String(rawText) : ''))).trim();
         if (!text || text === '[]') return [];
         
         try {
@@ -7141,7 +7353,8 @@ Gib das Ergebnis als valides JSON-Objekt zurück mit genau dieser Struktur:
         }
       });
 
-      const text = (response.text || '').trim();
+      const rawText = response.text;
+      const text = (typeof rawText === 'string' ? rawText : (typeof rawText === 'function' ? rawText() : (rawText ? String(rawText) : ''))).trim();
       if (!text) {
         throw new Error("Leere Rückgabe von Gemini beim Konsistenz-Scan");
       }
@@ -7381,7 +7594,8 @@ GIB NUR DAS REINE JSON-OBJEKT ZURÜCK, KEINE TEXTERKLÄRUNGEN DRUMHERUM!`;
         }
       });
 
-      const text = (response.text || '').trim();
+      const rawText = response.text;
+      const text = (typeof rawText === 'string' ? rawText : (typeof rawText === 'function' ? rawText() : (rawText ? String(rawText) : ''))).trim();
       if (!text) {
         throw new Error("Keine Antwort bei der vernetzten Smart-Fill Generierung erhalten.");
       }
@@ -8901,17 +9115,12 @@ ${keepExistingDetails && Object.keys(existingDetails).length > 0 ? `### BESTEHEN
                       description: "Detaillierte wechselseitige Beziehungen zu anderen Mitgliedern der Fraktion."
                     }
                   },
-                  required: ["characterName", "relationshipSummary", "conductSummary", "relationships"]
+                  required: ["characterName"]
                 }
               }
             },
             required: [
-              "philosophy", "foundingReason", "originalGoal", "currentGoal", "keyHistoricalEvents",
-              "evolutionAndChange", "leadershipStructure", "leader", "cohesion", "internalConflicts",
-              "allies", "rivals", "enemies", "convenienceAlliances", "unresolvedConflicts", "status",
-              "economicAgreements", "economyDirectives", "pendingDecisions", "resourceEconomy",
-              "resourceTerritory", "resourceMaterials", "resourceMembers", "resourceMilitary",
-              "resourceInfluence", "resourceKnowledge", "resourceTrade", "members", "characterUpdates"
+              "philosophy", "currentGoal", "leader", "status", "members"
             ]
           }
         }

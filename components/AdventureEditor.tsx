@@ -39,6 +39,7 @@ import {
   EP_DEFAULT_COST_RESOURCES, 
   EP_DEFAULT_HEALTH_NAMES, 
   EP_DEFAULT_COST_NAMES,
+  EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS,
   createEpDefaultWorldSettings
 } from '../lib/progressionDefaults';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
@@ -482,6 +483,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       campaignPowerSettings: epDefaults.campaignPowerSettings,
       customStatAllocations: epDefaults.customStatAllocations,
       costResources: epDefaults.costResources,
+      customResourceMappings: epDefaults.customResourceMappings,
       healthPowerNames: epDefaults.healthPowerNames,
       costPowerNames: epDefaults.costPowerNames,
       healthLabel: epDefaults.healthLabel,
@@ -500,6 +502,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     };
     if (!w.techniqueRulesList) {
       w.techniqueRulesList = [];
+    }
+    if (!w.customResourceMappings || w.customResourceMappings.length === 0) {
+      w.customResourceMappings = JSON.parse(JSON.stringify(epDefaults.customResourceMappings));
     }
     let resultWorld = w;
     if (initialData?.world) {
@@ -1057,26 +1062,35 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       // Convert cost resources
       let costResources = data.costResources || [];
       if (Array.isArray(costResources)) {
-        costResources = costResources.map((r: any) => ({
-          id: r.id || Math.random().toString(36).substr(2, 9),
-          name: r.name || 'Mana',
-          sourcePowers: r.sourcePowers || [],
-          baseMax: r.baseMax !== undefined ? r.baseMax : 100
-        }));
+        costResources = costResources.map((r: any) => {
+          let sources = Array.isArray(r.sourcePowers) ? [...r.sourcePowers] : [];
+          if ((r.name?.toUpperCase() === 'SP' || r.id === 'res-sp') && sources.includes('Geschicklichkeit')) {
+            sources = sources.filter((p: string) => p !== 'Geschicklichkeit');
+          }
+          return {
+            id: r.id || Math.random().toString(36).substr(2, 9),
+            name: r.name || 'Mana',
+            radarPowerName: r.radarPowerName,
+            sourcePowers: sources,
+            baseMax: r.baseMax !== undefined ? r.baseMax : 100
+          };
+        });
       }
 
       // Convert custom mappings
       let customResourceMappings = data.customResourceMappings || [];
-      if (Array.isArray(customResourceMappings)) {
+      if (Array.isArray(customResourceMappings) && customResourceMappings.length > 0) {
         customResourceMappings = customResourceMappings.map((m: any) => ({
           id: m.id || Math.random().toString(36).substr(2, 9),
-          name: m.name || 'Fokus',
-          icon: m.icon || '✨',
+          name: m.name || 'Magie',
+          icon: m.icon || '⚡',
           sourcePowers: m.sourcePowers || [],
           baseMax: m.baseMax !== undefined ? m.baseMax : 100,
-          effect: m.effect || 'regen',
+          effect: m.effect || 'power_source',
           description: m.description || ''
         }));
+      } else {
+        customResourceMappings = JSON.parse(JSON.stringify(EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS));
       }
 
       // Convert technique rules list
@@ -1150,26 +1164,35 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       // Convert cost resources
       let costResources = data.costResources || [];
       if (Array.isArray(costResources)) {
-        costResources = costResources.map((r: any) => ({
-          id: r.id || Math.random().toString(36).substr(2, 9),
-          name: r.name || 'Mana',
-          sourcePowers: r.sourcePowers || [],
-          baseMax: r.baseMax !== undefined ? r.baseMax : 100
-        }));
+        costResources = costResources.map((r: any) => {
+          let sources = Array.isArray(r.sourcePowers) ? [...r.sourcePowers] : [];
+          if ((r.name?.toUpperCase() === 'SP' || r.id === 'res-sp') && sources.includes('Geschicklichkeit')) {
+            sources = sources.filter((p: string) => p !== 'Geschicklichkeit');
+          }
+          return {
+            id: r.id || Math.random().toString(36).substr(2, 9),
+            name: r.name || 'Mana',
+            radarPowerName: r.radarPowerName,
+            sourcePowers: sources,
+            baseMax: r.baseMax !== undefined ? r.baseMax : 100
+          };
+        });
       }
 
       // Convert custom mappings
       let customResourceMappings = data.customResourceMappings || [];
-      if (Array.isArray(customResourceMappings)) {
+      if (Array.isArray(customResourceMappings) && customResourceMappings.length > 0) {
         customResourceMappings = customResourceMappings.map((m: any) => ({
           id: m.id || Math.random().toString(36).substr(2, 9),
-          name: m.name || 'Fokus',
-          icon: m.icon || '✨',
+          name: m.name || 'Magie',
+          icon: m.icon || '⚡',
           sourcePowers: m.sourcePowers || [],
           baseMax: m.baseMax !== undefined ? m.baseMax : 100,
-          effect: m.effect || 'regen',
+          effect: m.effect || 'power_source',
           description: m.description || ''
         }));
+      } else {
+        customResourceMappings = JSON.parse(JSON.stringify(EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS));
       }
 
       // Convert technique rules list
@@ -1762,17 +1785,25 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           personalityArchetype: finalArchetype,
         };
 
-        const generatedPlayerName = (data.name?.trim()) || (data.callName?.trim()) || (data.rufName?.trim()) || '';
+        const getSafePlayerName = (val: any): string => {
+          if (typeof val === 'string') return val.trim();
+          if (val && typeof val === 'object') return (val.name || val.title || val.callName || '').toString().trim();
+          return val ? String(val).trim() : '';
+        };
+        const generatedPlayerName = getSafePlayerName(data.name) || getSafePlayerName(data.callName) || getSafePlayerName(data.rufName);
         const finalRole = data.role || data.profession || (keepExistingPlayerDetails ? (prev.role || prev.profession || '') : '');
         const finalProfession = data.profession || data.role || (keepExistingPlayerDetails ? (prev.profession || prev.role || '') : '');
 
-        return {
+        const rawPlayerDetails = {
           ...prev,
           name: keepExistingPlayerDetails && prev.name ? prev.name : (generatedPlayerName || (prev.name && prev.name.length < 50 ? prev.name : 'Neuer Spieler-Charakter')),
           nickname: data.nickname || (keepExistingPlayerDetails ? prev.nickname : ''),
           rufName: data.rufName || data.nickname || generatedPlayerName || (keepExistingPlayerDetails ? prev.rufName : ''),
           role: finalRole,
           profession: finalProfession || finalRole,
+          professionField: data.professionField || (keepExistingPlayerDetails ? prev.professionField : ''),
+          professionSpecialization: data.professionSpecialization || (keepExistingPlayerDetails ? prev.professionSpecialization : ''),
+          professionRank: data.professionRank || data.professionLevel || (keepExistingPlayerDetails ? prev.professionRank : ''),
           professionLevel: data.professionLevel || (keepExistingPlayerDetails ? prev.professionLevel : ''),
           secondaryProfessions: data.secondaryProfessions || (keepExistingPlayerDetails ? prev.secondaryProfessions : []),
           jobTitle: data.jobTitle || (keepExistingPlayerDetails ? prev.jobTitle : ''),
@@ -1780,12 +1811,15 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           craftingSkills: data.craftingSkills || (keepExistingPlayerDetails ? prev.craftingSkills : ''),
           talents: data.talents || (keepExistingPlayerDetails ? prev.talents : ''),
           everydaySkills: data.everydaySkills || (keepExistingPlayerDetails ? prev.everydaySkills : ''),
+          toolsAndEquipment: data.toolsAndEquipment || (keepExistingPlayerDetails ? prev.toolsAndEquipment : ''),
           personality: finalPersonality,
           personalityArchetype: finalArchetype,
           personalityTraits: finalTraits,
           bio: finalBio,
           currentSituation: data.currentSituation || (keepExistingPlayerDetails ? prev.currentSituation : ''),
           goal: data.goal || (keepExistingPlayerDetails ? prev.goal : ''),
+          motivationCore: data.motivationCore || (keepExistingPlayerDetails ? prev.motivationCore : (data.goal ? { mainGoal: data.goal } : undefined)),
+          goals: Array.isArray(data.goals) && data.goals.length > 0 ? data.goals : (keepExistingPlayerDetails ? prev.goals : (data.goal ? [{ id: 'goal-1', title: data.goal, timeframe: 'langfristig', targetType: 'self', targetName: 'Selbst', priority: 'hoch', status: 'aktiv', progress: 0 }] : [])),
           relationship: data.relationship || (keepExistingPlayerDetails ? prev.relationship : ''),
           conduct: data.conduct || (keepExistingPlayerDetails ? prev.conduct : ''),
           relationships: mergedRelationships,
@@ -1794,6 +1828,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           powerCost: data.powerCost || (keepExistingPlayerDetails ? prev.powerCost : ''),
           techniques: data.techniques || (keepExistingPlayerDetails ? prev.techniques : ''),
           abilities: generatedAbilities,
+          techniqueList: Array.isArray(data.techniqueList) ? data.techniqueList : (keepExistingPlayerDetails ? prev.techniqueList : []),
           campaignPowerLevels: data.campaignPowerLevels || (keepExistingPlayerDetails ? prev.campaignPowerLevels : {}),
           secretsStage1: nextSecrets1,
           secretsStage2: nextSecrets2,
@@ -1801,6 +1836,11 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           knowledge: nextKnowledge,
           appearance: newAppearance
         };
+
+        const { powerSources: normalizedPs, baseAbilities: normalizedBa, techniques: normalizedTech } = normalizeAbilityHierarchy(rawPlayerDetails);
+        const syncedPlayer = syncCharacterAbilityTree(rawPlayerDetails, normalizedPs, normalizedBa, normalizedTech);
+
+        return syncedPlayer;
       });
 
       // Pull structured inventory automatically from generated smart fill info

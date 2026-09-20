@@ -2240,8 +2240,19 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
 
     const activeOrt = activeLocation || currentAdventure.loreDatabase?.find((l: any) => l.category === 'Orte' && l.details?.isActiveTarget)
       || currentAdventure.loreDatabase?.find((l: any) => l.category === 'Orte');
-    const placeName = activeOrt?.title || 'Startgebiet';
-    const newLocationStr = `${placeName} (${tileName}) (X:${x}, Y:${y})`;
+    const rawPlaceName = activeOrt?.title || currentAdventure.player?.appearance?.currentLocation || 'Startgebiet';
+
+    // Strip pre-existing parenthetical tags & coordinates from rawPlaceName to prevent compounding (e.g. "Startgebiet (Inselgras) (Inselgras)")
+    let basePlaceName = rawPlaceName
+      .replace(/[\(\[]\s*x\s*[:=]?\s*\d+\s*[,;/]?\s*y\s*[:=]?\s*\d+\s*[\)\]]/gi, '')
+      .replace(/[\(\[]\s*\d+\s*,\s*\d+\s*[\)\]]/g, '')
+      .replace(/\s*\([\s\S]*?\)/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!basePlaceName) basePlaceName = 'Startgebiet';
+
+    const newLocationStr = tileName ? `${basePlaceName} (${tileName}) (X:${x}, Y:${y})` : `${basePlaceName} (X:${x}, Y:${y})`;
 
     let updatedPlayer = {
       ...currentAdventure.player,
@@ -3060,7 +3071,14 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
     const nodeCoords = node.details?.coordinates || { x: 50, y: 50 };
     const microX = Math.min(maxX, Math.max(0, Math.floor(nodeCoords.x * gridWidth / 100)));
     const microY = Math.min(maxY, Math.max(0, Math.floor(nodeCoords.y * gridHeight / 100)));
-    const newLocationStr = `${node.title} (X:${microX}, Y:${microY})`;
+    const rawNodeTitle = node.title || 'Unbekannter Ort';
+    const cleanNodeTitle = rawNodeTitle
+      .replace(/[\(\[]\s*x\s*[:=]?\s*\d+\s*[,;/]?\s*y\s*[:=]?\s*\d+\s*[\)\]]/gi, '')
+      .replace(/[\(\[]\s*\d+\s*,\s*\d+\s*[\)\]]/g, '')
+      .replace(/\s*\([\s\S]*?\)/g, '')
+      .replace(/\s+/g, ' ')
+      .trim() || rawNodeTitle;
+    const newLocationStr = `${cleanNodeTitle} (X:${microX}, Y:${microY})`;
 
     // Update player character's current location in lore database too
     const pName = adventure.player?.name;

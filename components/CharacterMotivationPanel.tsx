@@ -14,6 +14,15 @@ interface Props {
   onToggleOpen: () => void;
 }
 
+const ensureString = (val: any): string => {
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val)) return val.map(item => (typeof item === 'string' ? item : JSON.stringify(item))).filter(Boolean).join(', ');
+  if (val !== null && val !== undefined && typeof val === 'object') {
+    return Object.entries(val).map(([k, v]) => `${k}: ${v}`).join(', ');
+  }
+  return val ? String(val) : '';
+};
+
 export const CharacterMotivationPanel: React.FC<Props> = ({
   motivationCore = {},
   mainGoalFallback,
@@ -25,7 +34,7 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
   isOpen,
   onToggleOpen
 }) => {
-  const currentMainGoal = motivationCore.mainGoal ?? mainGoalSync ?? mainGoalFallback ?? '';
+  const currentMainGoal = ensureString(motivationCore.mainGoal ?? mainGoalSync ?? mainGoalFallback ?? '');
   const isBusy = isGeneratingAI || isGenerating;
 
   const updateField = (field: keyof MotivationCore, val: string) => {
@@ -105,7 +114,7 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
                 Innerer Antrieb / Warum dieses Ziel?
               </label>
               <AutoExpandingTextarea
-                value={motivationCore.whyGoal || ''}
+                value={ensureString(motivationCore.whyGoal)}
                 onChange={e => updateField('whyGoal', e.target.value)}
                 placeholder="Tief sitzender emotionaler oder existenzieller Antrieb (z. B. Schutz, Freiheit, Anerkennung, Rache)..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[70px]"
@@ -121,7 +130,7 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
                 Aktuelle Prioritäten
               </label>
               <AutoExpandingTextarea
-                value={motivationCore.currentPriorities || ''}
+                value={ensureString(motivationCore.currentPriorities)}
                 onChange={e => updateField('currentPriorities', e.target.value)}
                 placeholder="Gegenwärtige Dringlichkeiten und unmittelbare Schwerpunkte..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[70px]"
@@ -137,7 +146,7 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
                 Bedürfnisse
               </label>
               <AutoExpandingTextarea
-                value={motivationCore.needs || ''}
+                value={ensureString(motivationCore.needs)}
                 onChange={e => updateField('needs', e.target.value)}
                 placeholder="Materielle, körperliche, soziale und emotionale Notwendigkeiten..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[70px]"
@@ -153,7 +162,7 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
                 Ängste &amp; Vermeidung
               </label>
               <AutoExpandingTextarea
-                value={motivationCore.fears || ''}
+                value={ensureString(motivationCore.fears)}
                 onChange={e => updateField('fears', e.target.value)}
                 placeholder="Umstände, Konsequenzen oder Gefahren, die unter allen Umständen verhindert werden sollen..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-red-500 min-h-[70px]"
@@ -169,7 +178,7 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
                 Werte &amp; Prinzipien
               </label>
               <AutoExpandingTextarea
-                value={motivationCore.valuesPrinciples || ''}
+                value={ensureString(motivationCore.valuesPrinciples)}
                 onChange={e => updateField('valuesPrinciples', e.target.value)}
                 placeholder="Moralischer Kompass, Grundregeln, Tabus und persönliche Ehrenkodizes..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-emerald-500 min-h-[70px]"
@@ -185,7 +194,7 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
                 Mittel &amp; Vorgehensweisen
               </label>
               <AutoExpandingTextarea
-                value={motivationCore.methodsAndMeans || ''}
+                value={ensureString(motivationCore.methodsAndMeans)}
                 onChange={e => updateField('methodsAndMeans', e.target.value)}
                 placeholder="Bevorzugte Taktiken (z. B. Diplomatie, Verhandlung, Täuschung, direkte Gewalt, Ausdauer)..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-sky-500 min-h-[70px]"
@@ -201,7 +210,7 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
                 Veränderungsauslöser
               </label>
               <AutoExpandingTextarea
-                value={motivationCore.changeTriggers || ''}
+                value={ensureString(motivationCore.changeTriggers)}
                 onChange={e => updateField('changeTriggers', e.target.value)}
                 placeholder="Ereignisse, Enthüllungen oder Verluste, die Gesinnung oder Prioritäten wandeln können..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 outline-none focus:border-purple-500 min-h-[70px]"
@@ -209,6 +218,55 @@ export const CharacterMotivationPanel: React.FC<Props> = ({
               <span className="text-[10px] text-slate-500">
                 Bedingungen für innere Wandlung, Sinneswandel oder Neuausrichtung.
               </span>
+            </div>
+          </div>
+
+          {/* Etappen zur Erreichung des Hauptziels */}
+          <div className="pt-3 border-t border-slate-800/80">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                Etappen zur Erreichung des Hauptziels
+              </span>
+              <span className="text-[10px] text-slate-500">
+                (Phasen &amp; Meilensteine)
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                <label className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                  Kurzfristige Schritte / Sofortmaßnahmen
+                </label>
+                <AutoExpandingTextarea
+                  value={ensureString(motivationCore.shortTermPlan)}
+                  onChange={e => updateField('shortTermPlan', e.target.value)}
+                  placeholder="Unmittelbare Vorbereitungen, Kontaktknüpfung, Beschaffung..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-emerald-500 min-h-[60px]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                <label className="text-[10px] text-sky-400 font-bold uppercase tracking-wider">
+                  Mittelfristige Meilensteine / Etappenziel
+                </label>
+                <AutoExpandingTextarea
+                  value={ensureString(motivationCore.mediumTermPlan)}
+                  onChange={e => updateField('mediumTermPlan', e.target.value)}
+                  placeholder="Größere Zwischenprüfungen, Bündnisse, Ressourcenaufbau..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-sky-500 min-h-[60px]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                <label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+                  Langfristige Vollendung
+                </label>
+                <AutoExpandingTextarea
+                  value={ensureString(motivationCore.longTermPlan)}
+                  onChange={e => updateField('longTermPlan', e.target.value)}
+                  placeholder="Abschluss, dauerhafte Absicherung, Machtetablierung..."
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -610,7 +610,9 @@ export const extractLocationTokens = (
   }
 
   // D. WAHRZEICHEN, SEHENSWÜRDIGKEITEN, DUNGEONS & BESONDERHEITEN (Custom Parser)
-  const extractCustomSpecialTokens = (text: string, defaultGroup: 'structures' | 'places', labelSource: string) => {
+  const extractCustomSpecialTokens = (rawText: any, defaultGroup: 'structures' | 'places', labelSource: string) => {
+    if (!rawText) return [];
+    const text = typeof rawText === 'string' ? rawText : (Array.isArray(rawText) ? rawText.join(', ') : (typeof rawText === 'object' ? (rawText.name || rawText.description || '') : String(rawText)));
     if (!text || text.trim() === '') return [];
     // Split by comma, semicolon, newline, or bullet points, and " und "
     const parts = text.split(/[;,|\n\r]+|(?:\s+und\s+)/i)

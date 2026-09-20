@@ -102,7 +102,7 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
 
       const generated = await smartFillTechnique({
         powerSourceId: activePowerSource?.id,
-        powerSourceName: activePowerSource?.powerName || activePowerSource?.source || 'Standard-Kraftquelle',
+        powerSourceName: activePowerSource?.powerName || activePowerSource?.source || 'Kraftquelle',
         baseAbilityId: activeBaseAbility.id,
         baseAbilityName: activeBaseAbility.displayName || activeBaseAbility.name || resolveKinesisName(activeBaseAbility.element, activeBaseAbility.abilityType),
         element: activeBaseAbility.element,
@@ -205,7 +205,7 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
             >
               {powerSources.map(ps => (
                 <option key={ps.id} value={ps.id} className="bg-slate-900 text-white">
-                  {ps.powerName || ps.source || 'Standard-Kraftquelle'} ({ps.cost || 'Mana'})
+                  {ps.powerName || ps.source || 'Kraftquelle'}{ps.cost ? ` (${ps.cost})` : ''}
                 </option>
               ))}
             </select>

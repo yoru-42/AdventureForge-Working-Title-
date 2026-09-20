@@ -1,4 +1,4 @@
-import { CampaignPowerParameter, CustomStatAllocation, CostResource } from '../types';
+import { CampaignPowerParameter, CustomStatAllocation, CostResource, CustomResourceMapping } from '../types';
 
 export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
   'Stärke': {
@@ -167,13 +167,34 @@ export const EP_DEFAULT_COST_RESOURCES: CostResource[] = [
     id: 'res-sp',
     name: 'SP',
     radarPowerName: 'Stärke',
-    sourcePowers: ['Stärke', 'Geschicklichkeit', 'Konstitution'],
+    sourcePowers: ['Stärke', 'Konstitution'],
     baseMax: 100
   }
 ];
 
 export const EP_DEFAULT_HEALTH_NAMES = ['Konstitution', 'Abwehr'];
 export const EP_DEFAULT_COST_NAMES = ['MP', 'SP'];
+
+export const EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS: CustomResourceMapping[] = [
+  {
+    id: 'res-map-magie',
+    name: 'Magie',
+    icon: '⚡',
+    sourcePowers: ['Magie', 'Intelligenz'],
+    baseMax: 100,
+    effect: 'power_source',
+    description: 'Fördert Magie. Effekt: Dient ausschließlich als Energie- oder Kraftquelle für Techniken/Fähigkeiten (wie Mana, Haki, Qi) ohne automatischen Zusatz-Effekt.'
+  },
+  {
+    id: 'res-map-koerperkraft',
+    name: 'Körperkraft',
+    icon: '⚡',
+    sourcePowers: ['Stärke', 'Konstitution'],
+    baseMax: 100,
+    effect: 'power_source',
+    description: 'Fördert Körperkraft . Effekt: Dient ausschließlich als Energie- oder Kraftquelle für Techniken/Fähigkeiten (wie Mana, Haki, Qi) ohne automatischen Zusatz-Effekt.'
+  }
+];
 
 export function createEpDefaultWorldSettings() {
   return {
@@ -182,6 +203,7 @@ export function createEpDefaultWorldSettings() {
     campaignPowerSettings: JSON.parse(JSON.stringify(EP_DEFAULT_PARAMETERS)),
     customStatAllocations: JSON.parse(JSON.stringify(EP_DEFAULT_STAT_ALLOCATIONS)),
     costResources: JSON.parse(JSON.stringify(EP_DEFAULT_COST_RESOURCES)),
+    customResourceMappings: JSON.parse(JSON.stringify(EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS)),
     healthPowerNames: [...EP_DEFAULT_HEALTH_NAMES],
     costPowerNames: [...EP_DEFAULT_COST_NAMES],
     healthLabel: 'Gesundheit (HP)',

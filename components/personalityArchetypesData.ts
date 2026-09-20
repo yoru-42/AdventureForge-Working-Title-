@@ -545,13 +545,61 @@ export const PERSONALITY_ARCHETYPE_OPTIONS: string[] = [
 ];
 
 export function getArchetypeDefinition(name?: string): PersonalityArchetypeDefinition | undefined {
-  if (!name || name === '-') return undefined;
-  const cleanName = name.trim().toLowerCase();
-  return PERSONALITY_ARCHETYPES.find(a => 
-    a.name.toLowerCase() === cleanName || 
-    a.label.toLowerCase() === cleanName ||
-    a.name.toLowerCase().replace('western:', '') === cleanName
-  );
+  if (!name || name === '-' || name.toLowerCase() === 'none' || name.toLowerCase() === 'neutral') return undefined;
+  const cleanName = name.trim().toLowerCase().replace(/^western\s*:\s*/i, '').replace(/[-_]/g, ' ');
+  
+  // 1. Exact or normalized matching
+  const match = PERSONALITY_ARCHETYPES.find(a => {
+    const aName = a.name.toLowerCase().replace(/^western\s*:\s*/i, '').replace(/[-_]/g, ' ');
+    const aLabel = a.label.toLowerCase().replace(/^western\s*:\s*/i, '').replace(/[-_]/g, ' ');
+    return aName === cleanName || aLabel === cleanName || a.name.toLowerCase() === name.trim().toLowerCase() || a.label.toLowerCase() === name.trim().toLowerCase();
+  });
+  if (match) return match;
+
+  // 2. Synonyms and common alias mapping
+  const aliasMap: Record<string, string> = {
+    'sadodere': 'S Dere',
+    's dere': 'S Dere',
+    's-dere': 'S Dere',
+    'mdere': 'M Dere',
+    'm dere': 'M Dere',
+    'm-dere': 'M Dere',
+    'ojou sama': 'Ojoudere',
+    'ojousama': 'Ojoudere',
+    'ojou': 'Ojoudere',
+    'oujidere': 'Western:Oujidere',
+    'ouji': 'Western:Oujidere',
+    'smugdere': 'Western:Smugdere',
+    'smug': 'Western:Smugdere',
+    'teasedere': 'Western:Teasedere',
+    'thugdere': 'Western:Thugdere',
+    'bocchandere': 'Western:Bocchandere',
+    'byoukidere': 'Western:Byoukidere',
+    'kanedere': 'Western:Kanedere',
+    'kekkondere': 'Western:Kekkondere',
+    'megadere': 'Megadere',
+    'nemuidere': 'Western:Nemuidere',
+    'nipadere': 'Western:Nipadere',
+    'oujodere': 'Western:Oujodere',
+    'goudere': 'Gou-dere',
+    'gou dere': 'Gou-dere',
+    'kamidere bite': 'Kamidere (Bite)',
+    'yandere yankii': 'Yandere (Yankii)',
+    'sunao cool': 'Sunao Cool',
+    'sunao heat': 'Sunao Heat',
+    'sunao surreal': 'Sunao Surreal'
+  };
+
+  const aliasTarget = aliasMap[cleanName];
+  if (aliasTarget) {
+    return PERSONALITY_ARCHETYPES.find(a => a.name.toLowerCase() === aliasTarget.toLowerCase() || a.label.toLowerCase() === aliasTarget.toLowerCase());
+  }
+
+  // 3. Partial substring matching
+  return PERSONALITY_ARCHETYPES.find(a => {
+    const aName = a.name.toLowerCase().replace(/^western\s*:\s*/i, '');
+    return cleanName.includes(aName) || aName.includes(cleanName);
+  });
 }
 
 export const DEFAULT_PERSONALITY_TRAITS: Required<PersonalityTraits> = {

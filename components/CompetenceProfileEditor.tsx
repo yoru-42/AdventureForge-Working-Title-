@@ -18,13 +18,16 @@ import { STANDARD_AUTHORITIES, AUTHORITY_DUTIES_MAP } from './economy/EconomyPre
 import { EXPANDED_AUTHORITIES, getSuggestedAuthoritiesForProfession, AuthorityDefinition } from '../lib/professionAuthoritiesData';
 import { BookOpen, Plus, Trash2, ChevronDown, ChevronUp, Briefcase, Layers, Award, Compass, Shield, Check, X, Filter, Crown, Landmark } from 'lucide-react';
 
-const normalizeForCompare = (s: string) =>
-  s.trim().toLowerCase().replace(/^[-*•]\s*/, '').replace(/\s+/g, ' ');
+const normalizeForCompare = (s: any) => {
+  if (typeof s !== 'string') s = String(s || '');
+  return s.trim().toLowerCase().replace(/^[-*•]\s*/, '').replace(/\s+/g, ' ');
+};
 
-const isDutyInText = (text: string, duty: string): boolean => {
+const isDutyInText = (text: any, duty: any): boolean => {
   if (!text || !duty) return false;
+  const strText = typeof text === 'string' ? text : (Array.isArray(text) ? text.join('\n') : String(text));
   const normDuty = normalizeForCompare(duty);
-  const lines = text.split('\n');
+  const lines = strText.split('\n');
   return lines.some(line => {
     const normLine = normalizeForCompare(line);
     if (!normLine) return false;
@@ -32,9 +35,13 @@ const isDutyInText = (text: string, duty: string): boolean => {
   });
 };
 
-const toggleDutyInText = (text: string, duty: string): string => {
-  const normDuty = normalizeForCompare(duty);
-  const lines = text.split('\n');
+const toggleDutyInText = (text: any, duty: any): string => {
+  const strText = typeof text === 'string' ? text : (Array.isArray(text) ? text.join('\n') : (text ? String(text) : ''));
+  const strDuty = typeof duty === 'string' ? duty : (duty ? String(duty) : '');
+  if (!strDuty) return strText;
+
+  const normDuty = normalizeForCompare(strDuty);
+  const lines = strText.split('\n');
   const exists = lines.some(line => {
     const normLine = normalizeForCompare(line);
     if (!normLine) return false;
@@ -49,17 +56,17 @@ const toggleDutyInText = (text: string, duty: string): string => {
     });
     return remaining.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   } else {
-    const cleanDuty = duty.trim().replace(/^[-*•]\s*/, '');
+    const cleanDuty = strDuty.trim().replace(/^[-*•]\s*/, '');
     const bullet = `- ${cleanDuty}`;
-    return text.trim() ? `${text.trim()}\n${bullet}` : bullet;
+    return strText.trim() ? `${strText.trim()}\n${bullet}` : bullet;
   }
 };
 
-const addAllDutiesToText = (currentText: string, duties: string[]): string => {
-  let res = currentText;
+const addAllDutiesToText = (currentText: any, duties: string[]): string => {
+  let res = typeof currentText === 'string' ? currentText : (Array.isArray(currentText) ? currentText.join('\n') : (currentText ? String(currentText) : ''));
   duties.forEach(d => {
     if (!isDutyInText(res, d)) {
-      const cleanDuty = d.trim().replace(/^[-*•]\s*/, '');
+      const cleanDuty = (typeof d === 'string' ? d : String(d || '')).trim().replace(/^[-*•]\s*/, '');
       res = res.trim() ? `${res.trim()}\n- ${cleanDuty}` : `- ${cleanDuty}`;
     }
   });

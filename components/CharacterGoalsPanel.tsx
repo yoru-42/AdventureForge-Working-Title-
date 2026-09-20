@@ -68,11 +68,20 @@ const TIMEFRAME_LABELS: Record<GoalTimeframe, { title: string; badgeClass: strin
   }
 };
 
+const ensureString = (val: any): string => {
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val)) return val.map(item => (typeof item === 'string' ? item : JSON.stringify(item))).filter(Boolean).join(', ');
+  if (val !== null && val !== undefined && typeof val === 'object') {
+    return Object.entries(val).map(([k, v]) => `${k}: ${v}`).join(', ');
+  }
+  return val ? String(val) : '';
+};
+
 export const CharacterGoalsPanel: React.FC<Props> = ({
   goals = [],
   onChange,
-  codexCharacters,
-  codexFactions,
+  codexCharacters = [],
+  codexFactions = [],
   relationships = [],
   playerName = 'Spieler',
   sourceCharacterName,
@@ -84,27 +93,71 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
   isOpen,
   onToggleOpen
 }) => {
+  // Available characters including player/user if not current character
+  const availableCharacterOptions = useMemo(() => {
+    const list: { id: string; title: string }[] = [];
+    const effectivePlayerName = playerName?.trim();
+    const isCurrentCharThePlayer = effectivePlayerName && (
+      (characterName && characterName.trim().toLowerCase() === effectivePlayerName.toLowerCase()) ||
+      (sourceCharacterName && sourceCharacterName.trim().toLowerCase() === effectivePlayerName.toLowerCase())
+    );
+
+    const hasPlayerInList = codexCharacters.some(c => 
+      c.id === 'player_user' || 
+      c.id === 'player' || 
+      (effectivePlayerName && c.title.toLowerCase().includes(effectivePlayerName.toLowerCase()))
+    );
+
+    if (!isCurrentCharThePlayer && !hasPlayerInList) {
+      list.push({
+        id: 'player_user',
+        title: effectivePlayerName ? `Spieler: ${effectivePlayerName}` : 'Spieler / Nutzer'
+      });
+    }
+
+    codexCharacters.forEach(c => {
+      const isSelf = (
+        (characterName && c.title.trim().toLowerCase() === characterName.trim().toLowerCase()) ||
+        (sourceCharacterName && c.title.trim().toLowerCase() === sourceCharacterName.trim().toLowerCase())
+      );
+      if (!isSelf) {
+        list.push(c);
+      }
+    });
+
+    return list;
+  }, [codexCharacters, playerName, characterName, sourceCharacterName]);
+
   // Filter tab for listing goals
   const [activeFilter, setActiveFilter] = useState<'alle' | GoalDomain>('alle');
   const [expandedGoalIds, setExpandedGoalIds] = useState<Record<string, boolean>>({});
 
-  // Unified Goal Creator Form State
+  // Creator Form Visibility & Edit Mode
   const [isCreatorOpen, setIsCreatorOpen] = useState<boolean>(true);
-  const [creatorMode, setCreatorMode] = useState<'tier3' | 'single'>('tier3');
-  const [creatorDomain, setCreatorDomain] = useState<GoalDomain>('self');
-  const [creatorTargetId, setCreatorTargetId] = useState<string>('');
-  const [creatorTargetName, setCreatorTargetName] = useState<string>('Selbst');
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
 
-  // Fields for 3-Tier Main Goal Creation
-  const [mainGoalText, setMainGoalText] = useState<string>('');
+  // Form Fields
+  const [mainGoal, setMainGoal] = useState<string>('');
+  const [domain, setDomain] = useState<GoalDomain>('self');
+  const [targetName, setTargetName] = useState<string>('Selbst');
+  const [targetId, setTargetId] = useState<string>('');
+  const [linkedRelId, setLinkedRelId] = useState<string>('');
+  
+  const [motivation, setMotivation] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [activePlan, setActivePlan] = useState<string>('');
 
-  // Fields for Single Goal Creation
-  const [singleTitle, setSingleTitle] = useState<string>('');
-  const [singleTimeframe, setSingleTimeframe] = useState<GoalTimeframe>('mittelfristig');
-  const [singlePriority, setSinglePriority] = useState<GoalPriority>('normal');
-  const [singleMotivation, setSingleMotivation] = useState<string>('');
-  const [singlePlan, setSinglePlan] = useState<string>('');
-  const [singleParentGoal, setSingleParentGoal] = useState<string>('');
+  const [shortTermPlan, setShortTermPlan] = useState<string>('');
+  const [mediumTermPlan, setMediumTermPlan] = useState<string>('');
+  const [longTermPlan, setLongTermPlan] = useState<string>('');
+
+  const [alternativePlans, setAlternativePlans] = useState<string[]>([]);
+  const [obstacles, setObstacles] = useState<string[]>([]);
+
+  const [timeframe, setTimeframe] = useState<GoalTimeframe>('mittelfristig');
+  const [priority, setPriority] = useState<GoalPriority>('normal');
+  const [status, setStatus] = useState<GoalStatus>('aktiv');
+  const [progress, setProgress] = useState<number>(0);
 
   const toggleGoalExpanded = (id: string) => {
     setExpandedGoalIds(prev => ({ ...prev, [id]: !prev[id] }));
@@ -116,181 +169,285 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
     return 'self';
   };
 
-  const handleDomainChange = (domain: GoalDomain) => {
-    setCreatorDomain(domain);
-    if (domain === 'self') {
-      setCreatorTargetName('Selbst');
-      setCreatorTargetId('');
-    } else if (domain === 'character') {
-      const defaultChar = codexCharacters[0];
-      setCreatorTargetName(defaultChar ? defaultChar.title : '');
-      setCreatorTargetId(defaultChar ? defaultChar.id : '');
-    } else if (domain === 'faction') {
+  const handleDomainSelect = (newDomain: GoalDomain) => {
+    setDomain(newDomain);
+    if (newDomain === 'self') {
+      setTargetName('Selbst');
+      setTargetId('');
+    } else if (newDomain === 'character') {
+      const defaultChar = availableCharacterOptions[0];
+      setTargetName(defaultChar ? defaultChar.title : '');
+      setTargetId(defaultChar ? defaultChar.id : '');
+    } else if (newDomain === 'faction') {
       const defaultFaction = codexFactions[0];
-      setCreatorTargetName(defaultFaction ? defaultFaction.title : '');
-      setCreatorTargetId(defaultFaction ? defaultFaction.id : '');
+      setTargetName(defaultFaction ? defaultFaction.title : '');
+      setTargetId(defaultFaction ? defaultFaction.id : '');
     }
   };
 
   const handleTakeFromMotivationCore = () => {
-    if (motivationCore?.mainGoal?.trim()) {
-      setMainGoalText(motivationCore.mainGoal.trim());
-      if (!singleTitle) {
-        setSingleTitle(motivationCore.mainGoal.trim());
-      }
+    const safeMainGoal = ensureString(motivationCore?.mainGoal).trim();
+    const safeWhyGoal = ensureString(motivationCore?.whyGoal).trim();
+    const safeMethods = ensureString(motivationCore?.methodsAndMeans).trim();
+    const safeFears = ensureString(motivationCore?.fears).trim();
+
+    if (safeMainGoal) {
+      setMainGoal(safeMainGoal);
+    }
+    if (safeWhyGoal && !motivation.trim()) {
+      setMotivation(safeWhyGoal);
+    }
+    if (safeMethods && !activePlan.trim()) {
+      setActivePlan(safeMethods);
+    }
+    if (safeFears && obstacles.length === 0) {
+      setObstacles([safeFears]);
     }
   };
 
-  // Create 3 Progressive Stages (Kurz-, Mittel-, Langfristig) per AI
-  const handleGenerate3TierAI = () => {
-    if (!mainGoalText.trim()) return;
-    if (!isOpen) onToggleOpen();
-
-    let targetName = creatorTargetName || 'Selbst';
-    let targetId = creatorTargetId || undefined;
-
-    if (creatorDomain === 'character' && !targetId && codexCharacters.length > 0) {
-      targetId = codexCharacters[0].id;
-      targetName = codexCharacters[0].title;
-    } else if (creatorDomain === 'faction' && !targetId && codexFactions.length > 0) {
-      targetId = codexFactions[0].id;
-      targetName = codexFactions[0].title;
-    }
-
-    if (onGenerateMainGoalAI) {
-      onGenerateMainGoalAI(mainGoalText.trim(), creatorDomain, targetName, targetId);
-    } else {
-      onGenerateAI();
-    }
+  const handleResetForm = () => {
+    setEditingGoalId(null);
+    setMainGoal('');
+    setDomain('self');
+    setTargetName('Selbst');
+    setTargetId('');
+    setLinkedRelId('');
+    setMotivation('');
+    setDescription('');
+    setActivePlan('');
+    setShortTermPlan('');
+    setMediumTermPlan('');
+    setLongTermPlan('');
+    setAlternativePlans([]);
+    setObstacles([]);
+    setTimeframe('mittelfristig');
+    setPriority('normal');
+    setStatus('aktiv');
+    setProgress(0);
   };
 
-  // Create 3 Progressive Stages manually
-  const handleCreate3TierManual = () => {
+  const handleLoadGoalIntoForm = (goal: CharacterGoal) => {
+    setEditingGoalId(goal.id);
+    setMainGoal(goal.title || goal.mainGoalTitle || '');
+    setDomain(normalizeGoalDomain(goal.targetType));
+    setTargetName(goal.targetName || (goal.targetType === 'self' ? 'Selbst' : ''));
+    setTargetId(goal.targetId || '');
+    setLinkedRelId(goal.linkedRelationshipId || '');
+    setMotivation(goal.motivation || '');
+    setDescription(goal.description || '');
+    setActivePlan(goal.activePlan || '');
+    setShortTermPlan(goal.shortTermPlan || '');
+    setMediumTermPlan(goal.mediumTermPlan || '');
+    setLongTermPlan(goal.longTermPlan || '');
+    setAlternativePlans(goal.alternativePlans ? [...goal.alternativePlans] : []);
+    setObstacles(goal.obstacles ? [...goal.obstacles] : []);
+    setTimeframe(goal.timeframe || 'mittelfristig');
+    setPriority((typeof goal.priority === 'string' ? goal.priority : 'normal') as GoalPriority);
+    setStatus(goal.status || 'aktiv');
+    setProgress(goal.progress ?? 0);
+
+    setIsCreatorOpen(true);
     if (!isOpen) onToggleOpen();
-    const title = mainGoalText.trim() || 'Hauptziel';
-    let targetName = creatorTargetName || 'Selbst';
-    let targetId = creatorTargetId || undefined;
+  };
 
-    if (creatorDomain === 'character' && !targetId && codexCharacters.length > 0) {
-      targetId = codexCharacters[0].id;
-      targetName = codexCharacters[0].title;
-    } else if (creatorDomain === 'faction' && !targetId && codexFactions.length > 0) {
-      targetId = codexFactions[0].id;
-      targetName = codexFactions[0].title;
-    }
+  // Add Alternative Plan
+  const handleAddAltPlan = () => {
+    setAlternativePlans(prev => [...prev, '']);
+  };
 
+  const handleUpdateAltPlan = (idx: number, text: string) => {
+    setAlternativePlans(prev => {
+      const next = [...prev];
+      next[idx] = text;
+      return next;
+    });
+  };
+
+  const handleRemoveAltPlan = (idx: number) => {
+    setAlternativePlans(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Add Obstacle
+  const handleAddObstacleItem = () => {
+    setObstacles(prev => [...prev, '']);
+  };
+
+  const handleUpdateObstacleItem = (idx: number, text: string) => {
+    setObstacles(prev => {
+      const next = [...prev];
+      next[idx] = text;
+      return next;
+    });
+  };
+
+  const handleRemoveObstacleItem = (idx: number) => {
+    setObstacles(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  // Save Goal to State
+  const handleSaveGoal = () => {
+    if (!isOpen) onToggleOpen();
+
+    const titleToSave = mainGoal.trim() || 'Neues Ziel';
     const now = new Date().toISOString();
+
+    const goalData: CharacterGoal = {
+      id: editingGoalId || `goal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      title: titleToSave,
+      mainGoalTitle: titleToSave,
+      description: description.trim() || undefined,
+      timeframe,
+      targetType: domain,
+      targetName: targetName.trim() || (domain === 'self' ? 'Selbst' : ''),
+      targetId: targetId || undefined,
+      priority,
+      status,
+      progress,
+      motivation: motivation.trim() || undefined,
+      activePlan: activePlan.trim() || undefined,
+      shortTermPlan: shortTermPlan.trim() || undefined,
+      mediumTermPlan: mediumTermPlan.trim() || undefined,
+      longTermPlan: longTermPlan.trim() || undefined,
+      alternativePlans: alternativePlans.filter(p => p.trim().length > 0),
+      obstacles: obstacles.filter(o => o.trim().length > 0),
+      linkedRelationshipId: domain === 'character' && linkedRelId ? linkedRelId : undefined,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    if (editingGoalId) {
+      onChange(goals.map(g => (g.id === editingGoalId ? { ...g, ...goalData, createdAt: g.createdAt } : g)));
+    } else {
+      onChange([...goals, goalData]);
+      setExpandedGoalIds(prev => ({ ...prev, [goalData.id]: true }));
+    }
+
+    handleResetForm();
+    setActiveFilter('alle');
+  };
+
+  // Save as 3 Progressive Stage Goals (Kurz, Mittel, Lang)
+  const handleSaveAs3TierGoals = () => {
+    if (!isOpen) onToggleOpen();
+
+    const baseTitle = mainGoal.trim() || 'Hauptziel';
+    const targetN = targetName.trim() || (domain === 'self' ? 'Selbst' : '');
+    const now = new Date().toISOString();
+    const cleanAlts = alternativePlans.filter(p => p.trim().length > 0);
+    const cleanObs = obstacles.filter(o => o.trim().length > 0);
+
     const shortId = `goal-${Date.now()}-short-${Math.random().toString(36).substring(2, 6)}`;
-    const mediumId = `goal-${Date.now()}-med-${Math.random().toString(36).substring(2, 6)}`;
+    const medId = `goal-${Date.now()}-med-${Math.random().toString(36).substring(2, 6)}`;
     const longId = `goal-${Date.now()}-long-${Math.random().toString(36).substring(2, 6)}`;
 
     const shortGoal: CharacterGoal = {
       id: shortId,
-      title: `Kurzfristiges Ziel: Vorbereitung für ${title}`,
-      mainGoalTitle: title,
+      title: `Kurzfristiges Ziel: Vorbereitung für ${baseTitle}`,
+      mainGoalTitle: baseTitle,
+      description: description.trim() || undefined,
       timeframe: 'kurzfristig',
-      targetType: creatorDomain,
-      targetName,
-      targetId,
+      targetType: domain,
+      targetName: targetN,
+      targetId: targetId || undefined,
       priority: 'hoch',
       status: 'aktiv',
       progress: 0,
-      motivation: `Erster notwendiger Schritt zur Erreichung des Hauptziels "${title}".`,
-      activePlan: `1. Schritt: Vorbereitungen treffen und Informationen sammeln\n2. Schritt: Erste Kontakte knüpfen und Ressourcen sichern`,
-      alternativePlans: [],
-      obstacles: [],
+      motivation: motivation.trim() || `Unmittelbarer Auftakt zur Erreichung von "${baseTitle}".`,
+      activePlan: shortTermPlan.trim() || activePlan.trim() || '1. Schritt: Vorbereitung treffen und Informationen sichern',
+      shortTermPlan: shortTermPlan.trim() || undefined,
+      mediumTermPlan: mediumTermPlan.trim() || undefined,
+      longTermPlan: longTermPlan.trim() || undefined,
+      alternativePlans: cleanAlts,
+      obstacles: cleanObs,
+      linkedRelationshipId: domain === 'character' && linkedRelId ? linkedRelId : undefined,
       createdAt: now
     };
 
-    const mediumGoal: CharacterGoal = {
-      id: mediumId,
-      title: `Mittelfristiges Ziel: Meilenstein für ${title}`,
-      mainGoalTitle: title,
+    const medGoal: CharacterGoal = {
+      id: medId,
+      title: `Mittelfristiges Ziel: Meilenstein für ${baseTitle}`,
+      mainGoalTitle: baseTitle,
+      description: description.trim() || undefined,
       timeframe: 'mittelfristig',
-      targetType: creatorDomain,
-      targetName,
-      targetId,
+      targetType: domain,
+      targetName: targetN,
+      targetId: targetId || undefined,
       priority: 'hoch',
       status: 'aktiv',
       progress: 0,
-      motivation: `Zentrale Zwischenetappe zur Umsetzung des Hauptziels "${title}".`,
-      activePlan: `1. Schritt: Hauptprüfung oder Zwischenziel absolvieren\n2. Schritt: Position festigen und nächste Phase einleiten`,
-      alternativePlans: [],
-      obstacles: [],
+      motivation: motivation.trim() || `Zentrale Zwischenetappe zur Umsetzung von "${baseTitle}".`,
+      activePlan: mediumTermPlan.trim() || activePlan.trim() || '1. Schritt: Hauptetappe absolvieren und Position festigen',
+      shortTermPlan: shortTermPlan.trim() || undefined,
+      mediumTermPlan: mediumTermPlan.trim() || undefined,
+      longTermPlan: longTermPlan.trim() || undefined,
+      alternativePlans: cleanAlts,
+      obstacles: cleanObs,
+      linkedRelationshipId: domain === 'character' && linkedRelId ? linkedRelId : undefined,
       createdAt: now
     };
 
     const longGoal: CharacterGoal = {
       id: longId,
-      title: `Langfristiges Ziel: Vollendung von ${title}`,
-      mainGoalTitle: title,
+      title: `Langfristiges Ziel: Vollendung von ${baseTitle}`,
+      mainGoalTitle: baseTitle,
+      description: description.trim() || undefined,
       timeframe: 'langfristig',
-      targetType: creatorDomain,
-      targetName,
-      targetId,
+      targetType: domain,
+      targetName: targetN,
+      targetId: targetId || undefined,
       priority: 'kritisch',
       status: 'aktiv',
       progress: 0,
-      motivation: `Vollständige Erreichung und dauerhafte Sicherung des Hauptziels "${title}".`,
-      activePlan: `1. Schritt: Finale Maßnahme umsetzen\n2. Schritt: Erreichten Status dauerhaft absichern`,
-      alternativePlans: [],
-      obstacles: [],
+      motivation: motivation.trim() || `Vollständige Erreichung und dauerhafte Sicherung von "${baseTitle}".`,
+      activePlan: longTermPlan.trim() || activePlan.trim() || '1. Schritt: Finale Maßnahme durchführen und Ergebnis absichern',
+      shortTermPlan: shortTermPlan.trim() || undefined,
+      mediumTermPlan: mediumTermPlan.trim() || undefined,
+      longTermPlan: longTermPlan.trim() || undefined,
+      alternativePlans: cleanAlts,
+      obstacles: cleanObs,
+      linkedRelationshipId: domain === 'character' && linkedRelId ? linkedRelId : undefined,
       createdAt: now
     };
 
-    onChange([...goals, shortGoal, mediumGoal, longGoal]);
+    onChange([...goals, shortGoal, medGoal, longGoal]);
     setExpandedGoalIds(prev => ({
       ...prev,
       [shortId]: true,
-      [mediumId]: true,
+      [medId]: true,
       [longId]: true
     }));
+
+    handleResetForm();
     setActiveFilter('alle');
   };
 
-  // Create single goal manually
-  const handleCreateSingleGoal = () => {
+  // AI Generation for Main Goal
+  const handleGenerateAIForCurrent = () => {
+    if (!mainGoal.trim()) {
+      onGenerateAI();
+      return;
+    }
     if (!isOpen) onToggleOpen();
-    const newId = `goal-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    let targetName = creatorTargetName || 'Selbst';
-    let targetId = creatorTargetId || undefined;
 
-    if (creatorDomain === 'character' && !targetId && codexCharacters.length > 0) {
-      targetId = codexCharacters[0].id;
-      targetName = codexCharacters[0].title;
-    } else if (creatorDomain === 'faction' && !targetId && codexFactions.length > 0) {
-      targetId = codexFactions[0].id;
-      targetName = codexFactions[0].title;
+    let tName = targetName.trim() || 'Selbst';
+    let tId = targetId || undefined;
+
+    if (domain === 'character' && !tId && availableCharacterOptions.length > 0) {
+      tId = availableCharacterOptions[0].id;
+      tName = availableCharacterOptions[0].title;
+    } else if (domain === 'faction' && !tId && codexFactions.length > 0) {
+      tId = codexFactions[0].id;
+      tName = codexFactions[0].title;
     }
 
-    const newGoal: CharacterGoal = {
-      id: newId,
-      title: singleTitle.trim() || 'Neues Ziel',
-      mainGoalTitle: singleParentGoal.trim() || undefined,
-      description: '',
-      timeframe: singleTimeframe,
-      targetType: creatorDomain,
-      targetName,
-      targetId,
-      priority: singlePriority,
-      status: 'aktiv',
-      progress: 0,
-      motivation: singleMotivation.trim() || undefined,
-      activePlan: singlePlan.trim() || undefined,
-      alternativePlans: [],
-      obstacles: [],
-      createdAt: new Date().toISOString()
-    };
-
-    onChange([...goals, newGoal]);
-    setExpandedGoalIds(prev => ({ ...prev, [newId]: true }));
-    setSingleTitle('');
-    setSingleMotivation('');
-    setSinglePlan('');
-    setSingleParentGoal('');
-    setActiveFilter('alle');
+    if (onGenerateMainGoalAI) {
+      onGenerateMainGoalAI(mainGoal.trim(), domain, tName, tId);
+    } else {
+      onGenerateAI();
+    }
   };
 
+  // Inline Goal Updates
   const handleUpdateGoal = (id: string, partial: Partial<CharacterGoal>) => {
     const updated = goals.map(g => (g.id === id ? { ...g, ...partial, updatedAt: new Date().toISOString() } : g));
     onChange(updated);
@@ -298,6 +455,9 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
 
   const handleDeleteGoal = (id: string) => {
     onChange(goals.filter(g => g.id !== id));
+    if (editingGoalId === id) {
+      handleResetForm();
+    }
   };
 
   const handleDuplicateGoal = (goal: CharacterGoal) => {
@@ -312,14 +472,15 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
     setExpandedGoalIds(prev => ({ ...prev, [newId]: true }));
   };
 
-  const handleAddAlternativePlan = (goalId: string) => {
+  // Inline Alternative Plans
+  const handleAddInlineAltPlan = (goalId: string) => {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
     const current = goal.alternativePlans || [];
     handleUpdateGoal(goalId, { alternativePlans: [...current, ''] });
   };
 
-  const handleUpdateAlternativePlan = (goalId: string, index: number, text: string) => {
+  const handleUpdateInlineAltPlan = (goalId: string, index: number, text: string) => {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
     const next = [...(goal.alternativePlans || [])];
@@ -327,21 +488,22 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
     handleUpdateGoal(goalId, { alternativePlans: next });
   };
 
-  const handleRemoveAlternativePlan = (goalId: string, index: number) => {
+  const handleRemoveInlineAltPlan = (goalId: string, index: number) => {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
     const next = (goal.alternativePlans || []).filter((_, i) => i !== index);
     handleUpdateGoal(goalId, { alternativePlans: next });
   };
 
-  const handleAddObstacle = (goalId: string) => {
+  // Inline Obstacles
+  const handleAddInlineObstacle = (goalId: string) => {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
     const current = goal.obstacles || [];
     handleUpdateGoal(goalId, { obstacles: [...current, ''] });
   };
 
-  const handleUpdateObstacle = (goalId: string, index: number, text: string) => {
+  const handleUpdateInlineObstacle = (goalId: string, index: number, text: string) => {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
     const next = [...(goal.obstacles || [])];
@@ -349,14 +511,14 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
     handleUpdateGoal(goalId, { obstacles: next });
   };
 
-  const handleRemoveObstacle = (goalId: string, index: number) => {
+  const handleRemoveInlineObstacle = (goalId: string, index: number) => {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
     const next = (goal.obstacles || []).filter((_, i) => i !== index);
     handleUpdateGoal(goalId, { obstacles: next });
   };
 
-  // Counts per domain
+  // Domain Counts
   const counts = useMemo(() => {
     const c = { self: 0, character: 0, faction: 0 };
     goals.forEach(g => {
@@ -366,14 +528,14 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
     return c;
   }, [goals]);
 
-  // Filtered goals
+  // Filtered Goals
   const filteredGoals = useMemo(() => {
     if (activeFilter === 'alle') return goals;
     return goals.filter(g => normalizeGoalDomain(g.targetType) === activeFilter);
   }, [goals, activeFilter]);
 
-  const getPriorityInfo = (priority?: GoalPriority | number) => {
-    switch (priority) {
+  const getPriorityInfo = (p?: GoalPriority | number) => {
+    switch (p) {
       case 'kritisch':
         return { label: 'Kritisch', badgeClass: 'bg-red-950/60 border-red-800/60 text-red-300' };
       case 'hoch':
@@ -386,8 +548,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
     }
   };
 
-  const getStatusInfo = (status?: GoalStatus) => {
-    switch (status) {
+  const getStatusInfo = (s?: GoalStatus) => {
+    switch (s) {
       case 'pausiert':
         return { label: 'Pausiert', badgeClass: 'bg-amber-950/40 border-amber-700/50 text-amber-300' };
       case 'erreicht':
@@ -402,12 +564,12 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
     }
   };
 
-  const getTargetTypeDisplay = (targetType?: GoalTargetType, targetName?: string) => {
-    switch (targetType) {
+  const getTargetTypeDisplay = (tType?: GoalTargetType, tName?: string) => {
+    switch (tType) {
       case 'character':
-        return targetName?.trim() ? `Charakter: ${targetName}` : 'Gegenüber Charakter';
+        return tName?.trim() ? `Charakter: ${tName}` : 'Gegenüber Charakter';
       case 'faction':
-        return targetName?.trim() ? `Fraktion: ${targetName}` : 'Gegenüber Fraktion';
+        return tName?.trim() ? `Fraktion: ${tName}` : 'Gegenüber Fraktion';
       case 'world':
         return 'Welt & Allgemein';
       case 'self':
@@ -418,7 +580,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
 
   return (
     <div className="bg-slate-900/40 border border-slate-800 rounded-2xl overflow-hidden transition-all">
-      {/* Header */}
+      {/* Panel Header */}
       <div className="p-4 flex items-center justify-between gap-3 bg-slate-950/40 border-b border-slate-800/80 flex-wrap">
         <button
           type="button"
@@ -438,7 +600,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
               </span>
             </div>
             <span className="text-xs text-slate-400 block mt-0.5">
-              Persönliche Ziele, Ziele gegenüber Charakteren und Fraktionen
+              Persönliche Vorhaben, Vorhaben gegenüber Personen und Fraktionen
             </span>
           </div>
         </button>
@@ -461,6 +623,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
             onClick={() => {
               if (!isOpen) onToggleOpen();
               setIsCreatorOpen(true);
+              handleResetForm();
             }}
             className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
@@ -471,10 +634,10 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
       </div>
 
       {isOpen && (
-        <div className="p-5 space-y-6 animate-in fade-in duration-200">
-          {/* EINES VEREINTES FORMULAR ZUR ZIELERSTELLUNG */}
-          <div className="bg-slate-950/80 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-4.5 space-y-4 shadow-md transition-colors">
-            {/* Kopfbereich des Erstellungsformulars */}
+        <div className="p-5 space-y-6">
+          {/* HAUPTFORMULAR FÜR ZIELE & PLÄNE */}
+          <div className="bg-slate-950/85 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-5 space-y-5 shadow-lg transition-colors">
+            {/* Formular-Kopfzeile */}
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 flex-wrap gap-2">
               <div className="flex items-center gap-2.5">
                 <span className="w-7 h-7 rounded-lg bg-cyan-950/50 border border-cyan-500/40 flex items-center justify-center text-cyan-300 text-xs shrink-0">
@@ -482,25 +645,41 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                 </span>
                 <div>
                   <h4 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                    <span>Zielverwaltung &amp; Planung</span>
+                    <span>{editingGoalId ? 'Ziel bearbeiten' : 'Zielerfassung & Planung'}</span>
+                    {editingGoalId && (
+                      <span className="text-[10px] text-amber-400 font-mono px-2 py-0.5 rounded bg-amber-950/40 border border-amber-800/30">
+                        Bearbeitungsmodus
+                      </span>
+                    )}
                   </h4>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Erstelle persönliche Vorhaben, Pläne gegenüber Personen oder Vorhaben bezüglich Fraktionen als 3-Stufen-Etappen oder Einzelziel.
+                    Formular zur Strukturierung von Zielen, Motivationen und mehrstufigen Handlungsplänen.
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                {motivationCore?.mainGoal?.trim() && (
+                {ensureString(motivationCore?.mainGoal).trim() && (
                   <button
                     type="button"
                     onClick={handleTakeFromMotivationCore}
                     className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 rounded-lg text-[11px] font-medium transition-colors cursor-pointer"
-                    title={`Aus Motivationskern übernehmen: "${motivationCore.mainGoal}"`}
+                    title={`Aus Motivationskern übernehmen: "${ensureString(motivationCore?.mainGoal)}"`}
                   >
                     Aus Motivationskern übernehmen
                   </button>
                 )}
+
+                {(mainGoal || motivation || activePlan || editingGoalId) && (
+                  <button
+                    type="button"
+                    onClick={handleResetForm}
+                    className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 rounded-lg text-[11px] transition-colors cursor-pointer"
+                  >
+                    {editingGoalId ? 'Abbrechen' : 'Zurücksetzen'}
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setIsCreatorOpen(prev => !prev)}
@@ -514,295 +693,370 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
 
             {isCreatorOpen && (
               <div className="space-y-4 pt-1">
-                {/* 1. ZIELBEREICH AUSWAHL (Persönlich / Charakter / Fraktion) */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    1. Zielbereich auswählen
-                  </label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                    {DOMAIN_OPTIONS.map((opt, optIdx) => {
-                      const isSelected = creatorDomain === opt.id;
-                      return (
-                        <button
-                          key={`creator-domain-${opt.id}-${optIdx}`}
-                          type="button"
-                          onClick={() => handleDomainChange(opt.id)}
-                          className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                            isSelected
-                              ? 'bg-cyan-950/30 border-cyan-500/60 shadow-sm'
-                              : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className={`w-5 h-5 rounded flex items-center justify-center text-xs ${isSelected ? 'text-cyan-300 bg-cyan-900/40' : 'text-slate-400 bg-slate-800'}`}>
-                              <i className={`fa-solid ${opt.icon}`}></i>
-                            </span>
-                            <span className={`text-xs font-bold ${isSelected ? 'text-cyan-200' : 'text-slate-300'}`}>
-                              {opt.label}
-                            </span>
-                          </div>
-                          <span className="text-[11px] text-slate-400 leading-snug">
-                            {opt.description}
-                          </span>
-                        </button>
-                      );
-                    })}
+                {/* 1. OBEN GUT SICHTBAR: DAS HAUPTZIEL */}
+                <div className="flex flex-col gap-1.5 bg-slate-900/40 p-3.5 rounded-xl border border-cyan-900/40 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-cyan-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-flag-checkered text-cyan-400 text-xs"></i>
+                      <span>Hauptziel</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Zentrales übergeordnetes Vorhaben des Charakters
+                    </span>
                   </div>
+                  <AutoExpandingTextarea
+                    value={mainGoal}
+                    onChange={e => setMainGoal(e.target.value)}
+                    placeholder="Übergeordnetes Hauptziel formulieren (z. B. Herrschaft über Falenas übernehmen, um ein gerechteres Reich zu schaffen)..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-400 font-semibold min-h-[48px]"
+                  />
                 </div>
 
-                {/* 2. ADRESSAT / ZIELOBJEKT */}
-                <div className="bg-slate-900/30 p-3 rounded-xl border border-slate-850 space-y-2">
-                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    2. Adressat / Konkreter Bezug
-                  </label>
-
-                  {creatorDomain === 'self' && (
-                    <div className="flex flex-col gap-1">
-                      <input
-                        type="text"
-                        value={creatorTargetName}
-                        onChange={e => setCreatorTargetName(e.target.value)}
-                        placeholder="Persönlicher Schwerpunkt oder Thema (z. B. Selbst, Magiemeisterschaft, Überleben, Wohlstand)..."
-                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 font-medium"
-                      />
+                {/* 2. ZIELBEREICH & ADRESSAT */}
+                <div className="bg-slate-900/30 p-3.5 rounded-xl border border-slate-800 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    <div className="md:col-span-4 flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        Zielbereich
+                      </label>
+                      <select
+                        value={domain}
+                        onChange={e => handleDomainSelect(e.target.value as GoalDomain)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
+                      >
+                        <option value="self">Persönliche Ziele</option>
+                        <option value="character">Ziele gegenüber Charakteren</option>
+                        <option value="faction">Ziele gegenüber Fraktionen</option>
+                      </select>
                     </div>
-                  )}
 
-                  {creatorDomain === 'character' && (
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                      <div className="md:col-span-6">
+                    <div className="md:col-span-8 flex flex-col gap-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                        Adressat / Konkreter Bezug
+                      </label>
+                      {domain === 'self' && (
+                        <input
+                          type="text"
+                          value={targetName}
+                          onChange={e => setTargetName(e.target.value)}
+                          placeholder="Persönlicher Schwerpunkt (z. B. Selbst, Magiemeisterschaft, Überleben, Wohlstand)..."
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500 font-medium"
+                        />
+                      )}
+
+                      {domain === 'character' && (
                         <select
-                          value={creatorTargetId}
+                          value={targetId}
                           onChange={e => {
-                            const selected = codexCharacters.find(c => c.id === e.target.value);
-                            setCreatorTargetId(e.target.value);
-                            if (selected) setCreatorTargetName(selected.title);
+                            const selected = availableCharacterOptions.find(c => c.id === e.target.value);
+                            setTargetId(e.target.value);
+                            if (selected) setTargetName(selected.title);
                           }}
-                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
                         >
-                          <option value="">-- Charakter aus Codex wählen --</option>
-                          {codexCharacters.map((c, cIdx) => (
-                            <option key={`char-target-${c.id || 'c'}-${cIdx}`} value={c.id}>
+                          <option value="">-- Charakter / Nutzer wählen --</option>
+                          {availableCharacterOptions.map((c, cIdx) => (
+                            <option key={`form-char-target-${c.id || 'c'}-${cIdx}`} value={c.id}>
                               {c.title}
                             </option>
                           ))}
                         </select>
-                      </div>
-                      <div className="md:col-span-6">
-                        <input
-                          type="text"
-                          placeholder="oder freier Name der Zielperson..."
-                          value={creatorTargetName}
-                          onChange={e => setCreatorTargetName(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                        />
-                      </div>
-                    </div>
-                  )}
+                      )}
 
-                  {creatorDomain === 'faction' && (
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                      <div className="md:col-span-6">
+                      {domain === 'faction' && (
                         <select
-                          value={creatorTargetId}
+                          value={targetId}
                           onChange={e => {
                             const selected = codexFactions.find(f => f.id === e.target.value);
-                            setCreatorTargetId(e.target.value);
-                            if (selected) setCreatorTargetName(selected.title);
+                            setTargetId(e.target.value);
+                            if (selected) setTargetName(selected.title);
                           }}
-                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
                         >
                           <option value="">-- Fraktion aus Codex wählen --</option>
                           {codexFactions.map((f, fIdx) => (
-                            <option key={`faction-target-${f.id || 'f'}-${fIdx}`} value={f.id}>
+                            <option key={`form-faction-target-${f.id || 'f'}-${fIdx}`} value={f.id}>
                               {f.title}
                             </option>
                           ))}
                         </select>
-                      </div>
-                      <div className="md:col-span-6">
-                        <input
-                          type="text"
-                          placeholder="oder freier Name der Organisation / Fraktion..."
-                          value={creatorTargetName}
-                          onChange={e => setCreatorTargetName(e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                        />
-                      </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Verknüpfte Beziehung (optional bei Charakter-Zielen) */}
+                  {domain === 'character' && relationships.length > 0 && (
+                    <div className="flex flex-col gap-1 pt-1">
+                      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
+                        <span>Verknüpfte Beziehung (Optional)</span>
+                        <span className="text-[9px] text-slate-500">Koppelt das Ziel an eine bestehende Beziehung</span>
+                      </label>
+                      <select
+                        value={linkedRelId}
+                        onChange={e => setLinkedRelId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 outline-none focus:border-cyan-500"
+                      >
+                        <option value="">-- Keine direkte Beziehungsbindung --</option>
+                        {relationships.map((rel, rIdx) => (
+                          <option key={`form-rel-link-${rel.id || 'r'}-${rIdx}`} value={rel.id}>
+                            {rel.targetCharacter || 'Unbenannt'} ({rel.type || 'Beziehung'})
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
                 </div>
 
-                {/* 3. ERSTELLUNGSMODUS (Hauptziel mit 3 Stufen ODER Einzelziel) */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 flex-wrap gap-2">
-                    <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                      3. Erstellungsmodus
+                {/* 3. MOTIVATION & KONTEXT */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1 bg-slate-900/30 p-3 rounded-xl border border-slate-800">
+                    <label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-heart text-amber-500 text-[10px]"></i>
+                      <span>Motivation / Warum dieses Ziel?</span>
                     </label>
-                    <div className="flex items-center gap-1.5 p-1 bg-slate-900 rounded-lg border border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => setCreatorMode('tier3')}
-                        className={`px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
-                          creatorMode === 'tier3'
-                            ? 'bg-cyan-600/20 text-cyan-300 border border-cyan-500/40'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        Hauptziel mit 3-Stufen-Etappen
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCreatorMode('single')}
-                        className={`px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
-                          creatorMode === 'single'
-                            ? 'bg-cyan-600/20 text-cyan-300 border border-cyan-500/40'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        Einzelziel
-                      </button>
-                    </div>
+                    <AutoExpandingTextarea
+                      value={motivation}
+                      onChange={e => setMotivation(e.target.value)}
+                      placeholder="Persönlicher Antrieb, emotionaler Grund, Verpflichtung oder Schwur..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[56px]"
+                    />
+                    <span className="text-[9px] text-slate-500">
+                      Beschreibt den inneren Antrieb hinter diesem Vorhaben.
+                    </span>
                   </div>
 
-                  {/* MODUS A: 3-STUFEN HAUPTZIEL */}
-                  {creatorMode === 'tier3' && (
-                    <div className="space-y-3">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-slate-300 font-bold uppercase tracking-wider flex items-center justify-between">
-                          <span>Übergeordnetes Hauptziel formulieren</span>
-                          <span className="text-[10px] text-cyan-400 font-normal">
-                            Erzeugt: 1x Kurzfristig &bull; 1x Mittelfristig &bull; 1x Langfristig
-                          </span>
+                  <div className="flex flex-col gap-1 bg-slate-900/30 p-3 rounded-xl border border-slate-800">
+                    <label className="text-[10px] text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-align-left text-slate-400 text-[10px]"></i>
+                      <span>Kontext &amp; Beschreibung</span>
+                    </label>
+                    <AutoExpandingTextarea
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      placeholder="Ausgangslage, Hintergrundinformationen und angestrebter Endzustand..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[56px]"
+                    />
+                    <span className="text-[9px] text-slate-500">
+                      Rahmenbedingungen und Erfolgskriterien des Ziels.
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4. AKTIVER HANDLUNGSPLAN (Wie soll das Ziel erreicht werden?) & 3-STUFEN ETAPPEN */}
+                <div className="bg-slate-900/35 p-4 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-cyan-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-list-check text-cyan-400"></i>
+                      <span>Aktiver Handlungsplan (Wie soll das Ziel erreicht werden?)</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Gesamtstrategie und konkrete Schrittfolgen
+                    </span>
+                  </div>
+
+                  {/* Übergreifender Handlungsplan */}
+                  <AutoExpandingTextarea
+                    value={activePlan}
+                    onChange={e => setActivePlan(e.target.value)}
+                    placeholder="Übergeordnete Vorgehensweise und Handlungsstrategie..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[50px]"
+                  />
+
+                  {/* 3 Frist-Felder: Kurzfristig, Mittelfristig, Langfristig */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      Etappen zur Erreichung des Hauptziels
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* Kurzfristig */}
+                      <div className="flex flex-col gap-1 bg-slate-950/70 p-3 rounded-xl border border-teal-900/40">
+                        <label className="text-[10px] text-teal-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <i className="fa-solid fa-forward-step text-[10px]"></i>
+                          <span>Kurzfristig (Erste Schritte)</span>
                         </label>
                         <AutoExpandingTextarea
-                          value={mainGoalText}
-                          onChange={e => setMainGoalText(e.target.value)}
-                          placeholder="Übergeordnetes Vorhaben beschreiben (z. B. Aufnahme in den Ältestenrat, Rache am Mörder der Familie, Erwerb des Meistertitels)..."
-                          className="w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-xs text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-400 min-h-[50px] font-medium"
+                          value={shortTermPlan}
+                          onChange={e => setShortTermPlan(e.target.value)}
+                          placeholder="Unmittelbare Vorbereitung, Informationsbeschaffung &amp; Sofortmaßnahmen..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-teal-400 min-h-[56px]"
                         />
                       </div>
 
-                      <div className="flex items-center gap-3 pt-1 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={handleGenerate3TierAI}
-                          disabled={!mainGoalText.trim() || isGeneratingAI}
-                          className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 shadow-md"
-                        >
-                          <i className={`fa-solid fa-wand-magic-sparkles ${isGeneratingAI ? 'animate-spin' : ''}`}></i>
-                          <span>
-                            {isGeneratingAI
-                              ? 'Generiere 3-Stufen-Ziele...'
-                              : '3 Etappenziele per KI generieren'}
-                          </span>
-                        </button>
+                      {/* Mittelfristig */}
+                      <div className="flex flex-col gap-1 bg-slate-950/70 p-3 rounded-xl border border-cyan-900/40">
+                        <label className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <i className="fa-solid fa-route text-[10px]"></i>
+                          <span>Mittelfristig (Meilensteine)</span>
+                        </label>
+                        <AutoExpandingTextarea
+                          value={mediumTermPlan}
+                          onChange={e => setMediumTermPlan(e.target.value)}
+                          placeholder="Zentrale Zwischenschritte, Bündnisse, Prüfungen &amp; Durchbrüche..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-400 min-h-[56px]"
+                        />
+                      </div>
 
-                        <button
-                          type="button"
-                          onClick={handleCreate3TierManual}
-                          className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-                        >
-                          <i className="fa-solid fa-layer-group text-slate-400"></i>
-                          <span>3 Etappen manuell anlegen</span>
-                        </button>
+                      {/* Langfristig */}
+                      <div className="flex flex-col gap-1 bg-slate-950/70 p-3 rounded-xl border border-indigo-900/40">
+                        <label className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <i className="fa-solid fa-trophy text-[10px]"></i>
+                          <span>Langfristig (Vollendung)</span>
+                        </label>
+                        <AutoExpandingTextarea
+                          value={longTermPlan}
+                          onChange={e => setLongTermPlan(e.target.value)}
+                          placeholder="Finale Vollendung, Meisterung &amp; dauerhafte Etablierung des Ziels..."
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-indigo-400 min-h-[56px]"
+                        />
                       </div>
                     </div>
-                  )}
+                  </div>
+                </div>
 
-                  {/* MODUS B: EINZELZIEL */}
-                  {creatorMode === 'single' && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                        <div className="md:col-span-6 flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                            Titel des Ziels
-                          </label>
-                          <input
-                            type="text"
-                            value={singleTitle}
-                            onChange={e => setSingleTitle(e.target.value)}
-                            placeholder="Titel des Ziels..."
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none focus:border-cyan-500 font-medium"
-                          />
-                        </div>
-
-                        <div className="md:col-span-3 flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                            Zeithorizont / Frist
-                          </label>
-                          <select
-                            value={singleTimeframe}
-                            onChange={e => setSingleTimeframe(e.target.value as GoalTimeframe)}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                          >
-                            <option value="kurzfristig">Kurzfristig</option>
-                            <option value="mittelfristig">Mittelfristig</option>
-                            <option value="langfristig">Langfristig</option>
-                          </select>
-                        </div>
-
-                        <div className="md:col-span-3 flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                            Priorität
-                          </label>
-                          <select
-                            value={singlePriority}
-                            onChange={e => setSinglePriority(e.target.value as GoalPriority)}
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                          >
-                            <option value="kritisch">Kritisch</option>
-                            <option value="hoch">Hoch</option>
-                            <option value="normal">Normal</option>
-                            <option value="niedrig">Niedrig</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                            Motivation (Warum)
-                          </label>
-                          <AutoExpandingTextarea
-                            value={singleMotivation}
-                            onChange={e => setSingleMotivation(e.target.value)}
-                            placeholder="Persönlicher Grund oder Antrieb..."
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[40px]"
-                          />
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                            Aktiver Handlungsplan (Wie)
-                          </label>
-                          <AutoExpandingTextarea
-                            value={singlePlan}
-                            onChange={e => setSinglePlan(e.target.value)}
-                            placeholder="Schritte zur Umsetzung..."
-                            className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[40px]"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 pt-1">
-                        <button
-                          type="button"
-                          onClick={handleCreateSingleGoal}
-                          className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-sm"
-                        >
-                          <i className="fa-solid fa-plus text-[10px]"></i>
-                          <span>Einzelziel hinzufügen</span>
-                        </button>
-                      </div>
+                {/* 5. ALTERNATIVPLÄNE & HINDERNISSE / KONFLIKTE */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Alternativpläne */}
+                  <div className="flex flex-col gap-2 bg-slate-900/30 p-3.5 rounded-xl border border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <i className="fa-solid fa-shuffle text-slate-400 text-[10px]"></i>
+                        <span>Alternativpläne (Plan B, Plan C...)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddAltPlan}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                      >
+                        + Alternative
+                      </button>
                     </div>
-                  )}
+
+                    {alternativePlans.length === 0 ? (
+                      <span className="text-[11px] text-slate-500 italic py-1">
+                        Keine Alternativpläne eingetragen. Klicke auf &quot;+ Alternative&quot;, um Ausweichpläne hinzuzufügen.
+                      </span>
+                    ) : (
+                      <div className="space-y-2">
+                        {alternativePlans.map((plan, pIdx) => (
+                          <div key={pIdx} className="flex items-start gap-1.5">
+                            <span className="text-[10px] text-slate-500 font-mono mt-2 shrink-0">
+                              {String.fromCharCode(66 + pIdx)}:
+                            </span>
+                            <AutoExpandingTextarea
+                              value={plan}
+                              onChange={e => handleUpdateAltPlan(pIdx, e.target.value)}
+                              placeholder={`Alternativer Plan ${String.fromCharCode(66 + pIdx)}...`}
+                              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[38px]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAltPlan(pIdx)}
+                              className="text-slate-500 hover:text-red-400 p-1.5 text-xs cursor-pointer mt-1"
+                              title="Alternative entfernen"
+                            >
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hindernisse & Konflikte */}
+                  <div className="flex flex-col gap-2 bg-slate-900/30 p-3.5 rounded-xl border border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-red-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <i className="fa-solid fa-triangle-exclamation text-red-500 text-[10px]"></i>
+                        <span>Hindernisse &amp; Konflikte</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddObstacleItem}
+                        className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-red-300 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                      >
+                        + Hindernis
+                      </button>
+                    </div>
+
+                    {obstacles.length === 0 ? (
+                      <span className="text-[11px] text-slate-500 italic py-1">
+                        Keine Hindernisse oder Konflikte eingetragen.
+                      </span>
+                    ) : (
+                      <div className="space-y-2">
+                        {obstacles.map((obs, oIdx) => (
+                          <div key={oIdx} className="flex items-start gap-1.5">
+                            <span className="text-[10px] text-red-400/70 font-mono mt-2 shrink-0">
+                              •
+                            </span>
+                            <AutoExpandingTextarea
+                              value={obs}
+                              onChange={e => handleUpdateObstacleItem(oIdx, e.target.value)}
+                              placeholder="Hindernis, Risiko oder Loyalitätskonflikt beschreiben..."
+                              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-red-500 min-h-[38px]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveObstacleItem(oIdx)}
+                              className="text-slate-500 hover:text-red-400 p-1.5 text-xs cursor-pointer mt-1"
+                              title="Hindernis entfernen"
+                            >
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 6. ZIEL-PARAMETER (Entfernt) */}
+
+                {/* 7. FORMULAR-AKTIONEN */}
+                <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-800/80 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleSaveGoal}
+                      disabled={!mainGoal.trim()}
+                      className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md"
+                    >
+                      <i className="fa-solid fa-floppy-disk text-[11px]"></i>
+                      <span>{editingGoalId ? 'Ziel aktualisieren' : 'Ziel speichern'}</span>
+                    </button>
+
+                    {!editingGoalId && (
+                      <button
+                        type="button"
+                        onClick={handleSaveAs3TierGoals}
+                        disabled={!mainGoal.trim()}
+                        className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-slate-200 disabled:opacity-50 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
+                        title="Erstellt automatisch 3 verknüpfte Ziele (Kurz-, Mittel- und Langfristig)"
+                      >
+                        <i className="fa-solid fa-layer-group text-slate-400 text-xs"></i>
+                        <span>Als 3 Etappenziele anlegen</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleGenerateAIForCurrent}
+                      disabled={!mainGoal.trim() || isGeneratingAI}
+                      className="px-3 py-2 bg-gradient-to-r from-cyan-600/20 to-teal-600/20 hover:from-cyan-600/30 hover:to-teal-600/30 text-cyan-300 border border-cyan-500/40 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      title="KI generiert passende 3-Stufen-Etappen für das aktuelle Hauptziel"
+                    >
+                      <i className={`fa-solid fa-wand-magic-sparkles ${isGeneratingAI ? 'animate-spin' : ''} text-xs`}></i>
+                      <span>{isGeneratingAI ? 'Generiere...' : '3 Etappen per KI generieren'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* FILTER-TABS FÜR GESPEICHERTE ZIELE */}
+          {/* FILTER-TABS FÜR DIE ZIEL-LISTE */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950/60 p-2 rounded-xl border border-slate-800">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-2">
@@ -829,7 +1083,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                 const isActive = activeFilter === dom.id;
                 return (
                   <button
-                    key={`filter-dom-${dom.id}-${domIdx}`}
+                    key={`filter-domain-btn-${dom.id}-${domIdx}`}
                     type="button"
                     onClick={() => setActiveFilter(dom.id)}
                     className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -853,12 +1107,12 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* LISTE DER ZIELE */}
+          {/* LISTE DER GESPEICHERTEN ZIELE */}
           {filteredGoals.length === 0 ? (
             <div className="text-xs text-slate-400 px-4 py-8 text-center bg-slate-950/40 rounded-xl border border-slate-800/60">
               <p>
                 {goals.length === 0
-                  ? 'Bisher sind keine Ziele für diesen Charakter hinterlegt. Nutze das obige Formular, um persönliche Ziele, Ziele gegenüber Charakteren oder Fraktionen zu erstellen.'
+                  ? 'Bisher sind keine Ziele für diesen Charakter hinterlegt. Nutze das obige Formular, um persönliche Vorhaben, Vorhaben gegenüber Charakteren oder Fraktionen anzulegen.'
                   : 'Keine Ziele im ausgewählten Filter vorhanden.'}
               </p>
             </div>
@@ -866,10 +1120,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
             <div className="space-y-3">
               {filteredGoals.map((goal, gIdx) => {
                 const isExpanded = !!expandedGoalIds[goal.id];
-                const priorityInfo = getPriorityInfo(goal.priority);
-                const statusInfo = getStatusInfo(goal.status);
                 const targetDisplay = getTargetTypeDisplay(goal.targetType, goal.targetName);
-                const timeframeInfo = TIMEFRAME_LABELS[goal.timeframe] || TIMEFRAME_LABELS.mittelfristig;
 
                 return (
                   <div
@@ -892,15 +1143,11 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                               {goal.title?.trim() ? goal.title : 'Unbenanntes Ziel'}
                             </span>
 
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${timeframeInfo.badgeClass}`}>
-                              {timeframeInfo.title}
-                            </span>
-
                             <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 border border-slate-700/80 text-cyan-300">
                               {targetDisplay}
                             </span>
 
-                            {goal.mainGoalTitle?.trim() && (
+                            {goal.mainGoalTitle?.trim() && goal.mainGoalTitle !== goal.title && (
                               <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-950/40 border border-indigo-700/40 text-indigo-300">
                                 Hauptziel: {goal.mainGoalTitle}
                               </span>
@@ -914,101 +1161,28 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                           )}
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${priorityInfo.badgeClass}`}>
-                          {priorityInfo.label}
-                        </span>
-
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${statusInfo.badgeClass}`}>
-                          {statusInfo.label}
-                        </span>
-
-                        {typeof goal.progress === 'number' && (
-                          <div className="flex items-center gap-1.5 hidden sm:flex">
-                            <div className="w-14 bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700">
-                              <div
-                                className="bg-cyan-500 h-full rounded-full transition-all"
-                                style={{ width: `${Math.min(100, Math.max(0, goal.progress))}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-[9px] text-slate-400 font-mono w-7 text-right">
-                              {goal.progress}%
-                            </span>
-                          </div>
-                        )}
-                      </div>
                     </div>
 
-                    {/* Detailbereich der Zielkarte */}
+                    {/* Detailbereich der Zielkarte (Vollständige Bearbeitung) */}
                     {isExpanded && (
                       <div className="p-4 border-t border-slate-800/80 space-y-4 bg-slate-950/50">
-                        {/* Zeile 1: Titel, Zeithorizont & Status */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                          <div className="md:col-span-6 flex flex-col gap-1">
-                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                              Titel des Ziels
-                            </label>
-                            <input
-                              type="text"
-                              value={goal.title}
-                              onChange={e => handleUpdateGoal(goal.id, { title: e.target.value })}
-                              placeholder="Zielbezeichnung eintragen..."
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none focus:border-cyan-500 font-medium"
-                            />
-                          </div>
-
-                          <div className="md:col-span-3 flex flex-col gap-1">
-                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                              Gliederung / Frist
-                            </label>
-                            <select
-                              value={goal.timeframe}
-                              onChange={e => handleUpdateGoal(goal.id, { timeframe: e.target.value as GoalTimeframe })}
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                            >
-                              <option value="kurzfristig">Kurzfristig</option>
-                              <option value="mittelfristig">Mittelfristig</option>
-                              <option value="langfristig">Langfristig</option>
-                            </select>
-                          </div>
-
-                          <div className="md:col-span-3 flex flex-col gap-1">
-                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                              Status
-                            </label>
-                            <select
-                              value={goal.status || 'aktiv'}
-                              onChange={e => handleUpdateGoal(goal.id, { status: e.target.value as GoalStatus })}
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                            >
-                              <option value="aktiv">Aktiv</option>
-                              <option value="pausiert">Pausiert</option>
-                              <option value="erreicht">Erreicht</option>
-                              <option value="gescheitert">Gescheitert</option>
-                              <option value="aufgegeben">Aufgegeben</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Zeile 1b: Übergeordnetes Hauptziel */}
-                        <div className="flex flex-col gap-1 bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/80">
-                          <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
-                            <span>Zugehöriges übergeordnetes Hauptziel (Optional)</span>
-                            <span className="text-[9px] text-slate-500 normal-case">Ordnungsrahmen für Etappenziele</span>
+                        {/* 1. Hauptziel & Titel */}
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider">
+                            Hauptziel / Zielbezeichnung
                           </label>
                           <input
                             type="text"
-                            value={goal.mainGoalTitle || ''}
-                            onChange={e => handleUpdateGoal(goal.id, { mainGoalTitle: e.target.value })}
-                            placeholder="Titel des übergeordneten Hauptziels eintragen..."
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 outline-none focus:border-cyan-500"
+                            value={goal.title}
+                            onChange={e => handleUpdateGoal(goal.id, { title: e.target.value, mainGoalTitle: e.target.value })}
+                            placeholder="Zielbezeichnung eintragen..."
+                            className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-white outline-none focus:border-cyan-500 font-medium"
                           />
                         </div>
 
-                        {/* Zeile 2: Zielbereich, Zielobjekt, Priorität & Fortschritt */}
+                        {/* 2. Zielbereich & Adressat */}
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                          <div className="md:col-span-3 flex flex-col gap-1">
+                          <div className="md:col-span-4 flex flex-col gap-1">
                             <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                               Zielbereich
                             </label>
@@ -1020,8 +1194,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                                 let defaultId: string | undefined = undefined;
 
                                 if (newDomain === 'character') {
-                                  defaultName = codexCharacters[0]?.title || '';
-                                  defaultId = codexCharacters[0]?.id;
+                                  defaultName = availableCharacterOptions[0]?.title || '';
+                                  defaultId = availableCharacterOptions[0]?.id;
                                 } else if (newDomain === 'faction') {
                                   defaultName = codexFactions[0]?.title || '';
                                   defaultId = codexFactions[0]?.id;
@@ -1035,72 +1209,54 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                               }}
                               className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
                             >
-                              <option value="self">Persönliches Ziel</option>
-                              <option value="character">Ziel gegenüber Charakter</option>
-                              <option value="faction">Ziel gegenüber Fraktion</option>
+                              <option value="self">Persönliche Ziele</option>
+                              <option value="character">Ziele gegenüber Charakteren</option>
+                              <option value="faction">Ziele gegenüber Fraktionen</option>
                             </select>
                           </div>
 
-                          <div className="md:col-span-4 flex flex-col gap-1">
+                          <div className="md:col-span-8 flex flex-col gap-1">
                             <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                              Adressat / Zielobjekt
+                              Adressat / Konkreter Bezug
                             </label>
                             {goal.targetType === 'character' ? (
-                              <div className="flex gap-2">
-                                <select
-                                  value={goal.targetId || ''}
-                                  onChange={e => {
-                                    const selected = codexCharacters.find(c => c.id === e.target.value);
-                                    handleUpdateGoal(goal.id, {
-                                      targetId: e.target.value,
-                                      targetName: selected ? selected.title : goal.targetName
-                                    });
-                                  }}
-                                  className="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                                >
-                                  <option value="">-- Charakter auswählen --</option>
-                                  {codexCharacters.map((c, cIdx) => (
-                                    <option key={`edit-char-target-${c.id || 'c'}-${cIdx}`} value={c.id}>
-                                      {c.title}
-                                    </option>
-                                  ))}
-                                </select>
-                                <input
-                                  type="text"
-                                  placeholder="oder freier Name..."
-                                  value={goal.targetName || ''}
-                                  onChange={e => handleUpdateGoal(goal.id, { targetName: e.target.value })}
-                                  className="w-32 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                                />
-                              </div>
+                              <select
+                                value={goal.targetId || ''}
+                                onChange={e => {
+                                  const selected = availableCharacterOptions.find(c => c.id === e.target.value);
+                                  handleUpdateGoal(goal.id, {
+                                    targetId: e.target.value,
+                                    targetName: selected ? selected.title : goal.targetName
+                                  });
+                                }}
+                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
+                              >
+                                <option value="">-- Charakter / Nutzer wählen --</option>
+                                {availableCharacterOptions.map((c, cIdx) => (
+                                  <option key={`card-char-target-${c.id || 'c'}-${cIdx}`} value={c.id}>
+                                    {c.title}
+                                  </option>
+                                ))}
+                              </select>
                             ) : goal.targetType === 'faction' ? (
-                              <div className="flex gap-2">
-                                <select
-                                  value={goal.targetId || ''}
-                                  onChange={e => {
-                                    const selected = codexFactions.find(f => f.id === e.target.value);
-                                    handleUpdateGoal(goal.id, {
-                                      targetId: e.target.value,
-                                      targetName: selected ? selected.title : goal.targetName
-                                    });
-                                  }}
-                                  className="flex-1 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                                >
-                                  <option value="">-- Fraktion auswählen --</option>
-                                  {codexFactions.map((f, fIdx) => (
-                                    <option key={`edit-fac-target-${f.id || 'f'}-${fIdx}`} value={f.id}>
-                                      {f.title}
-                                    </option>
-                                  ))}
-                                </select>
-                                <input
-                                  type="text"
-                                  placeholder="oder freier Name..."
-                                  value={goal.targetName || ''}
-                                  onChange={e => handleUpdateGoal(goal.id, { targetName: e.target.value })}
-                                  className="w-32 bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                                />
-                              </div>
+                              <select
+                                value={goal.targetId || ''}
+                                onChange={e => {
+                                  const selected = codexFactions.find(f => f.id === e.target.value);
+                                  handleUpdateGoal(goal.id, {
+                                    targetId: e.target.value,
+                                    targetName: selected ? selected.title : goal.targetName
+                                  });
+                                }}
+                                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
+                              >
+                                <option value="">-- Fraktion auswählen --</option>
+                                {codexFactions.map((f, fIdx) => (
+                                  <option key={`card-faction-target-${f.id || 'f'}-${fIdx}`} value={f.id}>
+                                    {f.title}
+                                  </option>
+                                ))}
+                              </select>
                             ) : (
                               <input
                                 type="text"
@@ -1111,67 +1267,9 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                               />
                             )}
                           </div>
-
-                          <div className="md:col-span-2 flex flex-col gap-1">
-                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                              Priorität
-                            </label>
-                            <select
-                              value={typeof goal.priority === 'string' ? goal.priority : 'normal'}
-                              onChange={e => handleUpdateGoal(goal.id, { priority: e.target.value as GoalPriority })}
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                            >
-                              <option value="kritisch">Kritisch</option>
-                              <option value="hoch">Hoch</option>
-                              <option value="normal">Normal</option>
-                              <option value="niedrig">Niedrig</option>
-                            </select>
-                          </div>
-
-                          <div className="md:col-span-3 flex flex-col gap-1">
-                            <div className="flex items-center justify-between">
-                              <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                                Fortschritt
-                              </label>
-                              <span className="text-[10px] text-cyan-400 font-mono">
-                                {goal.progress ?? 0}%
-                              </span>
-                            </div>
-                            <input
-                              type="range"
-                              min={0}
-                              max={100}
-                              step={5}
-                              value={goal.progress ?? 0}
-                              onChange={e => handleUpdateGoal(goal.id, { progress: parseInt(e.target.value, 10) })}
-                              className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-cyan-500 mt-2"
-                            />
-                          </div>
                         </div>
 
-                        {/* Zeile 2b: Verknüpfung mit Beziehung */}
-                        {relationships.length > 0 && goal.targetType === 'character' && (
-                          <div className="flex flex-col gap-1 bg-slate-900/30 p-2.5 rounded-lg border border-slate-800/80">
-                            <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center justify-between">
-                              <span>Verknüpfte Beziehung (Beziehung &rarr; Motivation &rarr; Ziel)</span>
-                              <span className="text-[9px] text-slate-500 normal-case">Optional</span>
-                            </label>
-                            <select
-                              value={goal.linkedRelationshipId || ''}
-                              onChange={e => handleUpdateGoal(goal.id, { linkedRelationshipId: e.target.value || undefined })}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 outline-none focus:border-cyan-500"
-                            >
-                              <option value="">-- Keine direkte Beziehungsbindung --</option>
-                              {relationships.map((rel, rIdx) => (
-                                <option key={`rel-link-${rel.id || 'r'}-${rIdx}`} value={rel.id}>
-                                  {rel.targetCharacter || 'Unbenannt'} ({rel.type || 'Beziehung'})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
-                        {/* Zeile 3: Motivation (Warum) & Beschreibung */}
+                        {/* 3. Motivation & Kontext */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <div className="flex flex-col gap-1">
                             <label className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
@@ -1181,11 +1279,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                               value={goal.motivation || ''}
                               onChange={e => handleUpdateGoal(goal.id, { motivation: e.target.value })}
                               placeholder="Persönlicher Grund, emotionaler Ansporn oder Verpflichtung..."
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[60px]"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-amber-500 min-h-[50px]"
                             />
-                            <span className="text-[9px] text-slate-500">
-                              Verbindet den inneren Antrieb mit diesem Vorhaben.
-                            </span>
                           </div>
 
                           <div className="flex flex-col gap-1">
@@ -1196,35 +1291,66 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                               value={goal.description || ''}
                               onChange={e => handleUpdateGoal(goal.id, { description: e.target.value })}
                               placeholder="Hintergrund, zeitlicher Rahmen oder Erfolgskriterien..."
-                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[60px]"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[50px]"
                             />
-                            <span className="text-[9px] text-slate-500">
-                              Beschreibung der Ausgangslage und des angestrebten Zustands.
-                            </span>
                           </div>
                         </div>
 
-                        {/* Zeile 4: Aktiver Handlungsplan (WIE) */}
-                        <div className="flex flex-col gap-1 bg-slate-900/30 p-3 rounded-xl border border-slate-800">
-                          <div className="flex items-center justify-between">
-                            <label className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                              <i className="fa-solid fa-list-check text-cyan-500"></i>
-                              <span>Aktiver Handlungsplan (Wie soll das Ziel erreicht werden?)</span>
-                            </label>
-                            <span className="text-[9px] text-slate-500">
-                              Konkrete Schrittfolge für Handlungen und Spielleiter
-                            </span>
-                          </div>
+                        {/* 4. Aktiver Handlungsplan (Wie) & Frist-Felder */}
+                        <div className="flex flex-col gap-2 bg-slate-900/30 p-3 rounded-xl border border-slate-800">
+                          <label className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                            <i className="fa-solid fa-list-check text-cyan-500"></i>
+                            <span>Aktiver Handlungsplan (Wie soll das Ziel erreicht werden?)</span>
+                          </label>
                           <AutoExpandingTextarea
                             value={goal.activePlan || ''}
                             onChange={e => handleUpdateGoal(goal.id, { activePlan: e.target.value })}
-                            placeholder="1. Schritt: Erste Maßnahme&#10;2. Schritt: Vorbereitung oder Bündnis&#10;3. Schritt: Umsetzung..."
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[70px]"
+                            placeholder="Gesamtstrategie und Schrittfolge..."
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[50px]"
                           />
+
+                          {/* 3 Frist-Felder */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-1">
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] text-teal-300 font-bold uppercase tracking-wider">
+                                Kurzfristig (Erste Schritte)
+                              </label>
+                              <AutoExpandingTextarea
+                                value={goal.shortTermPlan || ''}
+                                onChange={e => handleUpdateGoal(goal.id, { shortTermPlan: e.target.value })}
+                                placeholder="Unmittelbare Schritte..."
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-teal-400 min-h-[44px]"
+                              />
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] text-cyan-300 font-bold uppercase tracking-wider">
+                                Mittelfristig (Meilensteine)
+                              </label>
+                              <AutoExpandingTextarea
+                                value={goal.mediumTermPlan || ''}
+                                onChange={e => handleUpdateGoal(goal.id, { mediumTermPlan: e.target.value })}
+                                placeholder="Zwischenmeilensteine..."
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-400 min-h-[44px]"
+                              />
+                            </div>
+
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[9px] text-indigo-300 font-bold uppercase tracking-wider">
+                                Langfristig (Vollendung)
+                              </label>
+                              <AutoExpandingTextarea
+                                value={goal.longTermPlan || ''}
+                                onChange={e => handleUpdateGoal(goal.id, { longTermPlan: e.target.value })}
+                                placeholder="Finale Absicherung..."
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-indigo-400 min-h-[44px]"
+                              />
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Zeile 5: Alternativpläne & Hindernisse */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* 5. Alternativpläne & Hindernisse */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           {/* Alternativpläne */}
                           <div className="flex flex-col gap-2 bg-slate-900/20 p-3 rounded-xl border border-slate-800">
                             <div className="flex items-center justify-between">
@@ -1233,7 +1359,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                               </label>
                               <button
                                 type="button"
-                                onClick={() => handleAddAlternativePlan(goal.id)}
+                                onClick={() => handleAddInlineAltPlan(goal.id)}
                                 className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded text-[10px] font-bold cursor-pointer"
                               >
                                 + Alternative
@@ -1253,13 +1379,13 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                                     </span>
                                     <AutoExpandingTextarea
                                       value={plan}
-                                      onChange={e => handleUpdateAlternativePlan(goal.id, pIdx, e.target.value)}
+                                      onChange={e => handleUpdateInlineAltPlan(goal.id, pIdx, e.target.value)}
                                       placeholder={`Alternativer Plan ${String.fromCharCode(66 + pIdx)}...`}
-                                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[40px]"
+                                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-cyan-500 min-h-[36px]"
                                     />
                                     <button
                                       type="button"
-                                      onClick={() => handleRemoveAlternativePlan(goal.id, pIdx)}
+                                      onClick={() => handleRemoveInlineAltPlan(goal.id, pIdx)}
                                       className="text-slate-500 hover:text-red-400 p-1.5 text-xs cursor-pointer mt-1"
                                       title="Alternative entfernen"
                                     >
@@ -1274,12 +1400,12 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                           {/* Hindernisse / Konflikte */}
                           <div className="flex flex-col gap-2 bg-slate-900/20 p-3 rounded-xl border border-slate-800">
                             <div className="flex items-center justify-between">
-                              <label className="text-[10px] text-red-400/90 font-bold uppercase tracking-wider">
+                              <label className="text-[10px] text-red-400 font-bold uppercase tracking-wider">
                                 Hindernisse &amp; Konflikte
                               </label>
                               <button
                                 type="button"
-                                onClick={() => handleAddObstacle(goal.id)}
+                                onClick={() => handleAddInlineObstacle(goal.id)}
                                 className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-red-300 rounded text-[10px] font-bold cursor-pointer"
                               >
                                 + Hindernis
@@ -1299,13 +1425,13 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                                     </span>
                                     <AutoExpandingTextarea
                                       value={obs}
-                                      onChange={e => handleUpdateObstacle(goal.id, oIdx, e.target.value)}
+                                      onChange={e => handleUpdateInlineObstacle(goal.id, oIdx, e.target.value)}
                                       placeholder="Hindernis oder Risiko beschreiben..."
-                                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-red-500 min-h-[40px]"
+                                      className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-red-500 min-h-[36px]"
                                     />
                                     <button
                                       type="button"
-                                      onClick={() => handleRemoveObstacle(goal.id, oIdx)}
+                                      onClick={() => handleRemoveInlineObstacle(goal.id, oIdx)}
                                       className="text-slate-500 hover:text-red-400 p-1.5 text-xs cursor-pointer mt-1"
                                       title="Hindernis entfernen"
                                     >
@@ -1318,6 +1444,8 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                           </div>
                         </div>
 
+                        {/* 6. Parameter & Status (Entfernt) */}
+
                         {/* Fußzeile der Zielkarte */}
                         <div className="flex items-center justify-between pt-2 border-t border-slate-800 text-[10px] text-slate-500 flex-wrap gap-2">
                           <span className="font-mono">
@@ -1327,8 +1455,17 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
+                              onClick={() => handleLoadGoalIntoForm(goal)}
+                              className="px-2.5 py-1 bg-cyan-950/40 hover:bg-cyan-900/50 text-cyan-300 border border-cyan-800/40 rounded text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <i className="fa-solid fa-pen text-[10px]"></i>
+                              <span>Im Formular bearbeiten</span>
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() => handleDuplicateGoal(goal)}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs flex items-center gap-1 cursor-pointer transition-colors"
                             >
                               <i className="fa-solid fa-copy text-[10px]"></i>
                               <span>Duplizieren</span>
@@ -1337,7 +1474,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                             <button
                               type="button"
                               onClick={() => handleDeleteGoal(goal.id)}
-                              className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/50 text-red-400 border border-red-900/50 rounded text-xs flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/50 text-red-400 border border-red-900/50 rounded text-xs flex items-center gap-1 cursor-pointer transition-colors"
                             >
                               <i className="fa-solid fa-trash text-[10px]"></i>
                               <span>Löschen</span>
@@ -1346,7 +1483,7 @@ export const CharacterGoalsPanel: React.FC<Props> = ({
                             <button
                               type="button"
                               onClick={() => toggleGoalExpanded(goal.id)}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs cursor-pointer"
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs cursor-pointer transition-colors"
                             >
                               Zuklappen
                             </button>

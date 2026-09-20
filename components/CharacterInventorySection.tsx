@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { StructuredInventory, CustomInventoryItem, LoreEntry, WorldSetting } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { GeminiService } from '../services/geminiService';
@@ -64,7 +64,125 @@ export const CharacterInventorySection: React.FC<Props> = ({
   const [isGeneratingItem, setIsGeneratingItem] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-  const customItems: CustomInventoryItem[] = structuredInventory.customItems || [];
+  // Codex Gegenstände State
+  const [codexFilterMode, setCodexFilterMode] = useState<'char' | 'all'>('char');
+  const [codexSearchQuery, setCodexSearchQuery] = useState<string>('');
+  const [isCodexPickerOpen, setIsCodexPickerOpen] = useState<boolean>(false);
+  const [codexCategoryFilter, setCodexCategoryFilter] = useState<string>('all');
+
+  const customItems: CustomInventoryItem[] = structuredInventory?.customItems || [];
+
+  // Helper to extract clean string value from slots that may contain objects
+  const getSlotString = (val: any): string => {
+    if (!val) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object' && val.name) return String(val.name);
+    return '';
+  };
+
+  // Sanitize weapons array: ensure items are strings and extract names if objects
+  const sanitizedWeapons: string[] = useMemo(() => {
+    if (!Array.isArray(structuredInventory?.weapons)) return [];
+    return structuredInventory.weapons.map((w: any) => {
+      if (typeof w === 'string') return w.trim();
+      if (w && typeof w === 'object' && w.name) return String(w.name).trim();
+      return '';
+    }).filter(Boolean);
+  }, [structuredInventory?.weapons]);
+
+  // Automatically migrate any object-based weapons, armor, or accessories into clean strings and custom items
+  useEffect(() => {
+    if (!structuredInventory) return;
+    let needsUpdate = false;
+    const currentCustomItems: CustomInventoryItem[] = [...(structuredInventory.customItems || [])];
+
+    const addAsCustomItemIfDetailed = (obj: any, defaultSlot: any, defaultCategory: string) => {
+      if (!obj || typeof obj !== 'object' || !obj.name) return;
+      const name = String(obj.name).trim();
+      if (!name) return;
+      if (currentCustomItems.some(ci => (ci.name || '').toLowerCase() === name.toLowerCase())) return;
+
+      currentCustomItems.push({
+        id: 'custom_item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        name,
+        category: obj.category || defaultCategory,
+        subCategory: obj.type || obj.subCategory || (defaultSlot === 'weapon' ? 'Nahkampfwaffe' : 'Ausrüstung'),
+        slot: (obj.slot as any) || defaultSlot,
+        equipped: true,
+        rarity: (obj.rarity as any) || 'Selten',
+        quality: obj.quality || 'Meisterlich geschmiedet',
+        material: obj.material || '',
+        durability: obj.durability || '100 / 100',
+        weight: obj.weight || '',
+        value: typeof obj.value === 'number' ? obj.value : 350,
+        description: obj.description || '',
+        specialEffects: obj.properties || obj.specialEffects || '',
+        enchantments: obj.enchantments || '',
+        combatStats: {
+          damage: typeof obj.damage === 'object' ? JSON.stringify(obj.damage) : (obj.damage || obj.combatStats?.damage || ''),
+          damageType: obj.damageType || obj.combatStats?.damageType || '',
+          defense: typeof obj.defense === 'object' ? JSON.stringify(obj.defense) : (obj.defense || obj.combatStats?.defense || ''),
+          range: obj.range || obj.combatStats?.range || (defaultSlot === 'weapon' ? 'Nahkampf' : ''),
+          scalingStat: obj.scalingStat || obj.combatStats?.scalingStat || ''
+        }
+      });
+    };
+
+    // Check weapons
+    const cleanWeapons: string[] = [];
+    if (Array.isArray(structuredInventory.weapons)) {
+      structuredInventory.weapons.forEach((w: any) => {
+        if (typeof w === 'string') {
+          cleanWeapons.push(w.trim());
+        } else if (w && typeof w === 'object') {
+          needsUpdate = true;
+          const wName = String(w.name || '').trim();
+          if (wName) {
+            cleanWeapons.push(wName);
+            addAsCustomItemIfDetailed(w, 'weapon', 'Waffen');
+          }
+        }
+      });
+    }
+
+    // Check armor slots
+    const cleanArmor = { ...(structuredInventory.armor || {}) };
+    (['head', 'chest', 'hands', 'legs', 'feet'] as const).forEach(slot => {
+      const val = cleanArmor[slot];
+      if (val && typeof val === 'object') {
+        needsUpdate = true;
+        const aName = String((val as any).name || '').trim();
+        cleanArmor[slot] = aName;
+        if (aName) {
+          addAsCustomItemIfDetailed(val, slot, 'Rüstung');
+        }
+      }
+    });
+
+    // Check accessories slots
+    const cleanAccessories = { ...(structuredInventory.accessories || {}) };
+    (['finger', 'neck', 'wrist', 'waist', 'back'] as const).forEach(slot => {
+      const val = cleanAccessories[slot];
+      if (val && typeof val === 'object') {
+        needsUpdate = true;
+        const accName = String((val as any).name || '').trim();
+        cleanAccessories[slot] = accName;
+        if (accName) {
+          addAsCustomItemIfDetailed(val, slot, 'Schmuck & Accessoires');
+        }
+      }
+    });
+
+    if (needsUpdate) {
+      onChangeStructuredInventory({
+        ...structuredInventory,
+        weapons: cleanWeapons,
+        armor: cleanArmor,
+        accessories: cleanAccessories,
+        customItems: currentCustomItems
+      });
+    }
+  }, [structuredInventory]);
 
   const updateInventoryField = (field: keyof StructuredInventory, value: any) => {
     onChangeStructuredInventory({
@@ -267,7 +385,7 @@ export const CharacterInventorySection: React.FC<Props> = ({
     }
   };
 
-  // Sync custom item to Codex (Gegenstände)
+  // Sync custom item definition to Codex (Gegenstände)
   const handleSyncItemToCodex = (item: CustomInventoryItem) => {
     if (!onUpdateLore || !item.name.trim()) return;
 
@@ -280,23 +398,22 @@ export const CharacterInventorySection: React.FC<Props> = ({
       id: existingIndex >= 0 ? lore[existingIndex].id : ('item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)),
       title: item.name.trim(),
       category: 'Gegenstände',
-      description: item.description || `Besonderer Ausrüstungsgegenstand von ${characterName || 'Charakter'}.`,
+      description: item.description || `Allgemeine Definition für ${item.name.trim()}.`,
       isUnlocked: true,
       details: {
+        builderType: (item.category as any) || 'Waffe',
         mainCategory: (item.category as any) || 'Waffen',
         subCategory: item.subCategory || 'Spezialausrüstung',
         itemType: item.subCategory || item.category || 'Ausrüstung',
-        rarity: item.rarity || 'Selten',
-        quality: item.quality || 'Meisterlich',
-        material: item.material || 'Stahl',
-        owner: characterName || 'Charakter',
-        weight: item.weight || '1.0 kg',
-        pricePerUnit: item.value || 500,
-        durability: item.durability || '100 / 100',
+        material: item.material || '',
+        baseWeight: item.weight || '1.0 kg',
         specialProperties: item.specialEffects || '',
         magicalProperties: item.enchantments || '',
-        loreHistory: item.originHistory || '',
-        combatStats: item.combatStats || {}
+        combatStats: item.combatStats ? {
+          damageType: item.combatStats.damageType,
+          armorClass: item.combatStats.armorClass,
+          range: item.combatStats.range
+        } : {}
       }
     };
 
@@ -320,17 +437,179 @@ export const CharacterInventorySection: React.FC<Props> = ({
       customItems: updatedCustomList
     });
 
-    setSaveSuccessMsg(`"${item.name}" wurde im Gegenstands-Codex gespeichert.`);
+    setSaveSuccessMsg(`"${item.name}" wurde als Definition im Gegenstands-Codex gespeichert.`);
     setTimeout(() => setSaveSuccessMsg(null), 3500);
   };
 
   // Find Codex items belonging to this character
-  const codexItemsForChar = lore.filter(item => {
-    if (item.category !== 'Gegenstände') return false;
-    const o = (item.details?.owner || '').trim().toLowerCase();
-    const c = (characterName || '').trim().toLowerCase();
-    return o && c && (o === c || (c === 'spieler' && o === 'player') || (c === 'player' && o === 'spieler'));
-  });
+  // Helper to safely render strings in JSX children
+  const renderSafeText = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    if (typeof val === 'string') return val;
+    if (typeof val === 'number') return String(val);
+    if (Array.isArray(val)) return val.map(renderSafeText).filter(Boolean).join(', ');
+    if (typeof val === 'object') {
+      if (val.name) return String(val.name);
+      if (val.description) return String(val.description);
+      return JSON.stringify(val);
+    }
+    return String(val);
+  };
+
+  const allCodexGegenstaende = useMemo(() => {
+    if (!Array.isArray(lore)) return [];
+    return lore.filter(item => item.category === 'Gegenstände');
+  }, [lore]);
+
+  const codexItemsForChar = useMemo(() => {
+    return allCodexGegenstaende.filter(item => {
+      const o = (item.details?.owner || '').trim().toLowerCase();
+      const c = (characterName || '').trim().toLowerCase();
+      return o && c && (o === c || (c === 'spieler' && o === 'player') || (c === 'player' && o === 'spieler'));
+    });
+  }, [allCodexGegenstaende, characterName]);
+
+  const checkInInventory = (itemTitle: string, itemId?: string) => {
+    const normTitle = (itemTitle || '').toLowerCase().trim();
+    if (!normTitle && !itemId) return { inInventory: false, locationLabel: '' };
+
+    // 1. Check customItems
+    const customMatch = customItems.find(ci =>
+      (itemId && ci.codexItemId === itemId) || (ci.name && ci.name.toLowerCase().trim() === normTitle)
+    );
+    if (customMatch) {
+      return { inInventory: true, locationLabel: 'Spezial-Item', customItem: customMatch };
+    }
+
+    // 2. Check weapons
+    if (sanitizedWeapons.some(w => w.toLowerCase().trim() === normTitle)) {
+      return { inInventory: true, locationLabel: 'Waffe' };
+    }
+
+    // 3. Check generalItems
+    const genItems = structuredInventory?.generalItems || [];
+    if (genItems.some((g: any) => (typeof g === 'string' ? g : g?.name || '').toLowerCase().trim() === normTitle)) {
+      return { inInventory: true, locationLabel: 'Allgemeines Item' };
+    }
+
+    // 4. Check armor
+    const armor = structuredInventory?.armor || {};
+    for (const slotKey of Object.keys(armor)) {
+      if (getSlotString((armor as any)[slotKey]).toLowerCase().trim() === normTitle) {
+        return { inInventory: true, locationLabel: `Kleidung (${slotKey})` };
+      }
+    }
+
+    // 5. Check accessories
+    const accessories = structuredInventory?.accessories || {};
+    for (const slotKey of Object.keys(accessories)) {
+      if (getSlotString((accessories as any)[slotKey]).toLowerCase().trim() === normTitle) {
+        return { inInventory: true, locationLabel: `Schmuck (${slotKey})` };
+      }
+    }
+
+    return { inInventory: false, locationLabel: '' };
+  };
+
+  const handleAddCodexItemToInventory = (item: LoreEntry) => {
+    const status = checkInInventory(item.title, item.id);
+    if (status.inInventory) return;
+
+    const mainCat = item.details?.mainCategory || (item.details?.itemType === 'Waffe' ? 'Waffen' : 'Werkzeuge & Alltags-Gegenstände');
+    const customFromCodex: CustomInventoryItem = {
+      id: 'custom_' + item.id + '_' + Date.now(),
+      name: item.title,
+      category: mainCat,
+      subCategory: item.details?.subCategory || item.details?.itemType || 'Codex-Gegenstand',
+      slot: (mainCat === 'Waffen' || item.details?.itemType === 'Waffe') ? 'weapon' : 'inventory',
+      equipped: true,
+      rarity: item.details?.rarity || 'Gewöhnlich',
+      quality: item.details?.quality || 'Standard',
+      material: item.details?.material || 'Standard',
+      durability: item.details?.durability || '100 / 100',
+      weight: item.details?.weight || '1.0 kg',
+      value: item.details?.pricePerUnit || 50,
+      description: item.description || '',
+      specialEffects: item.details?.specialProperties || '',
+      enchantments: item.details?.magicalProperties || '',
+      originHistory: item.details?.loreHistory || '',
+      combatStats: item.details?.combatStats || {},
+      codexItemId: item.id
+    };
+
+    onChangeStructuredInventory({
+      ...structuredInventory,
+      customItems: [...customItems, customFromCodex]
+    });
+
+    setSaveSuccessMsg(`Gegenstand '${item.title}' wurde dem Inventar hinzugefügt.`);
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
+  const handleRemoveCodexItemFromInventory = (itemTitle: string, itemId?: string) => {
+    const normTitle = (itemTitle || '').toLowerCase().trim();
+
+    // 1. Filter customItems
+    const nextCustom = customItems.filter(ci => {
+      if (itemId && ci.codexItemId === itemId) return false;
+      if (ci.name && ci.name.toLowerCase().trim() === normTitle) return false;
+      return true;
+    });
+
+    // 2. Filter weapons
+    const nextWeapons = sanitizedWeapons.filter(w => w.toLowerCase().trim() !== normTitle);
+
+    // 3. Filter generalItems
+    const genItems = structuredInventory?.generalItems || [];
+    const nextGeneral = genItems.filter((g: any) => (typeof g === 'string' ? g : g?.name || '').toLowerCase().trim() !== normTitle);
+
+    // 4. Remove from armor if matching
+    const nextArmor = { ...(structuredInventory?.armor || {}) };
+    (Object.keys(nextArmor) as Array<keyof typeof nextArmor>).forEach(slot => {
+      if (getSlotString((nextArmor as any)[slot]).toLowerCase().trim() === normTitle) {
+        delete (nextArmor as any)[slot];
+      }
+    });
+
+    // 5. Remove from accessories if matching
+    const nextAccessories = { ...(structuredInventory?.accessories || {}) };
+    (Object.keys(nextAccessories) as Array<keyof typeof nextAccessories>).forEach(slot => {
+      if (getSlotString((nextAccessories as any)[slot]).toLowerCase().trim() === normTitle) {
+        delete (nextAccessories as any)[slot];
+      }
+    });
+
+    onChangeStructuredInventory({
+      ...structuredInventory,
+      customItems: nextCustom,
+      weapons: nextWeapons,
+      generalItems: nextGeneral,
+      armor: nextArmor,
+      accessories: nextAccessories
+    });
+
+    setSaveSuccessMsg(`Gegenstand '${itemTitle}' wurde aus dem Inventar entfernt.`);
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
+  const displayedCodexItems = useMemo(() => {
+    const sourceList = (codexFilterMode === 'char' && codexItemsForChar.length > 0) ? codexItemsForChar : allCodexGegenstaende;
+    return sourceList.filter(item => {
+      if (codexCategoryFilter !== 'all') {
+        const cat = item.details?.mainCategory || item.details?.itemType || 'Allgemein';
+        if (cat !== codexCategoryFilter) return false;
+      }
+      if (codexSearchQuery.trim()) {
+        const q = codexSearchQuery.toLowerCase().trim();
+        const t = (item.title || '').toLowerCase();
+        const d = (item.description || '').toLowerCase();
+        const c = (item.details?.mainCategory || item.details?.itemType || '').toLowerCase();
+        const o = (item.details?.owner || '').toLowerCase();
+        return t.includes(q) || d.includes(q) || c.includes(q) || o.includes(q);
+      }
+      return true;
+    });
+  }, [codexFilterMode, codexItemsForChar, allCodexGegenstaende, codexCategoryFilter, codexSearchQuery]);
 
   return (
     <div className="space-y-6">
@@ -482,24 +761,24 @@ export const CharacterInventorySection: React.FC<Props> = ({
                       {item.combatStats.damage && (
                         <div className="flex items-center gap-1 text-red-400">
                           <i className="fa-solid fa-khanda text-[9px]"></i>
-                          <span>Schaden: <strong>{item.combatStats.damage}</strong></span>
+                          <span>Schaden: <strong>{renderSafeText(item.combatStats.damage)}</strong></span>
                         </div>
                       )}
                       {item.combatStats.defense && (
                         <div className="flex items-center gap-1 text-sky-400">
                           <i className="fa-solid fa-shield text-[9px]"></i>
-                          <span>Rüstung: <strong>{item.combatStats.defense}</strong></span>
+                          <span>Rüstung: <strong>{renderSafeText(item.combatStats.defense)}</strong></span>
                         </div>
                       )}
                       {item.combatStats.scalingStat && (
                         <div className="flex items-center gap-1 text-amber-400">
                           <i className="fa-solid fa-scale-balanced text-[9px]"></i>
-                          <span>Skalierung: {item.combatStats.scalingStat}</span>
+                          <span>Skalierung: {renderSafeText(item.combatStats.scalingStat)}</span>
                         </div>
                       )}
                       {item.durability && (
                         <div className="text-slate-400 ml-auto font-mono text-[9px]">
-                          {item.durability}
+                          {renderSafeText(item.durability)}
                         </div>
                       )}
                     </div>
@@ -508,20 +787,20 @@ export const CharacterInventorySection: React.FC<Props> = ({
                   {item.specialEffects && (
                     <div className="text-[11px] text-amber-200/90 bg-amber-950/20 border border-amber-900/30 rounded-lg p-2 flex items-start gap-1.5">
                       <i className="fa-solid fa-bolt text-amber-400 text-[10px] mt-0.5 shrink-0"></i>
-                      <span>{item.specialEffects}</span>
+                      <span>{renderSafeText(item.specialEffects)}</span>
                     </div>
                   )}
 
                   {item.enchantments && (
                     <div className="text-[11px] text-purple-200/90 bg-purple-950/20 border border-purple-900/30 rounded-lg p-2 flex items-start gap-1.5">
                       <i className="fa-solid fa-sparkles text-purple-400 text-[10px] mt-0.5 shrink-0"></i>
-                      <span>{item.enchantments}</span>
+                      <span>{renderSafeText(item.enchantments)}</span>
                     </div>
                   )}
 
                   {item.description && (
                     <p className="text-[11px] text-slate-400 line-clamp-2 italic">
-                      "{item.description}"
+                      "{renderSafeText(item.description)}"
                     </p>
                   )}
                 </div>
@@ -582,119 +861,168 @@ export const CharacterInventorySection: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Kleidung & Rüstung */}
-        <div className="space-y-2">
-          <span className="text-[10px] text-sky-400 font-extrabold uppercase tracking-wide flex items-center gap-1.5">
-            <i className="fa-solid fa-shield-halved"></i> Kleidung &amp; Schutz
-          </span>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-            <div>
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Kopf</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Strohhut, Eisenhelm..."
-                value={structuredInventory?.armor?.head || ''}
+        {/* Kleidung / Schutz & Schmuck / Accessoires side-by-side on md, stacked on mobile */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Kleidung & Schutz */}
+          <div className="space-y-3 bg-slate-950/60 p-4 rounded-2xl border border-slate-800 shadow-inner">
+            <h5 className="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-800/80 pb-2">
+              <i className="fa-solid fa-shirt"></i> Kleidung &amp; Schutz
+            </h5>
+
+            {/* Kopf */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-hat-cowboy text-slate-500"></i> Kopf
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Strohhut, Eisenhelm...)"
+                value={getSlotString(structuredInventory?.armor?.head)}
                 onChange={e => updateArmorSlot('head', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
-            <div>
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Brust / Torso</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Lederharnisch, Robe..."
-                value={structuredInventory?.armor?.chest || ''}
+
+            {/* Brust / Torso */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-vest text-slate-500"></i> Brust / Torso
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Lederharnisch, Robe...)"
+                value={getSlotString(structuredInventory?.armor?.chest)}
                 onChange={e => updateArmorSlot('chest', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
-            <div>
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Hände</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Lederhandschuhe..."
-                value={structuredInventory?.armor?.hands || ''}
+
+            {/* Hände */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-hand text-slate-500"></i> Hände
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Lederhandschuhe...)"
+                value={getSlotString(structuredInventory?.armor?.hands)}
                 onChange={e => updateArmorSlot('hands', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
-            <div>
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Beine</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Stoffhose, Beinschienen..."
-                value={structuredInventory?.armor?.legs || ''}
+
+            {/* Beine */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-socks text-slate-500"></i> Beine
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Stoffhose, Beinschienen...)"
+                value={getSlotString(structuredInventory?.armor?.legs)}
                 onChange={e => updateArmorSlot('legs', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Füße</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Stiefel, Sandalen..."
-                value={structuredInventory?.armor?.feet || ''}
+
+            {/* Füße */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-shoe-prints text-slate-500"></i> Füße
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Stiefel, Sandalen...)"
+                value={getSlotString(structuredInventory?.armor?.feet)}
                 onChange={e => updateArmorSlot('feet', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
           </div>
-        </div>
 
-        {/* Schmuck & Accessoires */}
-        <div className="space-y-2 pt-2 border-t border-slate-800/60">
-          <span className="text-[10px] text-sky-400 font-extrabold uppercase tracking-wide flex items-center gap-1.5">
-            <i className="fa-solid fa-gem"></i> Schmuck &amp; Accessoires
-          </span>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-            <div>
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Finger</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Siegelring..."
-                value={structuredInventory?.accessories?.finger || ''}
+          {/* Schmuck & Accessoires */}
+          <div className="space-y-3 bg-slate-950/60 p-4 rounded-2xl border border-slate-800 shadow-inner">
+            <h5 className="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-800/80 pb-2">
+              <i className="fa-solid fa-gem"></i> Schmuck &amp; Accessoires
+            </h5>
+
+            {/* Finger */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-ring text-slate-500"></i> Finger
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Siegelring...)"
+                value={getSlotString(structuredInventory?.accessories?.finger)}
                 onChange={e => updateAccessorySlot('finger', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
-            <div>
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Hals</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Schutzamulett..."
-                value={structuredInventory?.accessories?.neck || ''}
+
+            {/* Hals */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-gem text-slate-500"></i> Hals
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Schutzamulett...)"
+                value={getSlotString(structuredInventory?.accessories?.neck)}
                 onChange={e => updateAccessorySlot('neck', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
-            <div>
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Handgelenke</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Armreif..."
-                value={structuredInventory?.accessories?.wrist || ''}
+
+            {/* Handgelenke */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-clock text-slate-500"></i> Handgelenke
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Armreif, Uhr...)"
+                value={getSlotString(structuredInventory?.accessories?.wrist)}
                 onChange={e => updateAccessorySlot('wrist', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
-            <div>
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Taille</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Gürtel, Schärpe..."
-                value={structuredInventory?.accessories?.waist || ''}
+
+            {/* Taille */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-ring text-slate-500"></i> Taille
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Gürtel, Schärpe...)"
+                value={getSlotString(structuredInventory?.accessories?.waist)}
                 onChange={e => updateAccessorySlot('waist', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
-            <div className="col-span-2 sm:col-span-1">
-              <label className="text-[9px] text-slate-500 block mb-1 uppercase font-bold">Rücken</label>
-              <input
-                type="text"
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
-                placeholder="z.B. Umhang, Tasche..."
-                value={structuredInventory?.accessories?.back || ''}
+
+            {/* Rücken */}
+            <div className="flex flex-col gap-1 bg-slate-900/40 border border-slate-800/80 p-2.5 rounded-xl focus-within:border-sky-500/80 transition-all">
+              <label className="text-[9px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-shield text-slate-500"></i> Rücken
+              </label>
+              <AutoExpandingTextarea
+                className="w-full bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500/80 focus:ring-1 focus:ring-sky-500/30 transition-all font-medium placeholder:text-slate-600 resize-none"
+                placeholder="Keine (z.B. Umhang, Rucksack...)"
+                value={getSlotString(structuredInventory?.accessories?.back)}
                 onChange={e => updateAccessorySlot('back', e.target.value)}
+                minRows={1}
+                readOnly={readOnly}
               />
             </div>
           </div>
@@ -718,7 +1046,7 @@ export const CharacterInventorySection: React.FC<Props> = ({
                 type="text"
                 className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
                 placeholder="Goldstücke / Berry"
-                value={structuredInventory?.currencyLabel || 'Goldstücke'}
+                value={getSlotString(structuredInventory?.currencyLabel) || 'Goldstücke'}
                 onChange={e => updateInventoryField('currencyLabel', e.target.value)}
               />
             </div>
@@ -733,16 +1061,16 @@ export const CharacterInventorySection: React.FC<Props> = ({
               type="text"
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 text-xs outline-none focus:border-sky-500"
               placeholder="z.B. Katana, Eisendolch, Zauberstab"
-              value={structuredInventory?.weapons ? structuredInventory.weapons.join(', ') : ''}
+              value={sanitizedWeapons.join(', ')}
               onChange={e => {
                 const list = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
                 updateInventoryField('weapons', list);
               }}
             />
-            {structuredInventory?.weapons && structuredInventory.weapons.length > 0 && (
+            {sanitizedWeapons.length > 0 && (
               <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                {structuredInventory.weapons.map((wName, idx) => {
-                  const hasCustom = customItems.some(ci => ci.name.toLowerCase() === wName.toLowerCase());
+                {sanitizedWeapons.map((wName, idx) => {
+                  const hasCustom = customItems.some(ci => (ci.name || '').toLowerCase() === wName.toLowerCase());
                   return (
                     <span
                       key={idx}
@@ -768,63 +1096,136 @@ export const CharacterInventorySection: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Verknüpfte Codex-Gegenstände */}
-        {codexItemsForChar.length > 0 && (
-          <div className="bg-slate-950/70 border border-amber-500/20 rounded-xl p-3 mt-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5 mb-2">
-              <i className="fa-solid fa-scroll text-amber-500 text-[10px]"></i>
-              Im Codex vorhandene Gegenstände (Besitzer: {characterName}):
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {codexItemsForChar.map(item => {
-                const alreadyInCustom = customItems.some(ci => ci.codexItemId === item.id || ci.name.toLowerCase() === item.title.toLowerCase());
+        {/* Im Codex vorhandene Gegenstände / Codex-Gegenstände Auswahl */}
+        {allCodexGegenstaende.length > 0 && (
+          <div className="bg-slate-950/70 border border-amber-500/20 rounded-xl p-3.5 mt-2 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-scroll text-amber-400 text-xs"></i>
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                  Im Codex vorhandene Gegenstände
+                </span>
+              </div>
+
+              {/* Filter Tabs & Modal Picker Trigger */}
+              <div className="flex items-center gap-2 flex-wrap text-xs">
+                {codexItemsForChar.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCodexFilterMode('char')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      codexFilterMode === 'char'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                    }`}
+                  >
+                    Besitzer: {characterName} ({codexItemsForChar.length})
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsCodexPickerOpen(true)}
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1.5 cursor-pointer ml-auto"
+                >
+                  <i className="fa-solid fa-magnifying-glass text-[10px]"></i>
+                  <span>Codex durchsuchen</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Search & Category Filter bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="sm:col-span-2">
+                <input
+                  type="text"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 placeholder:text-slate-500"
+                  placeholder="Gegenstand im Codex suchen..."
+                  value={codexSearchQuery}
+                  onChange={e => setCodexSearchQuery(e.target.value)}
+                />
+              </div>
+              <div>
+                <select
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+                  value={codexCategoryFilter}
+                  onChange={e => setCodexCategoryFilter(e.target.value)}
+                >
+                  <option value="all">Alle Kategorien</option>
+                  <option value="Waffen">Waffen</option>
+                  <option value="Rüstung">Rüstung &amp; Kleidung</option>
+                  <option value="Kleidung">Kleidung &amp; Textilien</option>
+                  <option value="Rohstoffe">Rohstoffe &amp; Materialien</option>
+                  <option value="Nahrung">Nahrung &amp; Getreide</option>
+                  <option value="Medizin">Medizin &amp; Alchemie</option>
+                  <option value="Magische">Magische Gegenstände</option>
+                  <option value="Werkzeuge">Werkzeuge &amp; Haushalt</option>
+                  <option value="Quest">Questgegenstände</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Grid of Codex Items */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
+              {displayedCodexItems.map(item => {
+                const status = checkInInventory(item.title, item.id);
                 return (
                   <div
                     key={item.id}
-                    className="p-2 bg-slate-900/90 border border-slate-800 rounded-lg flex items-center justify-between gap-2 text-xs"
+                    className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl flex flex-col justify-between gap-3 text-xs hover:border-slate-700 transition-all shadow-sm"
                   >
-                    <div className="truncate">
-                      <span className="font-bold text-slate-200 block truncate">{item.title}</span>
-                      <span className="text-[10px] text-slate-400">{item.details?.itemType || item.details?.mainCategory || 'Gegenstand'}</span>
+                    <div className="space-y-1">
+                      <span className="font-bold text-slate-100 block whitespace-normal break-words leading-snug">
+                        {item.title}
+                      </span>
+                      <div className="flex flex-col gap-0.5 text-[10px] text-slate-400">
+                        <span>
+                          {item.details?.itemType || item.details?.mainCategory || 'Gegenstand'}
+                        </span>
+                        {item.details?.owner && (
+                          <span className="text-slate-500 font-mono text-[9px]">
+                            Besitzer: {item.details.owner}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {!alreadyInCustom && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const customFromCodex: CustomInventoryItem = {
-                            id: 'custom_' + item.id,
-                            name: item.title,
-                            category: item.details?.mainCategory || 'Waffen',
-                            subCategory: item.details?.subCategory || item.details?.itemType || 'Katana',
-                            slot: item.details?.mainCategory === 'Waffen' ? 'weapon' : 'inventory',
-                            equipped: true,
-                            rarity: item.details?.rarity || 'Selten',
-                            quality: item.details?.quality || 'Meisterlich',
-                            material: item.details?.material || 'Stahl',
-                            durability: item.details?.durability || '100 / 100',
-                            weight: item.details?.weight || '1.0 kg',
-                            value: item.details?.pricePerUnit || 500,
-                            description: item.description || '',
-                            specialEffects: item.details?.specialProperties || '',
-                            enchantments: item.details?.magicalProperties || '',
-                            originHistory: item.details?.loreHistory || '',
-                            combatStats: item.details?.combatStats || {},
-                            codexItemId: item.id
-                          };
-                          onChangeStructuredInventory({
-                            ...structuredInventory,
-                            customItems: [...customItems, customFromCodex]
-                          });
-                        }}
-                        className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-[10px] font-bold shrink-0 cursor-pointer"
-                      >
-                        Zu Spezial-Items
-                      </button>
-                    )}
+                    <div className="flex items-center justify-between gap-2 border-t border-slate-800/65 pt-2 mt-1">
+                      {status.inInventory ? (
+                        <>
+                          <span className="px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-lg text-[9px] font-bold flex items-center gap-1 shrink-0">
+                            <i className="fa-solid fa-check text-[8px]"></i>
+                            <span>{status.locationLabel}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCodexItemFromInventory(item.title, item.id)}
+                            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 rounded-lg text-[9px] font-bold transition-all cursor-pointer shrink-0"
+                            title="Aus Inventar entfernen / löschen"
+                          >
+                            <i className="fa-solid fa-trash-can"></i>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleAddCodexItemToInventory(item)}
+                          className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
+                        >
+                          <i className="fa-solid fa-plus text-[9px]"></i>
+                          <span>Hinzufügen</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
+
+              {displayedCodexItems.length === 0 && (
+                <div className="col-span-full p-6 text-center text-xs text-slate-500 italic bg-slate-900/40 border border-dashed border-slate-800 rounded-xl">
+                  Keine passenden Codex-Gegenstände gefunden.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2077,6 +2478,179 @@ export const CharacterInventorySection: React.FC<Props> = ({
                   <span>Gegenstand Speichern</span>
                 </button>
               </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CODEX-GEGENSTÄNDE PICKER */}
+      {isCodexPickerOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-4xl rounded-2xl p-5 md:p-6 shadow-2xl my-auto space-y-4 max-h-[92vh] overflow-y-auto">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 text-sm">
+                  <i className="fa-solid fa-scroll"></i>
+                </span>
+                <div>
+                  <h3 className="text-sm md:text-base font-bold text-slate-100">
+                    Codex-Gegenstände verwalten &amp; auswählen
+                  </h3>
+                  <span className="text-[11px] text-slate-400">
+                    Wähle vorhandene Gegenstände aus dem Welt-Codex aus, um sie dem Charakter-Inventar hinzuzufügen oder wieder zu entfernen.
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsCodexPickerOpen(false)}
+                className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            {/* Filter controls */}
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {/* Search */}
+                <div className="sm:col-span-2">
+                  <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                    Suchbegriff
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500"
+                      placeholder="Name, Beschreibung, Besitzer oder Kategorie eingeben..."
+                      value={codexSearchQuery}
+                      onChange={e => setCodexSearchQuery(e.target.value)}
+                    />
+                    <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-500 text-xs"></i>
+                  </div>
+                </div>
+
+                {/* Filter mode */}
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold uppercase block mb-1">
+                    Besitzer-Filter
+                  </label>
+                  <select
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+                    value={codexFilterMode}
+                    onChange={e => setCodexFilterMode(e.target.value as any)}
+                  >
+                    <option value="all">Alle Codex-Gegenstände ({allCodexGegenstaende.length})</option>
+                    {characterName && (
+                      <option value="char">Nur für {characterName} ({codexItemsForChar.length})</option>
+                    )}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Item Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[55vh] overflow-y-auto pr-1">
+              {displayedCodexItems.map(item => {
+                const status = checkInInventory(item.title, item.id);
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
+                      status.inInventory
+                        ? 'bg-slate-950/90 border-emerald-500/30 shadow-sm'
+                        : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-100">{item.title}</span>
+                        {status.inInventory ? (
+                          <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded text-[10px] font-bold shrink-0 flex items-center gap-1">
+                            <i className="fa-solid fa-check text-[9px]"></i>
+                            <span>{status.locationLabel}</span>
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 bg-slate-800 text-slate-400 border border-slate-700 rounded text-[10px] font-medium shrink-0">
+                            Nicht im Inventar
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
+                        <span className="text-amber-400/90 font-medium">{item.details?.mainCategory || item.details?.itemType || 'Gegenstand'}</span>
+                        {item.details?.rarity && <span>• {item.details.rarity}</span>}
+                        {item.details?.owner && <span className="text-slate-400 font-mono">• Besitzer: {item.details.owner}</span>}
+                        {item.details?.pricePerUnit && <span>• Wert: {item.details.pricePerUnit} Münzen</span>}
+                      </div>
+
+                      {item.description && (
+                        <p className="text-[11px] text-slate-400 line-clamp-2 italic">
+                          "{item.description}"
+                        </p>
+                      )}
+
+                      {item.details?.specialProperties && (
+                        <div className="text-[10px] text-amber-300/90 bg-amber-950/20 border border-amber-900/30 rounded p-1.5">
+                          Eigenschaften: {item.details.specialProperties}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 border-t border-slate-800/80 pt-2.5 mt-1">
+                      {status.inInventory ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCodexItemFromInventory(item.title, item.id)}
+                          className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-trash-can"></i>
+                          <span>Aus Inventar löschen</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleAddCodexItemToInventory(item)}
+                          className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-plus"></i>
+                          <span>Ins Inventar übernehmen</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {displayedCodexItems.length === 0 && (
+                <div className="col-span-full p-8 text-center bg-slate-950/40 border border-dashed border-slate-800 rounded-xl space-y-1">
+                  <i className="fa-solid fa-scroll text-slate-600 text-2xl mb-1"></i>
+                  <span className="text-xs text-slate-400 block font-medium">
+                    Keine passenden Codex-Gegenstände gefunden.
+                  </span>
+                  <span className="text-[11px] text-slate-500 block">
+                    Passe deine Suchbegriffe an oder erstelle neue Gegenstände im Welten-Codex.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-slate-800 pt-3">
+              <span className="text-xs text-slate-400">
+                Gegenstände im Codex: <strong>{allCodexGegenstaende.length}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsCodexPickerOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                Fertig / Schließen
+              </button>
             </div>
 
           </div>

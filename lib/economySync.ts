@@ -1087,67 +1087,43 @@ export const syncCodexItemsToEconomy = (
 
   let changed = false;
   const updatedHoldings = economy.holdings.map(h => ({ ...h }));
-
   const itemEntries = loreDatabase.filter(e => e.category === 'Gegenstände');
 
-  itemEntries.forEach(item => {
-    const d = item.details || {};
-    const targetHoldingId = d.producingHoldingId || d.holdingId;
-    const itemName = item.title?.trim();
-    if (!itemName) return;
+  // Synchronize ONLY existing resources that reference loreItemId or match title
+  updatedHoldings.forEach(holding => {
+    if (!holding.resources || !Array.isArray(holding.resources)) return;
+    const resources = [...holding.resources];
+    let holdingChanged = false;
 
-    if (targetHoldingId) {
-      const holding = updatedHoldings.find(h => h.id === targetHoldingId || h.name.toLowerCase() === d.producingHoldingName?.toLowerCase());
-      if (holding) {
-        const resources = holding.resources ? [...holding.resources] : [];
-        const existingIdx = resources.findIndex(r => r.name.toLowerCase() === itemName.toLowerCase());
-        
-        const amount = d.stockAmount !== undefined ? Number(d.stockAmount) : 20;
-        const maxCapacity = d.maxCapacity !== undefined ? Number(d.maxCapacity) : 100;
-        const unit = d.unit || 'Stück';
-        const pricePerUnit = d.pricePerUnit !== undefined ? Number(d.pricePerUnit) : 10;
-        const condition = d.condition || 'gut';
-        const matchedCategoryMeta = ITEM_MAIN_CATEGORIES.find(c => c.id === d.mainCategory);
-        const resourceCategory = matchedCategoryMeta ? matchedCategoryMeta.economyCategory : 'goods';
+    resources.forEach((res, idx) => {
+      const matchedCodexItem = itemEntries.find(
+        item => item.id === res.loreItemId || item.title?.trim().toLowerCase() === res.name?.trim().toLowerCase()
+      );
 
-        if (existingIdx >= 0) {
-          const existing = resources[existingIdx];
-          if (
-            existing.amount !== amount ||
-            existing.maxCapacity !== maxCapacity ||
-            existing.pricePerUnit !== pricePerUnit ||
-            existing.unit !== unit ||
-            existing.condition !== condition
-          ) {
-            resources[existingIdx] = {
-              ...existing,
-              amount,
-              maxCapacity,
-              unit,
-              pricePerUnit,
-              condition,
-              category: resourceCategory as any,
-              notes: item.description || existing.notes
-            };
-            holding.resources = resources;
-            changed = true;
-          }
-        } else {
-          resources.push({
-            id: `res-${holding.id}-${item.id || Date.now()}`,
-            name: itemName,
-            category: resourceCategory as any,
-            amount,
-            maxCapacity,
-            unit,
-            pricePerUnit,
-            condition,
-            notes: item.description || ''
-          });
-          holding.resources = resources;
-          changed = true;
+      if (matchedCodexItem) {
+        let updatedRes = { ...res };
+        let resModified = false;
+
+        if (!res.loreItemId) {
+          updatedRes.loreItemId = matchedCodexItem.id;
+          resModified = true;
+        }
+
+        if (matchedCodexItem.title && res.name !== matchedCodexItem.title) {
+          updatedRes.name = matchedCodexItem.title;
+          resModified = true;
+        }
+
+        if (resModified) {
+          resources[idx] = updatedRes;
+          holdingChanged = true;
         }
       }
+    });
+
+    if (holdingChanged) {
+      holding.resources = resources;
+      changed = true;
     }
   });
 

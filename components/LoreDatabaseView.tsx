@@ -18,6 +18,7 @@ import WorldKnowledgeManager from './WorldKnowledgeManager';
 import { syncEconomyWithWorld, syncCodexItemsToEconomy } from '../lib/economySync';
 import { normalizeRelationships } from '../lib/relationshipHelper';
 import { enrichAndCompleteLoreEntry, sanitizeCharacterNameAndProfession, sanitizeRulerNameAndTitle } from '../lib/loreSanitizer';
+import { migrateLegacyProfessionData } from '../services/professionCompetencyService';
 
 interface Props {
   lore: LoreEntry[];
@@ -42,15 +43,6 @@ const CATEGORIES: (LoreCategory | 'Verhüllung')[] = ['Charaktere', 'Rassen', 'V
 const GENDER_OPTIONS = ["Männlich", "Weiblich", "Divers", "Nicht-Binär", "Androgyn", "Unbekannt"];
 const BUILD_OPTIONS = ["Schlank", "Sportlich", "Muskulös", "Kräftig", "Zierlich", "Drahtig", "Kurvig", "Stämmig", "Hager", "Unbekannt"];
 const CUP_SIZE_OPTIONS = ["-", "AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"];
-
-const ITEM_TYPE_OPTIONS = [
-  "Verbrauchsgüter",
-  "Waffen",
-  "Rüstung / Kleidung",
-  "Artefakte / Zubehör",
-  "Werkzeuge & Alltags-Gegenstände",
-  "Questgegenstände / Story-Objekte"
-];
 
 export interface TerrainPreset {
   id: string;
@@ -2777,17 +2769,21 @@ const LoreDatabaseView: React.FC<Props> = ({
     const updatedDetails = { ...(actorEntry.details || {}) };
     const updatedKnowledgeMap = { ...(updatedDetails.knowledgeMap || {}) };
     
-    if (text.trim() === '') {
+    const strText = typeof text === 'string' ? text : (text ? String(text) : '');
+    if (strText.trim() === '') {
       delete updatedKnowledgeMap[targetTitle];
     } else {
-      updatedKnowledgeMap[targetTitle] = text;
+      updatedKnowledgeMap[targetTitle] = strText;
     }
     
     updatedDetails.knowledgeMap = updatedKnowledgeMap;
     
     const lines = Object.entries(updatedKnowledgeMap)
-      .filter(([_, t]) => (t as string).trim().length > 0)
-      .map(([name, t]) => `- Über ${name}: ${(t as string).trim()}`);
+      .map(([name, t]) => {
+        const val = typeof t === 'string' ? t.trim() : (t ? String(t).trim() : '');
+        return val.length > 0 ? `- Über ${name}: ${val}` : '';
+      })
+      .filter(Boolean);
     const knowledgeStr = lines.length > 0 ? lines.join('\n') : '';
     
     const updatedEntry = {
@@ -2862,6 +2858,23 @@ const LoreDatabaseView: React.FC<Props> = ({
 
     if (entry.category === 'Gegenstände') {
       setItemSubTab('form');
+    }
+
+    if (entry.category === 'Charaktere' && preparedEntry.details) {
+      const details = preparedEntry.details;
+      const needsMigration =
+        (details.profession || details.role || details.jobTitle) &&
+        (!details.positions || !details.professionField || !details.professionProgress);
+      if (needsMigration) {
+        const migrated = migrateLegacyProfessionData(details as any);
+        preparedEntry = {
+          ...preparedEntry,
+          details: {
+            ...details,
+            ...migrated
+          }
+        };
+      }
     }
 
     setEditForm(preparedEntry);

@@ -135,29 +135,29 @@ export function normalizeAbilityHierarchy(char: any): {
         id: 'ps_default',
         source: char.powerSource || char.powerName,
         powerName: char.powerName || char.powerSource,
-        cost: char.powerCost || 'Mana',
+        cost: char.powerCost || '',
         powerDescription: char.powerDescription || ''
       }] : [{
         id: 'ps_default',
-        source: 'Standard-Kraftquelle',
-        powerName: 'Standard-Kraftquelle',
-        cost: 'Mana',
+        source: '',
+        powerName: '',
+        cost: '',
         powerDescription: ''
       }]);
 
   rawSources.forEach((ps, idx) => {
     if (!ps) return;
-    const pName = (ps.powerName || ps.source || 'Standard-Kraftquelle').trim();
+    const pName = (ps.powerName || ps.source || '').trim();
     const id = ps.id || `ps_${idx + 1}`;
     const existing = Array.from(powerSourcesMap.values()).find(
-      p => p.id === id || p.powerName.toLowerCase() === pName.toLowerCase()
+      p => p.id === id || (pName && p.powerName.toLowerCase() === pName.toLowerCase())
     );
     if (!existing) {
       powerSourcesMap.set(id, {
         id,
-        source: ps.source || pName,
+        source: ps.source || pName || '',
         powerName: pName,
-        cost: ps.cost || 'Mana',
+        cost: ps.cost || '',
         powerDescription: ps.powerDescription || ''
       });
     }
@@ -166,9 +166,9 @@ export function normalizeAbilityHierarchy(char: any): {
   if (powerSourcesMap.size === 0) {
     powerSourcesMap.set('ps_default', {
       id: 'ps_default',
-      source: 'Standard-Kraftquelle',
-      powerName: 'Standard-Kraftquelle',
-      cost: 'Mana',
+      source: '',
+      powerName: '',
+      cost: '',
       powerDescription: ''
     });
   }

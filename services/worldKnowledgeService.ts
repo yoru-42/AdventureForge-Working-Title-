@@ -136,6 +136,30 @@ export const FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE = `
    - Sie dürfen weder darauf anspielen, noch danach handeln, noch Vorkehrungen treffen oder so tun, als hätten sie Vorwissen. Sie erfahren von diesen Absichten und Plänen ERST DANN, wenn ihnen ein anwesender Charakter im Chat persönlich und direkt davon erzählt.
 `;
 
+export const REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE = `
+### STRIKTE REGELN FÜR ERZÄHLSTRUKTUR, ORGANISCHE KAUSALITÄT & REALISTISCHE INFORMATIONSVERBREITUNG:
+
+1. ABSOLUTES VERBOT DES DREHBUCH- / VORAB-WISSENS FÜR NPCs (KEIN TELEPATHISCHES DREHBUCH-VERHALTEN):
+   - NPCs verhalten und äußern sich NIEMALS so, als hätten sie den Kampagnenplan, die Timeline oder den Codex der Welt im Voraus gelesen.
+   - Spontane, impulshaft getroffene Entscheidungen (z. B. wenn ein Charakter spontan jemanden entführt, um ihn sofort zu heiraten, oder unangekündigt an einem Ort auftaucht) dürfen von NPCs vor Ort NIEMALS als im Voraus vereinbarter Termin behandelt werden (z. B. KEIN Priester, der sagt: "Ihr seid spät, Herr Baron...").
+   - Unangekündigte oder überraschende Vorfälle MÜSSEN von der Welt und ihren Bewohnern vollkommen realistisch mit Überraschung, Schock, Verwirrung oder Furcht verarbeitet werden! Niemand darf so tun, als hätte er auf diesen spezifischen unangekündigten Vorfall gewartet.
+
+2. REALISTISCHE INFORMATIONSVERBREITUNG & ZEITVERZÖGERUNG DURCH BOTEN (KEINE AUGENBLICKLICHE OMNIPRÄSENZ DER WELT):
+   - Nachrichten, Morde, Geheimnisse oder traumatische Vorkommnisse verbreiten sich in einer simulierten Welt NIEMALS augenblicklich, hellseherisch oder per Telepathie!
+   - Wenn im Zimmer eines Anwesens vor 5 Minuten zwei Personen gestorben oder ermordet worden sind (z. B. der Baron und die Baronin), weiß NIEMAND außerhalb dieses geschlossenen Raumes davon! Weder Sklavenjäger in den Slums, noch der Kaiserliche Hof in der Hauptstadt, noch rivalisierende Fraktionen.
+   - Informationen bewegen sich AUSSCHLIESSLICH durch physische Boten, Zeugen, das Entdecken von Leichen, offizielle Verkündigungen oder Gerüchte über real verstreichende Zeit (Stunden, Tage, Wochen).
+   - Dritte Parteien (wie Sklavenjäger, Feinde, ferner Hof) dürfen NIEMALS wenige Minuten nach einer geheimen oder frischen Tat bereits davon wissen oder gar schon Gegenmaßnahmen ergreifen. Sie erfahren es erst, wenn Nachrichten sie physisch erreichen.
+
+3. ORGANISCHE KAUSALITÄT & FOKUS AUF DIE DIREKTE GEGENWART (KEIN SCHNELLES ABHAKEN DER TIMELINE):
+   - Die Story-Stationen in der Timeline / im Codex sind Ziel-Meilensteine für den DM, um die Welt über längere Zeiträume organisch zu steuern. Sie sind KEINE Fahrpläne, die innerhalb weniger Spielminuten im Zeitraffer abgehakt oder in NPC-Dialoge gequetscht werden dürfen.
+   - Lass Szenen organischer atmen: Wenn soeben eine Schreckens- oder Schicksalstat geschehen ist, konzentriere dich zu 100% auf die unmittelbare Gegenwart (die Leichen am Boden, die blutigen Hände, das zitternde Gesinde im Raum, das Vertuschen der Spuren, die akute Schockstarre).
+   - Erfinde keine verfrühten Behauptungen von NPCs über fernstehende Mächte ("Der Hof sucht bereits nach Gründen...", "Die Sklavenjäger wissen es schon..."), die in der logischen Realität der Szene noch gar keine Kenntnis davon haben können.
+
+4. LOGIK DER DIALOGE VON BEGLEITERN & ANWESENDEN NPCs:
+   - Begleiter oder anwesende Figuren (wie Prinzessinnen, Berater, Wachen) sprechen AUSSCHLIESSLICH über Fakten, die sie persönlich miterlebt haben oder die logisch in diesem Moment bekannt sind.
+   - Wenn ein NPC Druck ausübt oder Gefahren anspricht, darf er nur reale, logische Befürchtungen nennen (z. B. "Wenn die Wachen das entdecken...", "Sobald morgen früh keine Nachrichten aus dem Anwesen dringen..."), aber NIEMALS behaupten, dass abwesende Dritte JETZT SCHON davon wissen.
+`;
+
 export class WorldKnowledgeService {
   /**
    * Evaluates if sourceNew has higher or equal priority over sourceOld

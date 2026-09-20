@@ -6,15 +6,24 @@ import { formatCharacterProfessionsForAI } from '../services/professionCompetenc
  */
 export function formatMotivationCoreForAI(core?: MotivationCore): string {
   if (!core) return '';
+  const toStr = (val: any): string => {
+    if (typeof val === 'string') return val.trim();
+    if (Array.isArray(val)) return val.filter(Boolean).join(', ');
+    if (val !== null && val !== undefined && typeof val === 'object') {
+      return Object.entries(val).map(([k, v]) => `${k}: ${v}`).join(', ');
+    }
+    return val ? String(val).trim() : '';
+  };
+
   const parts: string[] = [];
-  if (core.mainGoal) parts.push(`Hauptziel: ${core.mainGoal}`);
-  if (core.whyGoal) parts.push(`Warum dieses Ziel?: ${core.whyGoal}`);
-  if (core.currentPriorities) parts.push(`Aktuelle Prioritäten: ${core.currentPriorities}`);
-  if (core.needs) parts.push(`Bedürfnisse: ${core.needs}`);
-  if (core.fears) parts.push(`Ängste: ${core.fears}`);
-  if (core.valuesPrinciples) parts.push(`Werte/Prinzipien: ${core.valuesPrinciples}`);
-  if (core.methodsAndMeans) parts.push(`Methoden/Mittel: ${core.methodsAndMeans}`);
-  if (core.changeTriggers) parts.push(`Veränderungsauslöser: ${core.changeTriggers}`);
+  if (toStr(core.mainGoal)) parts.push(`Hauptziel: ${toStr(core.mainGoal)}`);
+  if (toStr(core.whyGoal)) parts.push(`Warum dieses Ziel?: ${toStr(core.whyGoal)}`);
+  if (toStr(core.currentPriorities)) parts.push(`Aktuelle Prioritäten: ${toStr(core.currentPriorities)}`);
+  if (toStr(core.needs)) parts.push(`Bedürfnisse: ${toStr(core.needs)}`);
+  if (toStr(core.fears)) parts.push(`Ängste: ${toStr(core.fears)}`);
+  if (toStr(core.valuesPrinciples)) parts.push(`Werte/Prinzipien: ${toStr(core.valuesPrinciples)}`);
+  if (toStr(core.methodsAndMeans)) parts.push(`Methoden/Mittel: ${toStr(core.methodsAndMeans)}`);
+  if (toStr(core.changeTriggers)) parts.push(`Veränderungsauslöser: ${toStr(core.changeTriggers)}`);
 
   if (parts.length === 0) return '';
   return `Motivationskern:\n    - ${parts.join('\n    - ')}`;
@@ -91,7 +100,7 @@ export function formatRelationshipForAI(rel: CharacterRelationship, sourceCharNa
   }
 
   // 8. Schlüsselereignisse
-  if (rel.keyEvents && rel.keyEvents.length > 0) {
+  if (Array.isArray(rel.keyEvents) && rel.keyEvents.length > 0) {
     const eventsStr = rel.keyEvents.map(e => `${e.title}${e.dateOrChapter ? ` (${e.dateOrChapter})` : ''}: ${e.description}${e.impact ? ` [Auswirkung: ${e.impact}]` : ''}`).join('; ');
     parts.push(`[BEZIEHUNGS-EREIGNISSE (Historischer Kanon): ${eventsStr}]`);
   }

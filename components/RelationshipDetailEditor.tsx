@@ -150,7 +150,7 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
             if (Array.isArray(genVal) && genVal.length > 0) {
               updatedRel.keyEvents = (hasUserInstruction || isBlank(curVal))
                 ? genVal
-                : [...(curVal || []), ...genVal];
+                : [...(Array.isArray(curVal) ? curVal : []), ...genVal];
             }
           } else {
             // Drop field if user provided explicit instruction OR current value is empty
@@ -206,12 +206,12 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
     };
     onChange({
       ...rel,
-      keyEvents: [...(rel.keyEvents || []), newEvent]
+      keyEvents: [...(Array.isArray(rel.keyEvents) ? rel.keyEvents : []), newEvent]
     });
   };
 
   const updateKeyEvent = (eventId: string, updatedEvent: Partial<RelationshipEvent>) => {
-    const updatedList = (rel.keyEvents || []).map(ev => ev.id === eventId ? { ...ev, ...updatedEvent } : ev);
+    const updatedList = (Array.isArray(rel.keyEvents) ? rel.keyEvents : []).map(ev => ev.id === eventId ? { ...ev, ...updatedEvent } : ev);
     onChange({
       ...rel,
       keyEvents: updatedList
@@ -221,7 +221,7 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
   const removeKeyEvent = (eventId: string) => {
     onChange({
       ...rel,
-      keyEvents: (rel.keyEvents || []).filter(ev => ev.id !== eventId)
+      keyEvents: (Array.isArray(rel.keyEvents) ? rel.keyEvents : []).filter(ev => ev.id !== eventId)
     });
   };
 
@@ -627,7 +627,7 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
               }`}
             >
               <i className="fa-solid fa-timeline text-[11px]"></i>
-              Ereignis-Chronik {rel.keyEvents && rel.keyEvents.length > 0 ? `(${rel.keyEvents.length})` : ''}
+              Ereignis-Chronik {Array.isArray(rel.keyEvents) && rel.keyEvents.length > 0 ? `(${rel.keyEvents.length})` : ''}
             </button>
           </div>
 
@@ -1091,13 +1091,13 @@ export const RelationshipDetailEditor: React.FC<Props> = ({
                 </button>
               </div>
 
-              {(!rel.keyEvents || rel.keyEvents.length === 0) ? (
+              {(!Array.isArray(rel.keyEvents) || rel.keyEvents.length === 0) ? (
                 <div className="text-xs text-slate-500 italic p-4 text-center bg-slate-950/40 rounded-lg border border-slate-800">
                   Noch keine Schlüsselereignisse erfasst. Klicke auf "+ Ereignis hinzufügen", um wichtige Wendepunkte in dieser Beziehung einzutragen.
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {rel.keyEvents.map((ev, evIdx) => (
+                  {(Array.isArray(rel.keyEvents) ? rel.keyEvents : []).map((ev, evIdx) => (
                     <div key={ev.id || evIdx} className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 flex flex-col gap-2 relative">
                       <button
                         type="button"
