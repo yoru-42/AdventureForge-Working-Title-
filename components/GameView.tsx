@@ -1666,6 +1666,11 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const addedNames = new Set<string>();
 
     const currentLoc = LocationContextService.resolveCurrentLocation(adventure);
+    const locOptions = {
+      holdings: adventure.world?.economyConfig?.holdings,
+      loreEntries: adventure.loreDatabase,
+      territories: adventure.world?.territories
+    };
 
     // 1. Check all NPCs - ONLY HOSTILE ONES PRESENT AT LOCATION
     (adventure.npcs || []).forEach(npc => {
@@ -1686,7 +1691,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
       if (isAlly || !isExplicitlyHostile) return;
 
-      const isPresent = LocationContextService.isCharacterAtLocation(npc, currentLoc) || (isCombatActive && selectedEnemyId === npc.id);
+      const isPresent = LocationContextService.isCharacterAtLocation(npc, currentLoc, locOptions) || (isCombatActive && selectedEnemyId === npc.id);
       if (!isPresent) return;
 
       const lowerName = (npc.nickname || npc.name).toLowerCase();
@@ -1715,7 +1720,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       const isFriendlyNpc = (adventure.npcs || []).some(n => !n.isHostile && isNameMatch(n.name, n.nickname || (n as any).rufName, enemy.title));
       if (isFriendlyNpc) return;
 
-      const isPresent = LocationContextService.isCharacterAtLocation(enemy, currentLoc) || (isCombatActive && selectedEnemyId === enemy.id);
+      const isPresent = LocationContextService.isCharacterAtLocation(enemy, currentLoc, locOptions) || (isCombatActive && selectedEnemyId === enemy.id);
       if (!isPresent) return;
 
       const isGroup = enemy.details?.itemType === 'Gruppe' || 
@@ -5405,14 +5410,19 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
   const availableDialogueNpcs = React.useMemo(() => {
     const allChars = getAllAdventureCharacters(adventure);
     const locCtx = LocationContextService.resolveCurrentLocation(adventure);
-    const presentChars = LocationContextService.filterPresentCharacters(allChars, locCtx);
+    const locOptions = {
+      holdings: adventure.world?.economyConfig?.holdings,
+      loreEntries: adventure.loreDatabase,
+      territories: adventure.world?.territories
+    };
+    const presentChars = LocationContextService.filterPresentCharacters(allChars, locCtx, locOptions);
     const nonPlayerPresent = presentChars.filter(char => {
       if (char.id === 'player') return false;
       if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, char.name || (char as any).title)) return false;
       return true;
     });
     return nonPlayerPresent;
-  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player]);
+  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player, adventure.world?.economyConfig?.holdings, adventure.world?.territories]);
 
   // Set default speaker IDs when npcs change or on mount
   useEffect(() => {

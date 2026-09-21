@@ -78,6 +78,9 @@ export class LocationContextService {
       .replace(/[„“”]/g, '"')
       .trim();
 
+    const isRoomKeyword = /schankraum|küche|gaststube|keller|lager|zimmer|schlafzimmer|saal|flur|dachboden|werkstatt|schmiede|tresen|kammer|büro|empfang|labor|gemach|privatzimmer|speisesaal|stube|thronsaal/i;
+    const isBuildingKeyword = /taverne|gasthaus|herberge|wirtshaus|schmiede|burg|festung|tempel|schrein|kirche|kathedrale|gilde|zunfthaus|laden|geschäft|kontor|rathaus|palast|schloss|anwesen|gutshaus|werkstatt|turm|hospital|lazarett|mühle|bäckerei|brauerei|kaserne|garde|posten|quartier/i;
+
     // 1. Check for arrow syntax: "A → B → C" or "A -> B -> C"
     if (cleanInput.includes('→') || cleanInput.includes('->')) {
       const parts = cleanInput.split(/→|->/).map(p => p.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
@@ -98,6 +101,14 @@ export class LocationContextService {
             roomName: parts[1]
           };
         }
+
+        if (isRoomKeyword.test(parts[1]) || isBuildingKeyword.test(parts[0])) {
+          return {
+            buildingName: parts[0],
+            roomName: parts[1]
+          };
+        }
+
         return {
           locationName: parts[0],
           buildingName: parts[1]
@@ -117,15 +128,38 @@ export class LocationContextService {
       }
     }
 
-    // 3. Check for parenthesized syntax: "Zum Hirsch (Schankraum)" or "Schankraum (Zum Hirsch, Falkengrund)"
+    // 3. Check for slash syntax: "Nordlande / Eichenhain" or "Falkengrund / Taverne"
+    if (cleanInput.includes('/')) {
+      const slashParts = cleanInput.split('/').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+      if (slashParts.length === 2) {
+        const p0 = slashParts[0];
+        const p1 = slashParts[1];
+        if (isBuildingKeyword.test(p1) || isRoomKeyword.test(p1)) {
+          if (isRoomKeyword.test(p1)) {
+            return {
+              buildingName: p0,
+              roomName: p1
+            };
+          }
+          return {
+            locationName: p0,
+            buildingName: p1
+          };
+        }
+        return {
+          regionName: p0,
+          locationName: p1
+        };
+      }
+    }
+
+    // 4. Check for parenthesized syntax: "Zum Hirsch (Schankraum)" or "Schankraum (Zum Hirsch, Falkengrund)"
     const parenMatch = cleanInput.match(/^([^(]+)\s*\(([^)]+)\)$/);
     if (parenMatch) {
       const mainPart = parenMatch[1].trim();
       const subPart = parenMatch[2].trim();
 
-      // Check if mainPart is a room name and subPart has building/location
-      const isRoomKeywords = /schankraum|küche|zimmer|schlafzimmer|saal|flur|keller|dachboden|werkstatt|schmiede|tresen|kammer/i;
-      if (isRoomKeywords.test(mainPart)) {
+      if (isRoomKeyword.test(mainPart)) {
         const subSub = this.parseLocationString(subPart, holdings, loreEntries, territories);
         return {
           ...subSub,
@@ -133,8 +167,7 @@ export class LocationContextService {
         };
       }
 
-      // Or mainPart is building and subPart is room
-      const holdingMatch = holdings.find(h => h.name.toLowerCase().includes(mainPart.toLowerCase()) || mainPart.toLowerCase().includes(h.name.toLowerCase()));
+      const holdingMatch = holdings.find(h => h.name.toLowerCase() === mainPart.toLowerCase() || h.name.toLowerCase().includes(mainPart.toLowerCase()));
       if (holdingMatch) {
         return {
           buildingId: holdingMatch.id,
@@ -145,12 +178,18 @@ export class LocationContextService {
           roomName: subPart
         };
       }
+
+      if (isBuildingKeyword.test(mainPart)) {
+        return {
+          buildingName: mainPart,
+          roomName: subPart
+        };
+      }
     }
 
-    // 4. Match against registered holdings in the world
+    // 5. Match against registered holdings in the world
     for (const h of holdings) {
-      if (cleanInput.toLowerCase().includes(h.name.toLowerCase())) {
-        // Check if there is room mentioned in the remainder
+      if (this.isExactLocationMatch(cleanInput, h.name) || cleanInput.toLowerCase().includes(h.name.toLowerCase())) {
         let roomName: string | undefined;
         const lowerInput = cleanInput.toLowerCase();
         const roomsToCheck = [
@@ -177,9 +216,9 @@ export class LocationContextService {
       }
     }
 
-    // 5. Match against Lore entries (Orte, Gebäude)
+    // 6. Match against Lore entries (Orte, Gebäude)
     for (const l of loreEntries) {
-      if (l.title && cleanInput.toLowerCase().includes(l.title.toLowerCase())) {
+      if (l.title && (this.isExactLocationMatch(cleanInput, l.title) || cleanInput.toLowerCase().includes(l.title.toLowerCase()))) {
         if ((l.category as string) === 'Gebäude' || (l.details?.itemType || '').toLowerCase().includes('gebäude')) {
           return {
             buildingId: l.id,
@@ -198,15 +237,26 @@ export class LocationContextService {
       }
     }
 
-    // 6. Match against Territories
+    // 7. Match against Territories
     for (const t of territories) {
-      if (cleanInput.toLowerCase().includes(t.name.toLowerCase())) {
+      if (this.isExactLocationMatch(cleanInput, t.name)) {
         return {
           territoryId: t.id,
-          territoryName: t.name,
-          locationName: cleanInput
+          territoryName: t.name
         };
       }
+    }
+
+    // 8. Keyword fallback classification if not matched to lore/holdings
+    if (isRoomKeyword.test(cleanInput)) {
+      return {
+        roomName: cleanInput
+      };
+    }
+    if (isBuildingKeyword.test(cleanInput)) {
+      return {
+        buildingName: cleanInput
+      };
     }
 
     // Default simple location
@@ -520,65 +570,243 @@ export class LocationContextService {
   }
 
   /**
-   * Checks if a character is at the current structured location.
-   * Matches room, building, location, and territory hierarchy.
+   * Helper to normalize location strings and names for clean, exact comparison without loose substring flaws.
    */
-  public static isCharacterAtLocation(
+  public static normalizeLocationName(s?: string): string {
+    if (!s) return '';
+    return s
+      .toLowerCase()
+      .replace(/[„“”"'`]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /**
+   * Helper to check exact equality of normalized location strings.
+   */
+  public static isExactLocationMatch(a?: string, b?: string): boolean {
+    const normA = this.normalizeLocationName(a);
+    const normB = this.normalizeLocationName(b);
+    if (!normA || !normB) return false;
+    return normA === normB;
+  }
+
+  /**
+   * Extracts or parses structured location context from a character (NPC, Character, LoreEntry, StoryEntityItem).
+   */
+  public static extractCharacterLocationContext(
     character: any,
-    currentLocation: CurrentLocationContext
-  ): boolean {
-    if (!character || !currentLocation) return false;
+    holdings: EconomyHolding[] = [],
+    loreEntries: LoreEntry[] = [],
+    territories: Territory[] = []
+  ): CurrentLocationContext | null {
+    if (!character) return null;
 
-    // Player is always at currentLocation
-    if (character.id === 'player') return true;
+    // Direct structured object if present
+    if (character.currentLocationContext && typeof character.currentLocationContext === 'object') {
+      return character.currentLocationContext;
+    }
+    if (character.currentLocation && typeof character.currentLocation === 'object' && character.currentLocation.locationName) {
+      return character.currentLocation;
+    }
 
-    // Check raw character location fields
-    const rawCharLoc = (
+    // Explicit structured details
+    const details = character.details || {};
+    const explicitRoom = details.roomName || details.room;
+    const explicitBuilding = details.buildingName || details.building || details.holdingName;
+    const explicitLocation = details.locationName || details.parentPlaceName || details.placeName || details.town || details.city;
+    const explicitTerritory = details.territory || details.territoryName;
+    const explicitRegion = details.region || details.regionName;
+
+    if (explicitRoom || explicitBuilding || explicitLocation) {
+      return {
+        roomName: explicitRoom,
+        buildingName: explicitBuilding,
+        locationName: explicitLocation,
+        territoryName: explicitTerritory,
+        regionName: explicitRegion
+      };
+    }
+
+    // Raw string fields
+    const rawString = (
       character.appearance?.currentLocation ||
-      character.currentLocation ||
-      character.details?.currentLocation ||
-      character.details?.locationName ||
-      character.details?.parentPlaceName ||
-      character.details?.territory ||
-      character.details?.region ||
+      (typeof character.currentLocation === 'string' ? character.currentLocation : '') ||
+      (typeof details.currentLocation === 'string' ? details.currentLocation : '') ||
       ''
     ).trim();
 
-    // If character has no assigned location field:
-    if (!rawCharLoc) {
-      const sit = (character.currentSituation || character.details?.currentSituation || '').toLowerCase();
-      if (sit.includes('anwesend') || sit.includes('vor ort') || sit.includes('begleiter') || sit.includes('gefährte')) {
-        return true;
-      }
-      return false;
+    if (!rawString) {
+      return null;
     }
 
-    const cleanCharLoc = rawCharLoc
-      .replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '')
-      .split('(')[0]
-      .trim()
-      .toLowerCase();
+    return this.parseLocationString(rawString, holdings, loreEntries, territories);
+  }
 
-    // If character location is explicitly "anwesend" or "beim spieler"
-    if (cleanCharLoc.includes('anwesend') || cleanCharLoc.includes('beim spieler') || cleanCharLoc.includes('begleiter')) {
+  /**
+   * Checks if a character is physically present at the current location hierarchy.
+   * Priority:
+   * Raum -> Gebäude -> Ort -> (Territorium/Region alone NEVER suffice)
+   *
+   * Rules:
+   * - Bekannt ≠ Anwesend ≠ Szenenteilnehmer ≠ Kampfbeteiligter
+   * - No reliance on chat mentions or loose substring matches
+   * - If player is in a room, a character in a different room of the same building is NOT present in that room.
+   */
+  public static isCharacterAtLocation(
+    character: any,
+    currentLocation: CurrentLocationContext,
+    options?: {
+      holdings?: EconomyHolding[];
+      loreEntries?: LoreEntry[];
+      territories?: Territory[];
+      allowSameBuildingWhenInRoom?: boolean;
+      explicitParticipantIds?: string[];
+    }
+  ): boolean {
+    if (!character || !currentLocation) return false;
+
+    // 1. Player is always at currentLocation
+    if (character.id === 'player') return true;
+
+    // 2. Explicit participant in active scene (e.g. dialogueParticipantIds)
+    const charId = character.id;
+    if (options?.explicitParticipantIds && charId && options.explicitParticipantIds.includes(charId)) {
       return true;
     }
 
-    // Compare with current location hierarchy
-    const candidateMatches = [
-      currentLocation.roomName,
-      currentLocation.buildingName,
-      currentLocation.locationName,
-      currentLocation.territoryName,
-      currentLocation.regionName,
-      this.formatLocationDisplay(currentLocation)
-    ].filter(Boolean).map(s => s!.trim().toLowerCase());
+    // 3. Explicit boolean presence flags (e.g. companion actively following player in party)
+    if (character.isExplicitlyPresent === true || character.isPresent === true || character.isCompanion === true || character.isPartyMember === true) {
+      return true;
+    }
+    if (character.details?.isExplicitlyPresent === true || character.details?.isPresent === true || character.details?.isCompanion === true) {
+      return true;
+    }
 
-    return candidateMatches.some(cand => 
-      cand === cleanCharLoc || 
-      cand.includes(cleanCharLoc) || 
-      cleanCharLoc.includes(cand)
+    // 4. Extract structured location of the character
+    const charLoc = this.extractCharacterLocationContext(
+      character,
+      options?.holdings,
+      options?.loreEntries,
+      options?.territories
     );
+
+    if (!charLoc) {
+      return false;
+    }
+
+    // Direct ID matches
+    if (charLoc.roomId && currentLocation.roomId && charLoc.roomId === currentLocation.roomId) {
+      return true;
+    }
+    if (charLoc.buildingId && currentLocation.buildingId && !currentLocation.roomName && charLoc.buildingId === currentLocation.buildingId) {
+      return true;
+    }
+    if (charLoc.locationId && currentLocation.locationId && !currentLocation.buildingName && !currentLocation.roomName && charLoc.locationId === currentLocation.locationId) {
+      return true;
+    }
+
+    // -------------------------------------------------------------
+    // FALL A: Aktueller Raum beim Spieler vorhanden (currentLocation.roomName)
+    // -------------------------------------------------------------
+    if (currentLocation.roomName) {
+      if (charLoc.roomName) {
+        // Room must match
+        if (!this.isExactLocationMatch(charLoc.roomName, currentLocation.roomName)) {
+          return false;
+        }
+        // If building is specified on character, it must also match
+        if (charLoc.buildingName && currentLocation.buildingName) {
+          if (!this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName)) {
+            return false;
+          }
+        }
+        // If location is specified on character, it must also match
+        if (charLoc.locationName && currentLocation.locationName) {
+          if (!this.isExactLocationMatch(charLoc.locationName, currentLocation.locationName)) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // If character has no room specified:
+      if (options?.allowSameBuildingWhenInRoom && charLoc.buildingName && currentLocation.buildingName) {
+        return this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName);
+      }
+
+      // Character without room (e.g. only building or location) is NOT in this specific room
+      return false;
+    }
+
+    // -------------------------------------------------------------
+    // FALL B: Gebäude ohne Raum beim Spieler (currentLocation.buildingName, but no roomName)
+    // -------------------------------------------------------------
+    if (currentLocation.buildingName) {
+      if (charLoc.buildingName) {
+        if (!this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName)) {
+          return false;
+        }
+        // If location is specified on character, it must match
+        if (charLoc.locationName && currentLocation.locationName) {
+          if (!this.isExactLocationMatch(charLoc.locationName, currentLocation.locationName)) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // Character has no building (only location or territory) -> NOT in this building
+      return false;
+    }
+
+    // -------------------------------------------------------------
+    // FALL C: Ort ohne Gebäude/Raum beim Spieler (currentLocation.locationName, but no buildingName, no roomName)
+    // -------------------------------------------------------------
+    if (currentLocation.locationName) {
+      if (charLoc.locationName) {
+        if (!this.isExactLocationMatch(charLoc.locationName, currentLocation.locationName)) {
+          return false;
+        }
+        return true;
+      }
+
+      // Character has only territory or region -> NOT at location!
+      return false;
+    }
+
+    // -------------------------------------------------------------
+    // FALL D: Nur Territorium oder Region
+    // -------------------------------------------------------------
+    // Territorium oder Region allein erzeugen niemals physische Anwesenheit!
+    return false;
+  }
+
+  /**
+   * Checks if a character is participating in the immediate scene.
+   */
+  public static isCharacterInScene(
+    character: any,
+    currentLocation: CurrentLocationContext,
+    sceneParticipantIds?: string[],
+    options?: {
+      holdings?: EconomyHolding[];
+      loreEntries?: LoreEntry[];
+      territories?: Territory[];
+    }
+  ): boolean {
+    if (!character || !currentLocation) return false;
+
+    const charId = character.id;
+    if (sceneParticipantIds && charId && sceneParticipantIds.includes(charId)) {
+      return true;
+    }
+
+    return this.isCharacterAtLocation(character, currentLocation, {
+      ...options,
+      explicitParticipantIds: sceneParticipantIds,
+      allowSameBuildingWhenInRoom: false
+    });
   }
 
   /**
@@ -587,13 +815,33 @@ export class LocationContextService {
    */
   public static filterPresentCharacters<T extends any>(
     characters: T[],
-    currentLocation: CurrentLocationContext
+    currentLocation: CurrentLocationContext,
+    options?: {
+      sceneOnly?: boolean;
+      explicitParticipantIds?: string[];
+      holdings?: EconomyHolding[];
+      loreEntries?: LoreEntry[];
+      territories?: Territory[];
+      allowSameBuildingWhenInRoom?: boolean;
+    }
   ): T[] {
-    if (!characters || characters.length === 0) return [];
+    if (!characters || characters.length === 0 || !currentLocation) return [];
+
+    const seenIds = new Set<string>();
 
     return characters.filter(char => {
       const c = char as any;
-      return this.isCharacterAtLocation(c, currentLocation);
+      const charId = c.id;
+      if (charId) {
+        if (seenIds.has(charId)) return false;
+        seenIds.add(charId);
+      }
+
+      if (options?.sceneOnly) {
+        return this.isCharacterInScene(c, currentLocation, options.explicitParticipantIds, options);
+      }
+
+      return this.isCharacterAtLocation(c, currentLocation, options);
     });
   }
 }
