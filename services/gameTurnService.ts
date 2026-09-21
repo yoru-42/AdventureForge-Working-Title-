@@ -4,6 +4,7 @@ import { GeminiService } from './geminiService';
 import { TravelService, RouteResolution } from './travelService';
 import { CharacterKnowledgeService } from './characterKnowledgeService';
 import { LocationContextService } from './locationContextService';
+import { STRUCTURED_STORY_STATE_DIRECTIVE } from './aiStoryStateProcessor';
 import type { ProcessPlayerTurnParams, ProcessPlayerTurnResult } from './turnTypes';
 
 export type { ProcessPlayerTurnParams, ProcessPlayerTurnResult };
@@ -171,7 +172,9 @@ ${adventure.player.name} (${adventure.player.role}).
 - Aktuelle Lage: ${adventure.player.currentSituation}
 - Ziel: ${adventure.player.goal}
 
-AKTUELLE WERTE: ${currentStatsStr}`;
+AKTUELLE WERTE: ${currentStatsStr}
+
+${STRUCTURED_STORY_STATE_DIRECTIVE}`;
 
         const response = await GeminiService.chat(
           updatedMessagesForAi,

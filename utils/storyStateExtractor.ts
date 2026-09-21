@@ -155,9 +155,12 @@ export function extractDynamicStoryState(
 
   const isAlreadyInEntities = (title: string, category: string): boolean => {
     const cleanTitle = title.trim().toLowerCase();
+    const npcExists = updatedNpcs.some(n => n.name.trim().toLowerCase() === cleanTitle || (n.nickname && n.nickname.trim().toLowerCase() === cleanTitle));
+    if (npcExists) return true;
+
     return (
-      currentStoryState.storyEntities.some(e => e.category === category && (e.title.toLowerCase() === cleanTitle || e.title.toLowerCase().includes(cleanTitle) || cleanTitle.includes(e.title.toLowerCase()))) ||
-      loreDatabase.some(l => l.category === category && (l.title.toLowerCase() === cleanTitle || l.title.toLowerCase().includes(cleanTitle) || cleanTitle.includes(l.title.toLowerCase())))
+      currentStoryState.storyEntities.some(e => e.category === category && e.title.trim().toLowerCase() === cleanTitle) ||
+      loreDatabase.some(l => l.category === category && l.title.trim().toLowerCase() === cleanTitle)
     );
   };
 

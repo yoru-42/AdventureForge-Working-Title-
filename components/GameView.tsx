@@ -30,6 +30,7 @@ import { StoryInfoModal } from './StoryInfoModal';
 import { Info } from 'lucide-react';
 import { getAllAdventureCharacters, extractDynamicStoryState } from '../utils/storyStateExtractor';
 import { LocationContextService } from '../services/locationContextService';
+import { AIStoryStateProcessor, STRUCTURED_STORY_STATE_DIRECTIVE } from '../services/aiStoryStateProcessor';
 import { CharacterPortrait } from './CharacterPortrait';
 
 
@@ -3436,29 +3437,33 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
   };
 
   const parseLoreAndCharUpdates = (text: string, currentAdventure: Adventure, forceHp?: number, forceMp?: number, worldOverride?: WorldSetting) => {
-    let updatedLore = [...(currentAdventure.loreDatabase || [])];
-    let updatedNpcs = [...(currentAdventure.npcs || [])];
+    // Primary Pipeline: Parse structured AI story state (if present) or execute fallback
+    const processed = AIStoryStateProcessor.parseAndProcessAiResponse(text, currentAdventure, worldOverride);
+    const baseAdventure = processed.updatedAdventure;
+
+    let updatedLore = [...(baseAdventure.loreDatabase || [])];
+    let updatedNpcs = [...(baseAdventure.npcs || [])];
     let updatedStoryEntities: StoryEntityItem[] = [
-      ...(currentAdventure.storyState?.storyEntities || [])
+      ...(baseAdventure.storyState?.storyEntities || [])
     ];
     let updatedPlayer = { 
-      ...currentAdventure.player, 
-      appearance: { ...currentAdventure.player.appearance }, 
-      campaignPowerLevels: { ...(currentAdventure.player.campaignPowerLevels || {}) } 
+      ...baseAdventure.player, 
+      appearance: { ...baseAdventure.player.appearance }, 
+      campaignPowerLevels: { ...(baseAdventure.player.campaignPowerLevels || {}) } 
     };
-    let updatedStructuredInventory = currentAdventure.structuredInventory 
-      ? JSON.parse(JSON.stringify(currentAdventure.structuredInventory)) 
+    let updatedStructuredInventory = baseAdventure.structuredInventory 
+      ? JSON.parse(JSON.stringify(baseAdventure.structuredInventory)) 
       : { armor: {}, accessories: {}, weapons: [], generalItems: [], money: 0, currencyLabel: 'Goldstücke' };
     let updatedWorld = worldOverride
       ? JSON.parse(JSON.stringify(worldOverride))
-      : currentAdventure.world 
-      ? JSON.parse(JSON.stringify(currentAdventure.world)) 
+      : baseAdventure.world 
+      ? JSON.parse(JSON.stringify(baseAdventure.world)) 
       : { territories: [], connections: [] };
     if (!Array.isArray(updatedWorld.territories)) updatedWorld.territories = [];
     if (!Array.isArray(updatedWorld.connections)) updatedWorld.connections = [];
 
-    let cleanedText = text;
-    let notifications: any[] = [];
+    let cleanedText = processed.cleanedNarrativeText;
+    let notifications: any[] = [...(processed.notifications || [])];
 
     const isPlayerMatch = (incomingName: string | undefined) => {
       if (!incomingName) return false;
@@ -5289,7 +5294,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
               - success: true | false
               - meaningful: true | false (ob es eine echte Herausforderung / bewusste Übung war)
             * Beispiel: [[PROFESSION_ACTIVITY: Spieler | Schmied | Schmiedefeuer entzünden | easy | true | true]]
-          - STRIKTES VERBOT WILLKÜRLICHER STAT-AUSGABEN: Gib niemals direkte Prozentwerte oder Erfahrungsstufen im Text oder als Tags wie [[PROFESSION: Schmieden=100%]] aus. Die Beherrschung und XP-Berechnung wird ausschließlich deterministisch und mathematisch vom Regelsystem auf Basis der Aktivität berechnet!`;
+          - STRIKTES VERBOT WILLKÜRLICHER STAT-AUSGABEN: Gib niemals direkte Prozentwerte oder Erfahrungsstufen im Text oder als Tags wie [[PROFESSION: Schmieden=100%]] aus. Die Beherrschung und XP-Berechnung wird ausschließlich deterministisch und mathematisch vom Regelsystem auf Basis der Aktivität berechnet!
+          
+          ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       
       const response = await GeminiService.chat(updatedMessages, systemInstruction, activeWorld.isNsfw, adventure.summaryLog);
       const rawText = response.text || '';
@@ -5600,7 +5607,9 @@ AKTUELLE WERTE: ${currentStatsStr}
 ${aiSystemDirective}
 
 WICHTIGSTE REGEL:
-Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben! Keine Erzählungen, keine Handlungen in Sternchen, keine Szenenbeschreibungen. Nur der nackte, gesprochene Text.`;
+Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben! Keine Erzählungen, keine Handlungen in Sternchen, keine Szenenbeschreibungen. Nur der nackte, gesprochene Text.
+
+${STRUCTURED_STORY_STATE_DIRECTIVE}`;
 
       const updatedMessages = [...messages, userMsg];
       const response = await GeminiService.chat(updatedMessages, systemInstruction, activeWorld.isNsfw, adventure.summaryLog);

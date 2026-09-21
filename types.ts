@@ -3229,6 +3229,92 @@ export interface ChatMessage {
   dialogueTargetName?: string;
   dialogueTargetId?: string;
   dialogueParticipantIds?: string[];
+  storyChanges?: AIStoryStateChanges;
+}
+
+export interface AIEntityDiscovery {
+  type: 'character' | 'building' | 'room' | 'location' | 'territory' | 'item' | 'creature' | 'organization' | 'event';
+  id?: string;
+  name: string;
+  role?: string;
+  description?: string;
+  locationContext?: {
+    locationName?: string;
+    buildingName?: string;
+    roomName?: string;
+  };
+  details?: Record<string, any>;
+}
+
+export interface AILocationChange {
+  locationName?: string;
+  buildingId?: string;
+  buildingName?: string;
+  roomId?: string;
+  roomName?: string;
+  territoryName?: string;
+  regionName?: string;
+}
+
+export interface AIPresenceChange {
+  characterId?: string;
+  characterName: string;
+  state: 'present' | 'scene_participant' | 'mentioned_only' | 'absent';
+  locationContext?: {
+    locationName?: string;
+    buildingName?: string;
+    roomName?: string;
+  };
+}
+
+export interface AIKnowledgeUpdate {
+  subject: string;
+  information: string;
+  source?: string;
+  learnedByPlayer?: boolean;
+  topic?: string;
+}
+
+export interface AIStoryEvent {
+  title: string;
+  description: string;
+  type?: 'world_event' | 'situation' | 'opportunity' | 'task_offered';
+  isPlayerTask?: boolean;
+}
+
+export interface AIInventoryChange {
+  item: string;
+  action: 'added' | 'removed' | 'updated';
+  quantity?: number;
+}
+
+export interface AIRelationshipChange {
+  characterName: string;
+  characterId?: string;
+  changeDescription: string;
+  relationshipLevel?: string;
+}
+
+export interface AIWorldChange {
+  description: string;
+  scope?: 'local' | 'regional' | 'global';
+}
+
+export interface AIStoryStateChanges {
+  discoveredEntities?: AIEntityDiscovery[];
+  locationChange?: AILocationChange;
+  presenceChanges?: AIPresenceChange[];
+  knowledgeUpdates?: AIKnowledgeUpdate[];
+  events?: AIStoryEvent[];
+  inventoryChanges?: AIInventoryChange[];
+  relationshipChanges?: AIRelationshipChange[];
+  worldChanges?: AIWorldChange[];
+}
+
+export interface AIServiceResponse {
+  narrativeText: string;
+  storyChanges?: AIStoryStateChanges;
+  hasStructuredData?: boolean;
 }
 
 export enum GameViewMode {
