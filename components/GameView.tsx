@@ -2684,15 +2684,34 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       setMessages(initialMsgs);
     }
 
-    // Auto-extract dynamic Story-Info and Temporary Story-Data at game start / initial load
+    // Initial load state processing: process firstMessage / prologue via AIStoryStateProcessor if present, or legacy recovery fallback if empty
     if (!adventure.storyState || !adventure.storyState.storyEntities || adventure.storyState.storyEntities.length === 0) {
-      const { updatedStoryState, updatedNpcs, hasChanges } = extractDynamicStoryState(adventure, currentMsgs);
-      if (hasChanges) {
-        onUpdateAdventure({
-          ...adventure,
-          storyState: updatedStoryState,
-          npcs: updatedNpcs
-        });
+      let currentAdv = { ...adventure };
+      let updated = false;
+
+      if (adventure.firstMessage) {
+        const processed = AIStoryStateProcessor.parseAndProcessAiResponse(adventure.firstMessage, currentAdv);
+        if (processed.hasStructuredData) {
+          currentAdv = processed.updatedAdventure;
+          updated = true;
+        }
+      }
+
+      // Legacy fallback only for old save files with no structured state and empty storyEntities
+      if (!updated && (!currentAdv.storyState || !currentAdv.storyState.storyEntities || currentAdv.storyState.storyEntities.length === 0)) {
+        const { updatedStoryState, updatedNpcs, hasChanges } = extractDynamicStoryState(currentAdv, currentMsgs);
+        if (hasChanges) {
+          currentAdv = {
+            ...currentAdv,
+            storyState: updatedStoryState,
+            npcs: updatedNpcs
+          };
+          updated = true;
+        }
+      }
+
+      if (updated) {
+        onUpdateAdventure(currentAdv);
       }
     }
   }, [adventure.id, adventure.chatHistory, adventure.firstMessage, adventure.prologue]);
@@ -2710,8 +2729,8 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     }
   }, [loreNotifications]);
 
-  // Automatischer Scanner, der neu erwähnte Charaktere und Fraktionen registriert
-  useEffect(() => {
+  // Legacy automatic message scanner - disabled in main chat loop (AIStoryStateProcessor is primary)
+  const runLegacyChatScanner = () => {
     if (!messages || messages.length === 0) return;
 
     let hasChanges = false;
@@ -3268,7 +3287,7 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
         storyState: dynStoryState
       });
     }
-  }, [messages, adventure.id]);
+  };
 
   const syncLocationToWorldHelper = (targetWorld: any, locTitle: string, locDesc: string, details: any) => {
     if (!targetWorld) return { coordinates: { x: 50, y: 50 }, mapLevel: 'meso' as const };
@@ -5365,29 +5384,15 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         };
       }
 
-      // Extract and sync dynamic story state & NPCs
-      const { updatedStoryState: finalStoryState, updatedNpcs: finalNpcs } = extractDynamicStoryState(
-        {
-          ...adventureRef.current,
-          player: updatedPlayer,
-          npcs: updatedNpcs,
-          world: updatedWorld,
-          loreDatabase: updatedLore,
-          storyState: updatedStoryState,
-          chatHistory: nextChatHistory
-        },
-        nextChatHistory
-      );
-
-      // Update adventure state immediately
+      // Update adventure state immediately using updatedNpcs and updatedStoryState from AIStoryStateProcessor
       onUpdateAdventure({ 
         ...adventureRef.current, 
         player: updatedPlayer,
-        npcs: finalNpcs,
+        npcs: updatedNpcs,
         world: updatedWorld,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
-        storyState: finalStoryState,
+        storyState: updatedStoryState,
         chatHistory: nextChatHistory,
         structuredInventory: syncedInv,
         combatState: updatedCombatState
@@ -5637,27 +5642,13 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       setMessages(prev => [...prev, newModelMsg]);
       const nextChatHistory: ChatMessage[] = [...updatedMessages, newModelMsg];
 
-      // Dynamically extract story state & relationships for dialogue turn
-      const { updatedStoryState: dynStoryState, updatedNpcs: dynNpcs } = extractDynamicStoryState(
-        {
-          ...adventureRef.current,
-          world: updatedWorld,
-          player: updatedPlayer,
-          npcs: updatedNpcs,
-          loreDatabase: updatedLore,
-          storyState: updatedStoryState,
-          chatHistory: nextChatHistory
-        },
-        nextChatHistory
-      );
-
       onUpdateAdventure({
         ...adventureRef.current,
         world: updatedWorld,
         player: updatedPlayer,
-        npcs: dynNpcs,
+        npcs: updatedNpcs,
         loreDatabase: updatedLore,
-        storyState: dynStoryState,
+        storyState: updatedStoryState,
         structuredInventory: updatedStructuredInventory,
         chatHistory: nextChatHistory
       });
@@ -7445,29 +7436,15 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         };
       }
 
-      // Extract and sync dynamic story state & NPCs
-      const { updatedStoryState: finalStoryState, updatedNpcs: finalNpcs } = extractDynamicStoryState(
-        {
-          ...adventureRef.current,
-          player: updatedPlayer,
-          npcs: updatedNpcs,
-          world: updatedWorld,
-          loreDatabase: updatedLore,
-          storyState: updatedStoryState,
-          chatHistory: finalMessages
-        },
-        finalMessages
-      );
-
-      // Update adventure state immediately
+      // Update adventure state immediately using updatedNpcs and updatedStoryState from AIStoryStateProcessor
       onUpdateAdventure({ 
         ...adventureRef.current, 
         player: updatedPlayer,
-        npcs: finalNpcs,
+        npcs: updatedNpcs,
         world: updatedWorld,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
-        storyState: finalStoryState,
+        storyState: updatedStoryState,
         chatHistory: finalMessages,
         structuredInventory: syncedInv,
         combatState: updatedCombatState
