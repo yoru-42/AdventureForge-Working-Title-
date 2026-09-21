@@ -659,14 +659,17 @@ export class AIStoryStateProcessor {
             };
           }
 
+          const targetSceneId = currentLoc.sceneId;
+          const finalState: 'absent' | 'present' | 'scene_participant' = (p.state === 'scene_participant' && (!targetSceneId || targetSceneId.trim() === '')) ? 'present' : p.state;
+
           npc.presenceState = {
-            state: p.state,
-            sceneId: currentLoc.sceneId,
+            state: finalState,
+            sceneId: finalState === 'scene_participant' ? targetSceneId : undefined,
             locationContext: targetLoc,
             updatedAt: now
           };
           npc.currentLocationContext = targetLoc;
-          npc.currentSituation = p.state === 'scene_participant' ? 'Nimmt aktiv an der Szene teil' : 'Am Ort anwesend';
+          npc.currentSituation = finalState === 'scene_participant' ? 'Nimmt aktiv an der Szene teil' : 'Am Ort anwesend';
         }
       }
     });

@@ -779,19 +779,17 @@ export class LocationContextService {
         return false;
       }
       if (character.presenceState.state === 'scene_participant') {
-        if (character.presenceState.sceneId && currentLocation.sceneId && character.presenceState.sceneId !== currentLocation.sceneId) {
-          // Excluded: scene_participant status belongs to a different scene
-        } else {
+        if (character.presenceState.sceneId && currentLocation.sceneId && character.presenceState.sceneId === currentLocation.sceneId) {
           return true;
         }
+        // Without matching valid sceneId, scene_participant state does NOT grant presence
       }
     }
 
     // 4. Explicit boolean override flags (e.g. isExplicitlyPresent set for specific scene context)
     if ((character.isExplicitlyPresent === true || character.details?.isExplicitlyPresent === true) && character.presenceState?.state !== 'absent') {
-      if (character.sceneId && currentLocation.sceneId && character.sceneId !== currentLocation.sceneId) {
-        // Excluded due to scene mismatch
-      } else {
+      const charSceneId = character.presenceState?.sceneId || character.sceneId;
+      if (charSceneId && currentLocation.sceneId && charSceneId === currentLocation.sceneId) {
         return true;
       }
     }
@@ -896,6 +894,31 @@ export class LocationContextService {
   }
 
   /**
+   * Specifically determines scene participation (separate from physical presence).
+   */
+  public static isCharacterSceneParticipant(
+    character: any,
+    currentSceneId?: string,
+    explicitParticipantIds?: string[]
+  ): boolean {
+    if (!character) return false;
+
+    const charId = character.id;
+    if (explicitParticipantIds && charId && explicitParticipantIds.includes(charId)) {
+      return true;
+    }
+
+    if (character.presenceState?.state === 'scene_participant') {
+      const charSceneId = character.presenceState.sceneId || character.sceneId;
+      if (charSceneId && currentSceneId && charSceneId === currentSceneId) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Checks if a character is participating in the immediate scene.
    */
   public static isCharacterInScene(
@@ -910,8 +933,7 @@ export class LocationContextService {
   ): boolean {
     if (!character || !currentLocation) return false;
 
-    const charId = character.id;
-    if (sceneParticipantIds && charId && sceneParticipantIds.includes(charId)) {
+    if (this.isCharacterSceneParticipant(character, currentLocation.sceneId, sceneParticipantIds)) {
       return true;
     }
 

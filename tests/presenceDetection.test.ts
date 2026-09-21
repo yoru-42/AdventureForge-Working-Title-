@@ -569,4 +569,39 @@ console.log('=== RUNNING FULL ADVENTUREFORGE PRESENCE & STATE PIPELINE SUITE ===
   );
 }
 
-console.log('\n=== ALL 35 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');
+// Test 36: isExplicitlyPresent without matching sceneId does NOT force presence
+{
+  const playerLoc: CurrentLocationContext = { locationName: 'Falkengrund' };
+  const npc = {
+    id: 'npc-36',
+    name: 'Schatten',
+    isExplicitlyPresent: true,
+    appearance: { currentLocation: 'Zauberturm' }
+  };
+
+  assert(
+    LocationContextService.isCharacterAtLocation(npc, playerLoc) === false,
+    'Test 36: isExplicitlyPresent=true without matching sceneId does NOT force physical presence'
+  );
+}
+
+// Test 37: scene_participant without sceneId fallback to 'present' in AI state processor
+{
+  const dummyAdventure: any = {
+    npcs: [{ id: 'npc-37', name: 'Bote' }],
+    currentLocation: { locationName: 'Falkengrund' } // no sceneId!
+  };
+
+  const processed = (AIStoryStateProcessor as any).processPresenceChanges(dummyAdventure, [
+    { characterId: 'npc-37', characterName: 'Bote', state: 'scene_participant' }
+  ]);
+
+  const bote = processed.npcs.find((n: any) => n.id === 'npc-37');
+
+  assert(
+    bote.presenceState.state === 'present',
+    'Test 37: scene_participant without active sceneId falls back to "present"'
+  );
+}
+
+console.log('\n=== ALL 37 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');
