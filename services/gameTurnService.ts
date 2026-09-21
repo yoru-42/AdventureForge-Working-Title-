@@ -91,8 +91,15 @@ export class GameTurnService {
       text: actionText,
       isDialogue: mode === 'dialogue',
       dialogueType,
-      dialogueSpeakerName: speakerName,
-      dialogueTargetName: targetName
+      dialogueSpeakerId: mode === 'dialogue' ? (dialogueType === 'user_npc' ? 'player' : speakerNpc?.id) : undefined,
+      dialogueSpeakerName: mode === 'dialogue' ? (dialogueType === 'user_npc' ? (adventure.player?.nickname || adventure.player?.name) : speakerName) : undefined,
+      dialogueTargetId: mode === 'dialogue' ? targetNpc?.id : undefined,
+      dialogueTargetName: targetName,
+      dialogueParticipantIds: mode === 'dialogue' ? (
+        dialogueType === 'group'
+          ? (Array.isArray(groupNpcs) ? groupNpcs.map((n: any) => n?.id).filter(Boolean) : [])
+          : (dialogueType === 'npc_npc' ? [speakerNpc?.id, targetNpc?.id].filter(Boolean) : ['player', speakerNpc?.id].filter(Boolean))
+      ) : undefined
     };
 
     const currentChatHistory = adventure.chatHistory || [];
@@ -213,8 +220,15 @@ AKTUELLE WERTE: ${currentStatsStr}`;
       text: cleanDisplay,
       isDialogue: mode === 'dialogue',
       dialogueType,
-      dialogueSpeakerName: speakerName,
-      dialogueTargetName: targetName
+      dialogueSpeakerId: mode === 'dialogue' ? (dialogueType === 'user_npc' ? speakerNpc?.id : undefined) : undefined,
+      dialogueSpeakerName: mode === 'dialogue' ? (dialogueType === 'user_npc' ? speakerName : undefined) : undefined,
+      dialogueTargetId: mode === 'dialogue' ? (dialogueType === 'user_npc' ? 'player' : targetNpc?.id) : undefined,
+      dialogueTargetName: mode === 'dialogue' ? (dialogueType === 'user_npc' ? (adventure.player?.nickname || adventure.player?.name) : targetName) : undefined,
+      dialogueParticipantIds: mode === 'dialogue' ? (
+        dialogueType === 'group'
+          ? (Array.isArray(groupNpcs) ? groupNpcs.map((n: any) => n?.id).filter(Boolean) : [])
+          : (dialogueType === 'npc_npc' ? [speakerNpc?.id, targetNpc?.id].filter(Boolean) : ['player', speakerNpc?.id].filter(Boolean))
+      ) : undefined
     };
 
     const finalChatHistory = [...updatedMessagesForAi, modelMsg];

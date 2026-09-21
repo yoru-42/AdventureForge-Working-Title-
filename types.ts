@@ -3225,7 +3225,10 @@ export interface ChatMessage {
   isDialogue?: boolean;
   dialogueType?: 'user_npc' | 'npc_npc' | 'group';
   dialogueSpeakerName?: string;
+  dialogueSpeakerId?: string;
   dialogueTargetName?: string;
+  dialogueTargetId?: string;
+  dialogueParticipantIds?: string[];
 }
 
 export enum GameViewMode {

@@ -30,6 +30,7 @@ import { StoryInfoModal } from './StoryInfoModal';
 import { Info } from 'lucide-react';
 import { getAllAdventureCharacters, extractDynamicStoryState } from '../utils/storyStateExtractor';
 import { LocationContextService } from '../services/locationContextService';
+import { CharacterPortrait } from './CharacterPortrait';
 
 
 const baseEmotions = [
@@ -2260,7 +2261,7 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
 4. HANDEL & REISEN: Erwähnte Händler, Warenangebote und Zuwege entsprechen den realen Gegebenheiten des Ortes.`;
   };
 
-  const renderDialogueText = (text: string) => {
+  const renderDialogueText = (text: string, msg?: ChatMessage) => {
     // Helper 1: Detect expression from speech heuristics
     const detectExpressionFromSpeech = (speech: string): string => {
       const t = speech.toLowerCase();
@@ -2336,41 +2337,6 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       return null;
     };
 
-    // Helper 3: Lookup matching portrait in player, npcs or lore
-    const getCharacterPortrait = (name: string, exprKey: string): string | undefined => {
-      const normalizedName = name.trim().toLowerCase();
-      
-      // Player lookup
-      const playerName = adventure.player.name?.trim().toLowerCase();
-      if (normalizedName === playerName || normalizedName === 'spieler') {
-        if (adventure.player.expressions && adventure.player.expressions[exprKey]) {
-          return adventure.player.expressions[exprKey];
-        }
-        return adventure.player.image;
-      }
-      
-      // NPC lookup
-      const npc = adventure.npcs?.find(n => n.name?.trim().toLowerCase() === normalizedName || n.rufName?.trim().toLowerCase() === normalizedName);
-      if (npc) {
-        if (npc.expressions && npc.expressions[exprKey]) {
-          return npc.expressions[exprKey];
-        }
-        return npc.image;
-      }
-      
-      // Lore entry character lookup
-      const loreEntry = adventure.loreDatabase?.find(l => (l.category === 'Charaktere' || (l.category as string) === 'Gegner') && (l.title?.trim().toLowerCase() === normalizedName || l.details?.rufName?.trim().toLowerCase() === normalizedName));
-      if (loreEntry) {
-        const entryExprs = loreEntry.expressions || loreEntry.details?.expressions;
-        if (entryExprs && entryExprs[exprKey]) {
-          return entryExprs[exprKey];
-        }
-        return loreEntry.image;
-      }
-
-      return undefined;
-    };
-
     const lines = text.split('\n');
     const dialogueLines = lines.map(line => {
       const trimmed = line.trim();
@@ -2382,7 +2348,7 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
         const name = match[1].trim();
         const rawExpression = match[2];
         let speech = match[3].trim();
-        if ((speech.startsWith('"') && speech.endsWith('"')) || (speech.startsWith('"') && speech.endsWith('"'))) {
+        if ((speech.startsWith('"') && speech.endsWith('"')) || (speech.startsWith('„') && speech.endsWith('“'))) {
           speech = speech.slice(1, -1);
         }
         return { name, rawExpression, speech };
@@ -2398,34 +2364,22 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
         <div className="space-y-3.5 font-sans my-1.5">
           {dialogueLines.map((line, lIdx) => {
             if (!line) return null;
-            const isPlayer = line.name.toLowerCase() === adventure.player.name.toLowerCase() || line.name.toLowerCase() === 'spieler';
+            const isPlayer = line.name.toLowerCase() === (adventure.player?.name || '').toLowerCase() || 
+                             line.name.toLowerCase() === (adventure.player?.nickname || '').toLowerCase() || 
+                             line.name.toLowerCase() === 'spieler';
             
             // Determine expression and fetch matching portrait
             const exprKey = getExpressionKey(line.rawExpression) || detectExpressionFromSpeech(line.speech);
-            const portraitUrl = getCharacterPortrait(line.name, exprKey);
 
             return (
               <div key={lIdx} className={`flex gap-3 items-start ${isPlayer ? 'flex-row-reverse' : 'flex-row'}`}>
-                {/* Character Portrait with hover badge */}
-                {portraitUrl ? (
-                  <div className="relative shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-2xl overflow-hidden border-2 border-slate-800 shadow bg-slate-900 group">
-                    <img 
-                      src={portraitUrl} 
-                      alt={line.name} 
-                      className="w-full h-full object-cover select-none" 
-                      referrerPolicy="no-referrer"
-                    />
-                    {/* Tiny expression badge on hover */}
-                    <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[8px] text-center text-slate-300 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity uppercase font-bold tracking-widest">
-                      {exprKey}
-                    </div>
-                  </div>
-                ) : (
-                  /* Fallback subtle initials avatar */
-                  <div className="shrink-0 w-12 h-12 md:w-14 md:h-14 rounded-2xl border border-dashed border-slate-800 flex items-center justify-center bg-slate-950/60 text-slate-500 text-xs font-bold uppercase select-none">
-                    {line.name.slice(0, 2)}
-                  </div>
-                )}
+                <CharacterPortrait
+                  adventure={adventure}
+                  characterName={line.name}
+                  expressionKey={exprKey || undefined}
+                  isPlayer={isPlayer}
+                  size="md"
+                />
 
                 {/* Speech Bubble with unique design */}
                 <div className={`flex-1 min-w-0 flex flex-col gap-1 p-2.5 rounded-2xl border ${isPlayer ? 'bg-amber-500/10 border-amber-500/25 rounded-tr-none' : 'bg-slate-950/60 border-slate-800/80 rounded-tl-none'}`}>
@@ -2433,13 +2387,13 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
                     <span className={`text-[11px] font-extrabold uppercase tracking-wider ${isPlayer ? 'text-amber-400' : 'text-sky-400'}`}>
                       {line.name}
                     </span>
-                    {exprKey !== 'neutral' && (
+                    {exprKey && exprKey !== 'neutral' && (
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-800/60 select-none">
-                        {exprKey === 'happy' && ' Glücklich'}
-                        {exprKey === 'sad' && ' Traurig'}
-                        {exprKey === 'angry' && ' Wütend'}
-                        {exprKey === 'surprised' && ' Überrascht'}
-                        {exprKey === 'blushing' && ' Errötet'}
+                        {exprKey === 'happy' && 'Glücklich'}
+                        {exprKey === 'sad' && 'Traurig'}
+                        {exprKey === 'angry' && 'Wütend'}
+                        {exprKey === 'surprised' && 'Überrascht'}
+                        {exprKey === 'blushing' && 'Errötet'}
                       </span>
                     )}
                   </div>
@@ -2454,11 +2408,38 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       );
     }
 
+    // Single speaker dialogue response
+    const speakerId = msg?.dialogueSpeakerId;
+    const speakerName = msg?.dialogueSpeakerName || 'Gesprächspartner';
+    const singleExprKey = detectExpressionFromSpeech(text);
+
     return (
-      <div className="font-sans leading-relaxed text-sm md:text-[15px] p-1 text-slate-200">
-        <p className="italic text-slate-400 text-xs mb-1 uppercase tracking-widest font-extrabold">Antwort:</p>
-        <div className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-          <p className="text-base font-medium">"{text.replace(/^["'"]|["'"]$/g, '')}"</p>
+      <div className="flex gap-3 items-start font-sans my-1.5">
+        <CharacterPortrait
+          adventure={adventure}
+          characterId={speakerId}
+          characterName={speakerName}
+          expressionKey={singleExprKey !== 'neutral' ? singleExprKey : undefined}
+          size="md"
+        />
+        <div className="flex-1 min-w-0 flex flex-col gap-1 p-3 rounded-2xl rounded-tl-none bg-slate-950/60 border border-slate-800/80 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400">
+              {speakerName}
+            </span>
+            {singleExprKey !== 'neutral' && (
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest bg-slate-900/50 px-1.5 py-0.5 rounded border border-slate-800/60 select-none">
+                {singleExprKey === 'happy' && 'Glücklich'}
+                {singleExprKey === 'sad' && 'Traurig'}
+                {singleExprKey === 'angry' && 'Wütend'}
+                {singleExprKey === 'surprised' && 'Überrascht'}
+                {singleExprKey === 'blushing' && 'Errötet'}
+              </span>
+            )}
+          </div>
+          <p className="text-sm md:text-[15px] leading-relaxed text-slate-200 font-normal">
+            "{text.replace(/^["'„]|["'“]$/g, '').trim()}"
+          </p>
         </div>
       </div>
     );
@@ -5558,10 +5539,14 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
   const [dialogueTargetId, setDialogueTargetId] = useState<string>(''); // For target NPC in NPC-to-NPC (B)
   const [dialogueGroupSelectedIds, setDialogueGroupSelectedIds] = useState<string[]>([]); // For Group
 
-  // Combined available characters from NPCs, LoreDatabase, and StoryState
+  // Combined available characters from NPCs, LoreDatabase, and StoryState (filtered by current location presence)
   const availableDialogueNpcs = React.useMemo(() => {
-    return getAllAdventureCharacters(adventure);
-  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities]);
+    const allChars = getAllAdventureCharacters(adventure);
+    const locCtx = LocationContextService.resolveCurrentLocation(adventure);
+    const recentText = (messages || []).slice(-4).map(m => m.text || '').join(' ');
+    const presentChars = LocationContextService.filterPresentCharacters(allChars, locCtx, recentText);
+    return presentChars.length > 0 ? presentChars : allChars;
+  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, messages]);
 
   // Set default speaker IDs when npcs change or on mount
   useEffect(() => {
@@ -5677,8 +5662,11 @@ REGELN FÜR DEINE ANTWORT (STRENG EINZUHALTEN):
       text: userDisplayMsgText,
       isDialogue: true,
       dialogueType,
-      dialogueSpeakerName: speakerName,
-      dialogueTargetName: targetName
+      dialogueSpeakerId: dialogueType === 'user_npc' ? 'player' : speakerNpc?.id,
+      dialogueSpeakerName: dialogueType === 'user_npc' ? (adventure.player?.nickname || adventure.player?.name) : speakerName,
+      dialogueTargetId: targetNpc?.id,
+      dialogueTargetName: targetName,
+      dialogueParticipantIds: dialogueType === 'group' ? groupNpcs.map(n => n.id) : (dialogueType === 'npc_npc' ? [speakerNpc?.id, targetNpc?.id].filter(Boolean) as string[] : ['player', speakerNpc?.id].filter(Boolean) as string[])
     };
     
     setMessages(prev => [...prev, userMsg]);
@@ -5754,8 +5742,11 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
         text: finalCleanedText.trim(),
         isDialogue: true,
         dialogueType,
-        dialogueSpeakerName: speakerName,
-        dialogueTargetName: targetName
+        dialogueSpeakerId: dialogueType === 'user_npc' ? speakerNpc?.id : undefined,
+        dialogueSpeakerName: dialogueType === 'user_npc' ? speakerName : undefined,
+        dialogueTargetId: dialogueType === 'user_npc' ? 'player' : targetNpc?.id,
+        dialogueTargetName: dialogueType === 'user_npc' ? (adventure.player?.nickname || adventure.player?.name) : targetName,
+        dialogueParticipantIds: dialogueType === 'group' ? groupNpcs.map(n => n.id) : (dialogueType === 'npc_npc' ? [speakerNpc?.id, targetNpc?.id].filter(Boolean) as string[] : ['player', speakerNpc?.id].filter(Boolean) as string[])
       };
 
       setMessages(prev => [...prev, newModelMsg]);
@@ -8442,13 +8433,21 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
               return (
                 <div key={msg.id ? `chat-msg-${msg.id}-${idx}` : `chat-msg-${idx}`} className="flex flex-col gap-1">
-                  <div className={`flex items-end ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-3 animate-in fade-in duration-300 relative`}>
-                    <div className={`max-w-[85%] rounded-2xl shadow-xl overflow-hidden relative ${msg.role === 'user' ? 'bg-amber-600 text-white rounded-tr-none p-4 text-[15px] md:text-[16px]' : 'bg-slate-900/90 border border-slate-800 text-slate-200 rounded-tl-none italic'}`}>
-                      {msg.image && <img src={msg.image} className="w-full aspect-video object-cover mb-3" />}
-                      {msg.role === 'model' ? (
+                  <div className={`flex items-end ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2.5 animate-in fade-in duration-300 relative`}>
+                    {msg.role === 'user' ? (
+                      <div className="flex items-end justify-end gap-2.5 max-w-[85%] md:max-w-[80%]">
+                        <div className="bg-amber-600 text-white rounded-2xl rounded-tr-none p-3.5 md:p-4 text-[15px] md:text-[16px] shadow-xl overflow-hidden relative">
+                          {msg.image && <img src={msg.image} className="w-full aspect-video object-cover mb-3 rounded-lg" />}
+                          <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
+                        </div>
+                        <CharacterPortrait adventure={adventure} isPlayer={true} size="sm" className="shrink-0 mb-1" />
+                      </div>
+                    ) : (
+                      <div className="max-w-[85%] rounded-2xl shadow-xl overflow-hidden relative bg-slate-900/90 border border-slate-800 text-slate-200 rounded-tl-none italic">
+                        {msg.image && <img src={msg.image} className="w-full aspect-video object-cover mb-3" />}
                         <div className="p-4 markdown-body text-slate-300 space-y-4 text-[15px] md:text-[16px] leading-relaxed">
                           {msg.isDialogue ? (
-                            renderDialogueText(cleanTextForDisplay(msg.text))
+                            renderDialogueText(cleanTextForDisplay(msg.text), msg)
                           ) : (
                             <ReactMarkdown 
                               components={{
@@ -8462,10 +8461,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                             >{cleanTextForDisplay(msg.text)}</ReactMarkdown>
                           )}
                         </div>
-                      ) : (
-                        <div className="whitespace-pre-wrap leading-relaxed p-4">{msg.text}</div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   {isRegeneratable && (
@@ -8577,25 +8574,32 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
               {/* Dialogue Type Options */}
               {dialogueType === 'user_npc' && (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Gesprächspartner wählen:</label>
                   {availableDialogueNpcs && availableDialogueNpcs.length > 0 ? (
-                    <select
-                      value={dialogueSpeakerId}
-                      onChange={(e) => setDialogueSpeakerId(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50"
-                    >
-                      {availableDialogueNpcs.map((npc, nIdx) => (
-                        <option key={npc.id ? `dlg-npc-${npc.id}-${nIdx}` : `dlg-npc-${nIdx}`} value={npc.id}>
-                          {npc.nickname || npc.name} ({npc.role})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-2.5">
+                      <CharacterPortrait
+                        adventure={adventure}
+                        characterId={dialogueSpeakerId}
+                        size="md"
+                      />
+                      <select
+                        value={dialogueSpeakerId}
+                        onChange={(e) => setDialogueSpeakerId(e.target.value)}
+                        className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500/50"
+                      >
+                        {availableDialogueNpcs.map((npc, nIdx) => (
+                          <option key={npc.id ? `dlg-npc-${npc.id}-${nIdx}` : `dlg-npc-${nIdx}`} value={npc.id}>
+                            {npc.nickname || npc.name} ({npc.role || 'Charakter'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   ) : (
-                    <p className="text-[10px] text-red-400 italic">Keine NPCs oder Charaktere verfügbar.</p>
+                    <p className="text-[10px] text-red-400 italic">Keine anwesenden Charaktere am aktuellen Standort verfügbar.</p>
                   )}
                   <p className="text-[10px] text-slate-500 leading-normal">
-                    Schreibe unten deine gesprochenen Worte. Der gewählte NPC wird im reinen Dialog antworten - ganz ohne beschreibende Erzählungen.
+                    Schreibe unten deine gesprochenen Worte. Der gewählte Charakter antwortet im reinen Dialog - ohne beschreibende Erzählungen.
                   </p>
                 </div>
               )}
@@ -8603,37 +8607,43 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               {dialogueType === 'npc_npc' && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Sprecher A:</label>
-                      <select
-                        value={dialogueSpeakerId}
-                        onChange={(e) => setDialogueSpeakerId(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500/50"
-                      >
-                        {availableDialogueNpcs?.map((npc, nIdx) => (
-                          <option key={npc.id ? `spkA-${npc.id}-${nIdx}` : `spkA-${nIdx}`} value={npc.id} disabled={npc.id === dialogueTargetId}>
-                            {npc.nickname || npc.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-1.5">
+                        <CharacterPortrait adventure={adventure} characterId={dialogueSpeakerId} size="xs" />
+                        <select
+                          value={dialogueSpeakerId}
+                          onChange={(e) => setDialogueSpeakerId(e.target.value)}
+                          className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-white outline-none focus:border-amber-500/50 truncate"
+                        >
+                          {availableDialogueNpcs?.map((npc, nIdx) => (
+                            <option key={npc.id ? `spkA-${npc.id}-${nIdx}` : `spkA-${nIdx}`} value={npc.id} disabled={npc.id === dialogueTargetId}>
+                              {npc.nickname || npc.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Sprecher B:</label>
-                      <select
-                        value={dialogueTargetId}
-                        onChange={(e) => setDialogueTargetId(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-white outline-none focus:border-amber-500/50"
-                      >
-                        {availableDialogueNpcs?.map((npc, nIdx) => (
-                          <option key={npc.id ? `spkB-${npc.id}-${nIdx}` : `spkB-${nIdx}`} value={npc.id} disabled={npc.id === dialogueSpeakerId}>
-                            {npc.nickname || npc.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-1.5">
+                        <CharacterPortrait adventure={adventure} characterId={dialogueTargetId} size="xs" />
+                        <select
+                          value={dialogueTargetId}
+                          onChange={(e) => setDialogueTargetId(e.target.value)}
+                          className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-xs text-white outline-none focus:border-amber-500/50 truncate"
+                        >
+                          {availableDialogueNpcs?.map((npc, nIdx) => (
+                            <option key={npc.id ? `spkB-${npc.id}-${nIdx}` : `spkB-${nIdx}`} value={npc.id} disabled={npc.id === dialogueSpeakerId}>
+                              {npc.nickname || npc.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-500 leading-normal">
-                    Gib unten ein Gesprächsthema vor oder schreibe den ersten Satz (z.B. "Sie reden über die anstehende Mission") und drücke Senden. Die beiden NPCs führen ein reines Hin-und-Her-Gespräch.
+                    Gib unten ein Gesprächsthema vor oder schreibe den ersten Satz. Die beiden Charaktere führen einen reinen Dialog.
                   </p>
                 </div>
               )}
@@ -8641,7 +8651,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               {dialogueType === 'group' && (
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Teilnehmer wählen (Mehrfachauswahl):</label>
-                  <div className="space-y-1.5 max-h-32 overflow-y-auto bg-slate-950/80 p-2 rounded-xl border border-slate-850">
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto bg-slate-950/80 p-2 rounded-xl border border-slate-850">
                     {availableDialogueNpcs && availableDialogueNpcs.length > 0 ? (
                       availableDialogueNpcs.map((npc, nIdx) => {
                         const isChecked = dialogueGroupSelectedIds.includes(npc.id);
@@ -8656,19 +8666,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                 setDialogueGroupSelectedIds(prev => [...prev, npc.id]);
                               }
                             }}
-                            className="w-full flex items-center justify-between text-left p-1.5 hover:bg-slate-900 rounded-lg transition-all"
+                            className="w-full flex items-center justify-between text-left p-1.5 hover:bg-slate-900 rounded-lg transition-all gap-2"
                           >
-                            <span className="text-xs text-slate-200">{npc.nickname || npc.name}</span>
-                            <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] border ${isChecked ? 'bg-amber-600 border-amber-500 text-white' : 'border-slate-700 text-transparent'}`}></span>
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <CharacterPortrait adventure={adventure} characterId={npc.id} characterName={npc.nickname || npc.name} size="xs" />
+                              <span className="text-xs text-slate-200 truncate">{npc.nickname || npc.name}</span>
+                            </div>
+                            <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] border shrink-0 ${isChecked ? 'bg-amber-600 border-amber-500 text-white' : 'border-slate-700 text-transparent'}`}></span>
                           </button>
                         );
                       })
                     ) : (
-                      <p className="text-[10px] text-slate-500 italic">Keine NPCs vorhanden.</p>
+                      <p className="text-[10px] text-slate-500 italic">Keine Charaktere am aktuellen Standort vorhanden.</p>
                     )}
                   </div>
                   <p className="text-[10px] text-slate-500 leading-normal">
-                    Gib unten ein Thema für die Gruppe vor. Die ausgewählten NPCs unterhalten sich lebendig im reinen Dialogformat miteinander.
+                    Gib unten ein Thema für die Gruppe vor. Die ausgewählten Figuren unterhalten sich im reinen Dialogformat miteinander.
                   </p>
                 </div>
               )}
@@ -8696,9 +8709,27 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
               {/* SubMenu: START (Wenn Kampf inaktiv) */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-[11px] text-slate-400">
-                    Anwesende Streitkräfte und Bedrohungen:
+                {/* Eigene Gruppe / Spieler Header */}
+                <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <CharacterPortrait adventure={adventure} isPlayer={true} size="sm" />
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-amber-300 truncate">
+                        {adventure.player.nickname || adventure.player.name}
+                      </div>
+                      <div className="text-[9px] text-slate-400 uppercase tracking-wider">
+                        Spieler & Gruppe
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-emerald-400">Bereit</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <p className="text-[11px] text-slate-400 font-medium">
+                    Anwesende Streitkräfte & Bedrohungen:
                   </p>
                   {combinedDetectedEnemies.length > 1 && (
                     <button
@@ -8730,7 +8761,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       return (
                         <div
                           key={enemy.id ? `det-enemy-${enemy.id}-${enIdx}` : `det-enemy-${enIdx}`}
-                          className={`w-full p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 ${
+                          className={`w-full p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2.5 ${
                             isChecked
                               ? 'border-red-500/60 bg-red-950/40 shadow-sm'
                               : 'border-slate-800 bg-slate-950/40 hover:border-slate-700'
@@ -8742,22 +8773,30 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                 prev.includes(enemy.id) ? prev.filter(id => id !== enemy.id) : [...prev, enemy.id]
                               );
                             }}
-                            className="flex items-center gap-2.5 flex-1 cursor-pointer select-none"
+                            className="flex items-center gap-2.5 flex-1 cursor-pointer select-none min-w-0"
                           >
                             <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => {}} // handled by parent div onClick
-                              className="accent-red-500 rounded cursor-pointer pointer-events-none"
+                              className="accent-red-500 rounded cursor-pointer pointer-events-none shrink-0"
                             />
-                            <div>
-                              <div className="text-xs font-bold text-slate-200">
+                            <CharacterPortrait
+                              adventure={adventure}
+                              characterId={enemy.id}
+                              characterName={enemy.name}
+                              isHostile={true}
+                              isGroup={enemy.type === 'group'}
+                              size="sm"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs font-bold text-slate-200 truncate">
                                 {enemy.name} {enemy.type === 'group' && !enemy.id.startsWith('ai-extracted') && (() => {
                                   const count = parseGroupCountFromText(enemy.name, messages.map(m => m.text || '').join(' '));
                                   return count ? `(${count} Einheiten)` : '(Gruppe)';
                                 })()}
                               </div>
-                              <div className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">
+                              <div className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold truncate">
                                 {enemy.subtitle || (enemy.type === 'npc' ? 'Anwesender Charakter' : 'Erkannte Streitkraft')}
                               </div>
                             </div>

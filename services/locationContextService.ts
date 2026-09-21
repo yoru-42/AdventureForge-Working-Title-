@@ -518,4 +518,85 @@ export class LocationContextService {
 
     return parts.join(' → ');
   }
+
+  /**
+   * Checks if a character is at the current structured location.
+   * Matches room, building, location, and territory.
+   */
+  public static isCharacterAtLocation(
+    character: any,
+    currentLocation: CurrentLocationContext
+  ): boolean {
+    if (!character || !currentLocation) return false;
+
+    // Player is always at currentLocation
+    if (character.id === 'player') return true;
+
+    // Check raw character location fields
+    const rawCharLoc = (
+      character.appearance?.currentLocation ||
+      character.currentLocation ||
+      character.details?.currentLocation ||
+      character.details?.locationName ||
+      character.details?.parentPlaceName ||
+      character.details?.territory ||
+      character.details?.region ||
+      ''
+    ).trim();
+
+    // If character has no assigned location at all, they are not present by default
+    if (!rawCharLoc) {
+      return false;
+    }
+
+    const cleanCharLoc = rawCharLoc
+      .replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '')
+      .split('(')[0]
+      .trim()
+      .toLowerCase();
+
+    // Compare with current location hierarchy
+    const candidateMatches = [
+      currentLocation.roomName,
+      currentLocation.buildingName,
+      currentLocation.locationName,
+      currentLocation.territoryName,
+      currentLocation.regionName,
+      this.formatLocationDisplay(currentLocation)
+    ].filter(Boolean).map(s => s!.trim().toLowerCase());
+
+    return candidateMatches.some(cand => 
+      cand === cleanCharLoc || 
+      cand.includes(cleanCharLoc) || 
+      cleanCharLoc.includes(cand)
+    );
+  }
+
+  /**
+   * Filters a list of characters (NPCs/Lore) to those who are actually present at the given location
+   * and/or mentioned in the active dialogue/chat scene.
+   */
+  public static filterPresentCharacters<T extends any>(
+    characters: T[],
+    currentLocation: CurrentLocationContext,
+    recentMessagesText: string = ''
+  ): T[] {
+    if (!characters || characters.length === 0) return [];
+
+    const normRecent = recentMessagesText.toLowerCase();
+
+    return characters.filter(char => {
+      const c = char as any;
+      // 1. Direct location check
+      const atLoc = this.isCharacterAtLocation(c, currentLocation);
+      
+      // 2. Mention in recent active scene text
+      const name = (c.name || c.title || '').trim();
+      const nickname = (c.nickname || c.rufName || c.details?.nickname || c.details?.rufName || '').trim();
+      const isMentioned = (name && normRecent.includes(name.toLowerCase())) ||
+                          (nickname && normRecent.includes(nickname.toLowerCase()));
+
+      return atLoc || isMentioned;
+    });
+  }
 }
