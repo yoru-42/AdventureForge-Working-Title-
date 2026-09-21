@@ -14,8 +14,21 @@ import {
   Activity, 
   Info,
   MapPin,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Bed,
+  Layers
 } from 'lucide-react';
+import {
+  normalizeHoldingRoom,
+  calculateHoldingRoomStats,
+  generateRoomsSummaryString,
+  generateRoomCapacityString,
+  ROOM_CATEGORIES,
+  ROOM_TYPE_METADATA,
+  OCCUPANCY_MODE_OPTIONS,
+  HoldingRoomType,
+  RoomOccupancyMode
+} from '../../lib/roomUtils';
 
 interface HoldingDetailsTabProps {
   holding: EconomyHolding;
@@ -44,41 +57,61 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
   const currentSize = holding.physicalSize || 'Mittel';
 
   // Obtain active rooms or fallback to presets for this holding type and size
-  const rooms: HoldingRoom[] = (holding.buildingRooms && holding.buildingRooms.length > 0)
+  const rawRooms: HoldingRoom[] = (holding.buildingRooms && holding.buildingRooms.length > 0)
     ? holding.buildingRooms
     : getDefaultRoomsForHolding(holding.type, currentSize);
 
-  const totalRoomCount = rooms.reduce((sum, r) => sum + (Math.max(1, Number(r.count) || 1)), 0);
+  const rooms: HoldingRoom[] = rawRooms.map(r => normalizeHoldingRoom(r));
+  const roomStats = calculateHoldingRoomStats(rooms);
   const suggestedJobs = getDefaultJobPositionsForHoldingType(holding.type, currentSize);
 
   const updateRooms = (newRooms: HoldingRoom[]) => {
-    const summaryStr = newRooms.map(r => `${r.count || 1}x ${r.name}`).join(', ');
+    const normalized = newRooms.map(r => normalizeHoldingRoom(r));
+    const summaryStr = generateRoomsSummaryString(normalized);
+    const autoCapacity = generateRoomCapacityString(normalized, holding.physicalCapacity);
     onUpdateHolding(holding.id, {
-      buildingRooms: newRooms,
-      roomsOrAreas: summaryStr
+      buildingRooms: normalized,
+      roomsOrAreas: summaryStr,
+      physicalCapacity: autoCapacity
     });
   };
 
   const handleRoomCountChange = (idx: number, delta: number) => {
     const updated = [...rooms];
     const newCount = Math.max(1, (updated[idx].count || 1) + delta);
-    updated[idx] = { ...updated[idx], count: newCount };
+    updated[idx] = normalizeHoldingRoom({ ...updated[idx], count: newCount });
     updateRooms(updated);
   };
 
   const handleRoomFieldChange = (idx: number, field: keyof HoldingRoom, val: any) => {
     const updated = [...rooms];
-    updated[idx] = { ...updated[idx], [field]: val };
+    const item = { ...updated[idx], [field]: val };
+    
+    // When changing room type, intelligently set default beds and occupancy mode
+    if (field === 'roomType') {
+      const meta = ROOM_TYPE_METADATA[val as HoldingRoomType];
+      if (meta) {
+        if (meta.defaultBeds !== undefined && (!item.bedsPerRoom || item.bedsPerRoom === 0)) {
+          item.bedsPerRoom = meta.defaultBeds;
+        }
+        if (meta.defaultOccupancy && (!item.occupancyMode || item.occupancyMode === 'none')) {
+          item.occupancyMode = meta.defaultOccupancy;
+        }
+      }
+    }
+
+    updated[idx] = normalizeHoldingRoom(item);
     updateRooms(updated);
   };
 
   const handleAddRoom = () => {
-    const newRoom: HoldingRoom = {
+    const newRoom: HoldingRoom = normalizeHoldingRoom({
       id: `room-${Date.now()}`,
       name: 'Neuer Raum',
       count: 1,
+      roomType: 'other',
       purpose: 'Nutzung & Betriebszweck'
-    };
+    });
     updateRooms([...rooms, newRoom]);
   };
 
@@ -90,7 +123,7 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
   const handleResetRoomsToDefault = (sizeToUse: string = currentSize) => {
     const defaultRooms = getDefaultRoomsForHolding(holding.type, sizeToUse);
     updateRooms(defaultRooms);
-    setSyncNotice(`Räume wurden auf die Standard-Vorgabe für ${holding.type} (${sizeToUse}) zurückgesetzt.`);
+    setSyncNotice(`Räume und Belegung wurden auf Standard (${holding.type}, ${sizeToUse}) zurückgesetzt.`);
     setTimeout(() => setSyncNotice(null), 3500);
   };
 
@@ -116,14 +149,8 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
 
   const handleSizeChange = (newSize: string) => {
     const newRooms = getDefaultRoomsForHolding(holding.type, newSize);
-    const summaryStr = newRooms.map(r => `${r.count || 1}x ${r.name}`).join(', ');
-    
-    // Auto-adapt capacity estimate based on size
-    let autoCapacity = holding.physicalCapacity;
-    if (newSize === 'Klein') autoCapacity = 'ca. 15-20 Personen / Gäste';
-    else if (newSize === 'Mittel') autoCapacity = 'ca. 40-50 Personen / Gäste';
-    else if (newSize === 'Groß') autoCapacity = 'ca. 80-120 Personen / Gäste';
-    else if (newSize === 'Monumental') autoCapacity = 'ca. 200+ Personen / Gäste';
+    const summaryStr = generateRoomsSummaryString(newRooms);
+    const autoCapacity = generateRoomCapacityString(newRooms, holding.physicalCapacity);
 
     onUpdateHolding(holding.id, {
       physicalSize: newSize,
@@ -452,99 +479,271 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
           </button>
         </div>
 
-        {/* Vorgegebene Raumaufteilung & Zimmer */}
+        {/* Vorgegebene Raumaufteilung, Betten & Belegung */}
         <div className="space-y-3 pt-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                 <DoorOpen className="w-3.5 h-3.5 text-indigo-400" />
-                Vorgegebene Raumaufteilung & Zimmer
+                Räume, Betten und Belegung
               </label>
               <span className="text-[11px] text-slate-400">
-                Klare Vorgabe der Räume nach Betriebstyp ({totalRoomCount} Räume insgesamt)
+                Strukturierte Raumverwaltung nach Nutzung, Kapazität und Bettenbelegung ({roomStats.totalRooms} Räume insgesamt)
               </span>
             </div>
-            <button
-              type="button"
-              onClick={handleAddRoom}
-              className="px-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-white text-xs font-semibold flex items-center gap-1 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Raum hinzufügen
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleResetRoomsToDefault(currentSize)}
+                className="px-2.5 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1 transition-colors"
+                title="Auf die Vorgabe für diesen Betriebstyp und diese Größe zurücksetzen"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Standard wiederherstellen
+              </button>
+              <button
+                type="button"
+                onClick={handleAddRoom}
+                className="px-3 py-1 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Raum hinzufügen
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            {rooms.map((room, idx) => (
-              <div 
-                key={room.id || `room-${idx}`} 
-                className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2.5 bg-slate-900 rounded-xl border border-slate-800/80 items-center"
-              >
-                {/* Anzahl Steuerung */}
-                <div className="sm:col-span-3 flex items-center gap-1.5">
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase">Anzahl:</span>
-                  <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
+          {/* Übersicht / Kennzahlen */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-slate-950 rounded-2xl border border-slate-800/90 text-xs">
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                Räume gesamt
+              </span>
+              <div className="text-base font-bold text-white">
+                {roomStats.totalRooms} <span className="text-xs font-normal text-slate-400">in {rooms.length} Raumarten</span>
+              </div>
+            </div>
+
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                Betten gesamt
+              </span>
+              <div className="text-base font-bold text-amber-300">
+                {roomStats.totalBeds}{' '}
+                <span className="text-xs font-normal text-slate-300">
+                  ({roomStats.occupiedBeds} belegt · {roomStats.freeBeds} frei)
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                Gäste-Betten
+              </span>
+              <div className="text-sm font-semibold text-slate-200">
+                {roomStats.guestBeds.total}{' '}
+                <span className="text-[11px] font-normal text-slate-400">
+                  ({roomStats.guestBeds.occupied} belegt · {roomStats.guestBeds.free} frei)
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                Personal & Familie
+              </span>
+              <div className="text-sm font-semibold text-slate-200">
+                {roomStats.staffBeds.total + roomStats.familyBeds.total}{' '}
+                <span className="text-[11px] font-normal text-slate-400">
+                  (Pers: {roomStats.staffBeds.occupied}/{roomStats.staffBeds.total} · Fam: {roomStats.familyBeds.occupied}/{roomStats.familyBeds.total})
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Liste der Räume */}
+          <div className="space-y-2.5">
+            {rooms.map((room, idx) => {
+              const meta = ROOM_TYPE_METADATA[room.roomType || 'other'];
+              const isSleeping = meta?.hasBeds || meta?.isSleepingRoom || (room.bedsPerRoom !== undefined && room.bedsPerRoom > 0);
+
+              return (
+                <div 
+                  key={room.id || `room-${idx}`} 
+                  className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2.5"
+                >
+                  {/* Obere Zeile: Anzahl, Name, Raumtyp, Ebene, Badge, Löschen */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Anzahl Steuerung */}
+                    <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleRoomCountChange(idx, -1)}
+                        className="px-2 py-1 text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-colors"
+                        title="Anzahl verringern"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        value={room.count || 1}
+                        onChange={e => handleRoomFieldChange(idx, 'count', Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-9 bg-transparent text-center text-xs font-bold text-white outline-none"
+                        title="Anzahl baugleicher Räume"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRoomCountChange(idx, 1)}
+                        className="px-2 py-1 text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-colors"
+                        title="Anzahl erhöhen"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Raumname */}
+                    <div className="flex-1 min-w-[140px]">
+                      <input
+                        type="text"
+                        value={room.name}
+                        onChange={e => handleRoomFieldChange(idx, 'name', e.target.value)}
+                        placeholder="Raumbezeichnung (z.B. Gästezimmer, Backstube)"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    {/* Raumtyp Dropdown */}
+                    <div className="w-44 min-w-[140px]">
+                      <select
+                        value={room.roomType || 'other'}
+                        onChange={e => handleRoomFieldChange(idx, 'roomType', e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+                        title="Nutzungsart des Raumes"
+                      >
+                        {ROOM_CATEGORIES.map(category => (
+                          <optgroup key={category.id} label={category.label}>
+                            {category.roomTypes.map(t => {
+                              const tMeta = ROOM_TYPE_METADATA[t];
+                              return (
+                                <option key={t} value={t}>
+                                  {tMeta?.label || t}
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Ebene / Etage */}
+                    <div className="w-28">
+                      <input
+                        type="text"
+                        value={room.floor || ''}
+                        onChange={e => handleRoomFieldChange(idx, 'floor', e.target.value)}
+                        placeholder="Ebene / Etage"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-amber-500"
+                        title="Lage im Gebäude (z.B. Erdgeschoss, 1. OG, Keller)"
+                      />
+                    </div>
+
+                    {/* Kompaktes Status-Pill nach Vorgabe */}
+                    <div className="hidden md:flex items-center text-[11px] px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800/80 text-slate-300 font-mono whitespace-nowrap">
+                      {isSleeping ? (
+                        <span>
+                          {room.totalBeds || 0} Betten | {room.occupiedBeds || 0} belegt | {room.freeBeds || 0} frei
+                        </span>
+                      ) : room.capacity ? (
+                        <span>Kapazität: {room.capacity}</span>
+                      ) : (
+                        <span className="text-slate-500">Nutzraum</span>
+                      )}
+                    </div>
+
+                    {/* Löschen */}
                     <button
                       type="button"
-                      onClick={() => handleRoomCountChange(idx, -1)}
-                      className="px-2 py-1 text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-colors"
-                      title="Anzahl verringern"
+                      onClick={() => handleRemoveRoom(idx)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors ml-auto"
+                      title="Diesen Raum entfernen"
                     >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min={1}
-                      value={room.count || 1}
-                      onChange={e => handleRoomFieldChange(idx, 'count', Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-10 bg-transparent text-center text-xs font-bold text-white outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRoomCountChange(idx, 1)}
-                      className="px-2 py-1 text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-colors"
-                      title="Anzahl erhöhen"
-                    >
-                      +
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                </div>
 
-                {/* Raumname */}
-                <div className="sm:col-span-4">
-                  <input
-                    type="text"
-                    value={room.name}
-                    onChange={e => handleRoomFieldChange(idx, 'name', e.target.value)}
-                    placeholder="z.B. Küche, Schlafzimmer für Gäste"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs font-semibold text-white outline-none focus:border-amber-500"
-                  />
-                </div>
+                  {/* Untere Zeile: Betten & Belegung / Kapazität & Zweck */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1 border-t border-slate-800/50 items-start">
+                    {isSleeping ? (
+                      <div className="sm:col-span-6 flex flex-wrap items-center gap-2 text-xs">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase">Betten/Raum:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={room.bedsPerRoom || 0}
+                            onChange={e => handleRoomFieldChange(idx, 'bedsPerRoom', Math.max(0, parseInt(e.target.value) || 0))}
+                            className="w-11 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-center font-bold text-amber-300 outline-none focus:border-amber-500"
+                            title="Betten in jedem einzelnen dieser Räume"
+                          />
+                        </div>
 
-                {/* Raumzweck / Funktion */}
-                <div className="sm:col-span-4">
-                  <input
-                    type="text"
-                    value={room.purpose || ''}
-                    onChange={e => handleRoomFieldChange(idx, 'purpose', e.target.value)}
-                    placeholder="Zweck, z.B. Gästeunterkunft, Speisenzubereitung"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-300 outline-none focus:border-amber-500"
-                  />
-                </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase">Belegt:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={room.totalBeds || 999}
+                            value={room.occupiedBeds || 0}
+                            onChange={e => handleRoomFieldChange(idx, 'occupiedBeds', Math.max(0, parseInt(e.target.value) || 0))}
+                            className="w-11 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-center font-bold text-white outline-none focus:border-amber-500"
+                            title="Aktuell belegte Betten"
+                          />
+                        </div>
 
-                {/* Löschen */}
-                <div className="sm:col-span-1 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveRoom(idx)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors"
-                    title="Diesen Raum entfernen"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400 font-semibold uppercase">Art:</span>
+                          <select
+                            value={room.occupancyMode || 'guest'}
+                            onChange={e => handleRoomFieldChange(idx, 'occupancyMode', e.target.value)}
+                            className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-slate-200 outline-none focus:border-amber-500 cursor-pointer"
+                            title="Belegungsart"
+                          >
+                            {OCCUPANCY_MODE_OPTIONS.map(opt => (
+                              <option key={opt.id} value={opt.id}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="sm:col-span-4 flex items-center gap-2 text-xs">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase">Personenkapazität:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={room.capacity || ''}
+                          onChange={e => handleRoomFieldChange(idx, 'capacity', e.target.value ? Math.max(0, parseInt(e.target.value) || 0) : undefined)}
+                          placeholder="z.B. 40"
+                          className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-center text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    )}
+
+                    {/* Zweck / Beschreibung (AutoExpandingTextarea ohne abgeschnittene Texte) */}
+                    <div className={isSleeping ? 'sm:col-span-6' : 'sm:col-span-8'}>
+                      <AutoExpandingTextarea
+                        value={room.purpose || ''}
+                        onChange={e => handleRoomFieldChange(idx, 'purpose', e.target.value)}
+                        placeholder="Nutzung, Besonderheiten oder betriebliche Aufgaben des Raumes"
+                        minRows={1}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 resize-none leading-relaxed"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

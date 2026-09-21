@@ -8,6 +8,7 @@ import {
   CombatState
 } from '../types';
 import { HOLDING_TYPES, getHoldingPresets, getDefaultRoomsForHolding, getDefaultJobPositionsForHoldingType } from './economy/EconomyPresets';
+import { generateRoomsSummaryString, generateRoomCapacityString } from '../lib/roomUtils';
 import { HoldingDetailsTab } from './economy/HoldingDetailsTab';
 import { HoldingPositionTab } from './economy/HoldingPositionTab';
 import { HoldingStaffTab } from './economy/HoldingStaffTab';
@@ -202,10 +203,10 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
       // Default physical properties & structured rooms
       physicalCondition: 'Gut',
       physicalSize: 'Mittel',
-      physicalCapacity: 'ca. 40-50 Personen / Gäste',
+      physicalCapacity: generateRoomCapacityString(getDefaultRoomsForHolding(preset.type, 'Mittel')),
       physicalUsage: 'Gewerbe & Betrieb',
       buildingRooms: getDefaultRoomsForHolding(preset.type, 'Mittel'),
-      roomsOrAreas: getDefaultRoomsForHolding(preset.type, 'Mittel').map(r => `${r.count || 1}x ${r.name}`).join(', '),
+      roomsOrAreas: generateRoomsSummaryString(getDefaultRoomsForHolding(preset.type, 'Mittel')),
       
       // Active modules
       useResourcesModule: true,

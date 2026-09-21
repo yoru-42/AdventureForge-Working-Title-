@@ -1345,11 +1345,103 @@ export type EconomyHoldingType =
   | 'custom'
   | (string & {});
 
+/**
+ * Raumtypen-Katalog für Holdings / Gebäude
+ */
+export type HoldingRoomType =
+  // Wohn- und Schlafräume
+  | 'family_room'
+  | 'bedroom'
+  | 'guest_room'
+  | 'staff_room'
+  | 'shared_staff_room'
+  | 'dormitory'
+  | 'servant_room'
+  | 'guard_quarters'
+  | 'barracks_room'
+  // Wirtschafts- und Arbeitsräume
+  | 'kitchen'
+  | 'workshop'
+  | 'forge'
+  | 'office'
+  | 'sales_room'
+  | 'tap_room'
+  | 'dining_room'
+  | 'production_room'
+  // Lagerung
+  | 'storage'
+  | 'pantry'
+  | 'warehouse_room'
+  | 'cellar'
+  | 'cold_storage'
+  // Versorgung
+  | 'bathroom'
+  | 'washroom'
+  | 'toilet'
+  | 'utility_room'
+  | 'heating_room'
+  // Verwaltung / Öffentlichkeit / Religion
+  | 'meeting_room'
+  | 'council_room'
+  | 'archive'
+  | 'classroom'
+  | 'prayer_room'
+  | 'chapel'
+  | 'audience_room'
+  // Erschließung
+  | 'entrance'
+  | 'hallway'
+  | 'corridor'
+  | 'stairway'
+  | 'stairwell'
+  | 'vestibule'
+  // Außen-/Funktionsbereiche
+  | 'courtyard'
+  | 'yard'
+  | 'garden'
+  | 'terrace'
+  | 'stable_yard'
+  | 'work_yard'
+  | (string & {});
+
+export type RoomOccupancyMode =
+  | 'private'
+  | 'shared'
+  | 'family'
+  | 'guest'
+  | 'staff'
+  | 'mixed'
+  | (string & {});
+
+export type RoomPrivacy = 'private' | 'shared' | 'public' | (string & {});
+
 export interface HoldingRoom {
   id: string;
-  name: string; // e.g. "Küche", "Schlafzimmer für Gäste", "Schlafzimmer für Personal"
-  count: number; // e.g. 1, 5, 3
-  purpose?: string; // e.g. "Speisenzubereitung", "Gästeunterkunft", "Personalunterkunft"
+  name: string; // z.B. "Schankraum", "Gästezimmer", "Küche"
+  count: number; // Anzahl identischer Räume
+  roomType?: HoldingRoomType; // Kategorie-Typ des Raumes
+  purpose?: string; // Zweck / Nutzung
+
+  // Betten- und Belegungsmodell
+  bedsPerRoom?: number; // Betten je Zimmer (z.B. 1, 2, 4)
+  totalBeds?: number; // Gesamtbetten (count × bedsPerRoom)
+  occupiedBeds?: number; // Aktuell belegte Betten
+  freeBeds?: number; // Aktuell freie Betten (totalBeds - occupiedBeds)
+
+  occupancyMode?: RoomOccupancyMode; // Belegungsart (private, shared, family, guest, staff, mixed)
+  privacy?: RoomPrivacy; // Privatsphäre (private, shared, public)
+
+  capacity?: number; // Maximale Personenkapazität (z.B. Gaststube: 40 Gäste)
+  currentOccupancy?: number; // Aktuelle Personenzahl
+
+  required?: boolean; // Betriebsnotwendig
+  optional?: boolean; // Optionaler Zusatzbereich
+
+  floor?: string; // z.B. "Keller", "Erdgeschoss", "1. OG", "2. OG", "Dachgeschoss", "Außenbereich"
+
+  occupantIds?: string[]; // IDs zugewiesener Charaktere/Bewohner
+  occupantNames?: string[]; // Namen zugewiesener Charaktere/Bewohner
+  notes?: string; // Zusätzliche Anmerkungen
 }
 
 export interface EconomyHolding {

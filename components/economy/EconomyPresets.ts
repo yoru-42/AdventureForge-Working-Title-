@@ -11,6 +11,7 @@ import {
   EconomyLogEntry,
   HoldingRoom 
 } from '../../types';
+import { normalizeHoldingRoom } from '../../lib/roomUtils';
 
 export interface HoldingTypePreset {
   type: EconomyHolding['type'];
@@ -342,6 +343,7 @@ export interface DefaultJobPosition {
 
 /**
  * Liefert Standardräume passend zum Betriebs- / Gebäudetyp und der gewählten Größe.
+ * Integriert das Raum-, Bett- und Belegungsmodell mit Kapazität, Nutzungs- und Belegungsarten.
  */
 export const getDefaultRoomsForHolding = (type: string, size: string = 'Mittel'): HoldingRoom[] => {
   const normSize = (size || 'Mittel').toLowerCase();
@@ -349,230 +351,109 @@ export const getDefaultRoomsForHolding = (type: string, size: string = 'Mittel')
   const isGross = normSize.includes('groß') || normSize.includes('gross');
   const isMonumental = normSize.includes('monumental') || normSize.includes('riesig');
 
+  let rawRooms: Partial<HoldingRoom>[] = [];
+
   switch (type) {
     case 'taverne':
     case 'gasthaus':
     case 'herberge':
       if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Schankraum & Gaststube', count: 1, purpose: 'Ausschank & Bewirtung (ca. 15 Gäste)' },
-          { id: 'room-2', name: 'Kleine Küche', count: 1, purpose: 'Einfache Speisenzubereitung' },
-          { id: 'room-3', name: 'Schlafzimmer für Gäste', count: 2, purpose: 'Gästeunterkunft' },
-          { id: 'room-4', name: 'Schlafzimmer für Personal', count: 1, purpose: 'Personalunterkunft' },
-          { id: 'room-5', name: 'Vorratskammer', count: 1, purpose: 'Lebensmittel- & Faßlager' }
+        rawRooms = [
+          { id: 'room-1', name: 'Schankraum & Gaststube', count: 1, roomType: 'tap_room', capacity: 20, floor: 'Erdgeschoss', purpose: 'Ausschank & Bewirtung (ca. 20 Gäste)' },
+          { id: 'room-2', name: 'Kleine Küche', count: 1, roomType: 'kitchen', floor: 'Erdgeschoss', purpose: 'Einfache Speisenzubereitung' },
+          { id: 'room-3', name: 'Vorratskammer', count: 1, roomType: 'pantry', floor: 'Erdgeschoss', purpose: 'Lebensmittel- & Faßlager' },
+          { id: 'room-4', name: 'Gästezimmer', count: 2, roomType: 'guest_room', bedsPerRoom: 2, occupiedBeds: 2, occupancyMode: 'guest', floor: '1. OG', purpose: 'Gästeunterkunft' },
+          { id: 'room-5', name: 'Personalzimmer', count: 1, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 1, occupancyMode: 'staff', floor: '1. OG', purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Toilette / Abort', count: 1, roomType: 'toilet', floor: 'Erdgeschoss', purpose: 'Sanitäre Einrichtung' },
+          { id: 'room-7', name: 'Flur', count: 1, roomType: 'hallway', floor: '1. OG', purpose: 'Verbindung der Zimmer' }
+        ];
+      } else if (isGross || isMonumental) {
+        rawRooms = [
+          { id: 'room-1', name: 'Großer Schankraum', count: 1, roomType: 'tap_room', capacity: 80, floor: 'Erdgeschoss', purpose: 'Hauptgaststube & Ausschank' },
+          { id: 'room-2', name: 'Separater Speise- & Festsaal', count: 1, roomType: 'dining_room', capacity: 40, floor: 'Erdgeschoss', purpose: 'Bankette & geschlossene Gesellschaften' },
+          { id: 'room-3', name: 'Großküche & Backstube', count: 1, roomType: 'kitchen', floor: 'Erdgeschoss', purpose: 'Warme Küche & Vorbereitung' },
+          { id: 'room-4', name: 'Vorratskammer', count: 2, roomType: 'pantry', floor: 'Erdgeschoss', purpose: 'Trockenvorräte & Gewürze' },
+          { id: 'room-5', name: 'Gewölbekeller für Bier & Wein', count: 1, roomType: 'cellar', floor: 'Keller', purpose: 'Kühles Faßlager & Weine' },
+          { id: 'room-6', name: 'Gäste-Einzelzimmer', count: 4, roomType: 'guest_room', bedsPerRoom: 1, occupiedBeds: 3, occupancyMode: 'guest', floor: '1. OG', purpose: 'Einzelbelegung' },
+          { id: 'room-7', name: 'Gäste-Doppelzimmer', count: 8, roomType: 'guest_room', bedsPerRoom: 2, occupiedBeds: 11, occupancyMode: 'guest', floor: '1. OG', purpose: 'Doppelbelegung für Reisende' },
+          { id: 'room-8', name: 'Mehrbett-Schlafsaal', count: 2, roomType: 'dormitory', bedsPerRoom: 4, occupiedBeds: 5, occupancyMode: 'guest', floor: 'Dachgeschoss', purpose: 'Günstiges Schlaflager' },
+          { id: 'room-9', name: 'Personal-Einzelzimmer', count: 2, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 2, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Unterkunft für Wirt & Koch' },
+          { id: 'room-10', name: 'Personal-Gemeinschaftszimmer', count: 3, roomType: 'shared_staff_room', bedsPerRoom: 3, occupiedBeds: 7, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Quartier für Schankmaiden & Knechte' },
+          { id: 'room-11', name: 'Familienzimmer', count: 2, roomType: 'family_room', bedsPerRoom: 3, occupiedBeds: 4, occupancyMode: 'family', floor: '1. OG', purpose: 'Privatbereich der Betreiberfamilie' },
+          { id: 'room-12', name: 'Bade- & Waschraum', count: 2, roomType: 'washroom', floor: '1. OG', purpose: 'Zuberbäder & Wäscheservice' },
+          { id: 'room-13', name: 'Toilettenanlagen', count: 4, roomType: 'toilet', floor: 'Erdgeschoss', purpose: 'Sanitäre Einrichtungen' },
+          { id: 'room-14', name: 'Eingangsfoyer', count: 1, roomType: 'entrance', floor: 'Erdgeschoss', purpose: 'Empfang & Garderobe' },
+          { id: 'room-15', name: 'Flure & Treppenhaus', count: 3, roomType: 'hallway', floor: 'Erdgeschoss / OG', purpose: 'Erschließung' },
+          { id: 'room-16', name: 'Pferdestall & Innenhof', count: 1, roomType: 'stable_yard', floor: 'Außenbereich', purpose: 'Gastpferde & Kutschen' },
+          { id: 'room-17', name: 'Büro des Wirts / Schreibstube', count: 1, roomType: 'office', floor: 'Erdgeschoss', purpose: 'Buchführung & Kasse' }
+        ];
+      } else {
+        // Mittel (Standard) - Exakt nach Vorgabe Taverne „Zum Hirsch“
+        rawRooms = [
+          // Öffentliche Bereiche
+          { id: 'room-1', name: 'Schankraum & Gaststube', count: 1, roomType: 'tap_room', capacity: 40, floor: 'Erdgeschoss', purpose: 'Ausschank & Bewirtung (ca. 40 Gäste)' },
+          { id: 'room-2', name: 'Speiseraum', count: 1, roomType: 'dining_room', capacity: 20, floor: 'Erdgeschoss', purpose: 'Essen & ruhige Tafelrunden' },
+
+          // Wirtschaft
+          { id: 'room-3', name: 'Küche', count: 1, roomType: 'kitchen', floor: 'Erdgeschoss', purpose: 'Speisenzubereitung' },
+          { id: 'room-4', name: 'Vorratskammer', count: 1, roomType: 'pantry', floor: 'Erdgeschoss', purpose: 'Zutaten & Trockenvorräte' },
+          { id: 'room-5', name: 'Lager', count: 1, roomType: 'storage', floor: 'Erdgeschoss', purpose: 'Geschirr, Brennholz & Ausrüstung' },
+          { id: 'room-6', name: 'Keller', count: 1, roomType: 'cellar', floor: 'Keller', purpose: 'Bier-, Wein- & Fässerlager' },
+
+          // Gäste
+          { id: 'room-7', name: 'Einzelzimmer für Gäste', count: 2, roomType: 'guest_room', bedsPerRoom: 1, occupiedBeds: 1, occupancyMode: 'guest', floor: '1. OG', purpose: 'Einzelunterkunft für Reisende' },
+          { id: 'room-8', name: 'Doppelzimmer für Gäste', count: 4, roomType: 'guest_room', bedsPerRoom: 2, occupiedBeds: 5, occupancyMode: 'guest', floor: '1. OG', purpose: 'Doppelzimmer für Gäste' },
+          { id: 'room-9', name: 'Mehrbettzimmer', count: 1, roomType: 'dormitory', bedsPerRoom: 4, occupiedBeds: 3, occupancyMode: 'guest', floor: 'Dachgeschoss', purpose: 'Günstige Gruppenunterkunft' },
+
+          // Personal
+          { id: 'room-10', name: 'Personal-Einzelzimmer', count: 1, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 1, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Zimmer für Koch / Hausverwalter' },
+          { id: 'room-11', name: 'Personal-Gemeinschaftszimmer', count: 2, roomType: 'shared_staff_room', bedsPerRoom: 3, occupiedBeds: 4, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Unterkunft für Bedienung & Knechte' },
+
+          // Familie
+          { id: 'room-12', name: 'Familienzimmer', count: 2, roomType: 'family_room', bedsPerRoom: 2, occupiedBeds: 3, occupancyMode: 'family', floor: '1. OG', purpose: 'Wohnbereich der Wirtsfamilie' },
+
+          // Versorgung
+          { id: 'room-13', name: 'Waschraum', count: 1, roomType: 'washroom', floor: '1. OG', purpose: 'Bade- & Waschgelegenheit' },
+          { id: 'room-14', name: 'Toilette', count: 2, roomType: 'toilet', floor: 'Erdgeschoss', purpose: 'Sanitäre Anlagen' },
+
+          // Erschließung
+          { id: 'room-15', name: 'Eingang', count: 1, roomType: 'entrance', floor: 'Erdgeschoss', purpose: 'Haupteingang & Vorraum' },
+          { id: 'room-16', name: 'Flur', count: 1, roomType: 'hallway', floor: '1. OG', purpose: 'Zimmerzugang' },
+
+          // Außenbereich
+          { id: 'room-17', name: 'Hinterhof & Pferdestall', count: 1, roomType: 'courtyard', floor: 'Außenbereich', purpose: 'Unterstand für Pferde & Kutschen' }
         ];
       }
-      if (isGross) {
-        return [
-          { id: 'room-1', name: 'Großer Schankraum', count: 1, purpose: 'Hauptgaststube (ca. 80 Gäste)' },
-          { id: 'room-2', name: 'Separater Festsaal / Clubzimmer', count: 1, purpose: 'Gesellschaften & geschlossene Runden' },
-          { id: 'room-3', name: 'Großküche & Backstube', count: 1, purpose: 'Warme Küche & Vorbereitung' },
-          { id: 'room-4', name: 'Schlafzimmer für Gäste', count: 12, purpose: 'Gästeunterkunft (Einzel- & Doppelzimmer)' },
-          { id: 'room-5', name: 'Schlafzimmer für Personal', count: 5, purpose: 'Personalunterkunft' },
-          { id: 'room-6', name: 'Gewölbekeller für Bier & Vorräte', count: 1, purpose: 'Fässer, Weine & Kühlung' },
-          { id: 'room-7', name: 'Pferdestall & Kutschenremise', count: 1, purpose: 'Gastpferde & Reisewagen' },
-          { id: 'room-8', name: 'Büro des Wirts / Schreibstube', count: 1, purpose: 'Buchführung & Kasse' }
-        ];
-      }
-      if (isMonumental) {
-        return [
-          { id: 'room-1', name: 'Prunkvoller Hauptsaal', count: 1, purpose: 'Großbewirtung & Festlichkeiten (150+ Gäste)' },
-          { id: 'room-2', name: 'Nebensäle & Séparées', count: 2, purpose: 'Exklusive Runden & VIP-Gäste' },
-          { id: 'room-3', name: 'Großgastronomieküche mit Kühlkellern', count: 1, purpose: 'Vollgastronomie' },
-          { id: 'room-4', name: 'Schlafzimmer für Gäste (Suiten)', count: 25, purpose: 'Gästeunterkunft gehobener Güte' },
-          { id: 'room-5', name: 'Schlafzimmer für Personal', count: 10, purpose: 'Personalunterkunft' },
-          { id: 'room-6', name: 'Große Hausbrauerei & Weinkeller', count: 1, purpose: 'Braustube & Großlager' },
-          { id: 'room-7', name: 'Große Stallung & Wagenhalle', count: 1, purpose: 'Gespann- & Pferdewechsel' },
-          { id: 'room-8', name: 'Direktionskontor & Geldkammer', count: 1, purpose: 'Geschäftsleitung' },
-          { id: 'room-9', name: 'Badehaus & Waschküche', count: 1, purpose: 'Gästekomfort & Wäscheservice' }
-        ];
-      }
-      // Mittel (Standard) - Vorgabe: 1 Küche, 5 Gästezimmer, 3 Personalzimmer etc.
-      return [
-        { id: 'room-1', name: 'Schankraum & Gaststube', count: 1, purpose: 'Ausschank & Bewirtung (ca. 40 Gäste)' },
-        { id: 'room-2', name: 'Küche', count: 1, purpose: 'Speisenzubereitung' },
-        { id: 'room-3', name: 'Schlafzimmer für Gäste', count: 5, purpose: 'Gästeunterkunft' },
-        { id: 'room-4', name: 'Schlafzimmer für Personal', count: 3, purpose: 'Personalunterkunft' },
-        { id: 'room-5', name: 'Vorratskeller & Bierlager', count: 1, purpose: 'Fässer & Vorräte' },
-        { id: 'room-6', name: 'Pferdestall & Innenhof', count: 1, purpose: 'Reittiere der Reisenden' }
-      ];
+      break;
 
     case 'schmiede':
       if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Werkstatt mit Esse & Amboss', count: 1, purpose: 'Schmiedearbeiten' },
-          { id: 'room-2', name: 'Werkzeug- & Kohlelager', count: 1, purpose: 'Brennstoff & Arbeitsgeräte' },
-          { id: 'room-3', name: 'Wohnstube des Schmieds', count: 1, purpose: 'Wohnbereich' }
+        rawRooms = [
+          { id: 'room-1', name: 'Werkstatt mit Esse & Amboss', count: 1, roomType: 'forge', floor: 'Erdgeschoss', purpose: 'Schmiedearbeiten' },
+          { id: 'room-2', name: 'Material- & Kohlelager', count: 1, roomType: 'storage', floor: 'Erdgeschoss', purpose: 'Brennstoff & Arbeitsgeräte' },
+          { id: 'room-3', name: 'Wohnstube des Schmieds', count: 1, roomType: 'family_room', bedsPerRoom: 2, occupiedBeds: 2, occupancyMode: 'family', floor: '1. OG', purpose: 'Wohnbereich' }
+        ];
+      } else if (isGross || isMonumental) {
+        rawRooms = [
+          { id: 'room-1', name: 'Grobschmiede & Hufbeschlag', count: 1, roomType: 'forge', floor: 'Erdgeschoss', purpose: 'Werkzeuge & Hufeisen' },
+          { id: 'room-2', name: 'Waffenschmiede & Feinarbeit', count: 1, roomType: 'workshop', floor: 'Erdgeschoss', purpose: 'Klingen & Rüstungsteile' },
+          { id: 'room-3', name: 'Gießerei & Härtebecken', count: 1, roomType: 'production_room', floor: 'Erdgeschoss', purpose: 'Guss & thermische Härtung' },
+          { id: 'room-4', name: 'Großes Material- & Erzlager', count: 1, roomType: 'warehouse_room', floor: 'Erdgeschoss', purpose: 'Barren & Kohlevorräte' },
+          { id: 'room-5', name: 'Waffenkammer & Ausstellungsraum', count: 1, roomType: 'sales_room', floor: 'Erdgeschoss', purpose: 'Verkauf & Kundenpräsentation' },
+          { id: 'room-6', name: 'Schlafzimmer für Gesellen & Knechte', count: 4, roomType: 'shared_staff_room', bedsPerRoom: 2, occupiedBeds: 6, occupancyMode: 'staff', floor: '1. OG', purpose: 'Personalunterkunft' },
+          { id: 'room-7', name: 'Meisterwohnung & Schreibstube', count: 1, roomType: 'family_room', bedsPerRoom: 2, occupiedBeds: 2, occupancyMode: 'family', floor: '1. OG', purpose: 'Leitung & Wohnen' }
+        ];
+      } else {
+        rawRooms = [
+          { id: 'room-1', name: 'Hauptschmiede (Esse & Ambosse)', count: 1, roomType: 'forge', floor: 'Erdgeschoss', purpose: 'Tagesproduktion & Reparaturen' },
+          { id: 'room-2', name: 'Material- & Kohlebunker', count: 1, roomType: 'storage', floor: 'Erdgeschoss', purpose: 'Rohstoffe & Brennmaterial' },
+          { id: 'room-3', name: 'Verkaufs- & Schauraum', count: 1, roomType: 'sales_room', floor: 'Erdgeschoss', purpose: 'Warenpräsentation & Auftragsannahme' },
+          { id: 'room-4', name: 'Meisterwohnung', count: 1, roomType: 'family_room', bedsPerRoom: 2, occupiedBeds: 2, occupancyMode: 'family', floor: '1. OG', purpose: 'Wohnraum des Schmieds' },
+          { id: 'room-5', name: 'Schlafzimmer für Gesellen', count: 2, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 2, occupancyMode: 'staff', floor: '1. OG', purpose: 'Personalunterkunft' },
+          { id: 'room-6', name: 'Beschlagplatz im Hof', count: 1, roomType: 'work_yard', floor: 'Außenbereich', purpose: 'Pferdebeschlag & Wagenräder' }
         ];
       }
-      if (isGross) {
-        return [
-          { id: 'room-1', name: 'Grobschmiede & Hufbeschlag', count: 1, purpose: 'Werkzeuge & Hufeisen' },
-          { id: 'room-2', name: 'Waffenschmiede & Feinarbeit', count: 1, purpose: 'Klingen & Rüstungsteile' },
-          { id: 'room-3', name: 'Gießerei & Härtebecken', count: 1, purpose: 'Guss & thermische Härtung' },
-          { id: 'room-4', name: 'Großes Material- & Erzlager', count: 1, purpose: 'Barren & Kohlevorräte' },
-          { id: 'room-5', name: 'Waffenkammer & Ausstellungsraum', count: 1, purpose: 'Verkauf & Kundenpräsentation' },
-          { id: 'room-6', name: 'Schlafzimmer für Gesellen & Knechte', count: 4, purpose: 'Personalunterkunft' },
-          { id: 'room-7', name: 'Meisterwohnung & Schreibstube', count: 1, purpose: 'Leitung & Buchhaltung' }
-        ];
-      }
-      if (isMonumental) {
-        return [
-          { id: 'room-1', name: 'Große Rüstungsschmiede & Zeughaus', count: 1, purpose: 'Serienfertigung von Rüstzeug' },
-          { id: 'room-2', name: 'Waffenmanufaktur', count: 1, purpose: 'Schwerter, Stangenwaffen, Schilde' },
-          { id: 'room-3', name: 'Erzschmelze & Großhochofen', count: 1, purpose: 'Erzveredelung' },
-          { id: 'room-4', name: 'Zentralmagazin für Metalle & Kohle', count: 2, purpose: 'Rohstoffdepots' },
-          { id: 'room-5', name: 'Schlafzimmer für Handwerker & Gesellen', count: 8, purpose: 'Personalunterkunft' },
-          { id: 'room-6', name: 'Verwaltungskanzlei & Prüfstelle', count: 1, purpose: 'Güteprüfung & Auftragsvergabe' }
-        ];
-      }
-      // Mittel (Standard)
-      return [
-        { id: 'room-1', name: 'Hauptschmiede (2 Essen, 2 Ambosse)', count: 1, purpose: 'Tagesproduktion & Reparaturen' },
-        { id: 'room-2', name: 'Material- & Kohlebunker', count: 1, purpose: 'Rohstoffe & Brennmaterial' },
-        { id: 'room-3', name: 'Verkaufs- & Schauraum', count: 1, purpose: 'Warenpräsentation & Auftragsannahme' },
-        { id: 'room-4', name: 'Schlafzimmer für Gesellen', count: 2, purpose: 'Personalunterkunft' },
-        { id: 'room-5', name: 'Beschlagplatz im Hof', count: 1, purpose: 'Pferdebeschlag & Wagenräder' }
-      ];
-
-    case 'baeckerei':
-    case 'muehle':
-      if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Backstube mit Steinofen', count: 1, purpose: 'Teigbereitung & Backen' },
-          { id: 'room-2', name: 'Verkaufsladen', count: 1, purpose: 'Theke & Warenausgabe' },
-          { id: 'room-3', name: 'Mehl- & Vorratskammer', count: 1, purpose: 'Zutatenlager' }
-        ];
-      }
-      if (isGross || isMonumental) {
-        return [
-          { id: 'room-1', name: 'Großbackstube mit 3 Backöfen', count: 1, purpose: 'Großproduktion von Brot & Gebäck' },
-          { id: 'room-2', name: 'Konditorei & Feingebäck-Stube', count: 1, purpose: 'Spezialitäten & Kuchen' },
-          { id: 'room-3', name: 'Großer Verkaufsraum & Probierstube', count: 1, purpose: 'Kundenbedienung' },
-          { id: 'room-4', name: 'Mehl- & Getreidesilo', count: 2, purpose: 'Rohstoffsicherung' },
-          { id: 'room-5', name: 'Schlafzimmer für Bäckergesellen', count: 4, purpose: 'Personalunterkunft' },
-          { id: 'room-6', name: 'Expedition & Auslieferungshof', count: 1, purpose: 'Beladung von Marktkarren' }
-        ];
-      }
-      return [
-        { id: 'room-1', name: 'Backstube mit 2 Backöfen', count: 1, purpose: 'Tagesproduktion' },
-        { id: 'room-2', name: 'Verkaufsraum mit Theke', count: 1, purpose: 'Kundenbedienung & Kasse' },
-        { id: 'room-3', name: 'Mehlkammer & Getreidelager', count: 1, purpose: 'Zutatenvorrat' },
-        { id: 'room-4', name: 'Schlafzimmer für Bäcker & Gesellen', count: 2, purpose: 'Personalunterkunft' },
-        { id: 'room-5', name: 'Holz- & Geräteschuppen', count: 1, purpose: 'Ofenholz & Mulden' }
-      ];
-
-    case 'bauernhof':
-      if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Wohnstube & Bauernküche', count: 1, purpose: 'Wohnbereich der Bauernfamilie' },
-          { id: 'room-2', name: 'Viehstall für Kleinvieh', count: 1, purpose: 'Hühner, Ziegen, Schwein' },
-          { id: 'room-3', name: 'Heuboden & Gerätescheune', count: 1, purpose: 'Heu & Werkzeug' },
-          { id: 'room-4', name: 'Erdkeller für Wurzelgemüse', count: 1, purpose: 'Wintervorräte' }
-        ];
-      }
-      if (isGross || isMonumental) {
-        return [
-          { id: 'room-1', name: 'Hof-Herrenhaus mit Gesindeküche', count: 1, purpose: 'Hauptwohnsitz & Verwaltung' },
-          { id: 'room-2', name: 'Großstallungen (Rinder & Pferde)', count: 2, purpose: 'Nutztierhaltung' },
-          { id: 'room-3', name: 'Schweinestall & Geflügelhof', count: 1, purpose: 'Zucht & Mast' },
-          { id: 'room-4', name: 'Große Getreidescheune & Dreschplatz', count: 2, purpose: 'Erntegut' },
-          { id: 'room-5', name: 'Schlafzimmer für Mägde & Knechte', count: 6, purpose: 'Personalunterkunft' },
-          { id: 'room-6', name: 'Räucherkammer, Käserei & Mostkeller', count: 1, purpose: 'Veredelung von Hofgütern' },
-          { id: 'room-7', name: 'Remise für Pflüge & Fuhrwerke', count: 1, purpose: 'Geräteunterstand' }
-        ];
-      }
-      return [
-        { id: 'room-1', name: 'Bauernhaus mit Wohnstube', count: 1, purpose: 'Wohnbereich & Speisekammer' },
-        { id: 'room-2', name: 'Großviehställe', count: 1, purpose: 'Kühe & Arbeitspferde' },
-        { id: 'room-3', name: 'Schweinestall & Hühnerstall', count: 1, purpose: 'Kleinvieh' },
-        { id: 'room-4', name: 'Getreidescheune & Heulager', count: 1, purpose: 'Erntevorräte' },
-        { id: 'room-5', name: 'Schlafzimmer für Mägde & Knechte', count: 3, purpose: 'Personalunterkunft' },
-        { id: 'room-6', name: 'Vorrats- & Vorratskeller', count: 1, purpose: 'Haltbarmachung' }
-      ];
-
-    case 'mine':
-      if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Mundloch & Förderstollen', count: 1, purpose: 'Erzabbau' },
-          { id: 'room-2', name: 'Werkzeug- & Gezäheschuppen', count: 1, purpose: 'Spitzhacken, Lampen & Seile' },
-          { id: 'room-3', name: 'Unterstand für Knappen', count: 1, purpose: 'Pausenraum & Schichtwechsel' }
-        ];
-      }
-      if (isGross || isMonumental) {
-        return [
-          { id: 'room-1', name: 'Hauptförderschächte & Tiefsohlen', count: 3, purpose: 'Untertageabbau' },
-          { id: 'room-2', name: 'Zechenverwaltung & Kasse', count: 1, purpose: 'Schichtleitung & Lohnvergabe' },
-          { id: 'room-3', name: 'Große Kaue mit Waschgelegenheit', count: 1, purpose: 'Umkleide & Mannschaftsraum' },
-          { id: 'room-4', name: 'Erzaufbereitung & Pochwerk', count: 1, purpose: 'Zerkleinerung & Sortierung' },
-          { id: 'room-5', name: 'Zechenschmiede & Zimmererwerkstatt', count: 1, purpose: 'Gezähe-Instandhaltung & Stützbalken' },
-          { id: 'room-6', name: 'Schlafzimmer für Bergleute (Baracken)', count: 6, purpose: 'Knappschaftsquartiere' },
-          { id: 'room-7', name: 'Großes Erzlager & Verladestation', count: 1, purpose: 'Abtransport' }
-        ];
-      }
-      return [
-        { id: 'room-1', name: 'Förderschacht & Hauptstrecke', count: 1, purpose: 'Erz- & Gesteinsförderung' },
-        { id: 'room-2', name: 'Zechenkontor & Erzwaage', count: 1, purpose: 'Erfassung des Abbaus' },
-        { id: 'room-3', name: 'Mannschaftskaue', count: 1, purpose: 'Aufenthalt & Ausrüstung' },
-        { id: 'room-4', name: 'Erzlagerplatz im Freien', count: 1, purpose: 'Zwischenlagerung von Rohstein' },
-        { id: 'room-5', name: 'Bergschmiede', count: 1, purpose: 'Schärfen von Meißeln & Hacken' },
-        { id: 'room-6', name: 'Schlafzimmer für Bergleute', count: 2, purpose: 'Personalunterkunft' }
-      ];
-
-    case 'werkstatt':
-    case 'atelier':
-    case 'manufaktur':
-      if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Werkstattraum mit Werkbank', count: 1, purpose: 'Handwerkliche Fertigung' },
-          { id: 'room-2', name: 'Material- & Werkzeugkammer', count: 1, purpose: 'Lagerung' },
-          { id: 'room-3', name: 'Wohnstube des Handwerkers', count: 1, purpose: 'Wohnbereich' }
-        ];
-      }
-      if (isGross || isMonumental) {
-        return [
-          { id: 'room-1', name: 'Große Werkhalle mit Spezialstationen', count: 2, purpose: 'Serienfertigung & Zuschnitt' },
-          { id: 'room-2', name: 'Feinarbeits- & Veredelungsraum', count: 1, purpose: 'Präzisionshandwerk' },
-          { id: 'room-3', name: 'Schauraum & Kundenkontor', count: 1, purpose: 'Musterstücke & Bestellungen' },
-          { id: 'room-4', name: 'Großlager für Rohstoffe & Fertigwaren', count: 2, purpose: 'Logistik' },
-          { id: 'room-5', name: 'Schlafzimmer für Gesellen & Arbeiter', count: 5, purpose: 'Personalunterkunft' },
-          { id: 'room-6', name: 'Meisterbüro & Entwurfszimmer', count: 1, purpose: 'Pläne & Kalkulation' }
-        ];
-      }
-      return [
-        { id: 'room-1', name: 'Hauptwerkstatt mit Werkbänken', count: 1, purpose: 'Fertigung & Reparaturen' },
-        { id: 'room-2', name: 'Material- & Rohstofflager', count: 1, purpose: 'Holz, Leder, Metalle' },
-        { id: 'room-3', name: 'Schauraum & Auslage', count: 1, purpose: 'Verkauf' },
-        { id: 'room-4', name: 'Schlafzimmer für Gesellen', count: 2, purpose: 'Personalunterkunft' },
-        { id: 'room-5', name: 'Lagerplatz für Fertigwaren', count: 1, purpose: 'Versandbereit' }
-      ];
-
-    case 'magierladen':
-      if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Kleiner Verkaufsraum & Kuriositätenecke', count: 1, purpose: 'Kundenkontakt' },
-          { id: 'room-2', name: 'Alchemiekabinett & Destille', count: 1, purpose: 'Brauen von Tinkturen' },
-          { id: 'room-3', name: 'Kräuterkammer', count: 1, purpose: 'Trocknen von Reagenzien' }
-        ];
-      }
-      if (isGross || isMonumental) {
-        return [
-          { id: 'room-1', name: 'Arkanes Verkaufskontor & Schauraum', count: 1, purpose: 'Artefakte & Spruchrollen' },
-          { id: 'room-2', name: 'Meisterlaboratorium mit Abzugsanlage', count: 1, purpose: 'Komplexe Alchemie' },
-          { id: 'room-3', name: 'Ritualkammer & Bannkreis', count: 1, purpose: 'Magische Verzauberungen & Prüfungen' },
-          { id: 'room-4', name: 'Arkane Bibliothek & Skriptorium', count: 1, purpose: 'Schriftrollen kopieren & Forschen' },
-          { id: 'room-5', name: 'Reagenzien- & Essenzengewölbe', count: 1, purpose: 'Gefahrstoffe & seltene Mineralien' },
-          { id: 'room-6', name: 'Schlafzimmer für Adepten & Schüler', count: 4, purpose: 'Personalunterkunft' },
-          { id: 'room-7', name: 'Magus-Gemach', count: 1, purpose: 'Leitung' }
-        ];
-      }
-      return [
-        { id: 'room-1', name: 'Verkaufs- & Beratungsstube', count: 1, purpose: 'Kundenannahme & Tränkeverkauf' },
-        { id: 'room-2', name: 'Laboratorium mit 2 Arbeitsplätzen', count: 1, purpose: 'Tränke & Salben zubereiten' },
-        { id: 'room-3', name: 'Kräuter- & Trockenspeicher', count: 1, purpose: 'Pflanzen, Wurzeln, Pilze' },
-        { id: 'room-4', name: 'Verschlossene Gift- & Reagenzkammer', count: 1, purpose: 'Wertvolle Essenzen' },
-        { id: 'room-5', name: 'Schlafzimmer für Adepten', count: 2, purpose: 'Personalunterkunft' }
-      ];
+      break;
 
     case 'burg':
     case 'adelssitz':
@@ -581,89 +462,133 @@ export const getDefaultRoomsForHolding = (type: string, size: string = 'Mittel')
     case 'gutshof':
     case 'schloss':
       if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Kamin- & Speisestube', count: 1, purpose: 'Gemeinschaftsraum' },
-          { id: 'room-2', name: 'Herrschaftliches Schlafgemach', count: 2, purpose: 'Herrschaftsunterkunft' },
-          { id: 'room-3', name: 'Burgküche & Speisekammer', count: 1, purpose: 'Mahlzeiten' },
-          { id: 'room-4', name: 'Schlafzimmer für Dienerschaft', count: 2, purpose: 'Personalunterkunft' },
-          { id: 'room-5', name: 'Wachstube & Waffenkammer', count: 1, purpose: 'Verteidigung' }
+        rawRooms = [
+          { id: 'room-1', name: 'Kamin- & Speisestube', count: 1, roomType: 'dining_room', capacity: 15, floor: 'Erdgeschoss', purpose: 'Gemeinschaftsraum & Speisen' },
+          { id: 'room-2', name: 'Herrschaftliches Schlafgemach', count: 2, roomType: 'family_room', bedsPerRoom: 2, occupiedBeds: 3, occupancyMode: 'family', floor: '1. OG', purpose: 'Herrschaftsunterkunft' },
+          { id: 'room-3', name: 'Burgküche & Speisekammer', count: 1, roomType: 'kitchen', floor: 'Erdgeschoss', purpose: 'Mahlzeiten' },
+          { id: 'room-4', name: 'Schlafzimmer für Dienerschaft', count: 2, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 2, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Personalunterkunft' },
+          { id: 'room-5', name: 'Wachstube & Waffenkammer', count: 1, roomType: 'guard_quarters', bedsPerRoom: 2, occupiedBeds: 2, occupancyMode: 'staff', floor: 'Erdgeschoss', purpose: 'Verteidigung & Wehr' }
+        ];
+      } else if (isGross || isMonumental) {
+        rawRooms = [
+          { id: 'room-1', name: 'Großer Thronsaal & Bankettsaal', count: 1, roomType: 'dining_room', capacity: 120, floor: 'Erdgeschoss', purpose: 'Feste & Staatsgeschäfte' },
+          { id: 'room-2', name: 'Empfangssalon & Audienzsaal', count: 1, roomType: 'audience_room', floor: 'Erdgeschoss', purpose: 'Besucher & Bittsteller' },
+          { id: 'room-3', name: 'Schlafzimmer (Familie)', count: 6, roomType: 'family_room', bedsPerRoom: 2, occupiedBeds: 8, occupancyMode: 'family', floor: '1. OG', purpose: 'Herrschaftsfamilie' },
+          { id: 'room-4', name: 'Gästezimmer (Ehrengäste)', count: 10, roomType: 'guest_room', bedsPerRoom: 2, occupiedBeds: 12, occupancyMode: 'guest', floor: '2. OG', purpose: 'Diplomaten & Gäste' },
+          { id: 'room-5', name: 'Personalzimmer', count: 12, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 10, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Dienerschaft' },
+          { id: 'room-6', name: 'Herrschaftsküche mit Vorratsgewölben', count: 1, roomType: 'kitchen', floor: 'Erdgeschoss', purpose: 'Bankette & Tafelrunden' },
+          { id: 'room-7', name: 'Speisekammer', count: 3, roomType: 'pantry', floor: 'Keller', purpose: 'Großvorräte' },
+          { id: 'room-8', name: 'Weinkeller', count: 1, roomType: 'cellar', floor: 'Keller', purpose: 'Fässer & Weine' },
+          { id: 'room-9', name: 'Zeughaus & Kasernenflügel', count: 2, roomType: 'barracks_room', bedsPerRoom: 4, occupiedBeds: 8, occupancyMode: 'staff', floor: 'Torhaus', purpose: 'Burgbesatzung' },
+          { id: 'room-10', name: 'Schlosskapelle', count: 1, roomType: 'chapel', floor: 'Erdgeschoss', purpose: 'Kult & Besinnung' },
+          { id: 'room-11', name: 'Bibliothek & Kartenzimmer', count: 1, roomType: 'archive', floor: '1. OG', purpose: 'Wissen & Akten' },
+          { id: 'room-12', name: 'Marstall & Kutschenhalle', count: 1, roomType: 'stable_yard', floor: 'Außenbereich', purpose: 'Edelpferde & Kutschen' },
+          { id: 'room-13', name: 'Waschraum', count: 3, roomType: 'washroom', floor: '1. OG', purpose: 'Bäder & Wäsche' },
+          { id: 'room-14', name: 'Toiletten', count: 5, roomType: 'toilet', floor: 'EG / OG', purpose: 'Sanitär' },
+          { id: 'room-15', name: 'Eingangshalle', count: 1, roomType: 'entrance', floor: 'Erdgeschoss', purpose: 'Repräsentativer Eingang' },
+          { id: 'room-16', name: 'Flure', count: 4, roomType: 'hallway', floor: 'EG / OG', purpose: 'Galerien & Gänge' },
+          { id: 'room-17', name: 'Treppenhaus', count: 2, roomType: 'stairway', floor: 'Zentral', purpose: 'Marmortreppen' }
+        ];
+      } else {
+        // Mittel (Standard) - Exakt nach Vorgabe Herrenhaus
+        rawRooms = [
+          // Familie
+          { id: 'room-1', name: 'Schlafzimmer (Familie)', count: 4, roomType: 'family_room', bedsPerRoom: 2, occupiedBeds: 6, occupancyMode: 'family', floor: '1. OG', purpose: 'Herrschaftliche Privatgemächer' },
+
+          // Gäste
+          { id: 'room-2', name: 'Gästezimmer', count: 6, roomType: 'guest_room', bedsPerRoom: 2, occupiedBeds: 7, occupancyMode: 'guest', floor: '2. OG', purpose: 'Gästeunterkunft' },
+
+          // Personal
+          { id: 'room-3', name: 'Personalzimmer', count: 8, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 7, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Unterkunft für Bedienstete' },
+
+          // Arbeitsräume
+          { id: 'room-4', name: 'Arbeitszimmer', count: 2, roomType: 'office', floor: '1. OG', purpose: 'Studierstube & Korrespondenz' },
+          { id: 'room-5', name: 'Büro / Verwalterkontor', count: 1, roomType: 'office', floor: 'Erdgeschoss', purpose: 'Gutsverwaltung & Buchhaltung' },
+
+          // Wirtschaft
+          { id: 'room-6', name: 'Küche', count: 1, roomType: 'kitchen', floor: 'Erdgeschoss', purpose: 'Große Speisenzubereitung' },
+          { id: 'room-7', name: 'Speisekammer', count: 2, roomType: 'pantry', floor: 'Erdgeschoss', purpose: 'Vorratshaltung' },
+          { id: 'room-8', name: 'Lager', count: 1, roomType: 'storage', floor: 'Erdgeschoss', purpose: 'Wirtschaftsgüter & Inventar' },
+          { id: 'room-9', name: 'Keller', count: 1, roomType: 'cellar', floor: 'Keller', purpose: 'Kühllager für Weine & Fässer' },
+
+          // Versorgung
+          { id: 'room-10', name: 'Waschraum', count: 2, roomType: 'washroom', floor: '1. OG', purpose: 'Badezimmer & Zuber' },
+          { id: 'room-11', name: 'Toilette', count: 3, roomType: 'toilet', floor: 'EG / OG', purpose: 'Sanitäre Einrichtungen' },
+
+          // Erschließung
+          { id: 'room-12', name: 'Eingang', count: 1, roomType: 'entrance', floor: 'Erdgeschoss', purpose: 'Eingangsportal & Vestibül' },
+          { id: 'room-13', name: 'Flure', count: 3, roomType: 'hallway', floor: 'EG / 1. OG / 2. OG', purpose: 'Erschließungsflure' },
+          { id: 'room-14', name: 'Treppenhaus', count: 2, roomType: 'stairway', floor: 'Zentral', purpose: 'Haupt- und Dienstbotentreppe' }
         ];
       }
-      if (isGross || isMonumental) {
-        return [
-          { id: 'room-1', name: 'Großer Thronsaal & Bankettsaal', count: 1, purpose: 'Feste & Staatsgeschäfte' },
-          { id: 'room-2', name: 'Empfangssalon & Audienzsaal', count: 1, purpose: 'Besucher & Bittsteller' },
-          { id: 'room-3', name: 'Prunkvolle Gemächer & Suiten', count: 10, purpose: 'Herrschaftsfamilie & Ehrengäste' },
-          { id: 'room-4', name: 'Herrschaftsküche mit Vorratsgewölben', count: 1, purpose: 'Bankette & Tafelrunden' },
-          { id: 'room-5', name: 'Zeughaus & Kasernenflügel', count: 2, purpose: 'Burgbesatzung & Waffen' },
-          { id: 'room-6', name: 'Schlafzimmer für Dienerschaft', count: 8, purpose: 'Personalunterkunft' },
-          { id: 'room-7', name: 'Schlosskapelle / Andachtsraum', count: 1, purpose: 'Kult & Besinnung' },
-          { id: 'room-8', name: 'Bibliothek & Kartenzimmer', count: 1, purpose: 'Wissen & Kriegspläne' },
-          { id: 'room-9', name: 'Marstall & Kutschenhalle', count: 1, purpose: 'Edelpferde & Kutschen' },
-          { id: 'room-10', name: 'Schatzkammer & Verliese', count: 1, purpose: 'Sicherheit' }
-        ];
-      }
-      return [
-        { id: 'room-1', name: 'Empfangs- & Rittersaal', count: 1, purpose: 'Repräsentation & Speisen' },
-        { id: 'room-2', name: 'Herrschaftliche Gemächer', count: 4, purpose: 'Wohnbereich der Gutsherren' },
-        { id: 'room-3', name: 'Schlossküche & Vorratskeller', count: 1, purpose: 'Speisenzubereitung' },
-        { id: 'room-4', name: 'Waffenkammer & Wachstube', count: 1, purpose: 'Garde & Wehr' },
-        { id: 'room-5', name: 'Schlafzimmer für Dienerschaft', count: 3, purpose: 'Personalunterkunft' },
-        { id: 'room-6', name: 'Pferdestall & Remise', count: 1, purpose: 'Kutschen & Reittiere' }
+      break;
+
+    case 'baeckerei':
+    case 'muehle':
+      rawRooms = [
+        { id: 'room-1', name: 'Backstube mit 2 Backöfen', count: 1, roomType: 'production_room', floor: 'Erdgeschoss', purpose: 'Tagesproduktion & Teigruhe' },
+        { id: 'room-2', name: 'Verkaufsraum mit Theke', count: 1, roomType: 'sales_room', floor: 'Erdgeschoss', purpose: 'Kundenbedienung & Kasse' },
+        { id: 'room-3', name: 'Mehlkammer & Getreidelager', count: 1, roomType: 'storage', floor: 'Erdgeschoss', purpose: 'Zutatenvorrat' },
+        { id: 'room-4', name: 'Meisterwohnung', count: 1, roomType: 'family_room', bedsPerRoom: 2, occupiedBeds: 2, occupancyMode: 'family', floor: '1. OG', purpose: 'Wohnraum der Familie' },
+        { id: 'room-5', name: 'Schlafzimmer für Gesellen', count: 2, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 2, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Personalunterkunft' },
+        { id: 'room-6', name: 'Holz- & Geräteschuppen', count: 1, roomType: 'utility_room', floor: 'Außenbereich', purpose: 'Ofenholz & Backmulden' }
       ];
+      break;
+
+    case 'bauernhof':
+      rawRooms = [
+        { id: 'room-1', name: 'Bauernhaus mit Wohnstube', count: 1, roomType: 'family_room', bedsPerRoom: 3, occupiedBeds: 3, occupancyMode: 'family', floor: 'Erdgeschoss', purpose: 'Wohnbereich & Speisekammer' },
+        { id: 'room-2', name: 'Schlafzimmer für Mägde & Knechte', count: 2, roomType: 'shared_staff_room', bedsPerRoom: 2, occupiedBeds: 3, occupancyMode: 'staff', floor: '1. OG', purpose: 'Personalunterkunft' },
+        { id: 'room-3', name: 'Großviehställe', count: 1, roomType: 'yard', floor: 'Außenbereich', purpose: 'Kühe & Arbeitspferde' },
+        { id: 'room-4', name: 'Schweinestall & Hühnerstall', count: 1, roomType: 'yard', floor: 'Außenbereich', purpose: 'Kleinvieh' },
+        { id: 'room-5', name: 'Getreidescheune & Heulager', count: 1, roomType: 'warehouse_room', floor: 'Außenbereich', purpose: 'Erntevorräte' },
+        { id: 'room-6', name: 'Vorrats- & Erdkeller', count: 1, roomType: 'cellar', floor: 'Keller', purpose: 'Haltbarmachung' },
+        { id: 'room-7', name: 'Wirtschaftshof', count: 1, roomType: 'courtyard', floor: 'Außenbereich', purpose: 'Hofplatz & Rangieren' }
+      ];
+      break;
+
+    case 'mine':
+      rawRooms = [
+        { id: 'room-1', name: 'Förderschacht & Hauptstrecke', count: 1, roomType: 'production_room', floor: 'Untertage', purpose: 'Erz- & Gesteinsförderung' },
+        { id: 'room-2', name: 'Zechenkontor & Erzwaage', count: 1, roomType: 'office', floor: 'Erdgeschoss', purpose: 'Erfassung des Abbaus' },
+        { id: 'room-3', name: 'Mannschaftskaue', count: 1, roomType: 'washroom', floor: 'Erdgeschoss', purpose: 'Aufenthalt & Ausrüstung' },
+        { id: 'room-4', name: 'Erzlagerplatz im Freien', count: 1, roomType: 'storage', floor: 'Außenbereich', purpose: 'Zwischenlagerung von Rohstein' },
+        { id: 'room-5', name: 'Bergschmiede', count: 1, roomType: 'forge', floor: 'Erdgeschoss', purpose: 'Schärfen von Meißeln & Hacken' },
+        { id: 'room-6', name: 'Schlafbaracken für Bergleute', count: 3, roomType: 'barracks_room', bedsPerRoom: 4, occupiedBeds: 10, occupancyMode: 'staff', floor: 'Erdgeschoss', purpose: 'Knappschaftsquartiere' }
+      ];
+      break;
 
     case 'haendler':
     case 'markt':
     case 'lagerhaus':
-      if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Verkaufsraum mit Schaufenster / Stand', count: 1, purpose: 'Warenverkauf' },
-          { id: 'room-2', name: 'Hinterer Lagerraum', count: 1, purpose: 'Warenkisten' },
-          { id: 'room-3', name: 'Schreibstube & Kasse', count: 1, purpose: 'Buchführung' }
-        ];
-      }
-      if (isGross || isMonumental) {
-        return [
-          { id: 'room-1', name: 'Großes Handelskabinett & Börsensaal', count: 1, purpose: 'Großhandel & Verträge' },
-          { id: 'room-2', name: 'Ladenlokal für Einzelkunden', count: 1, purpose: 'Direktverkauf' },
-          { id: 'room-3', name: 'Mehrstöckiges Lagerhaus (Kisten, Ballen, Fässer)', count: 2, purpose: 'Großlager' },
-          { id: 'room-4', name: 'Zoll- & Buchhaltungsbüro', count: 1, purpose: 'Finanzen' },
-          { id: 'room-5', name: 'Schlafzimmer für Schreiber & Lagerknechte', count: 5, purpose: 'Personalunterkunft' },
-          { id: 'room-6', name: 'Verladerampe & Fuhrparkremise', count: 1, purpose: 'Spedition' }
-        ];
-      }
-      return [
-        { id: 'room-1', name: 'Verkaufsraum mit Ladentresen', count: 1, purpose: 'Kundenbedienung' },
-        { id: 'room-2', name: 'Warenlager mit Regalen & Paletten', count: 1, purpose: 'Warenlagerung' },
-        { id: 'room-3', name: 'Schreibstube des Kaufmanns', count: 1, purpose: 'Kontor & Kasse' },
-        { id: 'room-4', name: 'Schlafzimmer für Handlungsgehilfen', count: 2, purpose: 'Personalunterkunft' },
-        { id: 'room-5', name: 'Ladehof für Karren', count: 1, purpose: 'Anlieferung' }
+      rawRooms = [
+        { id: 'room-1', name: 'Verkaufsraum mit Ladentresen', count: 1, roomType: 'sales_room', floor: 'Erdgeschoss', purpose: 'Kundenbedienung' },
+        { id: 'room-2', name: 'Warenlager mit Regalen & Paletten', count: 2, roomType: 'warehouse_room', floor: 'Erdgeschoss', purpose: 'Warenlagerung' },
+        { id: 'room-3', name: 'Schreibstube des Kaufmanns', count: 1, roomType: 'office', floor: '1. OG', purpose: 'Kontor & Kasse' },
+        { id: 'room-4', name: 'Schlafzimmer für Gehilfen', count: 2, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 2, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Personalunterkunft' },
+        { id: 'room-5', name: 'Ladehof für Karren', count: 1, roomType: 'work_yard', floor: 'Außenbereich', purpose: 'Anlieferung' }
       ];
+      break;
 
     default:
       if (isKlein) {
-        return [
-          { id: 'room-1', name: 'Hauptarbeitsraum', count: 1, purpose: 'Betriebstätigkeit' },
-          { id: 'room-2', name: 'Material- & Vorratskammer', count: 1, purpose: 'Lager' },
-          { id: 'room-3', name: 'Wohn- / Schlafraum', count: 1, purpose: 'Unterkunft' }
+        rawRooms = [
+          { id: 'room-1', name: 'Hauptarbeitsraum', count: 1, roomType: 'workshop', floor: 'Erdgeschoss', purpose: 'Betriebstätigkeit' },
+          { id: 'room-2', name: 'Material- & Vorratskammer', count: 1, roomType: 'storage', floor: 'Erdgeschoss', purpose: 'Lager' },
+          { id: 'room-3', name: 'Wohn- / Schlafraum', count: 1, roomType: 'bedroom', bedsPerRoom: 1, occupiedBeds: 1, occupancyMode: 'private', floor: '1. OG', purpose: 'Unterkunft' }
+        ];
+      } else {
+        rawRooms = [
+          { id: 'room-1', name: 'Haupthalle / Betriebsraum', count: 1, roomType: 'production_room', floor: 'Erdgeschoss', purpose: 'Betriebstätigkeit' },
+          { id: 'room-2', name: 'Schreibstube & Kasse', count: 1, roomType: 'office', floor: 'Erdgeschoss', purpose: 'Verwaltung' },
+          { id: 'room-3', name: 'Lagerraum', count: 1, roomType: 'storage', floor: 'Erdgeschoss', purpose: 'Material & Waren' },
+          { id: 'room-4', name: 'Schlafzimmer für Mitarbeiter', count: 2, roomType: 'staff_room', bedsPerRoom: 1, occupiedBeds: 2, occupancyMode: 'staff', floor: 'Dachgeschoss', purpose: 'Personalunterkunft' }
         ];
       }
-      if (isGross || isMonumental) {
-        return [
-          { id: 'room-1', name: 'Haupthalle / Betriebsraum', count: 2, purpose: 'Betriebstätigkeit' },
-          { id: 'room-2', name: 'Verwaltungsbüro & Kasse', count: 1, purpose: 'Leitung' },
-          { id: 'room-3', name: 'Großlager & Depot', count: 2, purpose: 'Waren & Vorräte' },
-          { id: 'room-4', name: 'Schlafzimmer für Personal', count: 5, purpose: 'Personalunterkunft' },
-          { id: 'room-5', name: 'Küche & Gemeinschaftsraum', count: 1, purpose: 'Versorgung' }
-        ];
-      }
-      return [
-        { id: 'room-1', name: 'Haupthalle / Betriebsraum', count: 1, purpose: 'Betriebstätigkeit' },
-        { id: 'room-2', name: 'Schreibstube & Kasse', count: 1, purpose: 'Verwaltung' },
-        { id: 'room-3', name: 'Lagerraum', count: 1, purpose: 'Material & Waren' },
-        { id: 'room-4', name: 'Schlafzimmer für Mitarbeiter', count: 2, purpose: 'Personalunterkunft' }
-      ];
+      break;
   }
+
+  return rawRooms.map(r => normalizeHoldingRoom(r));
 };
 
 /**
