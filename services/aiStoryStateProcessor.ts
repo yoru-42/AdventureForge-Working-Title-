@@ -21,7 +21,6 @@ import {
 import { jsonrepair } from 'jsonrepair';
 import { LocationContextService } from './locationContextService';
 import { CharacterKnowledgeService } from './characterKnowledgeService';
-import { extractDynamicStoryState } from '../utils/storyStateExtractor';
 
 export const STRUCTURED_STORY_STATE_DIRECTIVE = `
 ### ANWEISUNG FÜR STRUKTURIERTE STORY- UND ZUSTANDS-DATEN:
@@ -157,15 +156,6 @@ export class AIStoryStateProcessor {
 
     if (hasStructuredData && storyChanges) {
       updatedAdventure = this.applyStructuredStateChanges(updatedAdventure, storyChanges, notifications);
-    } else {
-      // Secondary Fallback if structured data missing or invalid
-      const chatHistory = updatedAdventure.chatHistory || [];
-      const fallbackResult = extractDynamicStoryState(updatedAdventure, chatHistory);
-      updatedAdventure = {
-        ...updatedAdventure,
-        npcs: fallbackResult.updatedNpcs,
-        storyState: fallbackResult.updatedStoryState
-      };
     }
 
     return {
@@ -175,6 +165,132 @@ export class AIStoryStateProcessor {
       hasStructuredData,
       notifications
     };
+  }
+
+  /**
+   * Validates raw AIStoryStateChanges object from AI response to ensure schema integrity.
+   * Invalid sub-blocks or malformed items are safely discarded without breaking valid blocks.
+   */
+  public static validateStoryStateChanges(raw: any): AIStoryStateChanges {
+    if (!raw || typeof raw !== 'object') {
+      return {};
+    }
+
+    const validated: AIStoryStateChanges = {};
+
+    // 1. Validate discoveredEntities
+    if (Array.isArray(raw.discoveredEntities)) {
+      validated.discoveredEntities = raw.discoveredEntities.filter((e: any) => {
+        if (!e || typeof e !== 'object') return false;
+        if (typeof e.name !== 'string' || !e.name.trim()) return false;
+        const validTypes = ['character', 'building', 'room', 'location', 'territory', 'item', 'creature', 'organization', 'event'];
+        if (typeof e.type !== 'string' || !validTypes.includes(e.type.toLowerCase())) return false;
+        return true;
+      }).map((e: any) => ({
+        type: e.type.toLowerCase() as any,
+        id: typeof e.id === 'string' && e.id.trim() ? e.id.trim() : undefined,
+        name: String(e.name).trim(),
+        role: typeof e.role === 'string' ? e.role : undefined,
+        description: typeof e.description === 'string' ? e.description : undefined,
+        locationContext: e.locationContext && typeof e.locationContext === 'object' ? {
+          locationName: typeof e.locationContext.locationName === 'string' ? e.locationContext.locationName : undefined,
+          buildingName: typeof e.locationContext.buildingName === 'string' ? e.locationContext.buildingName : undefined,
+          roomName: typeof e.locationContext.roomName === 'string' ? e.locationContext.roomName : undefined
+        } : undefined,
+        details: e.details && typeof e.details === 'object' ? e.details : undefined
+      }));
+    }
+
+    // 2. Validate locationChange
+    if (raw.locationChange && typeof raw.locationChange === 'object') {
+      const lc = raw.locationChange;
+      validated.locationChange = {
+        locationName: typeof lc.locationName === 'string' ? lc.locationName : undefined,
+        buildingId: typeof lc.buildingId === 'string' ? lc.buildingId : undefined,
+        buildingName: typeof lc.buildingName === 'string' ? lc.buildingName : undefined,
+        roomId: typeof lc.roomId === 'string' ? lc.roomId : undefined,
+        roomName: typeof lc.roomName === 'string' ? lc.roomName : undefined,
+        territoryName: typeof lc.territoryName === 'string' ? lc.territoryName : undefined,
+        regionName: typeof lc.regionName === 'string' ? lc.regionName : undefined
+      };
+    }
+
+    // 3. Validate presenceChanges
+    if (Array.isArray(raw.presenceChanges)) {
+      validated.presenceChanges = raw.presenceChanges.filter((p: any) => {
+        if (!p || typeof p !== 'object') return false;
+        if (typeof p.characterName !== 'string' || !p.characterName.trim()) return false;
+        const validStates = ['present', 'scene_participant', 'mentioned_only', 'absent'];
+        if (typeof p.state !== 'string' || !validStates.includes(p.state.toLowerCase())) return false;
+        return true;
+      }).map((p: any) => ({
+        characterId: typeof p.characterId === 'string' ? p.characterId : undefined,
+        characterName: String(p.characterName).trim(),
+        state: p.state.toLowerCase() as any,
+        locationContext: p.locationContext && typeof p.locationContext === 'object' ? {
+          locationName: typeof p.locationContext.locationName === 'string' ? p.locationContext.locationName : undefined,
+          buildingName: typeof p.locationContext.buildingName === 'string' ? p.locationContext.buildingName : undefined,
+          roomName: typeof p.locationContext.roomName === 'string' ? p.locationContext.roomName : undefined
+        } : undefined
+      }));
+    }
+
+    // 4. Validate knowledgeUpdates
+    if (Array.isArray(raw.knowledgeUpdates)) {
+      validated.knowledgeUpdates = raw.knowledgeUpdates.filter((k: any) => {
+        if (!k || typeof k !== 'object') return false;
+        if (typeof k.information !== 'string' || !k.information.trim()) return false;
+        return true;
+      }).map((k: any) => ({
+        subject: typeof k.subject === 'string' ? k.subject : 'Wissen',
+        information: String(k.information).trim(),
+        source: typeof k.source === 'string' ? k.source : undefined,
+        learnedByPlayer: Boolean(k.learnedByPlayer),
+        topic: typeof k.topic === 'string' ? k.topic : undefined
+      }));
+    }
+
+    // 5. Validate events
+    if (Array.isArray(raw.events)) {
+      validated.events = raw.events.filter((ev: any) => {
+        if (!ev || typeof ev !== 'object') return false;
+        if (typeof ev.title !== 'string' || !ev.title.trim()) return false;
+        return true;
+      }).map((ev: any) => ({
+        title: String(ev.title).trim(),
+        description: typeof ev.description === 'string' ? ev.description : '',
+        type: typeof ev.type === 'string' ? ev.type as any : undefined,
+        isPlayerTask: Boolean(ev.isPlayerTask)
+      }));
+    }
+
+    // 6. Validate relationshipChanges
+    if (Array.isArray(raw.relationshipChanges)) {
+      validated.relationshipChanges = raw.relationshipChanges.filter((r: any) => {
+        if (!r || typeof r !== 'object') return false;
+        if (typeof r.characterName !== 'string' || !r.characterName.trim()) return false;
+        return true;
+      }).map((r: any) => ({
+        characterName: String(r.characterName).trim(),
+        characterId: typeof r.characterId === 'string' ? r.characterId : undefined,
+        changeDescription: typeof r.changeDescription === 'string' ? r.changeDescription : '',
+        relationshipLevel: typeof r.relationshipLevel === 'string' ? r.relationshipLevel : undefined
+      }));
+    }
+
+    // 7. Validate worldChanges
+    if (Array.isArray(raw.worldChanges)) {
+      validated.worldChanges = raw.worldChanges.filter((w: any) => {
+        if (!w || typeof w !== 'object') return false;
+        if (typeof w.description !== 'string' || !w.description.trim()) return false;
+        return true;
+      }).map((w: any) => ({
+        description: String(w.description).trim(),
+        scope: typeof w.scope === 'string' ? w.scope as any : undefined
+      }));
+    }
+
+    return validated;
   }
 
   /**
@@ -209,7 +325,7 @@ export class AIStoryStateProcessor {
       }
     }
 
-    // Clean remaining internal tags from narrative text (e.g. [[STATUS:...]], [[LORE_ADD:...]], [[KNOWLEDGE_ADD:...]], ```json...```)
+    // Clean remaining internal tags from narrative text
     cleanedNarrativeText = cleanedNarrativeText
       .replace(/\[\[LORE_ADD:[^\]]+\]\]/gi, '')
       .replace(/\[\[LORE_UPDATE:[^\]]+\]\]/gi, '')
@@ -226,8 +342,13 @@ export class AIStoryStateProcessor {
         } catch (_) {}
         const parsed = JSON.parse(repaired);
         if (typeof parsed === 'object' && parsed !== null) {
-          storyChanges = parsed as AIStoryStateChanges;
-          hasStructuredData = true;
+          const validated = this.validateStoryStateChanges(parsed);
+          hasStructuredData = Object.keys(validated).some(k =>
+            Array.isArray((validated as any)[k]) ? (validated as any)[k].length > 0 : !!(validated as any)[k]
+          );
+          if (hasStructuredData) {
+            storyChanges = validated;
+          }
         }
       } catch (err) {
         console.warn("[AIStoryStateProcessor] Failed to parse structured JSON state:", err);
@@ -368,8 +489,29 @@ export class AIStoryStateProcessor {
 
       storyEntities.push(newStoryEntity);
 
-      // If character or creature, add to dynamic NPCs list
+      // If character or creature, add to dynamic NPCs list with resolved locationContext and presenceState
       if (discovery.type === 'character' || discovery.type === 'creature') {
+        const currentLoc = LocationContextService.resolveCurrentLocation(adventure);
+        const holdings = adventure.world?.economyConfig?.holdings || [];
+
+        let initialLocContext: CurrentLocationContext = currentLoc;
+        if (discovery.locationContext && (discovery.locationContext.locationName || discovery.locationContext.buildingName || discovery.locationContext.roomName)) {
+          const matchedBuilding = discovery.locationContext.buildingName
+            ? LocationContextService.resolveBuilding(holdings, discovery.locationContext.buildingName, discovery.locationContext.locationName || currentLoc.locationName)
+            : undefined;
+          const matchedRoom = LocationContextService.resolveRoom(matchedBuilding, discovery.locationContext.roomName);
+
+          initialLocContext = {
+            locationName: discovery.locationContext.locationName || currentLoc.locationName,
+            buildingId: matchedBuilding?.id,
+            buildingName: matchedBuilding?.name || discovery.locationContext.buildingName,
+            roomId: matchedRoom.roomId,
+            roomName: matchedRoom.roomName,
+            territoryName: currentLoc.territoryName,
+            regionName: currentLoc.regionName
+          };
+        }
+
         updatedNpcs.push({
           id: entityId,
           name: cleanName,
@@ -378,7 +520,13 @@ export class AIStoryStateProcessor {
           personality: 'Unbekannt',
           relationship: 'Neu entdeckt',
           conduct: 'Neutral',
-          currentSituation: 'In der aktuellen Szene',
+          currentSituation: 'Neu entdeckt',
+          currentLocationContext: initialLocContext,
+          presenceState: {
+            state: 'present',
+            locationContext: initialLocContext,
+            updatedAt: new Date().toISOString()
+          },
           appearance: {
             hairColor: 'Unbekannt',
             eyeColor: 'Unbekannt',
@@ -461,6 +609,7 @@ export class AIStoryStateProcessor {
   ): Adventure {
     const npcs = [...(adventure.npcs || [])];
     const currentLoc = LocationContextService.resolveCurrentLocation(adventure);
+    const holdings = adventure.world?.economyConfig?.holdings || [];
 
     presenceChanges.forEach(p => {
       if (!p || !p.characterName) return;
@@ -473,11 +622,45 @@ export class AIStoryStateProcessor {
       );
 
       if (npc) {
-        if (p.state === 'mentioned_only' || p.state === 'absent') {
-          // Explicitly mentioned in text, but NOT present in scene
-          npc.currentSituation = p.state === 'mentioned_only' ? 'In Gedanken/Gesprächen erwähnt' : 'Abwesend';
+        const now = new Date().toISOString();
+
+        if (p.state === 'mentioned_only') {
+          npc.presenceState = {
+            state: 'absent',
+            updatedAt: now
+          };
+          npc.currentSituation = 'In Gedanken/Gesprächen erwähnt';
+        } else if (p.state === 'absent') {
+          npc.presenceState = {
+            state: 'absent',
+            updatedAt: now
+          };
+          npc.currentSituation = 'Abwesend';
         } else if (p.state === 'present' || p.state === 'scene_participant') {
-          // Physically present at location
+          let targetLoc: CurrentLocationContext = currentLoc;
+          if (p.locationContext && (p.locationContext.locationName || p.locationContext.buildingName || p.locationContext.roomName)) {
+            const matchedBuilding = p.locationContext.buildingName
+              ? LocationContextService.resolveBuilding(holdings, p.locationContext.buildingName, p.locationContext.locationName || currentLoc.locationName)
+              : undefined;
+            const matchedRoom = LocationContextService.resolveRoom(matchedBuilding, p.locationContext.roomName);
+
+            targetLoc = {
+              locationName: p.locationContext.locationName || currentLoc.locationName,
+              buildingId: matchedBuilding?.id,
+              buildingName: matchedBuilding?.name || p.locationContext.buildingName,
+              roomId: matchedRoom.roomId,
+              roomName: matchedRoom.roomName,
+              territoryName: currentLoc.territoryName,
+              regionName: currentLoc.regionName
+            };
+          }
+
+          npc.presenceState = {
+            state: p.state,
+            locationContext: targetLoc,
+            updatedAt: now
+          };
+          npc.currentLocationContext = targetLoc;
           npc.currentSituation = p.state === 'scene_participant' ? 'Nimmt aktiv an der Szene teil' : 'Am Ort anwesend';
         }
       }

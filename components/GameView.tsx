@@ -28,7 +28,7 @@ import { applyProfessionCompetencyActivity } from '../services/professionCompete
 import { ProfessionCompetencyActivity, StoryEntityItem, StoryInfoState } from '../types';
 import { StoryInfoModal } from './StoryInfoModal';
 import { Info } from 'lucide-react';
-import { getAllAdventureCharacters, extractDynamicStoryState } from '../utils/storyStateExtractor';
+import { getAllAdventureCharacters } from '../utils/storyStateExtractor';
 import { LocationContextService } from '../services/locationContextService';
 import { AIStoryStateProcessor, STRUCTURED_STORY_STATE_DIRECTIVE } from '../services/aiStoryStateProcessor';
 import { CharacterPortrait } from './CharacterPortrait';
@@ -2697,19 +2697,6 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
         }
       }
 
-      // Legacy fallback only for old save files with no structured state and empty storyEntities
-      if (!updated && (!currentAdv.storyState || !currentAdv.storyState.storyEntities || currentAdv.storyState.storyEntities.length === 0)) {
-        const { updatedStoryState, updatedNpcs, hasChanges } = extractDynamicStoryState(currentAdv, currentMsgs);
-        if (hasChanges) {
-          currentAdv = {
-            ...currentAdv,
-            storyState: updatedStoryState,
-            npcs: updatedNpcs
-          };
-          updated = true;
-        }
-      }
-
       if (updated) {
         onUpdateAdventure(currentAdv);
       }
@@ -3252,28 +3239,6 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
           }
         }
       });
-    }
-
-    // Extract dynamic story state (Location, Territory, Situation, Goals, Relationships, Entities)
-    const { updatedStoryState: dynStoryState, updatedNpcs: dynNpcs, hasChanges: storyHasChanges, newEntitiesCount } = extractDynamicStoryState(
-      {
-        ...adventure,
-        loreDatabase: updatedLore,
-        npcs: updatedNpcs
-      },
-      messages
-    );
-
-    if (storyHasChanges) {
-      hasChanges = true;
-      if (newEntitiesCount > 0) {
-        notifications.push({
-          id: Math.random().toString(),
-          type: 'add',
-          title: `${newEntitiesCount} neue Story-Einträge erfasst`,
-          category: 'Story & Quests'
-        });
-      }
     }
 
     if (hasChanges) {

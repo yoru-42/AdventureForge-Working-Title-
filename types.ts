@@ -870,6 +870,8 @@ export interface Character {
   tasks?: EconomyTask[]; // Persönliche rollenspezifische Aufgaben
   duties?: EconomyDuty[]; // Rollenspezifische wiederkehrende Pflichten
   characterKnowledge?: CharacterKnowledge; // Strukturiertes Charakterwissen & Wissensstand
+  currentLocationContext?: CurrentLocationContext;
+  presenceState?: CharacterPresenceState;
 }
 
 export type InformationType =
@@ -3164,6 +3166,13 @@ export interface CurrentLocationContext {
 
   positionDescription?: string;
 
+  updatedAt?: string;
+}
+
+export interface CharacterPresenceState {
+  state: 'absent' | 'present' | 'scene_participant';
+  locationContext?: CurrentLocationContext;
+  sceneId?: string;
   updatedAt?: string;
 }
 

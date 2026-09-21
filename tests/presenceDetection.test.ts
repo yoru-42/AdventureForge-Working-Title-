@@ -214,4 +214,150 @@ console.log('=== RUNNING PRESENCE & SCENE DETECTION TESTS ===\n');
   );
 }
 
-console.log('\n=== ALL 12 TESTS PASSED PERFECTLY ===');
+// Imports for pipeline tests
+import { AIStoryStateProcessor } from '../services/aiStoryStateProcessor';
+
+// Test 13: processPresenceChanges - mentioned_only vs scene_participant
+{
+  const dummyAdventure: any = {
+    npcs: [
+      { id: 'npc-13a', name: 'Bartholomäus', currentSituation: 'Neu' },
+      { id: 'npc-13b', name: 'Clara', currentSituation: 'Neu' }
+    ],
+    currentLocation: { locationName: 'Falkengrund' }
+  };
+
+  const processed = (AIStoryStateProcessor as any).processPresenceChanges(dummyAdventure, [
+    { characterId: 'npc-13a', characterName: 'Bartholomäus', state: 'mentioned_only' },
+    { characterId: 'npc-13b', characterName: 'Clara', state: 'scene_participant' }
+  ]);
+
+  const bart = processed.npcs.find((n: any) => n.id === 'npc-13a');
+  const clara = processed.npcs.find((n: any) => n.id === 'npc-13b');
+
+  assert(
+    bart.presenceState.state === 'absent' &&
+    bart.currentSituation.includes('erwähnt') &&
+    LocationContextService.isCharacterAtLocation(bart, dummyAdventure.currentLocation) === false,
+    'Test 13a: mentioned_only sets presenceState to absent and returns false for presence'
+  );
+
+  assert(
+    clara.presenceState.state === 'scene_participant' &&
+    clara.currentSituation.includes('aktiv') &&
+    LocationContextService.isCharacterAtLocation(clara, dummyAdventure.currentLocation) === true,
+    'Test 13b: scene_participant sets presenceState to scene_participant and returns true for presence'
+  );
+}
+
+// Test 14: Movement of player does NOT mutate global world state (adventure.world.currentLocationId)
+{
+  const dummyAdventure: any = {
+    world: { currentLocationId: 'world-loc-global-orig' },
+    currentLocation: { locationName: 'Falkengrund', locationId: 'loc-1' },
+    storyState: { currentLocationContext: { locationName: 'Falkengrund', locationId: 'loc-1' } }
+  };
+
+  const updated = LocationContextService.updateCurrentLocation(dummyAdventure, {
+    locationId: 'loc-2',
+    locationName: 'Drachenfels'
+  });
+
+  assert(
+    updated.currentLocation.locationName === 'Drachenfels' &&
+    updated.world.currentLocationId === 'world-loc-global-orig',
+    'Test 14: Player location update preserves adventure.world.currentLocationId'
+  );
+}
+
+// Test 15: resolveRoom and resolveBuilding strict ID and name matching
+{
+  const mockHolding: any = {
+    id: 'holding-taverne',
+    name: 'Taverne Zum Hirsch',
+    buildingRooms: [
+      { id: 'room-1', name: 'Schankraum' },
+      { id: 'room-2', name: 'Küche' }
+    ]
+  };
+
+  const resolvedBuilding = LocationContextService.resolveBuilding([mockHolding], 'Taverne Zum Hirsch');
+  assert(
+    resolvedBuilding?.id === 'holding-taverne',
+    'Test 15a: resolveBuilding matches holding by name without wildcard creation'
+  );
+
+  const resolvedKnownRoom = LocationContextService.resolveRoom(mockHolding, 'Schankraum');
+  assert(
+    resolvedKnownRoom.roomId === 'room-1' && resolvedKnownRoom.roomName === 'Schankraum',
+    'Test 15b: resolveRoom matches registered room ID strictly'
+  );
+
+  const resolvedUnregisteredRoom = LocationContextService.resolveRoom(mockHolding, 'Geheimkammer Hinter Dem Regal');
+  assert(
+    resolvedUnregisteredRoom.roomId === undefined && resolvedUnregisteredRoom.roomName === 'Geheimkammer Hinter Dem Regal',
+    'Test 15c: resolveRoom keeps roomName and leaves roomId undefined for unregistered room (no unsafe string replace ID)'
+  );
+}
+
+// Test 16: Structured State Validation discards malformed items safely
+{
+  const malformedInput = {
+    discoveredEntities: [
+      { name: 'Gültiger NPC', type: 'character' },
+      { name: '', type: 'character' }, // invalid name
+      { name: 'Invalid Type', type: 'unknown_type' }, // invalid type
+      null
+    ],
+    presenceChanges: [
+      { characterName: 'Clara', state: 'scene_participant' },
+      { characterName: '', state: 'present' }, // invalid name
+      { characterName: 'Wache', state: 'flying' } // invalid state
+    ]
+  };
+
+  const validated = AIStoryStateProcessor.validateStoryStateChanges(malformedInput);
+  assert(
+    validated.discoveredEntities?.length === 1 && validated.discoveredEntities[0].name === 'Gültiger NPC',
+    'Test 16a: validateStoryStateChanges safely discards malformed discoveredEntities'
+  );
+  assert(
+    validated.presenceChanges?.length === 1 && validated.presenceChanges[0].characterName === 'Clara',
+    'Test 16b: validateStoryStateChanges safely discards malformed presenceChanges'
+  );
+}
+
+// Test 17: AIStoryStateProcessor decoupled from legacy scanner on plain text response
+{
+  const plainNarrativeAiText = "Du betrittst die alte Bibliothek. Der Staub tanzt im Sonnenlicht.";
+  const dummyAdv: any = {
+    npcs: [{ id: 'npc-orig', name: 'Original NPC' }],
+    storyState: { storyEntities: [] }
+  };
+
+  const processed = AIStoryStateProcessor.parseAndProcessAiResponse(plainNarrativeAiText, dummyAdv);
+  assert(
+    processed.hasStructuredData === false &&
+    processed.cleanedNarrativeText === plainNarrativeAiText &&
+    processed.updatedAdventure.npcs.length === 1,
+    'Test 17: AIStoryStateProcessor does not run legacy scanner on plain narrative text'
+  );
+}
+
+// Test 18: Absent presenceState overrides companion/party boolean flags
+{
+  const playerLoc: CurrentLocationContext = { locationName: 'Falkengrund' };
+  const absentCompanion = {
+    id: 'comp-1',
+    name: 'Gefährte',
+    isCompanion: true,
+    presenceState: { state: 'absent' }
+  };
+
+  assert(
+    LocationContextService.isCharacterAtLocation(absentCompanion, playerLoc) === false,
+    'Test 18: presenceState.state === "absent" overrides isCompanion flag'
+  );
+}
+
+console.log('\n=== ALL 18 TESTS PASSED PERFECTLY ===');

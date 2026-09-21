@@ -318,6 +318,105 @@ export class LocationContextService {
   }
 
   /**
+   * Resolves a room within a specific building strictly.
+   * Priority:
+   * 1. Exact roomId match in registered rooms of the building
+   * 2. Exact room name match in registered rooms of the building
+   * 3. Normalized string match within the same building
+   * 4. No hit -> return { roomId: undefined, roomName }
+   */
+  public static resolveRoom(
+    building: EconomyHolding | any | undefined,
+    roomIdOrName?: string
+  ): { roomId?: string; roomName?: string } {
+    if (!roomIdOrName || !roomIdOrName.trim()) {
+      return { roomId: undefined, roomName: undefined };
+    }
+
+    const cleanInput = roomIdOrName.trim();
+
+    if (!building) {
+      return { roomId: undefined, roomName: cleanInput };
+    }
+
+    const registeredRooms: Array<{ id?: string; name: string }> = [];
+    if (Array.isArray(building.buildingRooms)) {
+      building.buildingRooms.forEach((r: any) => {
+        if (typeof r === 'string') {
+          registeredRooms.push({ name: r });
+        } else if (r && typeof r === 'object' && r.name) {
+          registeredRooms.push({ id: r.id, name: r.name });
+        }
+      });
+    }
+    if (Array.isArray(building.roomsOrAreas)) {
+      building.roomsOrAreas.forEach((r: any) => {
+        if (typeof r === 'string') {
+          if (!registeredRooms.some(rr => rr.name.toLowerCase() === r.toLowerCase())) {
+            registeredRooms.push({ name: r });
+          }
+        }
+      });
+    }
+
+    // 1. Exact ID
+    const matchById = registeredRooms.find(r => r.id && r.id === cleanInput);
+    if (matchById) {
+      return { roomId: matchById.id, roomName: matchById.name };
+    }
+
+    // 2. Exact Name
+    const matchByName = registeredRooms.find(r => r.name.trim() === cleanInput);
+    if (matchByName) {
+      return { roomId: matchByName.id, roomName: matchByName.name };
+    }
+
+    // 3. Controlled normalized match within the SAME building
+    const matchByNormalized = registeredRooms.find(r => r.name.trim().toLowerCase() === cleanInput.toLowerCase());
+    if (matchByNormalized) {
+      return { roomId: matchByNormalized.id, roomName: matchByNormalized.name };
+    }
+
+    // 4. No hit -> keep roomName, leave roomId undefined
+    return { roomId: undefined, roomName: cleanInput };
+  }
+
+  /**
+   * Resolves a building strictly within the current location / holdings pool.
+   */
+  public static resolveBuilding(
+    holdings: EconomyHolding[] = [],
+    buildingIdOrName?: string,
+    currentLocationName?: string
+  ): EconomyHolding | undefined {
+    if (!buildingIdOrName || !buildingIdOrName.trim()) return undefined;
+    const clean = buildingIdOrName.trim();
+
+    // 1. Exact ID
+    const byId = holdings.find(h => h.id === clean);
+    if (byId) return byId;
+
+    // Filter by location if specified
+    const locationHoldings = currentLocationName
+      ? holdings.filter(h => h.locationName && h.locationName.trim().toLowerCase() === currentLocationName.trim().toLowerCase())
+      : holdings;
+
+    const searchPool = locationHoldings.length > 0 ? locationHoldings : holdings;
+
+    // 2. Exact Name in search pool
+    const byExactName = searchPool.find(h => h.name.trim().toLowerCase() === clean.toLowerCase());
+    if (byExactName) return byExactName;
+
+    // 3. Exact Name in global holdings
+    if (searchPool !== holdings) {
+      const byGlobalExactName = holdings.find(h => h.name.trim().toLowerCase() === clean.toLowerCase());
+      if (byGlobalExactName) return byGlobalExactName;
+    }
+
+    return undefined;
+  }
+
+  /**
    * Updates the central location context atomically across all legacy and current structures in the Adventure.
    */
   public static updateCurrentLocation(
@@ -387,7 +486,7 @@ export class LocationContextService {
       });
     }
 
-    // Atomic update
+    // Atomic update - Note: adventure.world global location IDs are intentionally NOT mutated by player movement!
     const updatedAdventure: Adventure = {
       ...adventure,
       currentLocation: finalContext,
@@ -408,16 +507,6 @@ export class LocationContextService {
         currentLocationContext: finalContext,
         currentLocationName: finalContext.locationName || displayStr,
         currentTerritoryName: finalContext.territoryName || ''
-      },
-      world: {
-        ...adventure.world,
-        currentLocationId: finalContext.locationId || adventure.world?.currentLocationId,
-        currentTerritoryId: finalContext.territoryId || adventure.world?.currentTerritoryId,
-        dynamicWorldState: adventure.world?.dynamicWorldState ? {
-          ...adventure.world.dynamicWorldState,
-          currentLocationId: finalContext.locationId || adventure.world.dynamicWorldState.currentLocationId,
-          currentTerritoryId: finalContext.territoryId || adventure.world.dynamicWorldState.currentTerritoryId
-        } : undefined
       },
       statusElements: updatedStatusElements
     };
@@ -445,11 +534,18 @@ export class LocationContextService {
    */
   public static changeRoom(adventure: Adventure, roomIdOrName: string): Adventure {
     const current = this.resolveCurrentLocation(adventure);
+    const holdings = adventure.world?.economyConfig?.holdings || [];
+    const currentBuilding = (current.buildingId || current.buildingName)
+      ? holdings.find(h => (current.buildingId && h.id === current.buildingId) || (current.buildingName && h.name.toLowerCase() === current.buildingName.toLowerCase()))
+      : undefined;
+
+    const resolvedRoom = this.resolveRoom(currentBuilding, roomIdOrName);
+
     return this.updateCurrentLocation(adventure, {
       ...current,
-      roomId: roomIdOrName.toLowerCase().replace(/\s+/g, '-'),
-      roomName: roomIdOrName
-    }, { preserveBuilding: true, preserveRoom: true });
+      roomId: resolvedRoom.roomId,
+      roomName: resolvedRoom.roomName
+    }, { preserveBuilding: true });
   }
 
   /**
@@ -462,17 +558,15 @@ export class LocationContextService {
   ): Adventure {
     const current = this.resolveCurrentLocation(adventure);
     const holdings = adventure.world?.economyConfig?.holdings || [];
-    const match = holdings.find(h => 
-      h.id.toLowerCase() === buildingIdOrName.toLowerCase() ||
-      h.name.toLowerCase() === buildingIdOrName.toLowerCase() ||
-      h.name.toLowerCase().includes(buildingIdOrName.toLowerCase())
-    );
+    const match = this.resolveBuilding(holdings, buildingIdOrName, current.locationName);
 
-    const buildingId = match ? match.id : buildingIdOrName;
+    const buildingId = match ? match.id : undefined;
     const buildingName = match ? match.name : buildingIdOrName;
     const locationName = match?.locationName || current.locationName;
     const locationId = match?.locationId || current.locationId;
     const territoryId = match?.territoryId || current.territoryId;
+
+    const resolvedRoom = this.resolveRoom(match, initialRoomIdOrName);
 
     return this.updateCurrentLocation(adventure, {
       ...current,
@@ -481,8 +575,8 @@ export class LocationContextService {
       locationId,
       locationName,
       territoryId,
-      roomId: initialRoomIdOrName ? initialRoomIdOrName.toLowerCase().replace(/\s+/g, '-') : undefined,
-      roomName: initialRoomIdOrName
+      roomId: resolvedRoom.roomId,
+      roomName: resolvedRoom.roomName
     });
   }
 
@@ -602,6 +696,11 @@ export class LocationContextService {
   ): CurrentLocationContext | null {
     if (!character) return null;
 
+    // Check presenceState location context if present
+    if (character.presenceState?.locationContext && typeof character.presenceState.locationContext === 'object') {
+      return character.presenceState.locationContext;
+    }
+
     // Direct structured object if present
     if (character.currentLocationContext && typeof character.currentLocationContext === 'object') {
       return character.currentLocationContext;
@@ -675,11 +774,18 @@ export class LocationContextService {
       return true;
     }
 
-    // 3. Explicit boolean presence flags (e.g. companion actively following player in party)
-    if (character.isExplicitlyPresent === true || character.isPresent === true || character.isCompanion === true || character.isPartyMember === true) {
-      return true;
+    // 3. Check presenceState enum if defined on character
+    if (character.presenceState) {
+      if (character.presenceState.state === 'absent') {
+        return false;
+      }
+      if (character.presenceState.state === 'scene_participant') {
+        return true;
+      }
     }
-    if (character.details?.isExplicitlyPresent === true || character.details?.isPresent === true || character.details?.isCompanion === true) {
+
+    // 4. Explicit boolean override flags (e.g. isExplicitlyPresent set for specific scene)
+    if (character.isExplicitlyPresent === true || character.details?.isExplicitlyPresent === true) {
       return true;
     }
 
