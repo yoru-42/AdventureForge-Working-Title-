@@ -521,7 +521,7 @@ export class LocationContextService {
 
   /**
    * Checks if a character is at the current structured location.
-   * Matches room, building, location, and territory.
+   * Matches room, building, location, and territory hierarchy.
    */
   public static isCharacterAtLocation(
     character: any,
@@ -544,8 +544,12 @@ export class LocationContextService {
       ''
     ).trim();
 
-    // If character has no assigned location at all, they are not present by default
+    // If character has no assigned location field:
     if (!rawCharLoc) {
+      const sit = (character.currentSituation || character.details?.currentSituation || '').toLowerCase();
+      if (sit.includes('anwesend') || sit.includes('vor ort') || sit.includes('begleiter') || sit.includes('gefährte')) {
+        return true;
+      }
       return false;
     }
 
@@ -554,6 +558,11 @@ export class LocationContextService {
       .split('(')[0]
       .trim()
       .toLowerCase();
+
+    // If character location is explicitly "anwesend" or "beim spieler"
+    if (cleanCharLoc.includes('anwesend') || cleanCharLoc.includes('beim spieler') || cleanCharLoc.includes('begleiter')) {
+      return true;
+    }
 
     // Compare with current location hierarchy
     const candidateMatches = [
@@ -573,30 +582,18 @@ export class LocationContextService {
   }
 
   /**
-   * Filters a list of characters (NPCs/Lore) to those who are actually present at the given location
-   * and/or mentioned in the active dialogue/chat scene.
+   * Filters a list of characters (NPCs/Lore) to those who are physically present at the given location context.
+   * Chat mentions do not count as physical presence ("Bekannt ≠ Anwesend").
    */
   public static filterPresentCharacters<T extends any>(
     characters: T[],
-    currentLocation: CurrentLocationContext,
-    recentMessagesText: string = ''
+    currentLocation: CurrentLocationContext
   ): T[] {
     if (!characters || characters.length === 0) return [];
 
-    const normRecent = recentMessagesText.toLowerCase();
-
     return characters.filter(char => {
       const c = char as any;
-      // 1. Direct location check
-      const atLoc = this.isCharacterAtLocation(c, currentLocation);
-      
-      // 2. Mention in recent active scene text
-      const name = (c.name || c.title || '').trim();
-      const nickname = (c.nickname || c.rufName || c.details?.nickname || c.details?.rufName || '').trim();
-      const isMentioned = (name && normRecent.includes(name.toLowerCase())) ||
-                          (nickname && normRecent.includes(nickname.toLowerCase()));
-
-      return atLoc || isMentioned;
+      return this.isCharacterAtLocation(c, currentLocation);
     });
   }
 }

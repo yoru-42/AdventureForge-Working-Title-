@@ -1660,244 +1660,106 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     return powerLevels;
   };
 
-  // Erkennt anwesende Gegner und feindliche Gruppen aus den jüngsten Chat-Ereignissen
+  // Erkennt anwesende Gegner und feindliche Gruppen streng anhand des aktuellen Standorts (LocationContext)
   const detectedEnemies = React.useMemo(() => {
     const presentList: { id: string; name: string; type: 'npc' | 'group' | 'dynamic'; subtitle?: string }[] = [];
     const addedNames = new Set<string>();
 
-    if (!messages || messages.length === 0) return presentList;
+    const currentLoc = LocationContextService.resolveCurrentLocation(adventure);
 
-    // First scan the MOST RECENT message (active immediate scene context)
-    const lastMsg = messages[messages.length - 1];
-    const lastMsgText = lastMsg?.text || '';
-
-    // Also prepare combined text of last 2 messages if lastMsg alone is short
-    const recentMsgs = messages.slice(-2);
-    const combinedRecentText = recentMsgs.map(m => m.text || '').join(' ');
-
-    const textToScan = lastMsgText.trim().length > 40 ? lastMsgText : combinedRecentText;
-
-    const escapeRegExp = (string: string) => {
-      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    };
-
-    // 1. Check all characters in Codex - ONLY HOSTILE ONES
-    const codexChars = (adventure.loreDatabase || []).filter(item => item.category === 'Charaktere');
-    codexChars.forEach(char => {
-      const lowerTitle = char.title.toLowerCase();
-      if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, char.title)) return;
-
-      const npc = (adventure.npcs || []).find(n => isNameMatch(n.name, n.nickname || (n as any).rufName, char.title));
+    // 1. Check all NPCs - ONLY HOSTILE ONES PRESENT AT LOCATION
+    (adventure.npcs || []).forEach(npc => {
+      if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, npc.name)) return;
       
-      const isExplicitlyHostile = npc?.isHostile || char.details?.isHostile === true;
-      const isAlly = npc?.role?.toLowerCase().includes('gefährte') || 
-                     npc?.role?.toLowerCase().includes('verbündet') ||
-                     npc?.role?.toLowerCase().includes('freund') ||
-                     npc?.role?.toLowerCase().includes('mentor') ||
-                     npc?.role?.toLowerCase().includes('lehrer') ||
-                     char.details?.role?.toLowerCase().includes('gefährte') ||
-                     char.details?.role?.toLowerCase().includes('verbündet') ||
-                     char.details?.role?.toLowerCase().includes('freund') ||
-                     char.details?.role?.toLowerCase().includes('mentor') ||
-                     char.details?.role?.toLowerCase().includes('lehrer') ||
-                     (char.details?.relationship && /freund|alli|mentor|lehr|geliebte|gefähr/i.test(JSON.stringify(char.details.relationship)));
+      const isExplicitlyHostile = npc.isHostile || 
+        npc.role?.toLowerCase().includes('feind') || 
+        npc.role?.toLowerCase().includes('gegner') ||
+        npc.role?.toLowerCase().includes('bandit') ||
+        npc.role?.toLowerCase().includes('räuber') ||
+        npc.role?.toLowerCase().includes('pirat');
 
-      if (isAlly || (!isExplicitlyHostile && npc !== undefined)) return;
+      const isAlly = npc.role?.toLowerCase().includes('gefährte') || 
+                     npc.role?.toLowerCase().includes('verbündet') ||
+                     npc.role?.toLowerCase().includes('freund') ||
+                     npc.role?.toLowerCase().includes('mentor') ||
+                     npc.role?.toLowerCase().includes('lehrer');
 
-      const aliases = [char.title, char.details?.nickname, char.details?.rufName]
-        .filter(Boolean)
-        .map(n => escapeRegExp(n!));
-      const regex = new RegExp(`\\b(?:${aliases.join('|')})\\b`, 'i');
-      if (regex.test(textToScan) || regex.test(combinedRecentText)) {
+      if (isAlly || !isExplicitlyHostile) return;
+
+      const isPresent = LocationContextService.isCharacterAtLocation(npc, currentLoc) || (isCombatActive && selectedEnemyId === npc.id);
+      if (!isPresent) return;
+
+      const lowerName = (npc.nickname || npc.name).toLowerCase();
+      if (!addedNames.has(lowerName)) {
         presentList.push({
-          id: char.id || npc?.id || `detected-char-${lowerTitle}`,
-          name: char.title,
+          id: npc.id,
+          name: npc.nickname || npc.name,
           type: 'npc',
-          subtitle: char.details?.role || npc?.role || 'Gegner'
+          subtitle: npc.role || 'Anwesender Gegner'
         });
-        addedNames.add(lowerTitle);
+        addedNames.add(lowerName);
       }
     });
 
-    // 2. Check all Gegner (Enemies) in Codex
-    const codexEnemies = (adventure.loreDatabase || []).filter(item => item.category === 'Gegner');
+    // 2. Check all LoreDatabase entries (Gegner / feindliche Charaktere) PRESENT AT LOCATION
+    const codexEnemies = (adventure.loreDatabase || []).filter(item => 
+      item.category === 'Gegner' || 
+      (item.category === 'Charaktere' && item.details?.isHostile === true)
+    );
+
     codexEnemies.forEach(enemy => {
       const lowerTitle = enemy.title.toLowerCase();
-      // EXPLICIT CHECK: Skip if it matches the player's name/nickname or is a friendly companion NPC!
       if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, enemy.title)) return;
+      if (addedNames.has(lowerTitle)) return;
+
       const isFriendlyNpc = (adventure.npcs || []).some(n => !n.isHostile && isNameMatch(n.name, n.nickname || (n as any).rufName, enemy.title));
       if (isFriendlyNpc) return;
 
-      const regex = new RegExp(`\\b${escapeRegExp(enemy.title)}\\b`, 'i');
-      if (regex.test(textToScan) || regex.test(combinedRecentText)) {
-        // If an enemy title is a broad faction (e.g. "Piraten der Kaiser"), but a more specific member (e.g. "Bestien-Späher") was already added from text, skip the broad faction title unless explicitly stated as plural
-        const isBroadFaction = lowerTitle.includes('piraten der') || lowerTitle === 'piraten' || lowerTitle === 'marine';
-        const hasSpecificMember = presentList.some(p => p.name.toLowerCase().includes('späher') || p.name.toLowerCase().includes('eindringling') || p.name.toLowerCase().includes('kapitän'));
-        if (isBroadFaction && hasSpecificMember && !/\b(?:gruppe|armee|truppe|flotte|viele|dutzende)\b/i.test(textToScan)) {
-          return;
-        }
+      const isPresent = LocationContextService.isCharacterAtLocation(enemy, currentLoc) || (isCombatActive && selectedEnemyId === enemy.id);
+      if (!isPresent) return;
 
-        const isGroup = enemy.details?.itemType === 'Gruppe' || 
-                        enemy.details?.rarity === 'Gruppe' ||
-                        lowerTitle.includes('bande') || 
-                        lowerTitle.includes('rudel') || 
-                        lowerTitle.includes('trupp') || 
-                        lowerTitle.includes('wachen') || 
-                        lowerTitle.includes('soldaten') ||
-                        lowerTitle.includes('marinesoldat') ||
-                        lowerTitle.includes('infanterie') ||
-                        lowerTitle.includes('infanteristen');
-        presentList.push({
-          id: enemy.id || `detected-enemy-${lowerTitle}`,
-          name: enemy.title,
-          type: isGroup ? 'group' : 'npc',
-          subtitle: enemy.details?.role || 'Gegner'
-        });
-        addedNames.add(lowerTitle);
-      }
+      const isGroup = enemy.details?.itemType === 'Gruppe' || 
+                      enemy.details?.rarity === 'Gruppe' ||
+                      lowerTitle.includes('bande') || 
+                      lowerTitle.includes('rudel') || 
+                      lowerTitle.includes('trupp') || 
+                      lowerTitle.includes('wachen') || 
+                      lowerTitle.includes('soldaten') ||
+                      lowerTitle.includes('marinesoldat') ||
+                      lowerTitle.includes('infanterie') ||
+                      lowerTitle.includes('infanteristen');
+
+      presentList.push({
+        id: enemy.id,
+        name: enemy.title,
+        type: isGroup ? 'group' : 'npc',
+        subtitle: enemy.details?.role || (isGroup ? 'Feindliche Gruppe' : 'Gegner')
+      });
+      addedNames.add(lowerTitle);
     });
 
-    // 3. Dynamic Hostile Keywords (Only add if no specific individual enemy covers it)
-    const hasSpecificEnemyAlready = presentList.length > 0;
-
-    const dynamicHostileKeywords: Array<{ pattern: RegExp; name: string; role: string; excludeContext?: RegExp }> = [
-      { pattern: /\bmarine(?:-)?soldat(?:en)?\b/i, name: 'Marine-Soldaten', role: 'Gruppe / Kaiserliche Marine' },
-      { pattern: /\bmarine(?:-)?infanterist(?:en)?\b/i, name: 'Marine-Infanteristen', role: 'Gruppe / Kaiserliche Marine' },
-      { pattern: /\bsoldat(?:en)?\b/i, name: 'Soldaten', role: 'Gruppe / Soldaten' },
-      { pattern: /\binfanterist(?:en)?\b/i, name: 'Infanteristen', role: 'Gruppe / Truppen' },
-      { pattern: /\bräuber(?:bande)?\b/i, name: 'Räuber-Bande', role: 'Gruppe / Gesetzlose' },
-      { pattern: /\bbanditen?\b/i, name: 'Banditen', role: 'Gruppe / Gesetzlose' },
-      { pattern: /\bpiraten?\b/i, name: 'Piraten', role: 'Gruppe / Gesetzlose' },
-      { pattern: /\bwölfe\b/i, name: 'Wildes Wolfsrudel', role: 'Gruppe / Wilde Bestien' },
-      { pattern: /\bskelette?\b/i, name: 'Skelett-Krieger', role: 'Gruppe / Untote' },
-      { pattern: /\bklonkrieger\b/i, name: 'Klonkrieger', role: 'Gruppe / Truppen' },
-      { pattern: /\bgoblins?\b/i, name: 'Goblin-Plünderer', role: 'Gruppe / Kreaturen' },
-      { pattern: /\borks?\b/i, name: 'Ork-Krieger', role: 'Gruppe / Kreaturen' },
-      { pattern: /\bdämonen?\b/i, name: 'Dämonen', role: 'Gruppe / Höllenbrut' },
-      { pattern: /\bmutanten?\b/i, name: 'Mutanten', role: 'Gruppe / Mutierte Wesen' },
-      { pattern: /\bschergen?\b/i, name: 'Schergen', role: 'Gruppe / Handlanger' },
-      { pattern: /\bwachen?\b/i, name: 'Wachen', role: 'Gruppe / Sicherheitskräfte' },
-      { pattern: /\bsöldner\b/i, name: 'Söldner-Trupp', role: 'Gruppe / Söldner' },
-      { pattern: /\bzombies?\b/i, name: 'Zombies', role: 'Gruppe / Untote' },
-      { pattern: /\bbestien?\b/i, name: 'Wilde Bestien', role: 'Gruppe / Kreaturen', excludeContext: /100-bestien|bestien-späher|bestien-pirat|bestien-bande|bestien-jäger/i },
-      { pattern: /\bmonster\b/i, name: 'Wilde Monster', role: 'Kreaturen' },
-      { pattern: /\bangreifer?\b/i, name: 'Angreifer', role: 'Feindliche Gruppe' },
-      { pattern: /\bspäher\b/i, name: 'Späher', role: 'Gegner / Aufklärung' },
-      { pattern: /\bkrieger\b/i, name: 'Krieger', role: 'Gegner / Kämpfer' },
-      { pattern: /\bvorhut(?:en)?\b/i, name: 'Vorhut', role: 'Gegner / Trupp' },
-      { pattern: /\b(?:pirat(?:en)?|piratenbande)\b/i, name: 'Piraten', role: 'Gruppe / Gesetzlose' },
-      { pattern: /\b(?:agent(?:en)?|assassin(?:en)?|ninja)\b/i, name: 'Agent / Assassine', role: 'Gegner' }
-    ];
-
-    dynamicHostileKeywords.forEach(kw => {
-      const lowerName = kw.name.toLowerCase();
-      
-      // Skip generic keyword detection if we ALREADY detected a specific named enemy (like "Bestien-Späher") AND the text doesn't explicitly describe a separate group
-      if (hasSpecificEnemyAlready && !/\b(?:gruppe|mehrere|dutzende|schwarm|truppe|horde|armee)\b/i.test(textToScan)) {
-        return;
-      }
-
-      // Check if context excludes this keyword (e.g. 100-Bestien-Piratenbande is not "Wilde Bestien")
-      if (kw.excludeContext && kw.excludeContext.test(textToScan)) {
-        return;
-      }
-
-      if (kw.pattern.test(textToScan) && !addedNames.has(lowerName)) {
-        let duplicate = false;
-        const norm = (s: string) => s.toLowerCase().replace(/[-\s_]/g, '');
-        const normLower = norm(lowerName);
-        
-        addedNames.forEach(name => {
-          const normName = norm(name);
-          if (normName.includes(normLower) || normLower.includes(normName)) duplicate = true;
-        });
-        
-        if (!duplicate) {
+    // 3. Active combat opponents if in combat
+    if (isCombatActive && adventure.combatState?.opponents) {
+      adventure.combatState.opponents.forEach(opp => {
+        const lowerName = opp.name.toLowerCase();
+        if (!addedNames.has(lowerName)) {
           presentList.push({
-            id: `detected-dyn-group-${lowerName.replace(/\s+/g, '-')}`,
-            name: kw.name,
-            type: 'group',
-            subtitle: kw.role
+            id: opp.id,
+            name: opp.name,
+            type: (opp.count && opp.count > 1) ? 'group' : 'npc',
+            subtitle: opp.role || 'Kampf-Gegner'
           });
           addedNames.add(lowerName);
         }
-      }
-    });
+      });
+    }
 
     return presentList;
-  }, [adventure.npcs, adventure.loreDatabase, messages]);
-
-  // KI-Gegner-Extraktion (Auto-Detect via Gemini)
-  useEffect(() => {
-    if (isCombatMenuExpanded && !isCombatActive) {
-      const lastMsg = messages[messages.length - 1];
-      if (lastMsg && lastMsg.role === 'model' && lastMsg.id !== lastExtractedMessageId && !isExtractingEnemies) {
-        
-        const extract = async () => {
-          setIsExtractingEnemies(true);
-          try {
-            const prompt = `Analysiere den folgenden RPG-Text und extrahiere alle feindlichen Charaktere, Monster oder feindlichen Gruppen, die im Text als aktuell physisch anwesend beschrieben werden.
-Sei dabei so präzise und detailliert wie möglich:
-1. Nutze für "name" den genauen, beschreibenden Namen inklusive Adjektiven (z.B. "bunter Späher", "gehörnter Krieger mit Eisenkeule", "Piraten von Kaido").
-2. Setze "type" auf "npc" für Einzelpersonen oder "group" für Gruppen.
-3. Ergänze in "subtitle" Fraktionen, Zugehörigkeiten oder Rollen, wenn diese im Text erwähnt werden (z.B. "Kaidos Armee", "Piraten", "Aufklärung"). Wenn es eine Gruppe ist und eine genaue Anzahl im Text steht, erwähne diese im subtitle (z.B. "Kaidos Armee (2)", "Wolfsrudel (ca. 5)").
-Antworte AUSSCHLIESSLICH im JSON-Format: {"enemies": [{"name": "...", "type": "npc"|"group", "subtitle": "..."}]}
-Wenn keine Feinde anwesend sind, antworte mit {"enemies": []}.
-Text:
-"${lastMsg.text}"`;
-            
-            const response = await GeminiService.chat([{ id: '1', role: 'user', text: prompt }], "Du bist ein JSON-Daten-Extraktor für ein RPG.", false, "");
-            let jsonStr = response.text;
-            if (jsonStr.includes('```json')) {
-              jsonStr = jsonStr.split('```json')[1].split('```')[0];
-            } else if (jsonStr.includes('```')) {
-              jsonStr = jsonStr.split('```')[1].split('```')[0];
-            }
-            
-            const parsed = JSON.parse(jsonStr.trim());
-            if (parsed && Array.isArray(parsed.enemies)) {
-               const mapped = parsed.enemies.map((e: any, idx: number) => ({
-                 id: `ai-extracted-${Date.now()}-${idx}`,
-                 name: e.name || 'Unbekannter Gegner',
-                 type: e.type === 'group' ? 'group' : 'npc',
-                 subtitle: e.subtitle || (e.type === 'group' ? 'Erkannte Gruppe (KI)' : 'Erkannter Gegner (KI)')
-               }));
-               setAiExtractedEnemies(mapped);
-            } else {
-               setAiExtractedEnemies([]);
-            }
-          } catch (e) {
-            console.error("Fehler bei der automatischen KI-Gegner-Extraktion:", e);
-          } finally {
-            setIsExtractingEnemies(false);
-            setLastExtractedMessageId(lastMsg.id);
-          }
-        };
-        
-        extract();
-      }
-    }
-  }, [isCombatMenuExpanded, isCombatActive, messages, lastExtractedMessageId, isExtractingEnemies]);
+  }, [adventure.npcs, adventure.loreDatabase, adventure.currentLocation, adventure.combatState, isCombatActive, selectedEnemyId, adventure.player]);
 
   const combinedDetectedEnemies = React.useMemo(() => {
-     // KI-Extrahierte Gegner priorisieren
-     const list: {id: string, name: string, type: 'npc'|'group'|'dynamic', subtitle?: string}[] = [...aiExtractedEnemies];
-     
-     // Generische Regex-Gegner nur hinzufügen, wenn sie nicht schon (ähnlich) von der KI gefunden wurden
-     detectedEnemies.forEach(regexE => {
-       const normRegex = regexE.name.toLowerCase().trim();
-       const isDuplicate = list.some(aiE => {
-         const normAi = aiE.name.toLowerCase().trim();
-         return normAi === normRegex || normAi.includes(normRegex) || normRegex.includes(normAi);
-       });
-       
-       if (!isDuplicate) {
-         list.push(regexE);
-       }
-     });
-     
-     return list;
-  }, [detectedEnemies, aiExtractedEnemies]);
+    return detectedEnemies;
+  }, [detectedEnemies]);
 
   // Synchronize detected enemies into Codex (loreDatabase) as 'Gegner' entries automatically
   useEffect(() => {
@@ -5539,14 +5401,18 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
   const [dialogueTargetId, setDialogueTargetId] = useState<string>(''); // For target NPC in NPC-to-NPC (B)
   const [dialogueGroupSelectedIds, setDialogueGroupSelectedIds] = useState<string[]>([]); // For Group
 
-  // Combined available characters from NPCs, LoreDatabase, and StoryState (filtered by current location presence)
+  // Combined available characters from NPCs, LoreDatabase, and StoryState (strictly filtered by current location presence)
   const availableDialogueNpcs = React.useMemo(() => {
     const allChars = getAllAdventureCharacters(adventure);
     const locCtx = LocationContextService.resolveCurrentLocation(adventure);
-    const recentText = (messages || []).slice(-4).map(m => m.text || '').join(' ');
-    const presentChars = LocationContextService.filterPresentCharacters(allChars, locCtx, recentText);
-    return presentChars.length > 0 ? presentChars : allChars;
-  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, messages]);
+    const presentChars = LocationContextService.filterPresentCharacters(allChars, locCtx);
+    const nonPlayerPresent = presentChars.filter(char => {
+      if (char.id === 'player') return false;
+      if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, char.name || (char as any).title)) return false;
+      return true;
+    });
+    return nonPlayerPresent;
+  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player]);
 
   // Set default speaker IDs when npcs change or on mount
   useEffect(() => {
