@@ -7,6 +7,7 @@ import {
   NPC
 } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import { CharacterKnowledgeService } from '../services/characterKnowledgeService';
 import { 
   ShoppingBag, 
   Handshake, 
@@ -77,15 +78,29 @@ export const TradeModal: React.FC<TradeModalProps> = ({
     return adventure.world?.economyConfig?.holdings || [];
   }, [adventure.world?.economyConfig?.holdings]);
 
+  // Effective character knowledge
+  const effectiveKnowledge = useMemo(() => {
+    return CharacterKnowledgeService.getEffectiveKnowledge(adventure);
+  }, [adventure]);
+
+  // Only holdings that are known, owned by player, or where player is employed
+  const availableHoldings = useMemo<EconomyHolding[]>(() => {
+    return holdings.filter(h => 
+      CharacterKnowledgeService.isHoldingOwnerOrMaster(adventure.player, h) ||
+      adventure.player?.workplaceId === h.id ||
+      CharacterKnowledgeService.isHoldingKnown(h, effectiveKnowledge, adventure.player)
+    );
+  }, [holdings, effectiveKnowledge, adventure.player]);
+
   // Current active holding for trade
   const activeHolding = useMemo<EconomyHolding | null>(() => {
-    if (holdings.length === 0) return null;
+    if (availableHoldings.length === 0) return null;
     if (selectedHoldingId) {
-      const found = holdings.find(h => h.id === selectedHoldingId);
+      const found = availableHoldings.find(h => h.id === selectedHoldingId);
       if (found) return found;
     }
-    return holdings[0];
-  }, [holdings, selectedHoldingId]);
+    return availableHoldings[0];
+  }, [availableHoldings, selectedHoldingId]);
 
   // Location details
   const currentLocationName = useMemo<string>(() => {
@@ -159,17 +174,10 @@ export const TradeModal: React.FC<TradeModalProps> = ({
     return adventure.npcs || [];
   }, [adventure.npcs]);
 
-  // Live Contracts from active holding or all holdings
+  // Live Contracts filtered strictly by character knowledge
   const activeContracts = useMemo<TradeContract[]>(() => {
-    if (activeHolding?.contracts) return activeHolding.contracts;
-    
-    // Fallback: Aggregate all contracts in world
-    const allContracts: TradeContract[] = [];
-    holdings.forEach(h => {
-      if (h.contracts) allContracts.push(...h.contracts);
-    });
-    return allContracts;
-  }, [activeHolding, holdings]);
+    return CharacterKnowledgeService.getKnownContracts(adventure, activeHolding);
+  }, [adventure, activeHolding]);
 
   if (!isOpen) return null;
 
@@ -283,7 +291,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
       );
     }
 
-    onUpdateAdventure({
+    const updatedAdventure = {
       ...adventure,
       world: {
         ...adventure.world,
@@ -296,7 +304,19 @@ export const TradeModal: React.FC<TradeModalProps> = ({
           holdings: updatedHoldings
         }
       }
+    };
+
+    // Register contract in character knowledge so the player is immediately aware of what they signed
+    const withKnowledge = CharacterKnowledgeService.addKnowledgeEntry(updatedAdventure, {
+      category: 'contract',
+      entityId: newContract.id,
+      entityName: `${contractType} mit ${partnerName}`,
+      summary: `Vertrag über ${contractResourceName || 'Waren'} (${contractPrice} ${currencyLabel})`,
+      sourceType: 'role',
+      description: newContract.terms
     });
+
+    onUpdateAdventure(withKnowledge);
 
     setShowCreateContract(false);
     triggerAction(`*schließt einen rechtskräftigen ${contractType} mit ${partnerName} ab: "${newContract.terms}"*`);
@@ -350,9 +370,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                 onChange={e => setSelectedHoldingId(e.target.value)}
                 className="bg-slate-900 border border-slate-700 text-white rounded-xl text-xs px-3 py-1 focus:outline-none"
               >
-                {holdings.map(h => (
-                  <option key={h.id} value={h.id}>{h.name} ({h.locationName || currentLocationName})</option>
-                ))}
+                {availableHoldings.length === 0 ? (
+                  <option value="">Kein bekannter Betrieb am Standort</option>
+                ) : (
+                  availableHoldings.map(h => (
+                    <option key={h.id} value={h.id}>{h.name} ({h.locationName || currentLocationName})</option>
+                  ))
+                )}
               </select>
             </div>
           </div>
@@ -785,8 +809,11 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                     </div>
                   ))
                 ) : (
-                  <div className="p-8 text-center text-slate-500 bg-slate-950/40 border border-slate-800 rounded-2xl text-xs">
-                    Keine aktiven Verträge in der Spielwelt verzeichnet.
+                  <div className="p-8 text-center text-slate-500 bg-slate-950/40 border border-slate-800 rounded-2xl text-xs space-y-1">
+                    <div className="text-slate-300 font-medium">Keine bekannten Verträge oder Abkommen vorhanden</div>
+                    <div className="text-[11px] text-slate-500">
+                      Dem Charakter sind aktuell keine Verträge dieses Betriebs bekannt. Verträge werden sichtbar, sobald Ihr Charakter davon erfährt, Berichte liest oder durch seine Rolle Einblick erhält.
+                    </div>
                   </div>
                 )}
               </div>

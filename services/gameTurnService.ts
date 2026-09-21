@@ -2,6 +2,7 @@ import { Adventure, WorldSetting, NPC, ChatMessage, LoreEntry } from '../types';
 import { WorldSimulationService, SimulationStepResult } from './worldSimulationService';
 import { GeminiService } from './geminiService';
 import { TravelService, RouteResolution } from './travelService';
+import { CharacterKnowledgeService } from './characterKnowledgeService';
 import type { ProcessPlayerTurnParams, ProcessPlayerTurnResult } from './turnTypes';
 
 export type { ProcessPlayerTurnParams, ProcessPlayerTurnResult };
@@ -189,11 +190,14 @@ AKTUELLE WERTE: ${currentStatsStr}`;
       };
     }
 
+    // Clean any AI knowledge tags from display text
+    const cleanDisplay = parsedResult.cleanedText.replace(/\[\[KNOWLEDGE_ADD:[^\]]+\]\]/gi, '').trim();
+
     // Step 5: Construct model message and updated Adventure state
     const modelMsg: ChatMessage = {
       id: `${mode}-model-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       role: 'model',
-      text: parsedResult.cleanedText,
+      text: cleanDisplay,
       isDialogue: mode === 'dialogue',
       dialogueType,
       dialogueSpeakerName: speakerName,
@@ -202,7 +206,7 @@ AKTUELLE WERTE: ${currentStatsStr}`;
 
     const finalChatHistory = [...updatedMessagesForAi, modelMsg];
 
-    const updatedAdventure: Adventure = {
+    let updatedAdventure: Adventure = {
       ...adventure,
       world: parsedResult.updatedWorld,
       player: parsedResult.updatedPlayer,
@@ -211,6 +215,9 @@ AKTUELLE WERTE: ${currentStatsStr}`;
       structuredInventory: parsedResult.updatedStructuredInventory,
       chatHistory: finalChatHistory
     };
+
+    // Step 5b: Parse Character Knowledge tags from AI response
+    updatedAdventure = CharacterKnowledgeService.parseKnowledgeTagsFromAI(rawAiResponse, updatedAdventure);
 
     // Step 6: Atomic persistence call on success
     if (saveAdventure) {
@@ -222,7 +229,7 @@ AKTUELLE WERTE: ${currentStatsStr}`;
       activeWorld: parsedResult.updatedWorld,
       simResult,
       rawAiResponse,
-      cleanedText: parsedResult.cleanedText,
+      cleanedText: cleanDisplay,
       notifications: parsedResult.notifications || [],
       userMsg,
       modelMsg

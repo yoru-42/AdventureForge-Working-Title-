@@ -7,9 +7,20 @@ import {
   EconomyDuty,
   TradeContract,
   EconomyResource,
-  NPC
+  NPC,
+  HoldingRoom
 } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import { CharacterKnowledgeService } from '../services/characterKnowledgeService';
+import {
+  calculateHoldingRoomStats,
+  normalizeHoldingRoom,
+  generateRoomsSummaryString,
+  generateRoomCapacityString,
+  ROOM_TYPE_METADATA,
+  ROOM_CATEGORIES,
+  OCCUPANCY_MODE_OPTIONS
+} from '../lib/roomUtils';
 import { 
   Building2, 
   MapPin, 
@@ -28,7 +39,9 @@ import {
   Briefcase,
   Layers,
   Send,
-  Edit3
+  Edit3,
+  DoorOpen,
+  BedDouble
 } from 'lucide-react';
 
 interface WorkManagementModalProps {
@@ -40,7 +53,7 @@ interface WorkManagementModalProps {
   onSetInputText?: (text: string) => void;
 }
 
-type TabType = 'overview' | 'tasks' | 'duties' | 'staff' | 'contracts';
+type TabType = 'overview' | 'tasks' | 'duties' | 'staff' | 'contracts' | 'rooms';
 
 export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
   isOpen,
@@ -76,29 +89,44 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
   // All holdings in current world state
+  // All holdings in current world state
   const holdings = useMemo<EconomyHolding[]>(() => {
     return adventure.world?.economyConfig?.holdings || [];
   }, [adventure.world?.economyConfig?.holdings]);
 
+  // Derive character knowledge
+  const effectiveKnowledge = useMemo(() => {
+    return CharacterKnowledgeService.getEffectiveKnowledge(adventure);
+  }, [adventure]);
+
+  // Holdings available / known to player
+  const availableHoldings = useMemo<EconomyHolding[]>(() => {
+    return holdings.filter(h => 
+      CharacterKnowledgeService.isHoldingOwnerOrMaster(adventure.player, h) ||
+      adventure.player?.workplaceId === h.id ||
+      CharacterKnowledgeService.isHoldingKnown(h, effectiveKnowledge, adventure.player)
+    );
+  }, [holdings, effectiveKnowledge, adventure.player]);
+
   // Current active holding
   const activeHolding = useMemo<EconomyHolding | null>(() => {
-    if (holdings.length === 0) return null;
+    if (availableHoldings.length === 0) return null;
 
     if (selectedHoldingId) {
-      const found = holdings.find(h => h.id === selectedHoldingId);
+      const found = availableHoldings.find(h => h.id === selectedHoldingId);
       if (found) return found;
     }
 
     // Try finding by player workplace
     if (adventure.player?.workplaceId) {
-      const wp = holdings.find(h => h.id === adventure.player?.workplaceId);
+      const wp = availableHoldings.find(h => h.id === adventure.player?.workplaceId);
       if (wp) return wp;
     }
 
     // Try finding by player profession
     const playerProf = (adventure.player?.profession || adventure.player?.role || '').toLowerCase();
     if (playerProf) {
-      const profHolding = holdings.find(h => 
+      const profHolding = availableHoldings.find(h => 
         h.type.toLowerCase().includes(playerProf) || 
         h.name.toLowerCase().includes(playerProf) ||
         h.roles?.some(r => r.name.toLowerCase().includes(playerProf))
@@ -107,11 +135,11 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
     }
 
     // Try finding owned holding
-    const owned = holdings.find(h => h.ownerType === 'user' || h.ownerCharacterId === adventure.player?.id);
+    const owned = availableHoldings.find(h => h.ownerType === 'user' || h.ownerCharacterId === adventure.player?.id);
     if (owned) return owned;
 
-    return holdings[0];
-  }, [holdings, selectedHoldingId, adventure.player]);
+    return availableHoldings[0];
+  }, [availableHoldings, selectedHoldingId, adventure.player]);
 
   // Location details for active holding
   const holdingLocationName = useMemo<string>(() => {
@@ -159,35 +187,61 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
     return empList;
   }, [activeHolding, adventure.npcs]);
 
-  // Live tasks from holding & player
+  // Live tasks filtered strictly by character knowledge
   const tasks = useMemo<EconomyTask[]>(() => {
     const rawHoldingTasks = activeHolding?.tasks || [];
     const rawPlayerTasks = adventure.player?.tasks || [];
     const map = new Map<string, EconomyTask>();
     rawHoldingTasks.forEach(t => map.set(t.id, t));
     rawPlayerTasks.forEach(t => map.set(t.id, t));
-    return Array.from(map.values());
-  }, [activeHolding?.tasks, adventure.player?.tasks]);
+    
+    return Array.from(map.values()).filter(task => 
+      CharacterKnowledgeService.isTaskKnown(task, activeHolding, effectiveKnowledge, adventure.player)
+    );
+  }, [activeHolding, adventure.player, effectiveKnowledge]);
 
-  // Live duties from holding & player
+  // Live duties filtered strictly by character knowledge
   const duties = useMemo<EconomyDuty[]>(() => {
     const rawHoldingDuties = activeHolding?.duties || [];
     const rawPlayerDuties = adventure.player?.duties || [];
     const map = new Map<string, EconomyDuty>();
     rawHoldingDuties.forEach(d => map.set(d.id, d));
     rawPlayerDuties.forEach(d => map.set(d.id, d));
-    return Array.from(map.values());
-  }, [activeHolding?.duties, adventure.player?.duties]);
 
-  // Live resources (Lager)
+    return Array.from(map.values()).filter(duty => 
+      CharacterKnowledgeService.isDutyKnown(duty, activeHolding, effectiveKnowledge, adventure.player)
+    );
+  }, [activeHolding, adventure.player, effectiveKnowledge]);
+
+  // Live resources (Lager) - only visible if character has access/knowledge or works there/owns it
   const resources = useMemo<EconomyResource[]>(() => {
-    return activeHolding?.resources || [];
-  }, [activeHolding?.resources]);
+    if (!activeHolding) return [];
+    const isMaster = CharacterKnowledgeService.isHoldingOwnerOrMaster(adventure.player, activeHolding);
+    const isEmployee = adventure.player?.workplaceId === activeHolding.id;
+    if (!isMaster && !isEmployee) {
+      const hasKnowledge = effectiveKnowledge.facts.some(f => 
+        f.entityId === activeHolding.id || f.title?.toLowerCase().includes(activeHolding.name.toLowerCase())
+      );
+      if (!hasKnowledge) return [];
+    }
+    return activeHolding.resources || [];
+  }, [activeHolding, adventure.player, effectiveKnowledge]);
 
-  // Live contracts (Verträge)
+  // Live contracts (Verträge) filtered strictly by character knowledge
   const contracts = useMemo<TradeContract[]>(() => {
-    return activeHolding?.contracts || [];
-  }, [activeHolding?.contracts]);
+    return CharacterKnowledgeService.getKnownContracts(adventure, activeHolding);
+  }, [adventure, activeHolding]);
+
+  // Holding rooms normalized
+  const holdingRooms = useMemo<HoldingRoom[]>(() => {
+    if (!activeHolding) return [];
+    const raw = activeHolding.buildingRooms || [];
+    return raw.map(r => normalizeHoldingRoom(r));
+  }, [activeHolding]);
+
+  const holdingRoomStats = useMemo(() => {
+    return calculateHoldingRoomStats(holdingRooms);
+  }, [holdingRooms]);
 
   if (!isOpen) return null;
 
@@ -228,6 +282,54 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
         }
       }
     });
+  };
+
+  const handleUpdateHoldingRooms = (updatedRooms: HoldingRoom[]) => {
+    if (!activeHolding) return;
+    const norm = updatedRooms.map(r => normalizeHoldingRoom(r));
+    const summaryStr = generateRoomsSummaryString(norm);
+    const capStr = generateRoomCapacityString(norm, activeHolding.physicalCapacity);
+    persistChanges(tasks, duties, {
+      buildingRooms: norm,
+      roomsOrAreas: summaryStr || activeHolding.roomsOrAreas,
+      physicalCapacity: capStr || activeHolding.physicalCapacity
+    });
+  };
+
+  const handleRoomFieldChange = (idx: number, field: keyof HoldingRoom, val: any) => {
+    const next = [...holdingRooms];
+    const item = { ...next[idx], [field]: val };
+    if (field === 'roomType') {
+      const meta = ROOM_TYPE_METADATA[val as any];
+      if (meta && meta.defaultBeds !== undefined && (!item.bedsPerRoom || item.bedsPerRoom === 0)) {
+        item.bedsPerRoom = meta.defaultBeds;
+      }
+    }
+    next[idx] = normalizeHoldingRoom(item);
+    handleUpdateHoldingRooms(next);
+  };
+
+  const handleRoomCountChange = (idx: number, delta: number) => {
+    const next = [...holdingRooms];
+    const newCount = Math.max(1, (next[idx].count || 1) + delta);
+    next[idx] = normalizeHoldingRoom({ ...next[idx], count: newCount });
+    handleUpdateHoldingRooms(next);
+  };
+
+  const handleAddHoldingRoom = () => {
+    const newRoom: HoldingRoom = normalizeHoldingRoom({
+      id: `room-${Date.now()}`,
+      name: 'Neuer Raum',
+      count: 1,
+      roomType: 'other',
+      purpose: 'Nutzung & Betriebszweck'
+    });
+    handleUpdateHoldingRooms([...holdingRooms, newRoom]);
+  };
+
+  const handleRemoveHoldingRoom = (idx: number) => {
+    const next = holdingRooms.filter((_, i) => i !== idx);
+    handleUpdateHoldingRooms(next);
   };
 
   const handleUpdateTaskStatus = (taskId: string, status: EconomyTask['status']) => {
@@ -404,20 +506,20 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
               <Building2 className="w-3.5 h-3.5 text-indigo-400" />
               Aktiver Betrieb:
             </span>
-            {holdings.length > 0 ? (
+            {availableHoldings.length > 0 ? (
               <select
                 value={activeHolding?.id || ''}
                 onChange={e => setSelectedHoldingId(e.target.value)}
                 className="bg-slate-900 border border-slate-700 text-white rounded-xl text-xs px-3 py-1.5 focus:outline-none focus:border-indigo-500 transition-colors"
               >
-                {holdings.map(h => (
+                {availableHoldings.map(h => (
                   <option key={h.id} value={h.id}>
                     {h.name} ({h.type})
                   </option>
                 ))}
               </select>
             ) : (
-              <span className="text-xs text-slate-400 italic">Keine Betriebe in der Welt erfasst</span>
+              <span className="text-xs text-slate-400 italic">Keine bekannten Betriebe vorhanden</span>
             )}
           </div>
 
@@ -508,6 +610,19 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
           >
             <FileText className="w-4 h-4" />
             Zugehörige Verträge ({contracts.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('rooms')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'rooms'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <BedDouble className="w-4 h-4" />
+            Räume & Belegung ({holdingRoomStats.totalRooms})
           </button>
         </div>
 
@@ -1029,6 +1144,311 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
               ) : (
                 <div className="p-8 text-center text-slate-500 bg-slate-950/40 border border-slate-800 rounded-2xl text-xs">
                   Keine aktiven Verträge für diesen Betrieb verzeichnet. Verträge können im Handelsmenü abgeschlossen werden.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 6: ROOMS & OCCUPANCY */}
+          {activeTab === 'rooms' && (
+            <div className="space-y-6">
+              {/* Header & Add Button */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
+                    <DoorOpen className="w-4 h-4 text-indigo-400" />
+                    Räume, Betten und Belegung ({holdingRoomStats.totalRooms})
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Strukturierte Erfassung von Räumen, Bettenkapazitäten und Bewohnerbelegung
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddHoldingRoom}
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Neuen Raum anlegen
+                </button>
+              </div>
+
+              {/* KPI Summary Banner */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                    Räume gesamt
+                  </span>
+                  <div className="text-base font-bold text-white">
+                    {holdingRoomStats.totalRooms}{' '}
+                    <span className="text-xs font-normal text-slate-400">
+                      in {holdingRooms.length} Raumarten
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                    Betten gesamt
+                  </span>
+                  <div className="text-base font-bold text-amber-300">
+                    {holdingRoomStats.totalBeds}{' '}
+                    <span className="text-xs font-normal text-slate-300">
+                      ({holdingRoomStats.occupiedBeds} belegt · {holdingRoomStats.freeBeds} frei)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                    Gästebetten
+                  </span>
+                  <div className="text-sm font-semibold text-slate-200">
+                    {holdingRoomStats.guestBeds.total}{' '}
+                    <span className="text-[11px] font-normal text-slate-400">
+                      ({holdingRoomStats.guestBeds.occupied} belegt · {holdingRoomStats.guestBeds.free} frei)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                    Personal & Familie
+                  </span>
+                  <div className="text-sm font-semibold text-slate-200">
+                    {holdingRoomStats.staffBeds.total + holdingRoomStats.familyBeds.total}{' '}
+                    <span className="text-[11px] font-normal text-slate-400">
+                      (Pers: {holdingRoomStats.staffBeds.occupied}/{holdingRoomStats.staffBeds.total} · Fam: {holdingRoomStats.familyBeds.occupied}/{holdingRoomStats.familyBeds.total})
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Room Cards List */}
+              {holdingRooms.length > 0 ? (
+                <div className="space-y-3">
+                  {holdingRooms.map((room, idx) => {
+                    const meta = ROOM_TYPE_METADATA[room.roomType || 'other'];
+                    const isSleeping = meta?.hasBeds || meta?.isSleepingRoom || (room.bedsPerRoom !== undefined && room.bedsPerRoom > 0);
+
+                    return (
+                      <div
+                        key={room.id || `room-${idx}`}
+                        className="p-3.5 bg-slate-900/60 hover:bg-slate-900/90 rounded-2xl border border-slate-800/80 transition-all space-y-2.5"
+                      >
+                        {/* Upper row: Count, Name, Type, Floor, and Delete */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Count counter */}
+                          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => handleRoomCountChange(idx, -1)}
+                              className="px-2 py-1 text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                              title="Anzahl verringern"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              value={room.count || 1}
+                              onChange={e => handleRoomFieldChange(idx, 'count', Math.max(1, parseInt(e.target.value) || 1))}
+                              className="w-9 bg-transparent text-center text-xs font-bold text-white outline-none"
+                              title="Anzahl baugleicher Räume"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRoomCountChange(idx, 1)}
+                              className="px-2 py-1 text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                              title="Anzahl erhöhen"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          {/* Room Name */}
+                          <div className="flex-1 min-w-[140px]">
+                            <input
+                              type="text"
+                              value={room.name}
+                              onChange={e => handleRoomFieldChange(idx, 'name', e.target.value)}
+                              placeholder="Raumbezeichnung (z.B. Gästezimmer, Küche)"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-white outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          {/* Room Type Selector */}
+                          <div className="w-44 min-w-[140px]">
+                            <select
+                              value={room.roomType || 'other'}
+                              onChange={e => handleRoomFieldChange(idx, 'roomType', e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500 cursor-pointer"
+                              title="Nutzungsart des Raumes"
+                            >
+                              {ROOM_CATEGORIES.map(category => (
+                                <optgroup key={category.id} label={category.label}>
+                                  {category.roomTypes.map(t => {
+                                    const tMeta = ROOM_TYPE_METADATA[t];
+                                    return (
+                                      <option key={t} value={t}>
+                                        {tMeta?.label || t}
+                                      </option>
+                                    );
+                                  })}
+                                </optgroup>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Floor / Level */}
+                          <div className="w-28">
+                            <input
+                              type="text"
+                              value={room.floor || ''}
+                              onChange={e => handleRoomFieldChange(idx, 'floor', e.target.value)}
+                              placeholder="Ebene / Etage"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-300 outline-none focus:border-indigo-500"
+                              title="Lage im Gebäude (z.B. Erdgeschoss, 1. OG)"
+                            />
+                          </div>
+
+                          {/* Status pill */}
+                          <div className="hidden md:flex items-center text-[11px] px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800/80 text-slate-300 font-mono whitespace-nowrap">
+                            {isSleeping ? (
+                              <span>
+                                {room.totalBeds || 0} Betten | {room.occupiedBeds || 0} belegt | {room.freeBeds || 0} frei
+                              </span>
+                            ) : room.capacity ? (
+                              <span>Kapazität: {room.capacity}</span>
+                            ) : (
+                              <span className="text-slate-500">Nutzraum</span>
+                            )}
+                          </div>
+
+                          {/* Delete room */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveHoldingRoom(idx)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 transition-colors ml-auto cursor-pointer"
+                            title="Diesen Raum entfernen"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Middle row: Beds, Occupancy Mode, and Purpose */}
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1 border-t border-slate-800/50 items-start">
+                          {isSleeping ? (
+                            <div className="sm:col-span-6 flex flex-wrap items-center gap-2 text-xs">
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-400 font-semibold uppercase">Betten/Raum:</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={room.bedsPerRoom || 0}
+                                  onChange={e => handleRoomFieldChange(idx, 'bedsPerRoom', Math.max(0, parseInt(e.target.value) || 0))}
+                                  className="w-12 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-center font-bold text-amber-300 outline-none focus:border-indigo-500"
+                                  title="Betten in jedem einzelnen dieser Räume"
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-400 font-semibold uppercase">Belegt:</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={room.totalBeds || 999}
+                                  value={room.occupiedBeds || 0}
+                                  onChange={e => handleRoomFieldChange(idx, 'occupiedBeds', Math.max(0, parseInt(e.target.value) || 0))}
+                                  className="w-12 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-center font-bold text-white outline-none focus:border-indigo-500"
+                                  title="Aktuell belegte Betten"
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] text-slate-400 font-semibold uppercase">Art:</span>
+                                <select
+                                  value={room.occupancyMode || 'guest'}
+                                  onChange={e => handleRoomFieldChange(idx, 'occupancyMode', e.target.value)}
+                                  className="bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-slate-200 outline-none focus:border-indigo-500 cursor-pointer"
+                                  title="Belegungsart"
+                                >
+                                  {OCCUPANCY_MODE_OPTIONS.map(opt => (
+                                    <option key={opt.id} value={opt.id}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="sm:col-span-4 flex items-center gap-2 text-xs">
+                              <span className="text-[10px] text-slate-400 font-semibold uppercase">Personenkapazität:</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={room.capacity || ''}
+                                onChange={e => handleRoomFieldChange(idx, 'capacity', e.target.value ? Math.max(0, parseInt(e.target.value) || 0) : undefined)}
+                                placeholder="z.B. 40"
+                                className="w-16 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-center text-white outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                          )}
+
+                          {/* Purpose / Duty description */}
+                          <div className={isSleeping ? 'sm:col-span-6' : 'sm:col-span-8'}>
+                            <AutoExpandingTextarea
+                              value={room.purpose || ''}
+                              onChange={e => handleRoomFieldChange(idx, 'purpose', e.target.value)}
+                              placeholder="Nutzung, Besonderheiten oder betriebliche Aufgaben des Raumes"
+                              minRows={1}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-300 outline-none focus:border-indigo-500 resize-none leading-relaxed"
+                            />
+                          </div>
+
+                          {/* Lower row: Occupants / Assigned Role */}
+                          <div className="sm:col-span-12 grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1.5 border-t border-slate-800/40 text-xs">
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-semibold uppercase block mb-1">
+                                Bewohner / Gäste / Personal (Namen):
+                              </span>
+                              <input
+                                type="text"
+                                value={Array.isArray(room.occupantNames) ? room.occupantNames.join(', ') : (room.occupantNames || '')}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  const arr = val.split(',').map(s => s.trim()).filter(Boolean);
+                                  handleRoomFieldChange(idx, 'occupantNames', arr);
+                                }}
+                                placeholder="z.B. Wirt Alwin, Magd Elspeth oder Reisende"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 font-semibold uppercase block mb-1">
+                                Zuständiges Personal / Arbeitsbereich:
+                              </span>
+                              <input
+                                type="text"
+                                value={room.assignedRoleName || ''}
+                                onChange={e => handleRoomFieldChange(idx, 'assignedRoleName', e.target.value)}
+                                placeholder="z.B. Schankkellner, Koch, Nachtwache"
+                                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-slate-500 bg-slate-950/40 border border-slate-800 rounded-2xl text-xs space-y-2">
+                  <p>Keine individuellen Räume definiert.</p>
+                  <p className="text-slate-600">
+                    Klicken Sie auf 'Neuen Raum anlegen', um Zimmer, Schlafräume oder Arbeitsbereiche für diesen Betrieb zu erfassen.
+                  </p>
                 </div>
               )}
             </div>

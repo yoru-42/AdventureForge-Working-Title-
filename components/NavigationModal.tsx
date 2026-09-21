@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Adventure, LoreEntry } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import { CharacterKnowledgeService } from '../services/characterKnowledgeService';
 
 interface NavigationModalProps {
   isOpen: boolean;
@@ -22,8 +23,13 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegionFilter, setSelectedRegionFilter] = useState<string>('all');
   const [customDestination, setCustomDestination] = useState('');
+  const [viewScope, setViewScope] = useState<'known' | 'all'>('known');
 
   const loreDatabase = useMemo(() => adventure.loreDatabase || [], [adventure.loreDatabase]);
+
+  const effectiveKnowledge = useMemo(() => {
+    return CharacterKnowledgeService.getEffectiveKnowledge(adventure);
+  }, [adventure]);
 
   const locationEntries = useMemo(() => {
     return loreDatabase.filter(l => l.category === 'Orte');
@@ -37,11 +43,14 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
     if (adventure.player?.appearance?.currentLocation) {
       return adventure.player.appearance.currentLocation;
     }
+    if (adventure.storyState?.currentLocationName) {
+      return adventure.storyState.currentLocationName;
+    }
     if (activeTargetLocation?.title) {
       return activeTargetLocation.title;
     }
-    return 'Unbekannter Standort';
-  }, [adventure.player?.appearance?.currentLocation, activeTargetLocation]);
+    return adventure.world?.startLocationName || 'Unbekannter Standort';
+  }, [adventure.player?.appearance?.currentLocation, adventure.storyState?.currentLocationName, activeTargetLocation, adventure.world?.startLocationName]);
 
   const regions = useMemo(() => {
     const list = new Set<string>();
@@ -54,8 +63,22 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
     return Array.from(list).sort();
   }, [locationEntries]);
 
-  const filteredLocations = useMemo(() => {
+  // Separate known vs total
+  const knownLocationsList = useMemo(() => {
     return locationEntries.filter(loc => {
+      return CharacterKnowledgeService.isLocationKnown(
+        { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
+        effectiveKnowledge,
+        adventure.player,
+        adventure.world
+      );
+    });
+  }, [locationEntries, effectiveKnowledge, adventure.player, adventure.world]);
+
+  const filteredLocations = useMemo(() => {
+    const sourceList = viewScope === 'known' ? knownLocationsList : locationEntries;
+
+    return sourceList.filter(loc => {
       const title = loc.title || '';
       const desc = loc.description || '';
       const region = (loc.details?.region || loc.details?.territory || '').toLowerCase();
@@ -68,7 +91,7 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
 
       return matchesSearch && matchesRegion;
     });
-  }, [locationEntries, searchTerm, selectedRegionFilter]);
+  }, [viewScope, knownLocationsList, locationEntries, searchTerm, selectedRegionFilter]);
 
   if (!isOpen) return null;
 
@@ -90,6 +113,38 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
       ...adventure,
       loreDatabase: updatedLore
     });
+  };
+
+  const handleClearTarget = () => {
+    const updatedLore = loreDatabase.map(l => {
+      if (l.category === 'Orte' && l.details?.isActiveTarget) {
+        return {
+          ...l,
+          details: {
+            ...(l.details || {}),
+            isActiveTarget: false
+          }
+        };
+      }
+      return l;
+    });
+
+    onUpdateAdventure({
+      ...adventure,
+      loreDatabase: updatedLore
+    });
+  };
+
+  const handleDiscoverLocation = (location: LoreEntry) => {
+    const updated = CharacterKnowledgeService.addKnowledgeEntry(adventure, {
+      category: 'location',
+      entityId: location.id,
+      entityName: location.title,
+      summary: `Ort ${location.title} wurde durch Erkundung oder Erwähnung bekannt`,
+      sourceType: 'observation',
+      description: location.description
+    });
+    onUpdateAdventure(updated);
   };
 
   const handleTravelTo = (location: LoreEntry) => {
@@ -140,7 +195,7 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                 Navigation & Reiseziel
               </h2>
               <p className="text-xs text-slate-400">
-                Umgebung erfassen, Reiseziele verwalten und den nächsten Zielort ansteuern
+                Charakterwissen über die Geografie der Welt erfassen, Reiseziele verwalten und den nächsten Zielort ansteuern
               </p>
             </div>
           </div>
@@ -227,17 +282,27 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
 
               <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
                 {activeTargetLocation ? (
-                  <button
-                    type="button"
-                    onClick={() => handleTravelTo(activeTargetLocation)}
-                    className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
-                  >
-                    <i className="fa-solid fa-person-walking-luggage"></i>
-                    Dorthin aufbrechen
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleTravelTo(activeTargetLocation)}
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                    >
+                      <i className="fa-solid fa-person-walking-luggage"></i>
+                      Dorthin aufbrechen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearTarget}
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs transition-colors"
+                      title="Reiseziel aufheben"
+                    >
+                      Entfernen
+                    </button>
+                  </div>
                 ) : (
                   <span className="text-xs text-slate-500 italic">
-                    Wähle unten einen Ort aus der Liste
+                    Wähle unten einen bekannten Ort als Reiseziel
                   </span>
                 )}
               </div>
@@ -247,10 +312,30 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
           {/* Section: Known Locations in the World */}
           <div className="space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <h3 className="text-xs uppercase font-bold text-slate-400 tracking-wider flex items-center gap-2">
-                <i className="fa-solid fa-map-location-dot text-slate-500"></i>
-                Bekannte Orte & Siedlungen ({filteredLocations.length})
-              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setViewScope('known')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    viewScope === 'known'
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Bekannte Orte ({knownLocationsList.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewScope('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    viewScope === 'all'
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Alle Orte im Codex ({locationEntries.length})
+                </button>
+              </div>
 
               {/* Filters */}
               <div className="flex flex-wrap items-center gap-2">
@@ -291,9 +376,15 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
             {/* Locations List */}
             {filteredLocations.length === 0 ? (
               <div className="p-8 text-center bg-slate-950/40 border border-slate-800/80 rounded-2xl text-slate-500 text-xs space-y-1">
-                <div>Keine passenden Orte im Weltenlexikon gefunden.</div>
+                <div>
+                  {viewScope === 'known' 
+                    ? 'Bisher sind Ihrem Charakter keine weiteren Orte bekannt.' 
+                    : 'Keine passenden Orte im Weltenlexikon gefunden.'}
+                </div>
                 <div className="text-[11px] text-slate-600">
-                  Nutze das untere Freitextfeld, um eine Reiserichtung oder einen neuen Zielort frei einzugeben.
+                  {viewScope === 'known'
+                    ? 'Orte werden dem Charakter durch Erkundung, Gespräche mit NPCs oder Dokumente bekannt.'
+                    : 'Nutze das untere Freitextfeld, um eine Reiserichtung frei einzugeben.'}
                 </div>
               </div>
             ) : (
@@ -303,6 +394,12 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                   const isTarget = activeTargetLocation?.id === loc.id;
                   const locType = loc.details?.type || loc.details?.category || 'Ort';
                   const locRegion = loc.details?.region || loc.details?.territory || '';
+                  const isKnown = CharacterKnowledgeService.isLocationKnown(
+                    { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
+                    effectiveKnowledge,
+                    adventure.player,
+                    adventure.world
+                  );
 
                   return (
                     <div
@@ -312,6 +409,8 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                           ? 'bg-indigo-950/30 border-indigo-500/50 shadow-lg'
                           : isCurrent
                           ? 'bg-teal-950/20 border-teal-500/40'
+                          : !isKnown
+                          ? 'bg-slate-950/20 border-slate-800/60 opacity-85'
                           : 'bg-slate-950/40 border-slate-800 hover:border-slate-700'
                       }`}
                     >
@@ -330,6 +429,16 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                             {isTarget && (
                               <span className="text-[9px] px-2 py-0.5 rounded-full bg-indigo-950 border border-indigo-800 text-indigo-300 font-bold">
                                 Reiseziel
+                              </span>
+                            )}
+                            {!isKnown && (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400 font-medium">
+                                Dem Charakter unbekannt
+                              </span>
+                            )}
+                            {isKnown && !isCurrent && !isTarget && (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-teal-950/50 border border-teal-800/50 text-teal-400 font-medium">
+                                Bekannt
                               </span>
                             )}
                           </div>
@@ -357,26 +466,40 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
 
                       {/* Action Buttons */}
                       <div className="pt-2 border-t border-slate-800/60 flex items-center justify-end gap-2 shrink-0">
-                        {!isTarget && (
+                        {!isKnown ? (
                           <button
                             type="button"
-                            onClick={() => handleSetAsTarget(loc)}
-                            className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
-                            title="Diesen Ort als aktives Reiseziel markieren"
+                            onClick={() => handleDiscoverLocation(loc)}
+                            className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-400 border border-teal-900 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                            title="Diesen Ort als durch Erzählung oder Erkundung bekannt markieren"
                           >
-                            <i className="fa-solid fa-map-pin text-indigo-400"></i>
-                            Als Reiseziel
+                            <i className="fa-solid fa-eye text-xs"></i>
+                            Als bekannt erfassen
                           </button>
+                        ) : (
+                          <>
+                            {!isTarget && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetAsTarget(loc)}
+                                className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer"
+                                title="Diesen Ort als aktives Reiseziel vormerken (ohne sofortige Abreise)"
+                              >
+                                <i className="fa-solid fa-map-pin text-indigo-400"></i>
+                                Als Reiseziel
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleTravelTo(loc)}
+                              className="px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow cursor-pointer"
+                              title="Sofort die Reise zu diesem Ort beginnen"
+                            >
+                              <i className="fa-solid fa-person-walking"></i>
+                              Reisen
+                            </button>
+                          </>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => handleTravelTo(loc)}
-                          className="px-3 py-1 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow cursor-pointer"
-                          title="Sofort die Reise zu diesem Ort beginnen"
-                        >
-                          <i className="fa-solid fa-person-walking"></i>
-                          Reisen
-                        </button>
                       </div>
                     </div>
                   );
@@ -433,3 +556,4 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
     </div>
   );
 };
+

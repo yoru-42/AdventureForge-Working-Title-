@@ -23,10 +23,14 @@ import {
   Compass,
   Info,
   CheckCircle2,
-  FileText
+  FileText,
+  BookOpen,
+  Search,
+  Eye
 } from 'lucide-react';
-import { Adventure, StoryEntityItem, StoryInfoState, LoreEntry } from '../types';
+import { Adventure, StoryEntityItem, StoryInfoState, LoreEntry, CharacterKnowledgeEntry } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import { CharacterKnowledgeService } from '../services/characterKnowledgeService';
 
 interface StoryInfoModalProps {
   isOpen: boolean;
@@ -50,7 +54,9 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
   const [expandedEntityIds, setExpandedEntityIds] = useState<Record<string, boolean>>({});
   const [selectedEntityIds, setSelectedEntityIds] = useState<Record<string, boolean>>({});
   const [showPromotedHistory, setShowPromotedHistory] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'temporary' | 'promoted'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'temporary' | 'promoted' | 'knowledge'>('overview');
+  const [knowledgeSearch, setKnowledgeSearch] = useState<string>('');
+  const [knowledgeCategoryFilter, setKnowledgeCategoryFilter] = useState<string>('all');
   const [storyNotes, setStoryNotes] = useState<string>(
     adventure.summaryLog || ''
   );
@@ -78,6 +84,28 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
   const promotedEntities = useMemo(() => {
     return allStoryEntities.filter(e => e.promotedToCodex);
   }, [allStoryEntities]);
+
+  // Character Knowledge list
+  const allKnowledgeEntries = useMemo<CharacterKnowledgeEntry[]>(() => {
+    const effective = CharacterKnowledgeService.getEffectiveKnowledge(adventure);
+    return effective.facts || [];
+  }, [adventure]);
+
+  const filteredKnowledgeEntries = useMemo(() => {
+    return allKnowledgeEntries.filter(k => {
+      if (knowledgeCategoryFilter !== 'all' && k.category !== knowledgeCategoryFilter) {
+        return false;
+      }
+      if (knowledgeSearch.trim()) {
+        const q = knowledgeSearch.toLowerCase();
+        const matchTitle = k.title?.toLowerCase().includes(q);
+        const matchSummary = k.summary?.toLowerCase().includes(q);
+        const matchSource = k.sourceDetail?.toLowerCase().includes(q);
+        return matchTitle || matchSummary || matchSource;
+      }
+      return true;
+    });
+  }, [allKnowledgeEntries, knowledgeCategoryFilter, knowledgeSearch]);
 
   const toggleExpand = (id: string) => {
     setExpandedEntityIds(prev => ({ ...prev, [id]: !prev[id] }));
@@ -198,6 +226,23 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
             {promotedEntities.length > 0 && (
               <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                 {promotedEntities.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('knowledge')}
+            className={`px-4 py-3 text-xs font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'knowledge'
+                ? 'border-indigo-500 text-indigo-300 bg-indigo-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            Charakterwissen
+            {allKnowledgeEntries.length > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                {allKnowledgeEntries.length}
               </span>
             )}
           </button>
@@ -537,6 +582,125 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: CHARACTER KNOWLEDGE */}
+          {activeTab === 'knowledge' && (
+            <div className="space-y-4">
+              {/* Informational intro banner */}
+              <div className="p-3.5 bg-slate-950/70 rounded-xl border border-slate-800 text-xs text-slate-300 flex items-start gap-2.5">
+                <BookOpen className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="font-semibold text-white block">
+                    Charakterwissen ({allKnowledgeEntries.length} bekannte Fakten)
+                  </span>
+                  <p className="text-slate-400 leading-relaxed">
+                    Nur was der Charakter persönlich erlebt, erfahren oder beobachtet hat, ist ihm bekannt.
+                    Vollständige Welt-, Betriebs- oder Vertragszustände existieren unabhängig und werden erst durch Interaktion aufgedeckt.
+                  </p>
+                </div>
+              </div>
+
+              {/* Filter and Search Bar */}
+              <div className="flex flex-wrap items-center gap-2.5 bg-slate-950/50 p-2.5 rounded-xl border border-slate-800">
+                <div className="relative flex-1 min-w-[180px]">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={knowledgeSearch}
+                    onChange={e => setKnowledgeSearch(e.target.value)}
+                    placeholder="Wissen durchsuchen (z.B. Taverne, Alwin, Vertrag)..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white outline-none focus:border-indigo-500 placeholder-slate-500"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-slate-400 font-semibold uppercase px-1">Kategorie:</span>
+                  <select
+                    value={knowledgeCategoryFilter}
+                    onChange={e => setKnowledgeCategoryFilter(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="all">Alle Kategorien</option>
+                    <option value="holding">Betriebe & Gebäude</option>
+                    <option value="location">Orte & Regionen</option>
+                    <option value="person">Personen & Charaktere</option>
+                    <option value="contract">Verträge & Handel</option>
+                    <option value="task">Aufgaben & Pflichten</option>
+                    <option value="resource">Waren & Ressourcen</option>
+                    <option value="lore">Allgemeines Wissen</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Knowledge entries list */}
+              {filteredKnowledgeEntries.length === 0 ? (
+                <div className="p-8 text-center bg-slate-950/40 rounded-xl border border-slate-800/80">
+                  <p className="text-xs text-slate-400 italic">
+                    {knowledgeSearch.trim() || knowledgeCategoryFilter !== 'all'
+                      ? 'Keine Wissenseinträge für diesen Filter gefunden.'
+                      : 'Bisher keine expliziten Wissenseinträge verzeichnet. Neues Wissen wird durch Gespräche, Erkundung oder Aufgaben erworben.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {filteredKnowledgeEntries.map((k, idx) => {
+                    const reliabilityBadge = 
+                      k.reliability === 'certain' ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/30' :
+                      k.reliability === 'plausible' ? 'bg-amber-950/80 text-amber-300 border-amber-500/30' :
+                      'bg-slate-800 text-slate-300 border-slate-700';
+                    const reliabilityLabel =
+                      k.reliability === 'certain' ? 'Gewiss' :
+                      k.reliability === 'plausible' ? 'Plausibel' : 'Gerücht';
+
+                    const sourceLabel =
+                      k.source === 'experienced' ? 'Selbst erlebt' :
+                      k.source === 'told_by_npc' ? 'Erzählt von NSC' :
+                      k.source === 'read' ? 'Gelesen / Dokument' :
+                      k.source === 'observed' ? 'Beobachtet' :
+                      k.source === 'duty_responsible' ? 'Dienstpflicht' : 'Vorausgesetzt';
+
+                    return (
+                      <div
+                        key={k.id ? `know-${k.id}-${idx}` : `know-${idx}`}
+                        className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 space-y-2 transition-colors"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-100">
+                              {k.title}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-300 font-mono">
+                              {k.category}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 text-[10px]">
+                            <span className={`px-2 py-0.5 rounded border font-semibold ${reliabilityBadge}`}>
+                              {reliabilityLabel}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
+                              {sourceLabel}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          {k.summary}
+                        </p>
+
+                        {k.sourceDetail && (
+                          <div className="text-[11px] text-slate-400 flex items-center gap-1 pt-1 border-t border-slate-900">
+                            <span className="text-slate-400 font-semibold">Quelle:</span>
+                            <span>{k.sourceDetail}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

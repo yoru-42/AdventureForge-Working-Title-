@@ -740,6 +740,38 @@ export const HoldingDetailsTab: React.FC<HoldingDetailsTabProps> = ({
                         className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs text-slate-300 outline-none focus:border-amber-500 resize-none leading-relaxed"
                       />
                     </div>
+
+                    {/* Verknüpfung: Bewohner/Gäste & Zuständige Rolle/Aufgabe */}
+                    <div className="sm:col-span-12 grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1.5 border-t border-slate-800/40 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase block mb-1">
+                          Bewohner / Gäste / Personal (Namen):
+                        </span>
+                        <input
+                          type="text"
+                          value={Array.isArray(room.occupantNames) ? room.occupantNames.join(', ') : (room.occupantNames || '')}
+                          onChange={e => {
+                            const val = e.target.value;
+                            const arr = val.split(',').map(s => s.trim()).filter(Boolean);
+                            handleRoomFieldChange(idx, 'occupantNames', arr);
+                          }}
+                          placeholder="z.B. Wirt Alwin, Magd Elspeth oder Reisende"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase block mb-1">
+                          Zuständiges Personal / Arbeitsbereich:
+                        </span>
+                        <input
+                          type="text"
+                          value={room.assignedRoleName || ''}
+                          onChange={e => handleRoomFieldChange(idx, 'assignedRoleName', e.target.value)}
+                          placeholder="z.B. Schankkellner, Koch, Nachtwache"
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               );

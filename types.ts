@@ -869,6 +869,95 @@ export interface Character {
   physicalChangeHistory?: PhysicalChangeHistoryEntry[]; // Protokollierte körperliche Veränderungen
   tasks?: EconomyTask[]; // Persönliche rollenspezifische Aufgaben
   duties?: EconomyDuty[]; // Rollenspezifische wiederkehrende Pflichten
+  characterKnowledge?: CharacterKnowledge; // Strukturiertes Charakterwissen & Wissensstand
+}
+
+export type InformationType =
+  | 'location'
+  | 'building'
+  | 'person'
+  | 'business'
+  | 'trade'
+  | 'contract'
+  | 'task'
+  | 'duty'
+  | 'problem'
+  | 'rumor'
+  | 'personal'
+  | 'report';
+
+export type InformationSourceType =
+  | 'npc'
+  | 'report'
+  | 'letter'
+  | 'document'
+  | 'conversation'
+  | 'observation'
+  | 'role'
+  | 'experience'
+  | 'story';
+
+export interface InformationEvent {
+  id: string;
+  informationType: InformationType;
+  sourceType: InformationSourceType;
+  sourceCharacterId?: string;
+  sourceCharacterName?: string;
+  targetEntityId?: string;
+  targetEntityType?: string;
+  reliability?: 'certain' | 'likely' | 'uncertain' | 'rumor';
+  revealedAt?: string;
+  description?: string;
+}
+
+export interface CharacterKnowledgeEntry {
+  id: string;
+  category:
+    | 'location'
+    | 'building'
+    | 'holding'
+    | 'character'
+    | 'organization'
+    | 'resource'
+    | 'producer'
+    | 'supplier'
+    | 'contract'
+    | 'trade'
+    | 'task'
+    | 'duty'
+    | 'problem'
+    | 'rumor'
+    | 'report'
+    | string;
+  entityId: string;
+  entityName: string;
+  title?: string;
+  summary?: string;
+  source?: 'experienced' | 'told_by_npc' | 'read' | 'observed' | 'duty_responsible' | 'assumed' | string;
+  sourceDetail?: string;
+  reliability?: 'certain' | 'plausible' | 'rumor' | string;
+  sourceEvent?: InformationEvent;
+  discoveredAt?: string;
+  isNew?: boolean;
+  isRelevant?: boolean;
+}
+
+export interface CharacterKnowledge {
+  facts?: CharacterKnowledgeEntry[];
+  knownLocations?: string[];
+  knownBuildings?: string[];
+  knownHoldings?: string[];
+  knownCharacters?: string[];
+  knownOrganizations?: string[];
+  knownResources?: string[];
+  knownProducers?: string[];
+  knownSuppliers?: string[];
+  knownContracts?: string[];
+  knownTradeRelations?: string[];
+  knownTasks?: string[];
+  knownDuties?: string[];
+  discoveredInformation?: CharacterKnowledgeEntry[];
+  events?: InformationEvent[];
 }
 
 export interface NPC extends Character {
@@ -1226,6 +1315,8 @@ export interface EconomyDuty {
   description: string;
   frequency: 'daily' | 'weekly' | 'monthly' | 'always' | 'shift';
   assignedRoleName?: string;
+  assigneeRole?: string;
+  assigneeId?: string;
   isFulfilled: boolean;
   consequences?: string;
 }
@@ -1441,6 +1532,8 @@ export interface HoldingRoom {
 
   occupantIds?: string[]; // IDs zugewiesener Charaktere/Bewohner
   occupantNames?: string[]; // Namen zugewiesener Charaktere/Bewohner
+  assignedTaskId?: string; // Verknüpfte betriebliche Aufgabe
+  assignedRoleName?: string; // Zuständige Mitarbeiter-Rolle oder Personalstelle
   notes?: string; // Zusätzliche Anmerkungen
 }
 
@@ -3049,6 +3142,7 @@ export interface StoryInfoState {
   activeGoals?: string[];
   relationships?: { fromName: string; toName: string; relationType: string; description?: string }[];
   storyEntities: StoryEntityItem[];
+  characterKnowledge?: CharacterKnowledge;
   lastUpdatedTime?: string;
 }
 
@@ -3074,6 +3168,7 @@ export interface Adventure {
   encounterForces?: EncounterForce[];
   dynamicWorldState?: DynamicWorldState;
   storyState?: StoryInfoState;
+  characterKnowledge?: CharacterKnowledge;
   emotionState?: UserEmotionState;
   physicalChangeHistory?: PhysicalChangeHistoryEntry[];
   npcAppearanceMemory?: Record<string, NPCAppearanceObservation>;

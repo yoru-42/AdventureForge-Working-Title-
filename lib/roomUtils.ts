@@ -646,6 +646,8 @@ export function normalizeHoldingRoom(raw: Partial<HoldingRoom>): HoldingRoom {
     floor: raw.floor || '',
     occupantIds: Array.isArray(raw.occupantIds) ? raw.occupantIds : [],
     occupantNames: Array.isArray(raw.occupantNames) ? raw.occupantNames : [],
+    assignedTaskId: raw.assignedTaskId,
+    assignedRoleName: raw.assignedRoleName,
     notes: raw.notes || ''
   };
 }
