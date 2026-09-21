@@ -29,6 +29,7 @@ import { ProfessionCompetencyActivity, StoryEntityItem, StoryInfoState } from '.
 import { StoryInfoModal } from './StoryInfoModal';
 import { Info } from 'lucide-react';
 import { getAllAdventureCharacters, extractDynamicStoryState } from '../utils/storyStateExtractor';
+import { LocationContextService } from '../services/locationContextService';
 
 
 const baseEmotions = [
@@ -2167,16 +2168,19 @@ Text:
   };
 
   const getActiveTerritoryInstruction = (worldOverride?: WorldSetting) => {
-    const currentLocName = (adventure?.player?.appearance?.currentLocation || '').trim();
+    const locCtx = LocationContextService.resolveCurrentLocation(adventure);
+    const currentLocName = LocationContextService.formatLocationDisplay(locCtx);
     if (!currentLocName) return '';
 
     const territories = (worldOverride || adventure?.world)?.territories || [];
     
     // Clean coordinates and parentheses from location name for comparison
-    const cleanLocName = currentLocName.replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '').split('(')[0].trim().toLowerCase();
+    const cleanLocName = (locCtx.locationName || currentLocName).replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '').split('(')[0].trim().toLowerCase();
     
     // Try to find matching territory
     const activeTerr = territories.find((t: any) => {
+      if (locCtx.territoryId && t.id === locCtx.territoryId) return true;
+      if (locCtx.territoryName && t.name.toLowerCase() === locCtx.territoryName.toLowerCase()) return true;
       const cleanTName = (t.name || '').replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '').split('(')[0].trim().toLowerCase();
       return cleanTName === cleanLocName || t.id === currentLocName;
     });
@@ -6368,8 +6372,9 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
     setPlayerMp(nextMp);
     setPlayerMaxMp(nextMaxMp);
 
-    const currentLocId = adventure.player?.appearance?.currentLocation || (adventure.player as any)?.currentLocationId;
-    const currentTerrId = adventure.world?.territories?.[0]?.id || 'territory_default';
+    const currentLocContext = LocationContextService.resolveCurrentLocation(adventure);
+    const currentLocId = currentLocContext.locationId || currentLocContext.locationName || adventure.player?.appearance?.currentLocation || (adventure.player as any)?.currentLocationId;
+    const currentTerrId = currentLocContext.territoryId || adventure.world?.territories?.[0]?.id || 'territory_default';
 
     const friendlyCompanions = (adventure.npcs || []).filter(
       n => !n.isHostile && isNpcCurrentlyPresent(n) && !isNameMatch(adventure.player?.name || '', adventure.player?.nickname, n.name)
@@ -6439,6 +6444,17 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
       }] : []
     });
 
+    const combatLocContext = {
+      ...currentLocContext,
+      locationId: multiBattleRes.updatedCombatState.locationId || currentLocContext.locationId,
+      locationName: multiBattleRes.updatedCombatState.locationName || currentLocContext.locationName,
+      territoryId: multiBattleRes.updatedCombatState.territoryId || currentLocContext.territoryId,
+      buildingId: currentLocContext.buildingId,
+      buildingName: currentLocContext.buildingName,
+      roomId: currentLocContext.roomId,
+      roomName: currentLocContext.roomName
+    };
+
     setIsCombatActive(true);
     setSelectedEnemyId(targetEnemies[0]?.id || 'custom');
     setSelectedEnemyIds(targetEnemies.map(e => e.id));
@@ -6450,8 +6466,14 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
     onUpdateAdventure({
       ...adventure,
       world: multiBattleRes.updatedWorld,
+      currentLocation: combatLocContext,
       combatState: {
         ...multiBattleRes.updatedCombatState,
+        currentLocationContext: combatLocContext,
+        buildingId: combatLocContext.buildingId,
+        buildingName: combatLocContext.buildingName,
+        roomId: combatLocContext.roomId,
+        roomName: combatLocContext.roomName,
         playerHp: nextHp,
         playerMaxHp: nextMaxHp,
         playerMp: nextMp,
@@ -6468,8 +6490,12 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
     clearCombatActionQueue();
     setSelectedEnemyId('');
     setSelectedEnemyIds([]);
+
+    const currentLocContext = LocationContextService.resolveCurrentLocation(adventure);
+    const updatedAdventure = LocationContextService.updateCurrentLocation(adventure, currentLocContext);
+
     onUpdateAdventure({
-      ...adventure,
+      ...updatedAdventure,
       combatState: {
         selectedEnemyId: '',
         selectedEnemyIds: [],
@@ -6485,6 +6511,7 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
         placedObjects: adventure.combatState?.placedObjects || [],
         tiles: adventure.combatState?.tiles || {},
         ...(adventure.combatState || {}),
+        currentLocationContext: currentLocContext,
         isCombatActive: false
       }
     });
@@ -7879,8 +7906,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             const l = (el.label || '').toLowerCase();
             return l.includes('standort') || l.includes('ort');
           }).forEach((el, idx) => {
-            const rawLoc = el.value || adventure.player.appearance.currentLocation || 'Startgebiet';
-            const cleanLoc = formatDisplayLocationName(rawLoc);
+            const locCtx = LocationContextService.resolveCurrentLocation(adventure);
+            const cleanLoc = LocationContextService.formatLocationDisplay(locCtx);
+            const rawLoc = el.value || cleanLoc;
             hudItems.push(
               <button
                 key={`hud-loc-${el.id || idx}`}
@@ -11448,13 +11476,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     }
 
                     if (isLocation) {
-                      updatedPlayer = {
-                        ...adventure.player,
-                        appearance: {
-                          ...adventure.player.appearance,
-                          currentLocation: newVal
-                        }
-                      };
+                      let nextAdv = LocationContextService.updateCurrentLocation(adventure, newVal);
+                      updatedStatus = nextAdv.statusElements || updatedStatus;
+                      updatedPlayer = nextAdv.player;
                       if (updatedLore) {
                         const loreIdx = updatedLore.findIndex(entry => entry.category === 'Charaktere' && entry.title === adventure.player.name);
                         if (loreIdx > -1) {
@@ -11468,6 +11492,15 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                           };
                         }
                       }
+                      onUpdateAdventure({
+                        ...nextAdv,
+                        player: updatedPlayer,
+                        loreDatabase: updatedLore,
+                        statusElements: updatedStatus,
+                        structuredInventory: updatedStructuredInventory
+                      });
+                      setSelectedHudDetailField(null);
+                      return;
                     }
 
                     onUpdateAdventure({

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Adventure, LoreEntry } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { CharacterKnowledgeService } from '../services/characterKnowledgeService';
+import { LocationContextService } from '../services/locationContextService';
 
 interface NavigationModalProps {
   isOpen: boolean;
@@ -39,18 +40,13 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
     return locationEntries.find(l => l.category === 'Orte' && l.details?.isActiveTarget);
   }, [locationEntries]);
 
+  const currentLocationContext = useMemo(() => {
+    return LocationContextService.resolveCurrentLocation(adventure);
+  }, [adventure]);
+
   const currentLocationName = useMemo(() => {
-    if (adventure.player?.appearance?.currentLocation) {
-      return adventure.player.appearance.currentLocation;
-    }
-    if (adventure.storyState?.currentLocationName) {
-      return adventure.storyState.currentLocationName;
-    }
-    if (activeTargetLocation?.title) {
-      return activeTargetLocation.title;
-    }
-    return adventure.world?.startLocationName || 'Unbekannter Standort';
-  }, [adventure.player?.appearance?.currentLocation, adventure.storyState?.currentLocationName, activeTargetLocation, adventure.world?.startLocationName]);
+    return LocationContextService.formatLocationDisplay(currentLocationContext);
+  }, [currentLocationContext]);
 
   const regions = useMemo(() => {
     const list = new Set<string>();

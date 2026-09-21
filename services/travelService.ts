@@ -1,6 +1,7 @@
 import { Adventure, WorldSetting, WorldLocationReference, Territory, LoreEntry, BattleInstance } from '../types';
 import { WorldIntegrationService } from './worldIntegrationService';
 import { WorldSimulationService, SimulationStepResult } from './worldSimulationService';
+import { LocationContextService } from './locationContextService';
 import type { ProcessPlayerTurnParams, ProcessPlayerTurnResult } from './turnTypes';
 import { GeminiService } from './geminiService';
 
@@ -135,8 +136,9 @@ export class TravelService {
     territory: Territory | null;
   } {
     const world = adventure.world;
-    const playerLocName = (adventure.player?.appearance?.currentLocation || world?.startLocationName || world?.title || 'Startgebiet').trim();
-    const currentLocId = world?.dynamicWorldState?.currentLocationId || world?.currentLocationId || world?.startLocationId;
+    const currentContext = LocationContextService.resolveCurrentLocation(adventure);
+    const playerLocName = (currentContext.locationName || adventure.player?.appearance?.currentLocation || world?.startLocationName || world?.title || 'Startgebiet').trim();
+    const currentLocId = currentContext.locationId || world?.dynamicWorldState?.currentLocationId || world?.currentLocationId || world?.startLocationId;
 
     const res = WorldIntegrationService.resolveLocationReference({
       idOrName: currentLocId || playerLocName,
@@ -149,10 +151,12 @@ export class TravelService {
 
     if (locationRef?.territoryId) {
       territory = (world.territories || []).find(t => t.id === locationRef.territoryId) || null;
+    } else if (currentContext.territoryId) {
+      territory = (world.territories || []).find(t => t.id === currentContext.territoryId) || null;
     }
 
     return {
-      locationName: locationRef?.name || playerLocName,
+      locationName: locationRef?.name || currentContext.locationName || playerLocName,
       locationRef,
       territory
     };
@@ -697,7 +701,7 @@ AKTUELLE WERTE: ${currentStatsStr}`;
 
     const finalChatHistory = [...updatedMessagesForAi, modelMsg];
 
-    const finalAdventure: Adventure = {
+    let finalAdventure: Adventure = {
       ...adventure,
       world: parsedResult.updatedWorld,
       player: parsedResult.updatedPlayer,
@@ -706,6 +710,21 @@ AKTUELLE WERTE: ${currentStatsStr}`;
       structuredInventory: parsedResult.updatedStructuredInventory,
       chatHistory: finalChatHistory
     };
+
+    if (finalLocation) {
+      finalAdventure = LocationContextService.updateCurrentLocation(finalAdventure, {
+        locationId: finalLocation.id,
+        locationName: finalLocation.name,
+        territoryId: finalLocation.territoryId,
+        buildingId: undefined,
+        buildingName: undefined,
+        roomId: undefined,
+        roomName: undefined
+      });
+    } else {
+      const currCtx = LocationContextService.resolveCurrentLocation(finalAdventure);
+      finalAdventure = LocationContextService.updateCurrentLocation(finalAdventure, currCtx);
+    }
 
     // Step 6: Atomic Save
     if (saveAdventure) {

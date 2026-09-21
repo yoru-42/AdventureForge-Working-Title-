@@ -3,6 +3,7 @@ import { WorldSimulationService, SimulationStepResult } from './worldSimulationS
 import { GeminiService } from './geminiService';
 import { TravelService, RouteResolution } from './travelService';
 import { CharacterKnowledgeService } from './characterKnowledgeService';
+import { LocationContextService } from './locationContextService';
 import type { ProcessPlayerTurnParams, ProcessPlayerTurnResult } from './turnTypes';
 
 export type { ProcessPlayerTurnParams, ProcessPlayerTurnResult };
@@ -114,10 +115,15 @@ export class GameTurnService {
         const currentStatsStr = (adventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
         const campaignPowerInstruction = activeWorld.campaignPowerSettings ? "Grundwerte: " + JSON.stringify(activeWorld.campaignPowerSettings) : "";
         
+        const locationContext = LocationContextService.resolveCurrentLocation(adventure);
+        const locationBlock = LocationContextService.formatLocationPromptBlock(locationContext, 'DIALOG');
+
         const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || adventure.world.title}".
 ${simulationInstruction}
 WELT: ${activeWorld.description || adventure.world.description} (Ton: ${activeWorld.tone || adventure.world.tone})
 ${campaignPowerInstruction}
+
+${locationBlock}
 
 SPIELER-CHARAKTER:
 ${adventure.player.name} (${adventure.player.role}). 
@@ -139,11 +145,18 @@ Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben
         }
         const currentStatsStr = (adventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
         const campaignPowerInstruction = activeWorld.campaignPowerSettings ? "Grundwerte: " + JSON.stringify(activeWorld.campaignPowerSettings) : "";
+        const locationContext = LocationContextService.resolveCurrentLocation(adventure);
+        const locationBlock = LocationContextService.formatLocationPromptBlock(
+          locationContext,
+          adventure.combatState?.isCombatActive ? 'COMBAT' : 'STORY'
+        );
 
         const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || adventure.world.title}".
 ${simulationInstruction}
 WELT: ${activeWorld.description || adventure.world.description} (Ton: ${activeWorld.tone || adventure.world.tone})
 ${campaignPowerInstruction}
+
+${locationBlock}
 
 SPIELER-CHARAKTER:
 ${adventure.player.name} (${adventure.player.role}). 
@@ -218,6 +231,15 @@ AKTUELLE WERTE: ${currentStatsStr}`;
 
     // Step 5b: Parse Character Knowledge tags from AI response
     updatedAdventure = CharacterKnowledgeService.parseKnowledgeTagsFromAI(rawAiResponse, updatedAdventure);
+
+    // Step 5c: Synchronize central location context
+    const latestLocStr = parsedResult.updatedPlayer?.appearance?.currentLocation;
+    if (latestLocStr && latestLocStr !== adventure.player?.appearance?.currentLocation) {
+      updatedAdventure = LocationContextService.updateCurrentLocation(updatedAdventure, latestLocStr);
+    } else {
+      const currentContext = LocationContextService.resolveCurrentLocation(updatedAdventure);
+      updatedAdventure = LocationContextService.updateCurrentLocation(updatedAdventure, currentContext);
+    }
 
     // Step 6: Atomic persistence call on success
     if (saveAdventure) {

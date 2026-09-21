@@ -2769,6 +2769,11 @@ export interface CombatState {
   territoryId?: string;
   locationId?: string;
   locationName?: string;
+  buildingId?: string;
+  buildingName?: string;
+  roomId?: string;
+  roomName?: string;
+  currentLocationContext?: CurrentLocationContext;
   tacticalEntities?: Record<string, TacticalEntity>;
   tacticalGroups?: Record<string, TacticalGroup>;
   tacticalCommands?: TacticalCommand[];
@@ -3135,7 +3140,35 @@ export interface StoryEntityItem {
   promotedToCodex?: boolean;
 }
 
+export interface CurrentLocationContext {
+  worldId?: string;
+  worldName?: string;
+
+  regionId?: string;
+  regionName?: string;
+
+  territoryId?: string;
+  territoryName?: string;
+
+  locationId?: string;
+  locationName?: string;
+
+  buildingId?: string;
+  buildingName?: string;
+
+  roomId?: string;
+  roomName?: string;
+
+  sceneId?: string;
+  sceneName?: string;
+
+  positionDescription?: string;
+
+  updatedAt?: string;
+}
+
 export interface StoryInfoState {
+  currentLocationContext?: CurrentLocationContext;
   currentLocationName?: string;
   currentTerritoryName?: string;
   activeSituation?: string;
@@ -3164,6 +3197,7 @@ export interface Adventure {
   hudConfig?: HUDConfiguration;
   statusElements: StatusElement[];
   summaryLog?: string;
+  currentLocation?: CurrentLocationContext;
   combatState?: CombatState;
   encounterForces?: EncounterForce[];
   dynamicWorldState?: DynamicWorldState;
