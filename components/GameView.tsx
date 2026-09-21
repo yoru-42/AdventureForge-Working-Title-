@@ -3248,8 +3248,8 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       onUpdateAdventure({
         ...adventure,
         loreDatabase: updatedLore,
-        npcs: dynNpcs,
-        storyState: dynStoryState
+        npcs: adventure.npcs,
+        storyState: adventure.storyState
       });
     }
   };

@@ -167,7 +167,7 @@ export class LocationContextService {
         };
       }
 
-      const holdingMatch = holdings.find(h => h.name.toLowerCase() === mainPart.toLowerCase() || h.name.toLowerCase().includes(mainPart.toLowerCase()));
+      const holdingMatch = holdings.find(h => h.name.toLowerCase() === mainPart.toLowerCase());
       if (holdingMatch) {
         return {
           buildingId: holdingMatch.id,
@@ -189,7 +189,7 @@ export class LocationContextService {
 
     // 5. Match against registered holdings in the world
     for (const h of holdings) {
-      if (this.isExactLocationMatch(cleanInput, h.name) || cleanInput.toLowerCase().includes(h.name.toLowerCase())) {
+      if (this.isExactLocationMatch(cleanInput, h.name)) {
         let roomName: string | undefined;
         const lowerInput = cleanInput.toLowerCase();
         const roomsToCheck = [
@@ -218,7 +218,7 @@ export class LocationContextService {
 
     // 6. Match against Lore entries (Orte, Gebäude)
     for (const l of loreEntries) {
-      if (l.title && (this.isExactLocationMatch(cleanInput, l.title) || cleanInput.toLowerCase().includes(l.title.toLowerCase()))) {
+      if (l.title && this.isExactLocationMatch(cleanInput, l.title)) {
         if ((l.category as string) === 'Gebäude' || (l.details?.itemType || '').toLowerCase().includes('gebäude')) {
           return {
             buildingId: l.id,
@@ -285,8 +285,7 @@ export class LocationContextService {
     if (enriched.buildingName || enriched.buildingId) {
       const match = holdings.find(h => 
         (enriched.buildingId && h.id === enriched.buildingId) ||
-        (enriched.buildingName && h.name.toLowerCase() === enriched.buildingName.toLowerCase()) ||
-        (enriched.buildingName && h.name.toLowerCase().includes(enriched.buildingName.toLowerCase()))
+        (enriched.buildingName && h.name.toLowerCase() === enriched.buildingName.toLowerCase())
       );
 
       if (match) {
@@ -304,8 +303,8 @@ export class LocationContextService {
       if (tMatch) enriched.territoryName = tMatch.name;
     } else if (enriched.locationName && !enriched.territoryName) {
       const tMatch = territories.find(t => 
-        t.name.toLowerCase().includes(enriched.locationName!.toLowerCase()) ||
-        enriched.locationName!.toLowerCase().includes(t.name.toLowerCase())
+        t.name.toLowerCase() === enriched.locationName!.toLowerCase() ||
+        ((t as any).locations && (t as any).locations.some((l: any) => l.name.toLowerCase() === enriched.locationName!.toLowerCase()))
       );
       if (tMatch) {
         enriched.territoryId = tMatch.id;
@@ -780,13 +779,21 @@ export class LocationContextService {
         return false;
       }
       if (character.presenceState.state === 'scene_participant') {
-        return true;
+        if (character.presenceState.sceneId && currentLocation.sceneId && character.presenceState.sceneId !== currentLocation.sceneId) {
+          // Excluded: scene_participant status belongs to a different scene
+        } else {
+          return true;
+        }
       }
     }
 
-    // 4. Explicit boolean override flags (e.g. isExplicitlyPresent set for specific scene)
-    if (character.isExplicitlyPresent === true || character.details?.isExplicitlyPresent === true) {
-      return true;
+    // 4. Explicit boolean override flags (e.g. isExplicitlyPresent set for specific scene context)
+    if ((character.isExplicitlyPresent === true || character.details?.isExplicitlyPresent === true) && character.presenceState?.state !== 'absent') {
+      if (character.sceneId && currentLocation.sceneId && character.sceneId !== currentLocation.sceneId) {
+        // Excluded due to scene mismatch
+      } else {
+        return true;
+      }
     }
 
     // 4. Extract structured location of the character
@@ -949,5 +956,78 @@ export class LocationContextService {
 
       return this.isCharacterAtLocation(c, currentLocation, options);
     });
+  }
+
+  /**
+   * Central resolution for character identity across ID, exact name, exact nickname, and rufName.
+   * Order:
+   * 1. Exact ID
+   * 2. Exact Name
+   * 3. Exact Nickname / RufName
+   * 4. Controlled exact normalized match
+   * No loose includes() substring matching!
+   * Handles duplicate names safely (returns undefined if ambiguous without ID).
+   */
+  public static resolveCharacter(
+    characters: any[],
+    identifier: { id?: string; name?: string; nickname?: string } | string
+  ): any | undefined {
+    if (!Array.isArray(characters) || characters.length === 0 || !identifier) {
+      return undefined;
+    }
+
+    let targetId: string | undefined = undefined;
+    let targetName: string | undefined = undefined;
+    let targetNick: string | undefined = undefined;
+
+    if (typeof identifier === 'string') {
+      const clean = identifier.trim();
+      if (!clean) return undefined;
+      targetId = clean;
+      targetName = clean;
+    } else {
+      targetId = identifier.id?.trim();
+      targetName = identifier.name?.trim();
+      targetNick = identifier.nickname?.trim();
+    }
+
+    // 1. Strict ID Match
+    if (targetId) {
+      const byId = characters.find(c => c && c.id === targetId);
+      if (byId) return byId;
+    }
+
+    // 2. Strict Exact Name / Nickname Match
+    const cleanTargetName = targetName ? targetName.toLowerCase() : undefined;
+    const cleanTargetNick = targetNick ? targetNick.toLowerCase() : undefined;
+
+    if (!cleanTargetName && !cleanTargetNick) {
+      return undefined;
+    }
+
+    const matches = characters.filter(c => {
+      if (!c) return false;
+      const cName = (c.name || c.title || '').trim().toLowerCase();
+      const cNick = (c.nickname || c.rufName || c.details?.nickname || c.details?.rufName || '').trim().toLowerCase();
+
+      if (cleanTargetName && (cName === cleanTargetName || cNick === cleanTargetName)) {
+        return true;
+      }
+      if (cleanTargetNick && (cName === cleanTargetNick || cNick === cleanTargetNick)) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matches.length === 1) {
+      return matches[0];
+    }
+
+    if (matches.length > 1) {
+      // Ambiguous duplicate names without matching ID! Return undefined to prevent wrong assignment.
+      return undefined;
+    }
+
+    return undefined;
   }
 }

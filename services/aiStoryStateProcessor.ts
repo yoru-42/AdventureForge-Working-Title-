@@ -418,7 +418,7 @@ export class AIStoryStateProcessor {
   private static processDiscoveredEntities(
     adventure: Adventure,
     entities: AIEntityDiscovery[],
-    notifications: any[]
+    notifications: any[] = []
   ): Adventure {
     const updatedNpcs = [...(adventure.npcs || [])];
     const loreDb = [...(adventure.loreDatabase || [])];
@@ -431,11 +431,10 @@ export class AIStoryStateProcessor {
       if (!cleanName || cleanName.toLowerCase() === playerName) return;
 
       // Deduplication check across NPCs, Lore, and Story Entities
-      const existingNpc = updatedNpcs.find(n =>
-        (discovery.id && n.id === discovery.id) ||
-        n.name.trim().toLowerCase() === cleanName.toLowerCase() ||
-        (n.nickname && n.nickname.trim().toLowerCase() === cleanName.toLowerCase())
-      );
+      const existingNpc = LocationContextService.resolveCharacter(updatedNpcs, {
+        id: discovery.id,
+        name: cleanName
+      });
 
       const existingLore = loreDb.find(l =>
         (discovery.id && l.id === discovery.id) ||
@@ -612,27 +611,31 @@ export class AIStoryStateProcessor {
     const holdings = adventure.world?.economyConfig?.holdings || [];
 
     presenceChanges.forEach(p => {
-      if (!p || !p.characterName) return;
-      const cleanName = p.characterName.trim().toLowerCase();
+      if (!p || (!p.characterName && !p.characterId)) return;
 
-      const npc = npcs.find(n =>
-        (p.characterId && n.id === p.characterId) ||
-        n.name.trim().toLowerCase() === cleanName ||
-        (n.nickname && n.nickname.trim().toLowerCase() === cleanName)
-      );
+      const npc = LocationContextService.resolveCharacter(npcs, {
+        id: p.characterId,
+        name: p.characterName
+      });
 
       if (npc) {
         const now = new Date().toISOString();
 
         if (p.state === 'mentioned_only') {
-          npc.presenceState = {
-            state: 'absent',
-            updatedAt: now
-          };
+          // Mentioned only: record mention timestamp & situation without wiping physical location or setting absent
+          npc.lastMentionedAt = now;
           npc.currentSituation = 'In Gedanken/Gesprächen erwähnt';
+          if (npc.presenceState?.state === 'scene_participant') {
+            npc.presenceState = {
+              state: 'present',
+              locationContext: npc.presenceState.locationContext || npc.currentLocationContext,
+              updatedAt: now
+            };
+          }
         } else if (p.state === 'absent') {
           npc.presenceState = {
             state: 'absent',
+            locationContext: npc.presenceState?.locationContext || npc.currentLocationContext,
             updatedAt: now
           };
           npc.currentSituation = 'Abwesend';
@@ -651,12 +654,14 @@ export class AIStoryStateProcessor {
               roomId: matchedRoom.roomId,
               roomName: matchedRoom.roomName,
               territoryName: currentLoc.territoryName,
-              regionName: currentLoc.regionName
+              regionName: currentLoc.regionName,
+              sceneId: currentLoc.sceneId
             };
           }
 
           npc.presenceState = {
             state: p.state,
+            sceneId: currentLoc.sceneId,
             locationContext: targetLoc,
             updatedAt: now
           };
