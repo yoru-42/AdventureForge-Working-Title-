@@ -915,17 +915,26 @@ export class LocationContextService {
       }
     }
 
+    if ((character.isExplicitlyPresent === true || character.details?.isExplicitlyPresent === true) && character.presenceState?.state !== 'absent') {
+      const charSceneId = character.presenceState?.sceneId || character.sceneId;
+      if (charSceneId && currentSceneId && charSceneId === currentSceneId) {
+        return true;
+      }
+    }
+
     return false;
   }
 
   /**
    * Checks if a character is participating in the immediate scene.
+   * Strictly answers whether the character belongs to the active scene.
+   * Does NOT fall back to mere physical presence at the location.
    */
   public static isCharacterInScene(
     character: any,
     currentLocation: CurrentLocationContext,
     sceneParticipantIds?: string[],
-    options?: {
+    _options?: {
       holdings?: EconomyHolding[];
       loreEntries?: LoreEntry[];
       territories?: Territory[];
@@ -933,15 +942,7 @@ export class LocationContextService {
   ): boolean {
     if (!character || !currentLocation) return false;
 
-    if (this.isCharacterSceneParticipant(character, currentLocation.sceneId, sceneParticipantIds)) {
-      return true;
-    }
-
-    return this.isCharacterAtLocation(character, currentLocation, {
-      ...options,
-      explicitParticipantIds: sceneParticipantIds,
-      allowSameBuildingWhenInRoom: false
-    });
+    return this.isCharacterSceneParticipant(character, currentLocation.sceneId, sceneParticipantIds);
   }
 
   /**

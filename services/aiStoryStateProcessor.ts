@@ -622,16 +622,9 @@ export class AIStoryStateProcessor {
         const now = new Date().toISOString();
 
         if (p.state === 'mentioned_only') {
-          // Mentioned only: record mention timestamp & situation without wiping physical location or setting absent
+          // Mentioned only: record mention timestamp & situation without modifying presenceState, sceneId, or location
           npc.lastMentionedAt = now;
           npc.currentSituation = 'In Gedanken/Gesprächen erwähnt';
-          if (npc.presenceState?.state === 'scene_participant') {
-            npc.presenceState = {
-              state: 'present',
-              locationContext: npc.presenceState.locationContext || npc.currentLocationContext,
-              updatedAt: now
-            };
-          }
         } else if (p.state === 'absent') {
           npc.presenceState = {
             state: 'absent',

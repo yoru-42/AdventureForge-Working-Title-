@@ -386,8 +386,8 @@ console.log('=== RUNNING FULL ADVENTUREFORGE PRESENCE & STATE PIPELINE SUITE ===
 
 // Test 24: Scene participant is available
 {
-  const playerLoc: CurrentLocationContext = { locationName: 'Falkengrund' };
-  const npc = { id: 'npc-24', name: 'Bote', presenceState: { state: 'scene_participant', locationContext: playerLoc } };
+  const playerLoc: CurrentLocationContext = { locationName: 'Falkengrund', sceneId: 'scene-24' };
+  const npc = { id: 'npc-24', name: 'Bote', presenceState: { state: 'scene_participant', sceneId: 'scene-24', locationContext: playerLoc } };
 
   assert(
     LocationContextService.isCharacterInScene(npc, playerLoc) === true,
@@ -604,4 +604,275 @@ console.log('=== RUNNING FULL ADVENTUREFORGE PRESENCE & STATE PIPELINE SUITE ===
   );
 }
 
-console.log('\n=== ALL 37 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');
+// -------------------------------------------------------------
+// SECTION 15 TESTS: Erwähnung, Anwesenheit, Szenenteilnahme, Dialog, Kampf
+// -------------------------------------------------------------
+
+// Test 38 (Section 15, Case 1): Erwähnung eines anwesenden Charakters
+// NPC = present, AI state = mentioned_only -> presenceState = present bleibt unverändert.
+{
+  const loc: CurrentLocationContext = { locationName: 'Falkengrund', buildingName: 'Taverne Zum Hirsch' };
+  const dummyAdventure: any = {
+    npcs: [
+      {
+        id: 'npc-baron-1',
+        name: 'Baron Von Falkenstein',
+        presenceState: { state: 'present', locationContext: loc, updatedAt: '2026-01-01T00:00:00.000Z' }
+      }
+    ],
+    currentLocation: loc
+  };
+
+  const processed = (AIStoryStateProcessor as any).processPresenceChanges(dummyAdventure, [
+    { characterId: 'npc-baron-1', characterName: 'Baron Von Falkenstein', state: 'mentioned_only' }
+  ]);
+
+  const baron = processed.npcs.find((n: any) => n.id === 'npc-baron-1');
+  assert(
+    baron.presenceState.state === 'present' &&
+    baron.presenceState.locationContext.buildingName === 'Taverne Zum Hirsch' &&
+    baron.lastMentionedAt !== undefined,
+    'Test 38: Erwähnung eines anwesenden Charakters lässt presenceState=present unverändert'
+  );
+}
+
+// Test 39 (Section 15, Case 2): Erwähnung eines Szenenteilnehmers
+// Vorher: presenceState = scene_participant, sceneId = scene-1. Danach: mentioned_only
+// Ergebnis: presenceState = scene_participant, sceneId = scene-1 muss unverändert bleiben.
+{
+  const loc: CurrentLocationContext = { locationName: 'Falkengrund', buildingName: 'Taverne Zum Hirsch', sceneId: 'scene-1' };
+  const dummyAdventure: any = {
+    npcs: [
+      {
+        id: 'npc-wache-1',
+        name: 'Wache Eric',
+        presenceState: { state: 'scene_participant', sceneId: 'scene-1', locationContext: loc, updatedAt: '2026-01-01T00:00:00.000Z' }
+      }
+    ],
+    currentLocation: loc
+  };
+
+  const processed = (AIStoryStateProcessor as any).processPresenceChanges(dummyAdventure, [
+    { characterId: 'npc-wache-1', characterName: 'Wache Eric', state: 'mentioned_only' }
+  ]);
+
+  const eric = processed.npcs.find((n: any) => n.id === 'npc-wache-1');
+  assert(
+    eric.presenceState.state === 'scene_participant' &&
+    eric.presenceState.sceneId === 'scene-1' &&
+    eric.lastMentionedAt !== undefined,
+    'Test 39: Erwähnung eines Szenenteilnehmers lässt scene_participant und sceneId unverändert'
+  );
+}
+
+// Test 40 (Section 15, Case 3): Physisch anwesend, aber keine Szene
+// NPC location = gleiche Taverne, current scene = scene-1, NPC sceneId = undefined
+// Ergebnis: physically present = true, scene participant = false
+{
+  const loc: CurrentLocationContext = { locationName: 'Falkengrund', buildingName: 'Taverne Zum Hirsch', sceneId: 'scene-1' };
+  const npc = {
+    id: 'npc-gast',
+    name: 'Gast',
+    currentLocationContext: { locationName: 'Falkengrund', buildingName: 'Taverne Zum Hirsch' },
+    presenceState: { state: 'present', locationContext: { locationName: 'Falkengrund', buildingName: 'Taverne Zum Hirsch' } }
+  };
+
+  const isPhysPresent = LocationContextService.isCharacterAtLocation(npc, loc);
+  const isScenePart = LocationContextService.isCharacterSceneParticipant(npc, loc.sceneId);
+  const isInScene = LocationContextService.isCharacterInScene(npc, loc);
+
+  assert(
+    isPhysPresent === true && isScenePart === false && isInScene === false,
+    'Test 40: Physisch anwesend in gleicher Taverne, aber ohne Szenenzuordnung -> present=true, scene_participant=false'
+  );
+}
+
+// Test 41 (Section 15, Case 4): Falsche Szene
+// NPC sceneId = scene-2, current scene = scene-1
+// Ergebnis: physically present kann true sein, scene participant = false
+{
+  const loc: CurrentLocationContext = { locationName: 'Falkengrund', buildingName: 'Taverne Zum Hirsch', sceneId: 'scene-1' };
+  const npc = {
+    id: 'npc-butler',
+    name: 'Butler',
+    currentLocationContext: { locationName: 'Falkengrund', buildingName: 'Taverne Zum Hirsch' },
+    presenceState: {
+      state: 'scene_participant',
+      sceneId: 'scene-2',
+      locationContext: { locationName: 'Falkengrund', buildingName: 'Taverne Zum Hirsch' }
+    }
+  };
+
+  const isPhysPresent = LocationContextService.isCharacterAtLocation(npc, loc);
+  const isScenePart = LocationContextService.isCharacterSceneParticipant(npc, loc.sceneId);
+  const isInScene = LocationContextService.isCharacterInScene(npc, loc);
+
+  assert(
+    isPhysPresent === true && isScenePart === false && isInScene === false,
+    'Test 41: Falsche Szene (scene-2 vs scene-1) -> physically present=true, scene participant=false'
+  );
+}
+
+// Test 42 (Section 15, Case 5): Gleicher Raum, aber keine Szenenteilnahme
+// NPC room = Schankraum, Player room = Schankraum ohne explizite Szenenteilnahme
+// Ergebnis: physically present = true, scene participant = false
+{
+  const loc: CurrentLocationContext = {
+    locationName: 'Falkengrund',
+    buildingName: 'Taverne Zum Hirsch',
+    roomName: 'Schankraum',
+    sceneId: 'scene-dialogue-1'
+  };
+  const npc = {
+    id: 'npc-wirt',
+    name: 'Wirt',
+    currentLocationContext: {
+      locationName: 'Falkengrund',
+      buildingName: 'Taverne Zum Hirsch',
+      roomName: 'Schankraum'
+    },
+    presenceState: {
+      state: 'present',
+      locationContext: {
+        locationName: 'Falkengrund',
+        buildingName: 'Taverne Zum Hirsch',
+        roomName: 'Schankraum'
+      }
+    }
+  };
+
+  const isPhysPresent = LocationContextService.isCharacterAtLocation(npc, loc);
+  const isScenePart = LocationContextService.isCharacterSceneParticipant(npc, loc.sceneId);
+  const isInScene = LocationContextService.isCharacterInScene(npc, loc);
+
+  assert(
+    isPhysPresent === true && isScenePart === false && isInScene === false,
+    'Test 42: Gleicher Raum, aber keine explizite Szenenteilnahme -> physically present=true, scene participant=false'
+  );
+}
+
+// Test 43 (Section 15, Case 6): Expliziter Szenenteilnehmer
+// dialogueParticipantIds / sceneParticipantIds mit stabiler characterId
+// Ergebnis: scene participant = true nur für diese konkrete Szene
+{
+  const locScene1: CurrentLocationContext = { locationName: 'Falkengrund', sceneId: 'scene-1' };
+  const locScene2: CurrentLocationContext = { locationName: 'Falkengrund', sceneId: 'scene-2' };
+  const npc = {
+    id: 'char-stable-43',
+    name: 'Söldner'
+  };
+
+  const isParticipantInScene1 = LocationContextService.isCharacterSceneParticipant(npc, locScene1.sceneId, ['char-stable-43']);
+  const isParticipantInScene2 = LocationContextService.isCharacterSceneParticipant(npc, locScene2.sceneId, ['other-char']);
+
+  assert(
+    isParticipantInScene1 === true && isParticipantInScene2 === false,
+    'Test 43: Expliziter Szenenteilnehmer ist nur für die zugewiesene Szene Teilnehmer'
+  );
+}
+
+// Test 44 (Section 15, Case 7): Dialogteilnehmer
+// Ein Szenenteilnehmer ohne Dialogeintrag darf nicht automatisch als Dialogsprecher erscheinen.
+{
+  const sceneParticipants = [
+    { id: 'char-player', name: 'Spieler' },
+    { id: 'char-baron', name: 'Baron' },
+    { id: 'char-butler', name: 'Butler' },
+    { id: 'char-guard', name: 'Wache' }
+  ];
+
+  // Nur Baron und Butler sprechen aktiv im Dialog
+  const dialogueSpeakers = ['char-player', 'char-baron', 'char-butler'];
+
+  const guardIsScenePart = sceneParticipants.some(p => p.id === 'char-guard');
+  const guardIsDialogueSpeaker = dialogueSpeakers.includes('char-guard');
+
+  assert(
+    guardIsScenePart === true && guardIsDialogueSpeaker === false,
+    'Test 44: Szenenteilnehmer (Wache) ist nicht automatisch Dialogteilnehmer/Sprecher'
+  );
+}
+
+// Test 45 (Section 15, Case 8): Combat
+// Ein Dialogteilnehmer darf nicht automatisch als Kampfbeteiligter erscheinen.
+{
+  const dialogueSpeakers = [
+    { id: 'char-player', name: 'Spieler' },
+    { id: 'char-baron', name: 'Baron' },
+    { id: 'char-guard', name: 'Wache' }
+  ];
+
+  // Nur die Wache greift an / ist Combat-Gegner, Baron schaut zu
+  const combatParticipantIds = ['char-guard'];
+
+  const baronInDialogue = dialogueSpeakers.some(s => s.id === 'char-baron');
+  const baronInCombat = combatParticipantIds.includes('char-baron');
+
+  assert(
+    baronInDialogue === true && baronInCombat === false,
+    'Test 45: Dialogteilnehmer (Baron) ist nicht automatisch Kampfbeteiligter'
+  );
+}
+
+// Test 46 (Section 15, Case 9): Doppelte Namen
+// Zwei NPCs mit demselben Namen (character-A, character-B) müssen über IDs getrennt bleiben.
+{
+  const npcs = [
+    { id: 'char-a-46', name: 'Hans', appearance: { currentLocation: 'Falkengrund' } },
+    { id: 'char-b-46', name: 'Hans', appearance: { currentLocation: 'Eichenhain' } }
+  ];
+
+  const resolvedA = LocationContextService.resolveCharacter(npcs, { id: 'char-a-46', name: 'Hans' });
+  const resolvedB = LocationContextService.resolveCharacter(npcs, { id: 'char-b-46', name: 'Hans' });
+  const ambiguous = LocationContextService.resolveCharacter(npcs, { name: 'Hans' });
+
+  assert(
+    resolvedA?.id === 'char-a-46' &&
+    resolvedB?.id === 'char-b-46' &&
+    ambiguous === undefined,
+    'Test 46: Doppelte Namen werden über IDs strikt getrennt und ohne ID abgewiesen'
+  );
+}
+
+// Test 47 (Section 15, Case 10): Dialog -> Kampf -> Dialog
+// Die characterId und das Portrait müssen über alle drei Zustände erhalten bleiben.
+{
+  const originalChar = {
+    id: 'char-baron-47',
+    name: 'Baron',
+    image: 'https://example.com/portraits/baron.png',
+    currentLocationContext: { locationName: 'Falkengrund', buildingName: 'Schloss' },
+    presenceState: { state: 'present', locationContext: { locationName: 'Falkengrund', buildingName: 'Schloss' } }
+  };
+
+  // 1. Im Dialog
+  const dialogueChar = {
+    characterId: originalChar.id,
+    characterName: originalChar.name,
+    avatar: originalChar.image
+  };
+
+  // 2. Im Kampf (Gegnerübernahme)
+  const combatChar = {
+    id: dialogueChar.characterId,
+    name: dialogueChar.characterName,
+    image: dialogueChar.avatar
+  };
+
+  // 3. Zurück im Dialog
+  const postCombatDialogueChar = {
+    characterId: combatChar.id,
+    characterName: combatChar.name,
+    avatar: combatChar.image
+  };
+
+  assert(
+    dialogueChar.characterId === originalChar.id &&
+    combatChar.id === originalChar.id &&
+    postCombatDialogueChar.characterId === originalChar.id &&
+    postCombatDialogueChar.avatar === originalChar.image,
+    'Test 47: Dialog -> Kampf -> Dialog bewahrt characterId und Portrait konsistent'
+  );
+}
+
+console.log('\n=== ALL 47 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');

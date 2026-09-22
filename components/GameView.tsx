@@ -481,6 +481,32 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     }
     return initialMsgs;
   });
+
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const handleLeaveView = (targetMode: GameViewMode) => {
+    if (messagesRef.current && messagesRef.current.length > 0) {
+      onUpdateAdventureRef.current({
+        ...adventureRef.current,
+        chatHistory: messagesRef.current
+      });
+    }
+    onViewChange(targetMode);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (messagesRef.current && messagesRef.current.length > 0) {
+        onUpdateAdventureRef.current({
+          ...adventureRef.current,
+          chatHistory: messagesRef.current
+        });
+      }
+    };
+  }, []);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isVoiceActive, setIsVoiceActive] = useState(false);
@@ -7590,7 +7616,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
       <div className="p-4 bg-slate-900/90 border-b border-slate-800 flex justify-between items-center z-20">
         <div className="flex items-center gap-3">
-          <button onClick={() => onViewChange(GameViewMode.HOME)} className="text-slate-400 p-2"><i className="fa-solid fa-chevron-left"></i></button>
+          <button onClick={() => handleLeaveView(GameViewMode.HOME)} className="text-slate-400 p-2"><i className="fa-solid fa-chevron-left"></i></button>
           <div className="flex items-center gap-3">
             {adventure.player.image && <img src={adventure.player.image} className="w-8 h-8 rounded-full border border-amber-500/30 object-cover" />}
             <div>
