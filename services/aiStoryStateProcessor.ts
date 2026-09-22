@@ -22,6 +22,17 @@ import { jsonrepair } from 'jsonrepair';
 import { LocationContextService } from './locationContextService';
 import { CharacterKnowledgeService } from './characterKnowledgeService';
 
+export interface EnsureStoryEntityOptions {
+  id?: string;
+  category: StoryEntityItem['category'];
+  title: string;
+  description?: string;
+  details?: Record<string, any>;
+  createdAt?: string;
+  isNewInStory?: boolean;
+  promotedToCodex?: boolean;
+}
+
 export const STRUCTURED_STORY_STATE_DIRECTIVE = `
 ### ANWEISUNG FÜR STRUKTURIERTE STORY- UND ZUSTANDS-DATEN:
 Zusätzlich zu deiner narrativen Antwort MUSST du am Ende deiner Ausgabe zwingend einen strukturierten JSON-Block im folgenden Format anfügen:
@@ -447,9 +458,96 @@ export class AIStoryStateProcessor {
   }
 
   /**
+   * Central helper to create, update, or deduplicate a StoryEntityItem in storyState.storyEntities.
+   * Priority:
+   * 1. Stable ID
+   * 2. Stable linked npcId in details
+   * 3. Exact title match within compatible category
+   * Never uses loose includes() for identity matching.
+   */
+  public static ensureStoryEntity(
+    storyEntities: StoryEntityItem[],
+    options: EnsureStoryEntityOptions,
+    loreDatabase: LoreEntry[] = []
+  ): { updatedList: StoryEntityItem[]; entity: StoryEntityItem; isNew: boolean } {
+    const list = [...storyEntities];
+    const cleanTitle = (options.title || '').trim();
+    if (!cleanTitle) {
+      return { updatedList: list, entity: null as any, isNew: false };
+    }
+
+    const cleanLowerTitle = cleanTitle.toLowerCase();
+    const targetId = options.id?.trim();
+    const linkedNpcId = options.details?.npcId?.trim();
+
+    // 1. Check existing in storyEntities
+    let existingIndex = -1;
+    if (targetId) {
+      existingIndex = list.findIndex(e => e.id === targetId);
+    }
+    if (existingIndex === -1 && linkedNpcId) {
+      existingIndex = list.findIndex(e => e.details?.npcId === linkedNpcId || e.id === linkedNpcId);
+    }
+    if (existingIndex === -1) {
+      existingIndex = list.findIndex(e =>
+        e.category === options.category && e.title.trim().toLowerCase() === cleanLowerTitle
+      );
+    }
+
+    // 2. Check existing in permanent loreDatabase
+    const existingLore = loreDatabase.find(l =>
+      (targetId && l.id === targetId) ||
+      (linkedNpcId && l.id === linkedNpcId) ||
+      (l.category === options.category && l.title.trim().toLowerCase() === cleanLowerTitle)
+    );
+
+    const now = options.createdAt || new Date().toISOString();
+
+    if (existingIndex !== -1) {
+      // Existing entry in storyEntities: update without creating duplicate
+      const current = list[existingIndex];
+      const mergedDetails = { ...(current.details || {}), ...(options.details || {}) };
+      if (linkedNpcId && !mergedDetails.npcId) {
+        mergedDetails.npcId = linkedNpcId;
+      }
+      const updatedEntity: StoryEntityItem = {
+        ...current,
+        description: options.description && options.description.trim() ? options.description.trim() : current.description,
+        details: mergedDetails,
+        promotedToCodex: current.promotedToCodex || (options.promotedToCodex ?? false)
+      };
+      list[existingIndex] = updatedEntity;
+      return { updatedList: list, entity: updatedEntity, isNew: false };
+    }
+
+    // If already in Codex, we do not mark it as a new pending Story-Info unless explicitly set
+    const isAlreadyInCodex = Boolean(existingLore);
+    const entityId = targetId || linkedNpcId || existingLore?.id || `story-ent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const finalDetails = { ...(options.details || {}) };
+    if (linkedNpcId && !finalDetails.npcId) {
+      finalDetails.npcId = linkedNpcId;
+    }
+
+    const newEntity: StoryEntityItem = {
+      id: entityId,
+      category: options.category,
+      title: cleanTitle,
+      description: options.description || `Neuer Story-Eintrag (${cleanTitle}).`,
+      details: finalDetails,
+      createdAt: now,
+      isNewInStory: options.isNewInStory !== undefined ? options.isNewInStory : !isAlreadyInCodex,
+      promotedToCodex: options.promotedToCodex !== undefined ? options.promotedToCodex : isAlreadyInCodex
+    };
+
+    list.push(newEntity);
+    return { updatedList: list, entity: newEntity, isNew: !isAlreadyInCodex };
+  }
+
+  /**
    * Processes discovered entities (Characters, Locations, Buildings, Rooms, Items, etc.)
    * Enforces strict deduplication: Stable ID first -> Exact Name -> Controlled Normalization.
    * New entities are added as temporary Story Entities (Story-Info), NOT directly promoted to Codex without review.
+   * When discovering new characters/creatures, creates NPC and Story-Info atomically with identical IDs.
    */
   private static processDiscoveredEntities(
     adventure: Adventure,
@@ -458,129 +556,120 @@ export class AIStoryStateProcessor {
   ): Adventure {
     const updatedNpcs = [...(adventure.npcs || [])];
     const loreDb = [...(adventure.loreDatabase || [])];
-    const storyEntities = [...(adventure.storyState?.storyEntities || [])];
+    let storyEntities = [...(adventure.storyState?.storyEntities || [])];
     const playerName = (adventure.player?.name || 'Spieler').trim().toLowerCase();
+
+    const categoryMap: Record<string, StoryEntityItem['category']> = {
+      character: 'Charaktere',
+      creature: 'Gegner',
+      building: 'Gebäude',
+      room: 'Räume',
+      location: 'Orte',
+      territory: 'Weltkarte',
+      item: 'Gegenstände',
+      organization: 'Fraktionen',
+      event: 'Story & Quests'
+    };
 
     entities.forEach(discovery => {
       if (!discovery || !discovery.name) return;
       const cleanName = discovery.name.trim();
       if (!cleanName || cleanName.toLowerCase() === playerName) return;
 
-      // Deduplication check across NPCs, Lore, and Story Entities
+      const category = categoryMap[discovery.type] || 'Story & Quests';
+
+      // Check existing NPC
       const existingNpc = LocationContextService.resolveCharacter(updatedNpcs, {
         id: discovery.id,
         name: cleanName
       });
 
-      const existingLore = loreDb.find(l =>
-        (discovery.id && l.id === discovery.id) ||
-        l.title.trim().toLowerCase() === cleanName.toLowerCase()
-      );
-
-      const existingStoryEnt = storyEntities.find(e =>
-        (discovery.id && e.id === discovery.id) ||
-        e.title.trim().toLowerCase() === cleanName.toLowerCase()
-      );
-
-      // If entity already exists, do NOT create a duplicate
-      if (existingNpc || existingLore || existingStoryEnt) {
-        // Update situation or role if provided, but keep existing ID
-        if (existingNpc && discovery.description) {
-          existingNpc.currentSituation = discovery.description;
-        }
-        return;
+      if (existingNpc && discovery.description) {
+        existingNpc.currentSituation = discovery.description;
       }
 
-      // Entity is truly new -> Create temporary Story Entity
-      const categoryMap: Record<string, StoryEntityItem['category']> = {
-        character: 'Charaktere',
-        creature: 'Gegner',
-        building: 'Gebäude',
-        room: 'Räume',
-        location: 'Orte',
-        territory: 'Weltkarte',
-        item: 'Gegenstände',
-        organization: 'Fraktionen',
-        event: 'Story & Quests'
+      const entityId = discovery.id || existingNpc?.id || `story-ent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+      const details: Record<string, any> = {
+        role: discovery.role,
+        locationContext: discovery.locationContext,
+        ...(discovery.details || {})
       };
+      if (discovery.type === 'character' || discovery.type === 'creature') {
+        details.npcId = existingNpc ? existingNpc.id : entityId;
+      }
 
-      const category = categoryMap[discovery.type] || 'Story & Quests';
-      const entityId = discovery.id || `story-ent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-
-      const newStoryEntity: StoryEntityItem = {
-        id: entityId,
+      const ensured = this.ensureStoryEntity(storyEntities, {
+        id: existingNpc ? existingNpc.id : entityId,
         category,
         title: cleanName,
         description: discovery.description || `Entdecktes Element (${cleanName}).`,
-        details: {
-          role: discovery.role,
-          locationContext: discovery.locationContext,
-          ...(discovery.details || {})
-        },
-        createdAt: new Date().toISOString(),
-        isNewInStory: true,
-        promotedToCodex: false
-      };
+        details
+      }, loreDb);
 
-      storyEntities.push(newStoryEntity);
+      storyEntities = ensured.updatedList;
 
       // If character or creature, add to dynamic NPCs list with resolved locationContext and presenceState
       if (discovery.type === 'character' || discovery.type === 'creature') {
-        const currentLoc = LocationContextService.resolveCurrentLocation(adventure);
-        const holdings = adventure.world?.economyConfig?.holdings || [];
+        if (!existingNpc) {
+          const currentLoc = LocationContextService.resolveCurrentLocation(adventure);
+          const holdings = adventure.world?.economyConfig?.holdings || [];
 
-        let initialLocContext: CurrentLocationContext = currentLoc;
-        if (discovery.locationContext && (discovery.locationContext.locationName || discovery.locationContext.buildingName || discovery.locationContext.roomName)) {
-          const matchedBuilding = discovery.locationContext.buildingName
-            ? LocationContextService.resolveBuilding(holdings, discovery.locationContext.buildingName, discovery.locationContext.locationName || currentLoc.locationName)
-            : undefined;
-          const matchedRoom = LocationContextService.resolveRoom(matchedBuilding, discovery.locationContext.roomName);
+          let initialLocContext: CurrentLocationContext = currentLoc;
+          if (discovery.locationContext && (discovery.locationContext.locationName || discovery.locationContext.buildingName || discovery.locationContext.roomName)) {
+            const matchedBuilding = discovery.locationContext.buildingName
+              ? LocationContextService.resolveBuilding(holdings, discovery.locationContext.buildingName, discovery.locationContext.locationName || currentLoc.locationName)
+              : undefined;
+            const matchedRoom = LocationContextService.resolveRoom(matchedBuilding, discovery.locationContext.roomName);
 
-          initialLocContext = {
-            locationName: discovery.locationContext.locationName || currentLoc.locationName,
-            buildingId: matchedBuilding?.id,
-            buildingName: matchedBuilding?.name || discovery.locationContext.buildingName,
-            roomId: matchedRoom.roomId,
-            roomName: matchedRoom.roomName,
-            territoryName: currentLoc.territoryName,
-            regionName: currentLoc.regionName
-          };
+            initialLocContext = {
+              locationName: discovery.locationContext.locationName || currentLoc.locationName,
+              buildingId: matchedBuilding?.id,
+              buildingName: matchedBuilding?.name || discovery.locationContext.buildingName,
+              roomId: matchedRoom.roomId,
+              roomName: matchedRoom.roomName,
+              territoryName: currentLoc.territoryName,
+              regionName: currentLoc.regionName
+            };
+          }
+
+          updatedNpcs.push({
+            id: ensured.entity.id,
+            name: cleanName,
+            role: discovery.role || (discovery.type === 'creature' ? 'Gegner' : 'Bewohner'),
+            bio: discovery.description || 'In der Geschichte anwesender Charakter.',
+            personality: 'Unbekannt',
+            relationship: 'Neu entdeckt',
+            conduct: 'Neutral',
+            currentSituation: 'Neu entdeckt',
+            currentLocationContext: initialLocContext,
+            presenceState: {
+              state: 'present',
+              locationContext: initialLocContext,
+              updatedAt: new Date().toISOString()
+            },
+            appearance: {
+              hairColor: 'Unbekannt',
+              eyeColor: 'Unbekannt',
+              age: 'Unbekannt',
+              build: 'Unbekannt',
+              gender: 'Unbekannt'
+            },
+            campaignPowerLevels: {},
+            attributes: [],
+            isHostile: discovery.type === 'creature'
+          });
         }
-
-        updatedNpcs.push({
-          id: entityId,
-          name: cleanName,
-          role: discovery.role || (discovery.type === 'creature' ? 'Gegner' : 'Bewohner'),
-          bio: discovery.description || 'In der Geschichte anwesender Charakter.',
-          personality: 'Unbekannt',
-          relationship: 'Neu entdeckt',
-          conduct: 'Neutral',
-          currentSituation: 'Neu entdeckt',
-          currentLocationContext: initialLocContext,
-          presenceState: {
-            state: 'present',
-            locationContext: initialLocContext,
-            updatedAt: new Date().toISOString()
-          },
-          appearance: {
-            hairColor: 'Unbekannt',
-            eyeColor: 'Unbekannt',
-            age: 'Unbekannt',
-            build: 'Unbekannt',
-            gender: 'Unbekannt'
-          },
-          campaignPowerLevels: {},
-          attributes: [],
-          isHostile: discovery.type === 'creature'
-        });
       }
 
-      notifications.push({
-        id: Math.random().toString(),
-        type: 'add',
-        title: `${cleanName} (${category})`,
-        category: 'Story-Info'
-      });
+      if (ensured.isNew) {
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'add',
+          title: `${cleanName} (${category})`,
+          category: 'Story-Info'
+        });
+      }
     });
 
     return {
@@ -619,29 +708,23 @@ export class AIStoryStateProcessor {
 
     let updatedAdventure = LocationContextService.updateCurrentLocation(adventure, newContext);
 
-    const storyEntities = [...(updatedAdventure.storyState?.storyEntities || [])];
+    let storyEntities = [...(updatedAdventure.storyState?.storyEntities || [])];
     const loreDb = updatedAdventure.loreDatabase || [];
 
     const ensureDiscoveredLocationEntity = (name: string, category: 'Orte' | 'Gebäude' | 'Räume') => {
       const clean = name.trim();
       if (!clean || clean.length < 2) return;
-      const lower = clean.toLowerCase();
-      const inStory = storyEntities.some(s => s.category === category && s.title.trim().toLowerCase() === lower);
-      const inLore = loreDb.some(l => l.category === category && l.title.trim().toLowerCase() === lower);
-      if (!inStory && !inLore) {
-        storyEntities.push({
-          id: `story-ent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          category,
-          title: clean,
-          description: `Neu entdeckter ${category === 'Orte' ? 'Ort' : category === 'Gebäude' ? 'Gebäudekomplex' : 'Raum'}: ${clean}.`,
-          details: {
-            locationName: newContext.locationName,
-            buildingName: newContext.buildingName
-          },
-          createdAt: new Date().toISOString(),
-          isNewInStory: true,
-          promotedToCodex: false
-        });
+      const ensured = this.ensureStoryEntity(storyEntities, {
+        category,
+        title: clean,
+        description: `Neu entdeckter ${category === 'Orte' ? 'Ort' : category === 'Gebäude' ? 'Gebäudekomplex' : 'Raum'}: ${clean}.`,
+        details: {
+          locationName: newContext.locationName,
+          buildingName: newContext.buildingName
+        }
+      }, loreDb);
+      storyEntities = ensured.updatedList;
+      if (ensured.isNew) {
         notifications.push({
           id: Math.random().toString(),
           type: 'add',
@@ -698,7 +781,7 @@ export class AIStoryStateProcessor {
     notifications: any[] = []
   ): Adventure {
     const npcs = [...(adventure.npcs || [])];
-    const storyEntities = [...(adventure.storyState?.storyEntities || [])];
+    let storyEntities = [...(adventure.storyState?.storyEntities || [])];
     const loreDb = adventure.loreDatabase || [];
     const currentLoc = LocationContextService.resolveCurrentLocation(adventure);
     const holdings = adventure.world?.economyConfig?.holdings || [];
@@ -825,28 +908,24 @@ export class AIStoryStateProcessor {
             isHostile: false
           });
 
-          if (!existingLore && !existingStoryEnt) {
-            storyEntities.push({
-              id: entityId,
-              category: 'Charaktere',
-              title: cleanName,
-              description: `In der Geschichte anwesender Charakter (${cleanName}).`,
-              details: {
-                npcId: entityId,
-                role: 'Charakter'
-              },
-              createdAt: now,
-              isNewInStory: true,
-              promotedToCodex: false
-            });
+          const ensured = this.ensureStoryEntity(storyEntities, {
+            id: entityId,
+            category: 'Charaktere',
+            title: cleanName,
+            description: `In der Geschichte anwesender Charakter (${cleanName}).`,
+            details: {
+              npcId: entityId,
+              role: 'Charakter'
+            }
+          }, loreDb);
+          storyEntities = ensured.updatedList;
+          if (ensured.isNew) {
             notifications.push({
               id: Math.random().toString(),
               type: 'add',
               title: `${cleanName} (Charaktere)`,
               category: 'Story-Info'
             });
-          } else if (existingStoryEnt && !existingStoryEnt.details?.npcId) {
-            existingStoryEnt.details = { ...existingStoryEnt.details, npcId: entityId };
           }
         }
       }
@@ -925,7 +1004,7 @@ export class AIStoryStateProcessor {
       lastUpdatedTime: new Date().toISOString()
     };
 
-    const storyEntities = storyState.storyEntities;
+    let storyEntities = storyState.storyEntities;
     const loreDb = adventure.loreDatabase || [];
 
     events.forEach(e => {
@@ -934,23 +1013,18 @@ export class AIStoryStateProcessor {
       if (!cleanTitle) return;
 
       const lower = cleanTitle.toLowerCase();
-      const inStory = storyEntities.some(s => s.title.trim().toLowerCase() === lower);
-      const inLore = loreDb.some(l => l.title.trim().toLowerCase() === lower);
+      const ensured = this.ensureStoryEntity(storyEntities, {
+        category: 'Story & Quests',
+        title: cleanTitle,
+        description: e.description || `Ereignis / Quest: ${cleanTitle}`,
+        details: {
+          type: e.type,
+          isPlayerTask: e.isPlayerTask
+        }
+      }, loreDb);
+      storyEntities = ensured.updatedList;
 
-      if (!inStory && !inLore) {
-        storyEntities.push({
-          id: `story-event-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          category: 'Story & Quests',
-          title: cleanTitle,
-          description: e.description || `Ereignis / Quest: ${cleanTitle}`,
-          details: {
-            type: e.type,
-            isPlayerTask: e.isPlayerTask
-          },
-          createdAt: new Date().toISOString(),
-          isNewInStory: true,
-          promotedToCodex: false
-        });
+      if (ensured.isNew) {
         notifications.push({
           id: Math.random().toString(),
           type: 'add',
@@ -977,7 +1051,10 @@ export class AIStoryStateProcessor {
 
     return {
       ...adventure,
-      storyState: storyState as StoryInfoState
+      storyState: {
+        ...storyState,
+        storyEntities
+      } as StoryInfoState
     };
   }
 
@@ -990,7 +1067,7 @@ export class AIStoryStateProcessor {
     inventoryChanges: AIInventoryChange[],
     notifications: any[]
   ): Adventure {
-    const storyEntities = [...(adventure.storyState?.storyEntities || [])];
+    let storyEntities = [...(adventure.storyState?.storyEntities || [])];
     const loreDb = adventure.loreDatabase || [];
     let updatedInventory = [...(adventure.inventory || [])];
 
@@ -1006,22 +1083,18 @@ export class AIStoryStateProcessor {
           updatedInventory.push(cleanItem as any);
         }
 
-        const inStory = storyEntities.some(s => s.category === 'Gegenstände' && s.title.trim().toLowerCase() === lower);
-        const inLore = loreDb.some(l => l.category === 'Gegenstände' && l.title.trim().toLowerCase() === lower);
-        if (!inStory && !inLore) {
-          storyEntities.push({
-            id: `story-item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            category: 'Gegenstände',
-            title: cleanItem,
-            description: `Im Laufe der Geschichte gefundener / erhaltener Gegenstand (${cleanItem}).`,
-            details: {
-              action: 'added',
-              quantity: inv.quantity || 1
-            },
-            createdAt: new Date().toISOString(),
-            isNewInStory: true,
-            promotedToCodex: false
-          });
+        const ensured = this.ensureStoryEntity(storyEntities, {
+          category: 'Gegenstände',
+          title: cleanItem,
+          description: `Im Laufe der Geschichte gefundener / erhaltener Gegenstand (${cleanItem}).`,
+          details: {
+            action: 'added',
+            quantity: inv.quantity || 1
+          }
+        }, loreDb);
+        storyEntities = ensured.updatedList;
+
+        if (ensured.isNew) {
           notifications.push({
             id: Math.random().toString(),
             type: 'add',

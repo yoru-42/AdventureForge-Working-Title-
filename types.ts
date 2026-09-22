@@ -3185,6 +3185,7 @@ export interface StoryInfoState {
   relationships?: { fromName: string; toName: string; relationType: string; description?: string }[];
   storyEntities: StoryEntityItem[];
   characterKnowledge?: CharacterKnowledge;
+  processedFirstMessage?: boolean;
   lastUpdatedTime?: string;
 }
 

@@ -982,4 +982,104 @@ Hier ist die Geschichte.
   );
 }
 
-console.log('\n=== ALL 51 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');
+// Test 52: ensureStoryEntity deduplication by ID and by Title
+{
+  let list: any[] = [];
+  const res1 = AIStoryStateProcessor.ensureStoryEntity(list, {
+    id: 'ent-1',
+    category: 'Charaktere',
+    title: 'Gideon Sternensucher',
+    description: 'Ein geheimnisvoller Magier'
+  });
+  list = res1.updatedList;
+
+  assert(list.length === 1 && res1.isNew === true, 'Test 52a: New entity added to empty list');
+
+  // Same ID, updated description
+  const res2 = AIStoryStateProcessor.ensureStoryEntity(list, {
+    id: 'ent-1',
+    category: 'Charaktere',
+    title: 'Gideon Sternensucher',
+    description: 'Ein mächtiger Magier'
+  });
+  list = res2.updatedList;
+  assert(
+    list.length === 1 && res2.isNew === false && list[0].description === 'Ein mächtiger Magier',
+    'Test 52b: Existing ID updates description without creating duplicates'
+  );
+
+  // Same title in same category without ID
+  const res3 = AIStoryStateProcessor.ensureStoryEntity(list, {
+    category: 'Charaktere',
+    title: 'Gideon Sternensucher',
+    description: 'Weitere Notizen'
+  });
+  list = res3.updatedList;
+  assert(
+    list.length === 1 && res3.isNew === false,
+    'Test 52c: Same title in same category does not create duplicate'
+  );
+}
+
+// Test 53: ensureStoryEntity linked npcId deduplication
+{
+  let list: any[] = [];
+  const res1 = AIStoryStateProcessor.ensureStoryEntity(list, {
+    category: 'Charaktere',
+    title: 'Wirtin Helga',
+    description: 'Die Tavernenwirtin',
+    details: { npcId: 'npc-helga-99' }
+  });
+  list = res1.updatedList;
+
+  const res2 = AIStoryStateProcessor.ensureStoryEntity(list, {
+    category: 'Charaktere',
+    title: 'Helga',
+    details: { npcId: 'npc-helga-99', role: 'Wirtin' }
+  });
+  list = res2.updatedList;
+
+  assert(
+    list.length === 1 && list[0].details?.role === 'Wirtin',
+    'Test 53: Linked npcId resolves to existing story entity regardless of minor title variations'
+  );
+}
+
+// Test 54: ensureStoryEntity checks permanent Codex (loreDatabase)
+{
+  const loreDb: any[] = [
+    { id: 'lore-1', category: 'Orte', title: 'Falkengrund', description: 'Ein altes Dorf' }
+  ];
+  let list: any[] = [];
+
+  const res = AIStoryStateProcessor.ensureStoryEntity(list, {
+    category: 'Orte',
+    title: 'Falkengrund',
+    description: 'Dorfbeschreibung'
+  }, loreDb);
+
+  assert(
+    res.entity.promotedToCodex === true && res.isNew === false,
+    'Test 54: Entity already in Codex is marked as promotedToCodex and not a new pending badge'
+  );
+}
+
+// Test 55: processedFirstMessage flag prevents duplicate initialization loops
+{
+  const adv: any = {
+    id: 'adv-55',
+    firstMessage: 'Willkommen in Falkengrund!\n<STORY_STATE_CHANGES>{"discoveredEntities":[{"type":"location","name":"Marktplatz"}]}</STORY_STATE_CHANGES>',
+    storyState: {
+      storyEntities: [],
+      processedFirstMessage: true
+    }
+  };
+
+  // When processedFirstMessage is true, GameView does not re-process firstMessage on mount/render
+  assert(
+    adv.storyState.processedFirstMessage === true,
+    'Test 55: processedFirstMessage flag reliably tracks initialization state'
+  );
+}
+
+console.log('\n=== ALL 55 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');

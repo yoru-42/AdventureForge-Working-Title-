@@ -566,7 +566,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       e.id === entity.id ? { ...e, promotedToCodex: true, isNewInStory: false } : e
     );
 
-    onUpdateAdventure({
+    const updatedAdv: Adventure = {
       ...adventure,
       chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       loreDatabase: newLore,
@@ -574,7 +574,9 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         ...(adventure.storyState || { storyEntities: [] }),
         storyEntities: updatedStoryEntities
       }
-    });
+    };
+    adventureRef.current = updatedAdv;
+    onUpdateAdventure(updatedAdv);
 
     addLoreNotifications([
       {
@@ -610,7 +612,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       promotedIds.has(e.id) ? { ...e, promotedToCodex: true, isNewInStory: false } : e
     );
 
-    onUpdateAdventure({
+    const updatedAdv: Adventure = {
       ...adventure,
       chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       loreDatabase: newLore,
@@ -618,7 +620,9 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         ...(adventure.storyState || { storyEntities: [] }),
         storyEntities: updatedStoryEntities
       }
-    });
+    };
+    adventureRef.current = updatedAdv;
+    onUpdateAdventure(updatedAdv);
 
     addLoreNotifications([
       {
@@ -635,14 +639,16 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const updatedStoryEntities = (adventure.storyState?.storyEntities || []).map(e =>
       e.id === entityId ? { ...e, isNewInStory: false } : e
     );
-    onUpdateAdventure({
+    const updatedAdv: Adventure = {
       ...adventure,
       chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       storyState: {
         ...(adventure.storyState || { storyEntities: [] }),
         storyEntities: updatedStoryEntities
       }
-    });
+    };
+    adventureRef.current = updatedAdv;
+    onUpdateAdventure(updatedAdv);
   };
 
   const handleKeepMultipleTemporary = (entities: StoryEntityItem[]) => {
@@ -652,27 +658,31 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const updatedStoryEntities = (adventure.storyState?.storyEntities || []).map(e =>
       ids.has(e.id) ? { ...e, isNewInStory: false } : e
     );
-    onUpdateAdventure({
+    const updatedAdv: Adventure = {
       ...adventure,
       chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       storyState: {
         ...(adventure.storyState || { storyEntities: [] }),
         storyEntities: updatedStoryEntities
       }
-    });
+    };
+    adventureRef.current = updatedAdv;
+    onUpdateAdventure(updatedAdv);
   };
 
   const handleDismissEntity = (entityId: string) => {
     const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
     const updatedStoryEntities = (adventure.storyState?.storyEntities || []).filter(e => e.id !== entityId);
-    onUpdateAdventure({
+    const updatedAdv: Adventure = {
       ...adventure,
       chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       storyState: {
         ...(adventure.storyState || { storyEntities: [] }),
         storyEntities: updatedStoryEntities
       }
-    });
+    };
+    adventureRef.current = updatedAdv;
+    onUpdateAdventure(updatedAdv);
   };
 
   const handleDismissMultiple = (entities: StoryEntityItem[]) => {
@@ -680,14 +690,16 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
     const ids = new Set(entities.map(e => e.id));
     const updatedStoryEntities = (adventure.storyState?.storyEntities || []).filter(e => !ids.has(e.id));
-    onUpdateAdventure({
+    const updatedAdv: Adventure = {
       ...adventure,
       chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       storyState: {
         ...(adventure.storyState || { storyEntities: [] }),
         storyEntities: updatedStoryEntities
       }
-    });
+    };
+    adventureRef.current = updatedAdv;
+    onUpdateAdventure(updatedAdv);
   };
 
   const pendingWorkTasksCount = React.useMemo(() => {
@@ -2763,8 +2775,8 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       setMessages(initialMsgs);
     }
 
-    // Initial load state processing: process firstMessage / prologue via AIStoryStateProcessor if present, or legacy recovery fallback if empty
-    if (!adventure.storyState || !adventure.storyState.storyEntities || adventure.storyState.storyEntities.length === 0) {
+    // Initial load state processing: process firstMessage / prologue via AIStoryStateProcessor if not already processed
+    if (!adventure.storyState?.processedFirstMessage) {
       let currentAdv = { ...adventure };
       let updated = false;
 
@@ -2776,12 +2788,26 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
         }
       }
 
-      if (updated) {
-        onUpdateAdventure({
-          ...currentAdv,
-          chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : currentAdv.chatHistory
-        });
-      }
+      const finalStoryState: StoryInfoState = {
+        ...(currentAdv.storyState || {
+          currentLocationName: '',
+          currentTerritoryName: '',
+          activeSituation: '',
+          activeGoals: [],
+          relationships: [],
+          storyEntities: [],
+          lastUpdatedTime: new Date().toISOString()
+        }),
+        processedFirstMessage: true
+      };
+
+      currentAdv = {
+        ...currentAdv,
+        storyState: finalStoryState,
+        chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : currentAdv.chatHistory
+      };
+      adventureRef.current = currentAdv;
+      onUpdateAdventure(currentAdv);
     }
   }, [adventure.id, adventure.chatHistory, adventure.firstMessage, adventure.prologue]);
 
@@ -3673,34 +3699,22 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
           }
         }
 
-        const newStoryEntity: StoryEntityItem = {
-          id: 'story-ent-' + Math.random().toString(36).substr(2, 9),
+        const ensured = AIStoryStateProcessor.ensureStoryEntity(updatedStoryEntities, {
           category,
           title,
           description,
-          details,
-          isNewInStory: true,
-          promotedToCodex: false,
-          createdAt: new Date().toISOString()
-        };
+          details
+        }, updatedLore);
+        updatedStoryEntities = ensured.updatedList;
 
-        const existingStoryIdx = updatedStoryEntities.findIndex(e => e.category === category && isSimilarLoreTitle(e.title, title));
-        if (existingStoryIdx === -1) {
-          updatedStoryEntities.push(newStoryEntity);
-        } else {
-          updatedStoryEntities[existingStoryIdx] = {
-            ...updatedStoryEntities[existingStoryIdx],
-            description,
-            details: { ...updatedStoryEntities[existingStoryIdx].details, ...details }
-          };
+        if (ensured.isNew) {
+          notifications.push({
+            id: Math.random().toString(),
+            type: 'add',
+            title: `[Story-Info] Neu: ${title}`,
+            category
+          });
         }
-
-        notifications.push({
-          id: Math.random().toString(),
-          type: 'add',
-          title: `[Story-Info] Neu: ${title}`,
-          category
-        });
       } else {
         const existingEntry = updatedLore[existsIdx];
         let mergedDetails = { ...existingEntry.details };
