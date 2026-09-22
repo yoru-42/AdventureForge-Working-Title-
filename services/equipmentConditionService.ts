@@ -99,8 +99,10 @@ export class EquipmentConditionService {
   /**
    * Attach a physical restraint to a character (Player or NPC).
    * - Creates/updates ItemInstance & ItemDefinition
-   * - Creates/updates EquipmentState
+   * - Priority 1: itemInstanceId, Priority 2: itemDefinitionId, Priority 3: Name fallback
+   * - Creates/updates EquipmentState (slot: 'restraint', isRestraint: true)
    * - Creates/updates persistent BodyCondition in appearance.activeConditions
+   * - Guarantees EquipmentState.itemInstanceId === BodyCondition.sourceItemInstanceId
    * - Retains state persistently across turns
    */
   public static attachRestraint(
@@ -113,6 +115,7 @@ export class EquipmentConditionService {
       condition?: string;
       source?: string;
       itemInstanceId?: string;
+      itemDefinitionId?: string;
       severity?: 'leicht' | 'mittel' | 'stark' | 'vollständig';
       duration?: string;
     }
@@ -128,8 +131,7 @@ export class EquipmentConditionService {
       ? bodyAreasInput
       : this.inferBodyAreas(cleanItemName, options?.description);
 
-    const instanceId = options?.itemInstanceId || `item-inst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const defId = `item-def-${cleanItemName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const defId = options?.itemDefinitionId || `item-def-${cleanItemName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 
     // 1. Ensure ItemDefinition
     let itemDefs = [...(adventure.itemDefinitions || [])];
@@ -145,23 +147,37 @@ export class EquipmentConditionService {
       itemDefs.push(existingDef);
     }
 
-    // 2. Ensure ItemInstance
+    // 2. Identify or Create ItemInstance
+    // Priority: 1. options.itemInstanceId, 2. unequipped instance of same name for this owner, 3. new instance
     let itemInstances = [...(adventure.itemInstances || [])];
-    let existingInstanceIdx = itemInstances.findIndex(inst => inst.id === instanceId || (inst.name?.toLowerCase() === cleanItemName.toLowerCase() && inst.owner === targetId));
-    let itemInstance: ItemInstance;
+    let targetInstanceIdx = -1;
 
-    if (existingInstanceIdx >= 0) {
+    if (options?.itemInstanceId) {
+      targetInstanceIdx = itemInstances.findIndex(inst => inst.id === options.itemInstanceId);
+    } else {
+      // Look for an existing UNATTACHED / UNEQUIPPED instance owned by target or unassigned
+      targetInstanceIdx = itemInstances.findIndex(inst =>
+        inst.name?.toLowerCase() === cleanItemName.toLowerCase() &&
+        inst.owner === targetId &&
+        inst.currentState !== 'angelegt / aktiv' &&
+        inst.currentState !== 'ausgerüstet'
+      );
+    }
+
+    let itemInstance: ItemInstance;
+    if (targetInstanceIdx >= 0) {
       itemInstance = {
-        ...itemInstances[existingInstanceIdx],
-        condition: options?.condition || itemInstances[existingInstanceIdx].condition || 'stabil angelegt',
+        ...itemInstances[targetInstanceIdx],
+        condition: options?.condition || itemInstances[targetInstanceIdx].condition || 'stabil angelegt',
         owner: targetId,
         location: `Angelegt an ${targetId === 'player' ? (adventure.player?.name || 'Spieler') : targetId}`,
         currentState: 'angelegt / aktiv'
       };
-      itemInstances[existingInstanceIdx] = itemInstance;
+      itemInstances[targetInstanceIdx] = itemInstance;
     } else {
+      const newInstanceId = options?.itemInstanceId || `item-inst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       itemInstance = {
-        id: instanceId,
+        id: newInstanceId,
         itemDefinitionId: existingDef.id,
         name: cleanItemName,
         condition: options?.condition || 'stabil angelegt',
@@ -175,7 +191,8 @@ export class EquipmentConditionService {
 
     // 3. Ensure EquipmentState
     let adventureEquipment = [...(adventure.equipmentState || [])];
-    const equipIdx = adventureEquipment.findIndex(e => e.itemInstanceId === itemInstance.id || (e.itemName.toLowerCase() === cleanItemName.toLowerCase() && e.ownerId === targetId));
+    // Find equipment by itemInstanceId (Priority 1)
+    const equipIdx = adventureEquipment.findIndex(e => e.itemInstanceId === itemInstance.id);
     const equipment: EquipmentState = {
       itemInstanceId: itemInstance.id,
       itemDefinitionId: existingDef.id,
@@ -197,7 +214,7 @@ export class EquipmentConditionService {
       adventureEquipment.push(equipment);
     }
 
-    // 4. Ensure persistent BodyCondition
+    // 4. Ensure persistent BodyCondition with sourceItemInstanceId === itemInstance.id
     const conditionId = `cond-restraint-${itemInstance.id}`;
     const conditionDesc = options?.description || `Körperlich gefesselt an: ${bodyAreas.join(', ')} (${cleanItemName})`;
     const condition: BodyCondition = {
@@ -217,13 +234,16 @@ export class EquipmentConditionService {
       statusTag: `Gefesselt (${cleanItemName})`
     };
 
-    // Apply to target character's appearance.activeConditions
+    // Apply to target character's appearance.activeConditions & equipment
     let updatedPlayer = { ...adventure.player };
     let updatedNpcs = [...(adventure.npcs || [])];
 
     if (targetId === 'player') {
       const currentConds = [...(updatedPlayer.appearance?.activeConditions || [])];
-      const condIdx = currentConds.findIndex(c => c.id === condition.id || (c.sourceItemInstanceId && c.sourceItemInstanceId === itemInstance.id) || (c.name.toLowerCase() === cleanItemName.toLowerCase() && c.isRestraint));
+      const condIdx = currentConds.findIndex(c =>
+        c.id === condition.id ||
+        (c.sourceItemInstanceId && c.sourceItemInstanceId === itemInstance.id)
+      );
       if (condIdx >= 0) {
         currentConds[condIdx] = { ...currentConds[condIdx], ...condition, isActive: true };
       } else {
@@ -242,7 +262,10 @@ export class EquipmentConditionService {
       if (npcIdx >= 0) {
         const npc = updatedNpcs[npcIdx];
         const currentConds = [...(npc.appearance?.activeConditions || [])];
-        const condIdx = currentConds.findIndex(c => c.id === condition.id || (c.sourceItemInstanceId && c.sourceItemInstanceId === itemInstance.id) || (c.name.toLowerCase() === cleanItemName.toLowerCase() && c.isRestraint));
+        const condIdx = currentConds.findIndex(c =>
+          c.id === condition.id ||
+          (c.sourceItemInstanceId && c.sourceItemInstanceId === itemInstance.id)
+        );
         if (condIdx >= 0) {
           currentConds[condIdx] = { ...currentConds[condIdx], ...condition, isActive: true };
         } else {
@@ -278,42 +301,68 @@ export class EquipmentConditionService {
 
   /**
    * Detach or remove a restraint from a character.
+   * Priority:
+   * 1. Exact itemInstanceId match (removes ONLY that concrete instance)
+   * 2. BodyCondition.id match
+   * 3. Name fallback: only remove the first matching instance/condition for that owner, never other instances
    */
   public static detachRestraint(
     adventure: Adventure,
     targetIdentifier: string,
-    itemOrConditionName: string
+    itemOrConditionIdentifier: string,
+    options?: {
+      itemInstanceId?: string;
+    }
   ): {
     updatedAdventure: Adventure;
     removed: boolean;
   } {
     const targetId = this.resolveTargetId(adventure, targetIdentifier);
-    const cleanSearch = itemOrConditionName.trim().toLowerCase();
+    const searchKey = (options?.itemInstanceId || itemOrConditionIdentifier).trim();
+    const cleanSearchLower = searchKey.toLowerCase();
 
     let removed = false;
     let adventureEquipment = [...(adventure.equipmentState || [])];
     let itemInstances = [...(adventure.itemInstances || [])];
 
-    // Find matching equipment
-    const matchingEquip = adventureEquipment.filter(e =>
-      e.ownerId === targetId &&
-      (e.itemName.toLowerCase() === cleanSearch ||
-       e.itemName.toLowerCase().includes(cleanSearch) ||
-       cleanSearch.includes(e.itemName.toLowerCase()) ||
-       e.itemInstanceId === itemOrConditionName)
-    );
+    // Check if searchKey is an exact itemInstanceId
+    const isExactInstanceId = Boolean(options?.itemInstanceId) ||
+      adventureEquipment.some(e => e.itemInstanceId === searchKey) ||
+      itemInstances.some(i => i.id === searchKey);
 
     const removedInstanceIds = new Set<string>();
-    matchingEquip.forEach(e => {
-      removedInstanceIds.add(e.itemInstanceId);
-      removed = true;
-    });
 
-    adventureEquipment = adventureEquipment.filter(e => !matchingEquip.includes(e));
+    if (isExactInstanceId) {
+      const targetInstId = options?.itemInstanceId || searchKey;
+      const equipIndex = adventureEquipment.findIndex(e => e.ownerId === targetId && e.itemInstanceId === targetInstId);
+      if (equipIndex >= 0) {
+        adventureEquipment.splice(equipIndex, 1);
+        removedInstanceIds.add(targetInstId);
+        removed = true;
+      } else {
+        // Even if not in equipmentState, mark instance ID for condition cleanup
+        removedInstanceIds.add(targetInstId);
+      }
+    } else {
+      // Fallback: match by name or condition ID
+      const matchingEquip = adventureEquipment.find(e =>
+        e.ownerId === targetId &&
+        (e.itemInstanceId === searchKey ||
+         e.itemName.toLowerCase() === cleanSearchLower ||
+         e.itemName.toLowerCase().includes(cleanSearchLower) ||
+         cleanSearchLower.includes(e.itemName.toLowerCase()))
+      );
 
-    // Update item instance states
+      if (matchingEquip) {
+        adventureEquipment = adventureEquipment.filter(e => e !== matchingEquip);
+        removedInstanceIds.add(matchingEquip.itemInstanceId);
+        removed = true;
+      }
+    }
+
+    // Update matching item instance states
     itemInstances = itemInstances.map(inst => {
-      if (removedInstanceIds.has(inst.id) || (inst.owner === targetId && inst.name && inst.name.toLowerCase().includes(cleanSearch))) {
+      if (removedInstanceIds.has(inst.id) || (!isExactInstanceId && inst.owner === targetId && inst.name?.toLowerCase() === cleanSearchLower && inst.currentState === 'angelegt / aktiv')) {
         return {
           ...inst,
           currentState: 'abgelegt / gelöst',
@@ -323,7 +372,7 @@ export class EquipmentConditionService {
       return inst;
     });
 
-    // Remove from target character's activeConditions
+    // Remove from target character's activeConditions and equipment
     let updatedPlayer = { ...adventure.player };
     let updatedNpcs = [...(adventure.npcs || [])];
 
@@ -333,9 +382,18 @@ export class EquipmentConditionService {
           removed = true;
           return false;
         }
-        if (c.name.toLowerCase() === cleanSearch || c.name.toLowerCase().includes(cleanSearch) || cleanSearch.includes(c.name.toLowerCase())) {
+        if (c.id === searchKey) {
           removed = true;
           return false;
+        }
+        if (!isExactInstanceId && removedInstanceIds.size === 0) {
+          if (c.name.toLowerCase() === cleanSearchLower || c.name.toLowerCase().includes(cleanSearchLower) || cleanSearchLower.includes(c.name.toLowerCase())) {
+            // Only remove if it doesn't belong to another active restraint instance
+            if (!c.sourceItemInstanceId || !adventureEquipment.some(e => e.itemInstanceId === c.sourceItemInstanceId)) {
+              removed = true;
+              return false;
+            }
+          }
         }
         return true;
       });
@@ -345,7 +403,7 @@ export class EquipmentConditionService {
           ...(updatedPlayer.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' }),
           activeConditions: currentConds
         },
-        equipment: (updatedPlayer.equipment || []).filter(e => !removedInstanceIds.has(e.itemInstanceId) && e.itemName.toLowerCase() !== cleanSearch)
+        equipment: (updatedPlayer.equipment || []).filter(e => !removedInstanceIds.has(e.itemInstanceId) && (isExactInstanceId ? true : e.itemName.toLowerCase() !== cleanSearchLower))
       };
     } else {
       const npcIdx = updatedNpcs.findIndex(n => n.id === targetId);
@@ -356,9 +414,17 @@ export class EquipmentConditionService {
             removed = true;
             return false;
           }
-          if (c.name.toLowerCase() === cleanSearch || c.name.toLowerCase().includes(cleanSearch) || cleanSearch.includes(c.name.toLowerCase())) {
+          if (c.id === searchKey) {
             removed = true;
             return false;
+          }
+          if (!isExactInstanceId && removedInstanceIds.size === 0) {
+            if (c.name.toLowerCase() === cleanSearchLower || c.name.toLowerCase().includes(cleanSearchLower) || cleanSearchLower.includes(c.name.toLowerCase())) {
+              if (!c.sourceItemInstanceId || !adventureEquipment.some(e => e.itemInstanceId === c.sourceItemInstanceId)) {
+                removed = true;
+                return false;
+              }
+            }
           }
           return true;
         });
@@ -368,7 +434,7 @@ export class EquipmentConditionService {
             ...(npc.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' }),
             activeConditions: currentConds
           },
-          equipment: (npc.equipment || []).filter(e => !removedInstanceIds.has(e.itemInstanceId) && e.itemName.toLowerCase() !== cleanSearch)
+          equipment: (npc.equipment || []).filter(e => !removedInstanceIds.has(e.itemInstanceId) && (isExactInstanceId ? true : e.itemName.toLowerCase() !== cleanSearchLower))
         };
       }
     }
@@ -387,6 +453,12 @@ export class EquipmentConditionService {
 
   /**
    * Equip an item on a character (Player or NPC).
+   * - Priority 1: options.itemInstanceId
+   * - Priority 2: existing unequipped ItemInstance
+   * - Priority 3: create new ItemInstance
+   * - Accurately updates ItemInstance (currentState = 'ausgerüstet', location = 'Ausgerüstet')
+   * - Writes the updated instance back into adventure.itemInstances
+   * - Exclusively replaces regular armor slots without touching independent body conditions or restraints
    */
   public static equipItem(
     adventure: Adventure,
@@ -398,6 +470,8 @@ export class EquipmentConditionService {
       condition?: string;
       description?: string;
       source?: string;
+      itemInstanceId?: string;
+      itemDefinitionId?: string;
     }
   ): {
     updatedAdventure: Adventure;
@@ -409,10 +483,9 @@ export class EquipmentConditionService {
       ? bodyAreasInput
       : this.inferBodyAreas(cleanItemName, options?.description);
 
-    const instanceId = `item-inst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const defId = `item-def-${cleanItemName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const defId = options?.itemDefinitionId || `item-def-${cleanItemName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
 
-    // Item Definition
+    // 1. Item Definition
     let itemDefs = [...(adventure.itemDefinitions || [])];
     let existingDef = itemDefs.find(d => d.id === defId || d.name.toLowerCase() === cleanItemName.toLowerCase());
     if (!existingDef) {
@@ -426,12 +499,43 @@ export class EquipmentConditionService {
       itemDefs.push(existingDef);
     }
 
-    // Item Instance
+    // 2. Item Instance: Priority 1: itemInstanceId, 2: unequipped matching instance, 3: new instance
     let itemInstances = [...(adventure.itemInstances || [])];
-    let existingInst = itemInstances.find(i => i.name?.toLowerCase() === cleanItemName.toLowerCase() && i.owner === targetId);
-    if (!existingInst) {
+    let targetInstIdx = -1;
+
+    if (options?.itemInstanceId) {
+      targetInstIdx = itemInstances.findIndex(i => i.id === options.itemInstanceId);
+    } else {
+      // Find unequipped instance for this owner
+      targetInstIdx = itemInstances.findIndex(i =>
+        i.name?.toLowerCase() === cleanItemName.toLowerCase() &&
+        i.owner === targetId &&
+        i.currentState !== 'ausgerüstet'
+      );
+      if (targetInstIdx < 0) {
+        // Fallback: any instance of this name owned by targetId
+        targetInstIdx = itemInstances.findIndex(i =>
+          i.name?.toLowerCase() === cleanItemName.toLowerCase() &&
+          i.owner === targetId
+        );
+      }
+    }
+
+    let existingInst: ItemInstance;
+    if (targetInstIdx >= 0) {
       existingInst = {
-        id: instanceId,
+        ...itemInstances[targetInstIdx],
+        condition: options?.condition || itemInstances[targetInstIdx].condition || 'gut',
+        owner: targetId,
+        location: 'Ausgerüstet',
+        currentState: 'ausgerüstet'
+      };
+      // CRITICAL: Write the updated instance back into itemInstances array!
+      itemInstances[targetInstIdx] = existingInst;
+    } else {
+      const newInstId = options?.itemInstanceId || `item-inst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      existingInst = {
+        id: newInstId,
         itemDefinitionId: existingDef.id,
         name: cleanItemName,
         condition: options?.condition || 'gut',
@@ -441,20 +545,25 @@ export class EquipmentConditionService {
         currentState: 'ausgerüstet'
       };
       itemInstances.push(existingInst);
-    } else {
-      existingInst = {
-        ...existingInst,
-        condition: options?.condition || existingInst.condition || 'gut',
-        location: 'Ausgerüstet',
-        currentState: 'ausgerüstet'
-      };
     }
 
-    // Equipment State
+    // 3. Equipment State & Slot Conflict Resolution
     let adventureEquipment = [...(adventure.equipmentState || [])];
-    // Unequip previous item in the same slot if exclusive
-    if (slot && slot !== 'weapon' && slot !== 'accessory') {
-      adventureEquipment = adventureEquipment.filter(e => !(e.ownerId === targetId && e.slot === slot));
+    // Unequip previous item in the same slot if exclusive (excluding restraints)
+    if (slot && slot !== 'weapon' && slot !== 'weapons' && slot !== 'accessory' && slot !== 'restraint') {
+      const replacedEquip = adventureEquipment.find(e => e.ownerId === targetId && e.slot === slot && !e.isRestraint);
+      if (replacedEquip) {
+        adventureEquipment = adventureEquipment.filter(e => e !== replacedEquip);
+        // Update replaced item instance state to 'im Inventar'
+        const replacedInstIdx = itemInstances.findIndex(i => i.id === replacedEquip.itemInstanceId);
+        if (replacedInstIdx >= 0) {
+          itemInstances[replacedInstIdx] = {
+            ...itemInstances[replacedInstIdx],
+            currentState: 'im Inventar',
+            location: 'Inventar'
+          };
+        }
+      }
     }
 
     const equipment: EquipmentState = {
@@ -472,6 +581,8 @@ export class EquipmentConditionService {
       description: options?.description
     };
 
+    // Remove any prior equipment record for this specific instanceId
+    adventureEquipment = adventureEquipment.filter(e => e.itemInstanceId !== existingInst.id);
     adventureEquipment.push(equipment);
 
     let updatedPlayer = { ...adventure.player };
@@ -480,7 +591,7 @@ export class EquipmentConditionService {
     if (targetId === 'player') {
       updatedPlayer = {
         ...updatedPlayer,
-        equipment: (updatedPlayer.equipment || []).filter(e => e.itemInstanceId !== equipment.itemInstanceId && (slot ? e.slot !== slot : true)).concat(equipment)
+        equipment: (updatedPlayer.equipment || []).filter(e => e.itemInstanceId !== equipment.itemInstanceId && (slot && slot !== 'weapon' && slot !== 'accessory' && slot !== 'restraint' ? e.slot !== slot : true)).concat(equipment)
       };
     } else {
       const npcIdx = updatedNpcs.findIndex(n => n.id === targetId);
@@ -488,7 +599,7 @@ export class EquipmentConditionService {
         const npc = updatedNpcs[npcIdx];
         updatedNpcs[npcIdx] = {
           ...npc,
-          equipment: (npc.equipment || []).filter(e => e.itemInstanceId !== equipment.itemInstanceId && (slot ? e.slot !== slot : true)).concat(equipment)
+          equipment: (npc.equipment || []).filter(e => e.itemInstanceId !== equipment.itemInstanceId && (slot && slot !== 'weapon' && slot !== 'accessory' && slot !== 'restraint' ? e.slot !== slot : true)).concat(equipment)
         };
       }
     }
@@ -515,29 +626,79 @@ export class EquipmentConditionService {
 
   /**
    * Unequip an item from a character.
+   * Priority:
+   * 1. Exact itemInstanceId match
+   * 2. Slot match
+   * 3. Name fallback
+   * - Accurately updates ItemInstance state (currentState = 'im Inventar', location = 'Inventar')
    */
   public static unequipItem(
     adventure: Adventure,
     targetIdentifier: string,
-    itemNameOrSlot: string
+    itemNameOrSlot: string,
+    options?: {
+      itemInstanceId?: string;
+    }
   ): {
     updatedAdventure: Adventure;
     unequipped: boolean;
   } {
     const targetId = this.resolveTargetId(adventure, targetIdentifier);
-    const cleanSearch = itemNameOrSlot.trim().toLowerCase();
+    const searchKey = (options?.itemInstanceId || itemNameOrSlot).trim();
+    const cleanSearchLower = searchKey.toLowerCase();
 
     let adventureEquipment = [...(adventure.equipmentState || [])];
-    const initialCount = adventureEquipment.length;
+    let itemInstances = [...(adventure.itemInstances || [])];
 
-    adventureEquipment = adventureEquipment.filter(e => {
-      if (e.ownerId !== targetId) return true;
-      if (e.itemName.toLowerCase() === cleanSearch || e.itemName.toLowerCase().includes(cleanSearch)) return false;
-      if (e.slot && e.slot.toLowerCase() === cleanSearch) return false;
-      return true;
+    const isExactInstanceId = Boolean(options?.itemInstanceId) ||
+      adventureEquipment.some(e => e.itemInstanceId === searchKey) ||
+      itemInstances.some(i => i.id === searchKey);
+
+    const unequippedInstanceIds = new Set<string>();
+
+    if (isExactInstanceId) {
+      const targetInstId = options?.itemInstanceId || searchKey;
+      const equipIdx = adventureEquipment.findIndex(e => e.ownerId === targetId && e.itemInstanceId === targetInstId);
+      if (equipIdx >= 0) {
+        adventureEquipment.splice(equipIdx, 1);
+        unequippedInstanceIds.add(targetInstId);
+      } else {
+        unequippedInstanceIds.add(targetInstId);
+      }
+    } else {
+      // Check for slot match
+      const matchingSlotEquip = adventureEquipment.filter(e => e.ownerId === targetId && e.slot && e.slot.toLowerCase() === cleanSearchLower && !e.isRestraint);
+      if (matchingSlotEquip.length > 0) {
+        matchingSlotEquip.forEach(e => {
+          unequippedInstanceIds.add(e.itemInstanceId);
+        });
+        adventureEquipment = adventureEquipment.filter(e => !matchingSlotEquip.includes(e));
+      } else {
+        // Match by item name
+        const matchingNameEquip = adventureEquipment.filter(e =>
+          e.ownerId === targetId &&
+          (e.itemName.toLowerCase() === cleanSearchLower || e.itemName.toLowerCase().includes(cleanSearchLower))
+        );
+        matchingNameEquip.forEach(e => {
+          unequippedInstanceIds.add(e.itemInstanceId);
+        });
+        adventureEquipment = adventureEquipment.filter(e => !matchingNameEquip.includes(e));
+      }
+    }
+
+    const unequipped = unequippedInstanceIds.size > 0;
+
+    // Update unequipped item instances
+    itemInstances = itemInstances.map(inst => {
+      if (unequippedInstanceIds.has(inst.id) || (!isExactInstanceId && inst.owner === targetId && inst.name?.toLowerCase() === cleanSearchLower && inst.currentState === 'ausgerüstet')) {
+        return {
+          ...inst,
+          currentState: 'im Inventar',
+          location: 'Inventar'
+        };
+      }
+      return inst;
     });
-
-    const unequipped = adventureEquipment.length < initialCount;
 
     let updatedPlayer = { ...adventure.player };
     let updatedNpcs = [...(adventure.npcs || [])];
@@ -545,11 +706,7 @@ export class EquipmentConditionService {
     if (targetId === 'player') {
       updatedPlayer = {
         ...updatedPlayer,
-        equipment: (updatedPlayer.equipment || []).filter(e => {
-          if (e.itemName.toLowerCase() === cleanSearch || e.itemName.toLowerCase().includes(cleanSearch)) return false;
-          if (e.slot && e.slot.toLowerCase() === cleanSearch) return false;
-          return true;
-        })
+        equipment: (updatedPlayer.equipment || []).filter(e => !unequippedInstanceIds.has(e.itemInstanceId) && (isExactInstanceId ? true : e.itemName.toLowerCase() !== cleanSearchLower && (e.slot ? e.slot.toLowerCase() !== cleanSearchLower : true)))
       };
     } else {
       const npcIdx = updatedNpcs.findIndex(n => n.id === targetId);
@@ -557,11 +714,7 @@ export class EquipmentConditionService {
         const npc = updatedNpcs[npcIdx];
         updatedNpcs[npcIdx] = {
           ...npc,
-          equipment: (npc.equipment || []).filter(e => {
-            if (e.itemName.toLowerCase() === cleanSearch || e.itemName.toLowerCase().includes(cleanSearch)) return false;
-            if (e.slot && e.slot.toLowerCase() === cleanSearch) return false;
-            return true;
-          })
+          equipment: (npc.equipment || []).filter(e => !unequippedInstanceIds.has(e.itemInstanceId) && (isExactInstanceId ? true : e.itemName.toLowerCase() !== cleanSearchLower && (e.slot ? e.slot.toLowerCase() !== cleanSearchLower : true)))
         };
       }
     }
@@ -570,6 +723,7 @@ export class EquipmentConditionService {
       ...adventure,
       player: updatedPlayer,
       npcs: updatedNpcs,
+      itemInstances,
       equipmentState: adventureEquipment
     };
 
@@ -585,6 +739,7 @@ export class EquipmentConditionService {
 
   /**
    * Add a generic or physical BodyCondition to Player or NPC.
+   * sourceItemInstanceId is optional (e.g. magical paralysis, beast hold, wounds).
    */
   public static addCondition(
     adventure: Adventure,
@@ -618,7 +773,11 @@ export class EquipmentConditionService {
 
     if (targetId === 'player') {
       const conds = [...(updatedPlayer.appearance?.activeConditions || [])];
-      const existingIdx = conds.findIndex(c => c.id === condition.id || c.name.toLowerCase() === condition.name.toLowerCase());
+      const existingIdx = conds.findIndex(c =>
+        c.id === condition.id ||
+        (c.sourceItemInstanceId && condition.sourceItemInstanceId && c.sourceItemInstanceId === condition.sourceItemInstanceId) ||
+        (!c.sourceItemInstanceId && !condition.sourceItemInstanceId && c.name.toLowerCase() === condition.name.toLowerCase())
+      );
       if (existingIdx >= 0) {
         conds[existingIdx] = { ...conds[existingIdx], ...condition, isActive: true };
       } else {
@@ -636,7 +795,11 @@ export class EquipmentConditionService {
       if (npcIdx >= 0) {
         const npc = updatedNpcs[npcIdx];
         const conds = [...(npc.appearance?.activeConditions || [])];
-        const existingIdx = conds.findIndex(c => c.id === condition.id || c.name.toLowerCase() === condition.name.toLowerCase());
+        const existingIdx = conds.findIndex(c =>
+          c.id === condition.id ||
+          (c.sourceItemInstanceId && condition.sourceItemInstanceId && c.sourceItemInstanceId === condition.sourceItemInstanceId) ||
+          (!c.sourceItemInstanceId && !condition.sourceItemInstanceId && c.name.toLowerCase() === condition.name.toLowerCase())
+        );
         if (existingIdx >= 0) {
           conds[existingIdx] = { ...conds[existingIdx], ...condition, isActive: true };
         } else {
@@ -663,18 +826,18 @@ export class EquipmentConditionService {
   }
 
   /**
-   * Remove a BodyCondition from Player or NPC by name or ID.
+   * Remove a BodyCondition from Player or NPC by ID, sourceItemInstanceId, or name.
    */
   public static removeCondition(
     adventure: Adventure,
     targetIdentifier: string,
-    conditionNameOrId: string
+    conditionIdentifier: string
   ): {
     updatedAdventure: Adventure;
     removed: boolean;
   } {
     const targetId = this.resolveTargetId(adventure, targetIdentifier);
-    const cleanSearch = conditionNameOrId.trim().toLowerCase();
+    const cleanSearch = conditionIdentifier.trim().toLowerCase();
     let removed = false;
 
     let updatedPlayer = { ...adventure.player };
@@ -682,7 +845,11 @@ export class EquipmentConditionService {
 
     if (targetId === 'player') {
       const conds = (updatedPlayer.appearance?.activeConditions || []).filter(c => {
-        if (c.id.toLowerCase() === cleanSearch || c.name.toLowerCase() === cleanSearch) {
+        if (c.id === conditionIdentifier || (c.sourceItemInstanceId && c.sourceItemInstanceId === conditionIdentifier)) {
+          removed = true;
+          return false;
+        }
+        if (c.name.toLowerCase() === cleanSearch) {
           removed = true;
           return false;
         }
@@ -700,7 +867,11 @@ export class EquipmentConditionService {
       if (npcIdx >= 0) {
         const npc = updatedNpcs[npcIdx];
         const conds = (npc.appearance?.activeConditions || []).filter(c => {
-          if (c.id.toLowerCase() === cleanSearch || c.name.toLowerCase() === cleanSearch) {
+          if (c.id === conditionIdentifier || (c.sourceItemInstanceId && c.sourceItemInstanceId === conditionIdentifier)) {
+            removed = true;
+            return false;
+          }
+          if (c.name.toLowerCase() === cleanSearch) {
             removed = true;
             return false;
           }
@@ -728,25 +899,25 @@ export class EquipmentConditionService {
 
   /**
    * Transfer an item from one character/owner to another.
-   * Cleans up attachments/conditions on the source owner.
+   * Preserves exact itemInstanceId and updates ownership cleanly.
    */
   public static transferItem(
     adventure: Adventure,
     fromTargetIdentifier: string,
     toTargetIdentifier: string,
-    itemNameOrId: string
+    itemInstanceIdOrName: string
   ): Adventure {
     const fromId = this.resolveTargetId(adventure, fromTargetIdentifier);
     const toId = this.resolveTargetId(adventure, toTargetIdentifier);
-    const cleanSearch = itemNameOrId.trim().toLowerCase();
+    const searchKey = itemInstanceIdOrName.trim();
 
-    // 1. Detach/Unequip from source owner
-    let detached = this.detachRestraint(adventure, fromId, cleanSearch);
-    let updated = this.unequipItem(detached.updatedAdventure, fromId, cleanSearch).updatedAdventure;
+    // 1. Detach/Unequip specific instance from source owner
+    let detached = this.detachRestraint(adventure, fromId, searchKey);
+    let updated = this.unequipItem(detached.updatedAdventure, fromId, searchKey).updatedAdventure;
 
-    // 2. Transfer ItemInstance ownership
+    // 2. Transfer ItemInstance ownership without duplicating
     let itemInstances = (updated.itemInstances || []).map(inst => {
-      if (inst.owner === fromId && (inst.id === itemNameOrId || inst.name?.toLowerCase() === cleanSearch)) {
+      if (inst.owner === fromId && (inst.id === searchKey || inst.name?.toLowerCase() === searchKey.toLowerCase())) {
         return {
           ...inst,
           owner: toId,
@@ -765,20 +936,22 @@ export class EquipmentConditionService {
 
   /**
    * Destroy an item instance completely.
+   * Priority: exact itemInstanceId to only destroy that specific instance.
    */
   public static destroyItem(
     adventure: Adventure,
     targetIdentifier: string,
-    itemNameOrId: string
+    itemInstanceIdOrName: string
   ): Adventure {
     const targetId = this.resolveTargetId(adventure, targetIdentifier);
-    const cleanSearch = itemNameOrId.trim().toLowerCase();
+    const searchKey = itemInstanceIdOrName.trim();
+    const cleanSearchLower = searchKey.toLowerCase();
 
-    let detached = this.detachRestraint(adventure, targetId, cleanSearch);
-    let updated = this.unequipItem(detached.updatedAdventure, targetId, cleanSearch).updatedAdventure;
+    let detached = this.detachRestraint(adventure, targetId, searchKey);
+    let updated = this.unequipItem(detached.updatedAdventure, targetId, searchKey).updatedAdventure;
 
     let itemInstances = (updated.itemInstances || []).filter(inst => {
-      if (inst.owner === targetId && (inst.id === itemNameOrId || inst.name?.toLowerCase() === cleanSearch)) {
+      if (inst.owner === targetId && (inst.id === searchKey || inst.name?.toLowerCase() === cleanSearchLower)) {
         return false;
       }
       return true;
@@ -786,7 +959,7 @@ export class EquipmentConditionService {
 
     let inventory = (updated.inventory || []).filter(i => {
       const name = typeof i === 'string' ? i : (i as any)?.name;
-      return name?.toLowerCase() !== cleanSearch;
+      return name?.toLowerCase() !== cleanSearchLower;
     });
 
     return {
@@ -798,6 +971,8 @@ export class EquipmentConditionService {
 
   /**
    * Synchronize `structuredInventory` from canonical `equipmentState` for player.
+   * StructuredInventory is purely a derived presentation layer.
+   * Fully reconstructs armor, accessories, and weapons to prevent any obsolete items.
    */
   public static syncStructuredInventory(adventure: Adventure): Adventure {
     const playerEquipment = (adventure.equipmentState || []).filter(e => e.ownerId === 'player' && e.equipped);
@@ -805,34 +980,33 @@ export class EquipmentConditionService {
       ? JSON.parse(JSON.stringify(adventure.structuredInventory))
       : { armor: {}, accessories: {}, weapons: [], generalItems: [], money: 0, currencyLabel: 'Goldstücke' };
 
-    if (!structuredInv.armor) structuredInv.armor = {};
-    if (!structuredInv.accessories) structuredInv.accessories = {};
-    if (!Array.isArray(structuredInv.weapons)) structuredInv.weapons = [];
-    if (!Array.isArray(structuredInv.generalItems)) structuredInv.generalItems = [];
-
     const armorSlots = ['head', 'chest', 'hands', 'legs', 'feet'];
     const accSlots = ['finger', 'wrist', 'waist', 'back', 'neck'];
 
-    // Update armor slots
+    const newArmor: Record<string, string> = {};
     armorSlots.forEach(slot => {
       const equip = playerEquipment.find(e => !e.isRestraint && e.slot === slot);
-      (structuredInv.armor as any)[slot] = equip ? equip.itemName : '';
+      newArmor[slot] = equip ? equip.itemName : '';
     });
 
-    // Update accessory slots
+    const newAccessories: Record<string, string> = {};
     accSlots.forEach(slot => {
       const equip = playerEquipment.find(e => !e.isRestraint && e.slot === slot);
-      (structuredInv.accessories as any)[slot] = equip ? equip.itemName : '';
+      newAccessories[slot] = equip ? equip.itemName : '';
     });
 
-    // Weapons
+    const equippedWeapons: string[] = [];
     playerEquipment.forEach(e => {
-      if (!e.isRestraint && (e.slot === 'weapon' || e.slot === 'weapons' || e.bodyAreas?.includes('hands'))) {
-        if (!structuredInv.weapons.includes(e.itemName)) {
-          structuredInv.weapons.push(e.itemName);
+      if (!e.isRestraint && (e.slot === 'weapon' || e.slot === 'weapons' || e.slot === 'waffe' || e.bodyAreas?.includes('hands'))) {
+        if (!equippedWeapons.includes(e.itemName)) {
+          equippedWeapons.push(e.itemName);
         }
       }
     });
+
+    structuredInv.armor = newArmor;
+    structuredInv.accessories = newAccessories;
+    structuredInv.weapons = equippedWeapons;
 
     return {
       ...adventure,
@@ -864,6 +1038,8 @@ export class EquipmentConditionService {
           const res = this.attachRestraint(currentAdventure, targetId, cleanItem, inv.bodyAreas, {
             description: inv.description,
             condition: inv.condition,
+            itemInstanceId: inv.itemInstanceId,
+            itemDefinitionId: inv.itemDefinitionId,
             severity: 'mittel'
           });
           currentAdventure = res.updatedAdventure;
@@ -874,7 +1050,7 @@ export class EquipmentConditionService {
             category: 'Zustand'
           });
         } else if (inv.action === 'detach') {
-          const res = this.detachRestraint(currentAdventure, targetId, cleanItem);
+          const res = this.detachRestraint(currentAdventure, targetId, cleanItem, { itemInstanceId: inv.itemInstanceId });
           currentAdventure = res.updatedAdventure;
           if (res.removed) {
             notifications.push({
@@ -887,14 +1063,16 @@ export class EquipmentConditionService {
         } else if (inv.action === 'equip') {
           const res = this.equipItem(currentAdventure, targetId, cleanItem, inv.slot, inv.bodyAreas, {
             condition: inv.condition,
-            description: inv.description
+            description: inv.description,
+            itemInstanceId: inv.itemInstanceId,
+            itemDefinitionId: inv.itemDefinitionId
           });
           currentAdventure = res.updatedAdventure;
         } else if (inv.action === 'unequip') {
-          const res = this.unequipItem(currentAdventure, targetId, cleanItem);
+          const res = this.unequipItem(currentAdventure, targetId, cleanItem, { itemInstanceId: inv.itemInstanceId });
           currentAdventure = res.updatedAdventure;
         } else if (inv.action === 'removed') {
-          currentAdventure = this.destroyItem(currentAdventure, targetId, cleanItem);
+          currentAdventure = this.destroyItem(currentAdventure, targetId, inv.itemInstanceId || cleanItem);
         } else if (inv.action === 'added') {
           let updatedInv = [...(currentAdventure.inventory || [])];
           const lower = cleanItem.toLowerCase();
@@ -922,7 +1100,8 @@ export class EquipmentConditionService {
             const res = this.attachRestraint(currentAdventure, targetId, cleanName, bc.bodyAreas, {
               description: bc.description,
               severity: bc.severity,
-              duration: bc.duration
+              duration: bc.duration,
+              itemInstanceId: bc.sourceItemInstanceId
             });
             currentAdventure = res.updatedAdventure;
           } else {
@@ -948,10 +1127,10 @@ export class EquipmentConditionService {
           });
         } else if (bc.action === 'removed') {
           if (bc.type === 'restraint' || bc.isRestraint) {
-            const res = this.detachRestraint(currentAdventure, targetId, cleanName);
+            const res = this.detachRestraint(currentAdventure, targetId, cleanName, { itemInstanceId: bc.sourceItemInstanceId });
             currentAdventure = res.updatedAdventure;
           } else {
-            const res = this.removeCondition(currentAdventure, targetId, cleanName);
+            const res = this.removeCondition(currentAdventure, targetId, bc.sourceItemInstanceId || cleanName);
             currentAdventure = res.updatedAdventure;
           }
         }

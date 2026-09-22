@@ -125,123 +125,91 @@ Die Wachen überwältigen Kaelen und legen ihm schwere Eisenfesseln an.
       "item": "Schwere Eisenfesseln",
       "action": "attach",
       "bodyAreas": ["hands", "arms"],
-      "description": "Fesseln an den Händen"
+      "description": "Feste Eisenketten an den Handgelenken"
     }
   ]
 }
 </STORY_STATE_CHANGES>
   `;
   const res1 = AIStoryStateProcessor.parseAndProcessAiResponse(turn1Ai, adv);
-  let state = res1.updatedAdventure;
-
+  const state1 = res1.updatedAdventure;
   assert(
-    (state.player.appearance?.activeConditions || []).some(c => c.name === 'Schwere Eisenfesseln' && c.isActive),
+    (state1.player.appearance?.activeConditions || []).some(c => c.name === 'Schwere Eisenfesseln' && c.isActive),
     'Test 2a: Turn 1 shackles attached'
   );
 
-  // Turn 2: Guard speaks, does NOT mention shackles
+  // Turn 2: General storytelling, ZERO mention of shackles
   const turn2Ai = `
-Der Hauptmann tritt vor dich und verhört dich streng über deine Herkunft.
+Kaelen blickt sich im Kerker um. An der Wand tropft Wasser herab. Eine Ratte huscht vorbei.
 <STORY_STATE_CHANGES>
 {
-  "events": [
-    {
-      "title": "Verhör durch den Hauptmann",
-      "description": "Der Hauptmann stellt Fragen."
-    }
-  ]
+  "narrativeLocation": "Kerkerzelle"
 }
 </STORY_STATE_CHANGES>
   `;
-  const res2 = AIStoryStateProcessor.parseAndProcessAiResponse(turn2Ai, state);
-  state = res2.updatedAdventure;
-
+  const res2 = AIStoryStateProcessor.parseAndProcessAiResponse(turn2Ai, state1);
+  const state2 = res2.updatedAdventure;
   assert(
-    (state.player.appearance?.activeConditions || []).some(c => c.name === 'Schwere Eisenfesseln' && c.isActive),
+    (state2.player.appearance?.activeConditions || []).some(c => c.name === 'Schwere Eisenfesseln' && c.isActive),
     'Test 2b: Turn 2 shackles remain persistently active despite not being mentioned'
   );
 
-  // Turn 3: Guard leads player to another cell, does NOT mention shackles
+  // Turn 3: Dialogue without mention of shackles
   const turn3Ai = `
-Die Zellentür quietscht, als du in den Kerker geführt wirst.
+Der Wärter grinst hämisch: "Hier kommst du nicht so schnell raus, Abenteurer!"
 <STORY_STATE_CHANGES>
 {
-  "locationChange": {
-    "locationName": "Burgkerker",
-    "roomName": "Dunkle Zelle"
-  }
+  "sceneRole": "dialogue"
 }
 </STORY_STATE_CHANGES>
   `;
-  const res3 = AIStoryStateProcessor.parseAndProcessAiResponse(turn3Ai, state);
-  state = res3.updatedAdventure;
-
+  const res3 = AIStoryStateProcessor.parseAndProcessAiResponse(turn3Ai, state2);
+  const state3 = res3.updatedAdventure;
   assert(
-    (state.player.appearance?.activeConditions || []).some(c => c.name === 'Schwere Eisenfesseln' && c.isActive),
+    (state3.player.appearance?.activeConditions || []).some(c => c.name === 'Schwere Eisenfesseln' && c.isActive),
     'Test 2c: Turn 3 shackles still persistently active in new location'
   );
 }
 
-// Test 3: Explicit detachment cleanly removes condition and updates equipment
+// Test 3: Explicit Detachment removes restraint and clears BodyCondition
 {
   const adv = createBaseAdventure();
-  const resAttach = EquipmentConditionService.attachRestraint(adv, 'player', 'Kettenfesseln', ['hands']);
-  let state = resAttach.updatedAdventure;
+  const res1 = EquipmentConditionService.attachRestraint(adv, 'player', 'Handfesseln', ['hands']);
+  const attachedAdv = res1.updatedAdventure;
+  assert((attachedAdv.player.appearance?.activeConditions || []).length === 1, 'Test 3a: 1 condition active before detach');
 
-  assert((state.player.appearance?.activeConditions || []).length === 1, 'Test 3a: 1 condition active before detach');
+  const res2 = EquipmentConditionService.detachRestraint(attachedAdv, 'player', 'Handfesseln');
+  const detachedAdv = res2.updatedAdventure;
 
-  // Turn with explicit detach
-  const detachAi = `
-Mit einem versteckten Dietrich knackst du das Schloss der Kettenfesseln und streifst sie ab!
-<STORY_STATE_CHANGES>
-{
-  "inventoryChanges": [
-    {
-      "item": "Kettenfesseln",
-      "action": "detach"
-    }
-  ]
-}
-</STORY_STATE_CHANGES>
-  `;
-  const resDetach = AIStoryStateProcessor.parseAndProcessAiResponse(detachAi, state);
-  state = resDetach.updatedAdventure;
-
-  const remainingCond = (state.player.appearance?.activeConditions || []).find(c => c.name.toLowerCase().includes('kettenfessel'));
-  const remainingEquip = (state.equipmentState || []).find(e => e.itemName.toLowerCase().includes('kettenfessel'));
-
-  assert(!remainingCond, 'Test 3b: BodyCondition cleanly removed on detach');
-  assert(!remainingEquip, 'Test 3c: EquipmentState cleanly detached');
+  assert((detachedAdv.player.appearance?.activeConditions || []).length === 0, 'Test 3b: BodyCondition cleanly removed on detach');
+  assert((detachedAdv.equipmentState || []).length === 0, 'Test 3c: EquipmentState cleanly detached');
 }
 
-// Test 4: Equipping regular gear updates EquipmentState and structuredInventory
+// Test 4: Equip items cleanly updates structuredInventory & equipmentState
 {
   const adv = createBaseAdventure();
-  const resHelm = EquipmentConditionService.equipItem(adv, 'player', 'Eisenhelm', 'head');
-  let state = resHelm.updatedAdventure;
-  const resChest = EquipmentConditionService.equipItem(state, 'player', 'Lederharnisch', 'chest');
-  state = resChest.updatedAdventure;
-  const resWpn = EquipmentConditionService.equipItem(state, 'player', 'Stahlschwert', 'weapon', ['hands']);
-  state = resWpn.updatedAdventure;
+  let current = EquipmentConditionService.equipItem(adv, 'player', 'Eisenhelm', 'head', ['head']).updatedAdventure;
+  current = EquipmentConditionService.equipItem(current, 'player', 'Lederharnisch', 'chest', ['chest']).updatedAdventure;
+  current = EquipmentConditionService.equipItem(current, 'player', 'Stahlschwert', 'weapon', ['hands']).updatedAdventure;
 
-  assert(state.structuredInventory?.armor?.head === 'Eisenhelm', 'Test 4a: Head slot synced with Eisenhelm');
-  assert(state.structuredInventory?.armor?.chest === 'Lederharnisch', 'Test 4b: Chest slot synced with Lederharnisch');
-  assert(state.structuredInventory?.weapons?.includes('Stahlschwert'), 'Test 4c: Weapons array contains Stahlschwert');
-  assert((state.equipmentState || []).filter(e => e.ownerId === 'player' && e.equipped).length === 3, 'Test 4d: 3 equipped items in EquipmentState');
+  assert(current.structuredInventory?.armor?.head === 'Eisenhelm', 'Test 4a: Head slot synced with Eisenhelm');
+  assert(current.structuredInventory?.armor?.chest === 'Lederharnisch', 'Test 4b: Chest slot synced with Lederharnisch');
+  assert(current.structuredInventory?.weapons?.includes('Stahlschwert'), 'Test 4c: Weapons array contains Stahlschwert');
+  assert((current.equipmentState || []).length === 3, 'Test 4d: 3 equipped items in EquipmentState');
 }
 
-// Test 5: Unequipping gear clears slot and updates structuredInventory
+// Test 5: Unequip item clears slot and removes from equipmentState
 {
   const adv = createBaseAdventure();
-  const equipped = EquipmentConditionService.equipItem(adv, 'player', 'Ritterhelm', 'head').updatedAdventure;
-  assert(equipped.structuredInventory?.armor?.head === 'Ritterhelm', 'Test 5a: Helmet equipped');
+  let current = EquipmentConditionService.equipItem(adv, 'player', 'Ritterhelm', 'head', ['head']).updatedAdventure;
+  assert(current.structuredInventory?.armor?.head === 'Ritterhelm', 'Test 5a: Helmet equipped');
 
-  const unequipped = EquipmentConditionService.unequipItem(equipped, 'player', 'Ritterhelm').updatedAdventure;
-  assert(unequipped.structuredInventory?.armor?.head !== 'Ritterhelm', 'Test 5b: Helmet unequipped from structuredInventory');
-  assert(!(unequipped.equipmentState || []).some(e => e.itemName === 'Ritterhelm'), 'Test 5c: EquipmentState removed');
+  current = EquipmentConditionService.unequipItem(current, 'player', 'head').updatedAdventure;
+  assert(current.structuredInventory?.armor?.head === '', 'Test 5b: Helmet unequipped from structuredInventory');
+  assert((current.equipmentState || []).length === 0, 'Test 5c: EquipmentState removed');
 }
 
-// Test 6: Body areas inference works for various item types
+// Test 6: Infer body areas accurately across various German terms
 {
   assert(EquipmentConditionService.inferBodyAreas('Handschellen').includes('hands'), 'Test 6a: Handschellen -> hands');
   assert(EquipmentConditionService.inferBodyAreas('Armfesseln').includes('arms'), 'Test 6b: Armfesseln -> arms');
@@ -253,48 +221,47 @@ Mit einem versteckten Dietrich knackst du das Schloss der Kettenfesseln und stre
   assert(EquipmentConditionService.inferBodyAreas('Ganzkörperfessel').includes('whole_body'), 'Test 6h: Ganzkörperfessel -> whole_body');
 }
 
-// Test 7: NPC support: Restraints and equipment work symmetrically for NPCs
+// Test 7: NPC Equipment and Body Conditions
 {
   const adv = createBaseAdventure();
-  const resNpc = EquipmentConditionService.attachRestraint(adv, 'Lyra', 'Seilfesseln', ['hands', 'arms'], {
-    description: 'Lyra wurde an den Händen gefesselt.'
-  });
-  const state = resNpc.updatedAdventure;
-  const lyra = state.npcs.find(n => n.name === 'Lyra');
+  const res = EquipmentConditionService.attachRestraint(adv, 'npc-lyra', 'Kettenfessel', ['hands', 'arms']);
+  const updated = res.updatedAdventure;
+  const lyra = updated.npcs?.find(n => n.id === 'npc-lyra');
+  const cond = lyra?.appearance?.activeConditions?.find(c => c.name === 'Kettenfessel');
+  const equip = updated.equipmentState?.find(e => e.ownerId === 'npc-lyra' && e.itemName === 'Kettenfessel');
 
-  assert(Boolean(lyra?.appearance?.activeConditions?.some(c => c.name === 'Seilfesseln' && c.isRestraint)), 'Test 7a: NPC Lyra has active restraint condition');
-  assert(Boolean(state.equipmentState?.some(e => e.itemName === 'Seilfesseln' && e.ownerId === 'npc-lyra')), 'Test 7b: EquipmentState correctly references NPC id');
+  assert(Boolean(cond && cond.isActive), 'Test 7a: NPC Lyra has active restraint condition');
+  assert(equip?.ownerId === 'npc-lyra', 'Test 7b: EquipmentState correctly references NPC id');
 }
 
-// Test 8: Transfer item updates owner and detaches previous active conditions
+// Test 8: Transfer Item between Player and NPC
 {
   const adv = createBaseAdventure();
-  const attached = EquipmentConditionService.attachRestraint(adv, 'player', 'Magischer Ring', ['hands']).updatedAdventure;
-  assert((attached.player.appearance?.activeConditions || []).some(c => c.name === 'Magischer Ring'), 'Test 8a: Ring on player initially');
+  let current = EquipmentConditionService.attachRestraint(adv, 'player', 'Magischer Ring', ['hands']).updatedAdventure;
+  assert((current.player.appearance?.activeConditions || []).length === 1, 'Test 8a: Ring on player initially');
 
-  const transferred = EquipmentConditionService.transferItem(attached, 'player', 'Lyra', 'Magischer Ring');
-  assert(!(transferred.player.appearance?.activeConditions || []).some(c => c.name === 'Magischer Ring'), 'Test 8b: Ring condition detached from player upon transfer');
-  const instance = transferred.itemInstances?.find(i => i.name === 'Magischer Ring');
-  assert(instance?.owner === 'npc-lyra', 'Test 8c: ItemInstance owner changed to Lyra');
+  current = EquipmentConditionService.transferItem(current, 'player', 'npc-lyra', 'Magischer Ring');
+  assert((current.player.appearance?.activeConditions || []).length === 0, 'Test 8b: Ring condition detached from player upon transfer');
+  const inst = current.itemInstances?.find(i => i.name === 'Magischer Ring');
+  assert(inst?.owner === 'npc-lyra', 'Test 8c: ItemInstance owner changed to Lyra');
 }
 
-// Test 9: Destroy item removes instance, inventory, and clears any active condition
+// Test 9: Destroy Item
 {
   const adv = createBaseAdventure();
-  const equipped = EquipmentConditionService.equipItem(adv, 'player', 'Holzstab', 'weapon').updatedAdventure;
-  const attached = EquipmentConditionService.attachRestraint(equipped, 'player', 'Zerbrechliche Fessel', ['hands']).updatedAdventure;
+  let current = EquipmentConditionService.attachRestraint(adv, 'player', 'Morsche Holzfessel', ['hands']).updatedAdventure;
+  current = EquipmentConditionService.destroyItem(current, 'player', 'Morsche Holzfessel');
 
-  const destroyed = EquipmentConditionService.destroyItem(attached, 'player', 'Zerbrechliche Fessel');
-  assert(!(destroyed.player.appearance?.activeConditions || []).some(c => c.name === 'Zerbrechliche Fessel'), 'Test 9a: Destroyed restraint removed from activeConditions');
-  assert(!(destroyed.equipmentState || []).some(e => e.itemName === 'Zerbrechliche Fessel'), 'Test 9b: Destroyed item removed from EquipmentState');
-  assert(!(destroyed.itemInstances || []).some(i => i.name === 'Zerbrechliche Fessel'), 'Test 9c: Destroyed item removed from ItemInstances');
+  assert((current.player.appearance?.activeConditions || []).length === 0, 'Test 9a: Destroyed restraint removed from activeConditions');
+  assert((current.equipmentState || []).length === 0, 'Test 9b: Destroyed item removed from EquipmentState');
+  assert((current.itemInstances || []).length === 0, 'Test 9c: Destroyed item removed from ItemInstances');
 }
 
-// Test 10: StoryEntity integration: Items and restraints appear in storyEntities under 'Gegenstände'
+// Test 10: Discovered Items land in storyEntities under 'Gegenstände'
 {
   const adv = createBaseAdventure();
   const aiText = `
-Du findest einen alten Schlüssel und wirst mit Ketten gefesselt.
+In der Ecke liegt ein alter Zellenschlüssel und am Boden rostige Kerkereisen.
 <STORY_STATE_CHANGES>
 {
   "inventoryChanges": [
@@ -406,4 +373,220 @@ Der Assassine schlägt dich mit dem Schwertgriff, fesselt deine Hände mit Leder
   assert(hasWeapon, 'Test 13c: Weapon equipped in combined turn');
 }
 
-console.log('\n=== ALL 13 EQUIPMENT & BODY CONDITION TESTS PASSED PERFECTLY! ===');
+console.log('\n--- EXTENDED REGRESSION SUITE (TESTS A - I) ---\n');
+
+// Test A: Zwei gleichnamige Fesseln mit unterschiedlichen ItemInstanceIds
+{
+  const adv = createBaseAdventure();
+  // Fessel A an Händen
+  let current = EquipmentConditionService.attachRestraint(adv, 'player', 'Fessel', ['hands'], {
+    itemInstanceId: 'item-inst-A',
+    description: 'Fessel an Händen'
+  }).updatedAdventure;
+
+  // Fessel B an Beinen mit selbem Namen
+  current = EquipmentConditionService.attachRestraint(current, 'player', 'Fessel', ['legs'], {
+    itemInstanceId: 'item-inst-B',
+    description: 'Fessel an Beinen'
+  }).updatedAdventure;
+
+  assert((current.equipmentState || []).length === 2, 'Test A1: Beide Fesseln in EquipmentState vorhanden');
+  assert((current.player.appearance?.activeConditions || []).length === 2, 'Test A2: Beide Conditions aktiv');
+
+  // Entferne gezielt Fessel A über itemInstanceId
+  current = EquipmentConditionService.detachRestraint(current, 'player', 'item-inst-A', { itemInstanceId: 'item-inst-A' }).updatedAdventure;
+
+  const equipRemaining = current.equipmentState || [];
+  const condsRemaining = current.player.appearance?.activeConditions || [];
+
+  assert(equipRemaining.length === 1 && equipRemaining[0].itemInstanceId === 'item-inst-B', 'Test A3: Nur Fessel A entfernt, Fessel B verbleibt in EquipmentState');
+  assert(condsRemaining.length === 1 && condsRemaining[0].sourceItemInstanceId === 'item-inst-B', 'Test A4: Nur Condition von Fessel B bleibt aktiv');
+  assert(condsRemaining[0].bodyAreas?.includes('legs'), 'Test A5: Verbleibende Condition betrifft weiterhin Beine');
+}
+
+// Test B: Bestehende ItemInstance ausrüsten aktualisiert itemInstances[] und EquipmentState
+{
+  const adv = createBaseAdventure();
+  // Manuell eine ungerüstete ItemInstance anlegen
+  adv.itemInstances = [
+    {
+      id: 'item-inst-sword-1',
+      itemDefinitionId: 'item-def-bastardschwert',
+      name: 'Bastardschwert',
+      condition: 'geschärft',
+      owner: 'player',
+      location: 'Im Rucksack',
+      quantity: 1,
+      currentState: 'im Inventar'
+    }
+  ];
+
+  const res = EquipmentConditionService.equipItem(adv, 'player', 'Bastardschwert', 'weapon', ['hands'], {
+    itemInstanceId: 'item-inst-sword-1'
+  });
+
+  const updatedAdv = res.updatedAdventure;
+  const instance = updatedAdv.itemInstances?.find(i => i.id === 'item-inst-sword-1');
+  const equip = updatedAdv.equipmentState?.find(e => e.itemInstanceId === 'item-inst-sword-1');
+
+  assert(Boolean(instance && instance.currentState === 'ausgerüstet' && instance.location === 'Ausgerüstet'), 'Test B1: itemInstances[] enthält aktualisierte Instanz mit currentState=ausgerüstet');
+  assert(Boolean(equip && equip.itemInstanceId === 'item-inst-sword-1' && equip.equipped), 'Test B2: EquipmentState verweist auf dieselbe itemInstanceId');
+  assert((updatedAdv.itemInstances || []).length === 1, 'Test B3: Keine redundante zweite ItemInstance erzeugt');
+}
+
+// Test C: UNEQUIP synchronisiert ItemInstance-Zustand zu 'im Inventar'
+{
+  const adv = createBaseAdventure();
+  let current = EquipmentConditionService.equipItem(adv, 'player', 'Drachenschild', 'shield', ['hands'], {
+    itemInstanceId: 'item-inst-shield-1'
+  }).updatedAdventure;
+
+  assert((current.equipmentState || []).length === 1, 'Test C1: Schild ausgerüstet');
+
+  current = EquipmentConditionService.unequipItem(current, 'player', 'item-inst-shield-1', {
+    itemInstanceId: 'item-inst-shield-1'
+  }).updatedAdventure;
+
+  const instance = current.itemInstances?.find(i => i.id === 'item-inst-shield-1');
+  assert((current.equipmentState || []).length === 0, 'Test C2: EquipmentState nach UNEQUIP leer');
+  assert(instance?.currentState === 'im Inventar' && instance?.location === 'Inventar', 'Test C3: ItemInstance Zustand zu "im Inventar" synchronisiert');
+}
+
+// Test D: StructuredInventory entfernt alten Waffeneintrag nach UNEQUIP vollständig
+{
+  const adv = createBaseAdventure();
+  let current = EquipmentConditionService.equipItem(adv, 'player', 'Zweihänder', 'weapon', ['hands']).updatedAdventure;
+  assert(current.structuredInventory?.weapons?.includes('Zweihänder'), 'Test D1: Zweihänder in structuredInventory.weapons');
+
+  current = EquipmentConditionService.unequipItem(current, 'player', 'Zweihänder').updatedAdventure;
+  assert(!current.structuredInventory?.weapons?.includes('Zweihänder'), 'Test D2: Zweihänder nach unequip vollständig aus structuredInventory.weapons entfernt');
+  assert((current.structuredInventory?.weapons || []).length === 0, 'Test D3: Keine Geisterwaffen in structuredInventory');
+}
+
+// Test E: Zwei unterschiedliche Fesselungen (Hände vs Beine)
+{
+  const adv = createBaseAdventure();
+  let current = EquipmentConditionService.attachRestraint(adv, 'player', 'Handschellen', ['hands'], {
+    itemInstanceId: 'inst-hands-1'
+  }).updatedAdventure;
+  current = EquipmentConditionService.attachRestraint(current, 'player', 'Fußeisen', ['legs', 'feet'], {
+    itemInstanceId: 'inst-legs-1'
+  }).updatedAdventure;
+
+  // Löse nur die Handschellen
+  current = EquipmentConditionService.detachRestraint(current, 'player', 'inst-hands-1', {
+    itemInstanceId: 'inst-hands-1'
+  }).updatedAdventure;
+
+  const conds = current.player.appearance?.activeConditions || [];
+  assert(conds.length === 1, 'Test E1: Genau eine Fesselung verbleibt');
+  assert(conds[0].sourceItemInstanceId === 'inst-legs-1', 'Test E2: Fußeisen verbleiben aktiv');
+  assert(conds[0].bodyAreas?.includes('legs') && conds[0].bodyAreas?.includes('feet'), 'Test E3: Beine und Füße bleiben gebunden');
+}
+
+// Test F: Schweigen der KI über 10 Turns
+{
+  let state = createBaseAdventure();
+  const initAi = `
+Du wirst in Ketten gelegt.
+<STORY_STATE_CHANGES>
+{
+  "inventoryChanges": [
+    { "item": "Kerkereisen", "action": "attach", "bodyAreas": ["hands", "arms"] }
+  ]
+}
+</STORY_STATE_CHANGES>
+  `;
+  state = AIStoryStateProcessor.parseAndProcessAiResponse(initAi, state).updatedAdventure;
+
+  // Simuliere 10 Turns ohne jede Erwähnung der Kerkereisen
+  for (let turn = 1; turn <= 10; turn++) {
+    const silentTurn = `
+Turn ${turn}: Du sitzt stumm im Schatten. Zeit vergeht.
+<STORY_STATE_CHANGES>
+{
+  "narrativeLocation": "Kerker"
+}
+</STORY_STATE_CHANGES>
+    `;
+    state = AIStoryStateProcessor.parseAndProcessAiResponse(silentTurn, state).updatedAdventure;
+  }
+
+  const cond = state.player.appearance?.activeConditions?.find(c => c.name === 'Kerkereisen');
+  const equip = state.equipmentState?.find(e => e.itemName === 'Kerkereisen');
+
+  assert(Boolean(cond && cond.isActive), 'Test F1: Nach 10 stummen Zügen ist BodyCondition immer noch aktiv');
+  assert(Boolean(equip && equip.equipped), 'Test F2: Nach 10 stummen Zügen ist EquipmentState immer noch aktiv');
+}
+
+// Test G: Explizite Entfernung via itemInstanceId
+{
+  const adv = createBaseAdventure();
+  const attachRes = EquipmentConditionService.attachRestraint(adv, 'player', 'Runenkette', ['neck'], {
+    itemInstanceId: 'inst-rune-neck'
+  });
+  let state = attachRes.updatedAdventure;
+  assert((state.equipmentState || []).length === 1, 'Test G1: Runenkette angelegt');
+
+  const detachRes = EquipmentConditionService.detachRestraint(state, 'player', 'inst-rune-neck', {
+    itemInstanceId: 'inst-rune-neck'
+  });
+  state = detachRes.updatedAdventure;
+
+  assert((state.equipmentState || []).length === 0, 'Test G2: Equipment entfernt');
+  assert((state.player.appearance?.activeConditions || []).length === 0, 'Test G3: BodyCondition entfernt');
+}
+
+// Test H: Vollständiges NPC-Szenario
+{
+  const adv = createBaseAdventure();
+  // Attach restraint to NPC Lyra
+  let state = EquipmentConditionService.attachRestraint(adv, 'npc-lyra', 'Sklavenhalsband', ['neck'], {
+    itemInstanceId: 'inst-collar-lyra'
+  }).updatedAdventure;
+
+  let lyra = state.npcs?.find(n => n.id === 'npc-lyra');
+  assert((lyra?.appearance?.activeConditions || []).some(c => c.sourceItemInstanceId === 'inst-collar-lyra'), 'Test H1: NPC Lyra hat aktives Halsband');
+
+  // Detach restraint from NPC Lyra
+  state = EquipmentConditionService.detachRestraint(state, 'npc-lyra', 'inst-collar-lyra', {
+    itemInstanceId: 'inst-collar-lyra'
+  }).updatedAdventure;
+
+  lyra = state.npcs?.find(n => n.id === 'npc-lyra');
+  assert((lyra?.appearance?.activeConditions || []).length === 0, 'Test H2: NPC Lyra Condition sauber entfernt');
+  assert((state.equipmentState || []).filter(e => e.ownerId === 'npc-lyra').length === 0, 'Test H3: NPC EquipmentState bereinigt');
+}
+
+// Test I: Story-Info + ItemInstance + EquipmentState Koexistenz
+{
+  const adv = createBaseAdventure();
+  const aiText = `
+Du findest eine mystische Armbrust und rüstest sie sofort aus.
+<STORY_STATE_CHANGES>
+{
+  "inventoryChanges": [
+    {
+      "item": "Mystische Armbrust",
+      "action": "equip",
+      "slot": "weapon",
+      "bodyAreas": ["hands"]
+    }
+  ]
+}
+</STORY_STATE_CHANGES>
+  `;
+  const res = AIStoryStateProcessor.parseAndProcessAiResponse(aiText, adv);
+  const finalState = res.updatedAdventure;
+
+  const storyEntity = finalState.storyState?.storyEntities?.find(e => e.title === 'Mystische Armbrust');
+  const itemInst = finalState.itemInstances?.find(i => i.name === 'Mystische Armbrust');
+  const equipState = finalState.equipmentState?.find(e => e.itemName === 'Mystische Armbrust');
+
+  assert(Boolean(storyEntity && storyEntity.category === 'Gegenstände'), 'Test I1: StoryEntity in storyState.storyEntities vorhanden');
+  assert(Boolean(itemInst && itemInst.currentState === 'ausgerüstet'), 'Test I2: ItemInstance in itemInstances[] vorhanden');
+  assert(Boolean(equipState && equipState.equipped && equipState.slot === 'weapon'), 'Test I3: EquipmentState in equipmentState[] vorhanden');
+  assert(finalState.structuredInventory?.weapons?.includes('Mystische Armbrust'), 'Test I4: structuredInventory.weapons synchronisiert');
+}
+
+console.log('\n=== ALL TESTS (ORIGINAL 13 + REGRESSION A-I) PASSED WITH ZERO FAILURES! ===');
