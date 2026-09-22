@@ -119,6 +119,40 @@ STRIKTE REGELN FÜR DEN STRUKTURIERTEN ZUSTAND:
 
 export class AIStoryStateProcessor {
   /**
+   * Completely strips out any <STORY_STATE_CHANGES>, [[STORY_STATE_CHANGES]], [STORY_STATE_CHANGES]
+   * tags and their associated JSON payloads or leftover tags from display text.
+   */
+  public static stripStoryStateMarkup(rawText: string | undefined): string {
+    if (!rawText) return '';
+    let cleaned = rawText;
+
+    // 1. Remove closed or open tag blocks containing STORY_STATE_CHANGES
+    cleaned = cleaned.replace(/(?:<|\[\[?)STORY_STATE_CHANGES(?:>|\]\]?)[\s\S]*?(?:(?:<|\[\[?)\/STORY_STATE_CHANGES(?:>|\]\]?)|$)/gi, '');
+
+    // 2. Remove standalone tags like [[STORY_STATE_CHANGES]], <STORY_STATE_CHANGES>, [STORY_STATE_CHANGES], STORY_STATE_CHANGES:
+    cleaned = cleaned.replace(/(?:<|\[\[?)STORY_STATE_CHANGES(?:>|\]\]?):?/gi, '');
+
+    // 3. Remove JSON markdown blocks containing story state keys
+    cleaned = cleaned.replace(/```(?:json[^\n]*)?\s*\{[\s\S]*?(?:discoveredEntities|locationChange|presenceChanges|events|inventoryChanges|knowledgeUpdates|bodyConditionChanges)[\s\S]*?\}\s*```/gi, '');
+
+    // 4. Remove standalone JSON objects containing story state keys
+    cleaned = cleaned.replace(/\{[\s\S]*?"(?:discoveredEntities|locationChange|presenceChanges|events|inventoryChanges|knowledgeUpdates|bodyConditionChanges)"[\s\S]*?\}/gi, '');
+
+    // 5. Clean remaining internal brackets / system tags
+    cleaned = cleaned
+      .replace(/\[\[LORE_ADD:[^\]]+\]\]/gi, '')
+      .replace(/\[\[LORE_UPDATE:[^\]]+\]\]/gi, '')
+      .replace(/\[\[STATUS:[^\]]+\]\]/gi, '')
+      .replace(/\[\[KNOWLEDGE_ADD:[^\]]+\]\]/gi, '')
+      .replace(/\[\[INVENTORY_SET:[^\]]+\]\]/gi, '')
+      .replace(/\[\[EVENT_STEP_SET:[^\]]+\]\]/gi, '')
+      .replace(/\[\[TERRITORY_ADD:[^\]]+\]\]/gi, '')
+      .replace(/\[\[LORE_UNLOCK:[^\]]+\]\]/gi, '');
+
+    return cleaned.trim();
+  }
+
+  /**
    * Primary entry point to parse raw AI text containing narrative + optional <STORY_STATE_CHANGES> block.
    */
   public static parseAndProcessAiResponse(
@@ -387,35 +421,39 @@ export class AIStoryStateProcessor {
     let storyChanges: AIStoryStateChanges | undefined = undefined;
     let hasStructuredData = false;
 
-    // 1. Look for explicit <STORY_STATE_CHANGES>...</STORY_STATE_CHANGES> block
-    const blockMatch = rawText.match(/<STORY_STATE_CHANGES>([\s\S]*?)<\/STORY_STATE_CHANGES>/i);
+    // 1. Look for explicit tag block: <STORY_STATE_CHANGES>..., [[STORY_STATE_CHANGES]]..., [STORY_STATE_CHANGES]...
+    const tagBlockMatch = rawText.match(/(?:<|\[\[?)STORY_STATE_CHANGES(?:>|\]\]?)([\s\S]*?)(?:(?:<|\[\[?)\/STORY_STATE_CHANGES(?:>|\]\]?)|$)/i);
     let jsonString = '';
 
-    if (blockMatch) {
-      jsonString = blockMatch[1].trim();
-      cleanedNarrativeText = cleanedNarrativeText.replace(blockMatch[0], '');
-      // Strip outer markdown code blocks if the AI placed ```json inside <STORY_STATE_CHANGES>
-      const innerCodeBlock = jsonString.match(/```(?:json[^\n]*)?\s*([\s\S]*?)\s*```/i);
+    if (tagBlockMatch) {
+      const insideTag = tagBlockMatch[1].trim();
+      const innerCodeBlock = insideTag.match(/```(?:json[^\n]*)?\s*([\s\S]*?)\s*```/i);
       if (innerCodeBlock) {
         jsonString = innerCodeBlock[1].trim();
+      } else {
+        const jsonObjectInTag = insideTag.match(/(\{[\s\S]*\})/);
+        jsonString = jsonObjectInTag ? jsonObjectInTag[1].trim() : insideTag;
       }
-    } else {
-      // Fallback: check if json code block exists (e.g. ```json or ```json:story_state)
-      const codeBlockMatch = rawText.match(/```(?:json[^\n]*)?\s*(\{[\s\S]*?(?:discoveredEntities|locationChange|presenceChanges|events|inventoryChanges|knowledgeUpdates)[\s\S]*?\})\s*```/i);
+      cleanedNarrativeText = cleanedNarrativeText.replace(tagBlockMatch[0], '');
+    }
+
+    if (!jsonString) {
+      // 2. Fallback: check if json code block or standalone JSON object with state keys exists
+      const codeBlockMatch = rawText.match(/```(?:json[^\n]*)?\s*(\{[\s\S]*?(?:discoveredEntities|locationChange|presenceChanges|events|inventoryChanges|knowledgeUpdates|bodyConditionChanges)[\s\S]*?\})\s*```/i);
       if (codeBlockMatch) {
         jsonString = codeBlockMatch[1].trim();
         cleanedNarrativeText = cleanedNarrativeText.replace(codeBlockMatch[0], '');
+      } else {
+        const rawJsonMatch = rawText.match(/(\{[\s\S]*?"(?:discoveredEntities|locationChange|presenceChanges|events|inventoryChanges|knowledgeUpdates|bodyConditionChanges)"[\s\S]*?\})/i);
+        if (rawJsonMatch) {
+          jsonString = rawJsonMatch[1].trim();
+          cleanedNarrativeText = cleanedNarrativeText.replace(rawJsonMatch[0], '');
+        }
       }
     }
 
-    // Clean remaining internal tags from narrative text
-    cleanedNarrativeText = cleanedNarrativeText
-      .replace(/\[\[LORE_ADD:[^\]]+\]\]/gi, '')
-      .replace(/\[\[LORE_UPDATE:[^\]]+\]\]/gi, '')
-      .replace(/\[\[STATUS:[^\]]+\]\]/gi, '')
-      .replace(/\[\[KNOWLEDGE_ADD:[^\]]+\]\]/gi, '')
-      .replace(/<STORY_STATE_CHANGES>[\s\S]*?<\/STORY_STATE_CHANGES>/gi, '')
-      .trim();
+    // Completely strip any remaining story state markup or JSON blocks
+    cleanedNarrativeText = this.stripStoryStateMarkup(cleanedNarrativeText);
 
     if (jsonString) {
       try {

@@ -123,7 +123,8 @@ const isSimilarLoreTitle = (titleA: string | undefined, titleB: string | undefin
 
 const cleanTextForDisplay = (text: string | undefined): string => {
   if (!text) return '';
-  let cleaned = text.replace(/\[(?:Ausweichen|Schaden|Blocken|Treffer|Fehlschlag|Kritischer\s+Treffer|Heilung|Reflektiert|Parriert|Parade|Widerstanden|Absorbiert)[^\]]*\]/gi, '');
+  let cleaned = AIStoryStateProcessor.stripStoryStateMarkup(text);
+  cleaned = cleaned.replace(/\[(?:Ausweichen|Schaden|Blocken|Treffer|Fehlschlag|Kritischer\s+Treffer|Heilung|Reflektiert|Parriert|Parade|Widerstanden|Absorbiert)[^\]]*\]/gi, '');
   cleaned = cleaned.replace(/ +/g, ' ');
   cleaned = cleaned.replace(/\n\s*\n\s*\n+/g, '\n\n');
   return cleaned.trim();

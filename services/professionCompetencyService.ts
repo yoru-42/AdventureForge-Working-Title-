@@ -653,3 +653,10 @@ export function formatCharacterProfessionsForAI(char: Character): string {
   return lines.join('\n');
 }
 
+export class ProfessionCompetencyService {
+  public static calculateActivityBaseXp = calculateActivityBaseXp;
+  public static calculateCompetencyProgress = calculateCompetencyProgress;
+  public static normalizeCompetency = normalizeCompetency;
+  public static createCompetencyFromDefinition = createCompetencyFromDefinition;
+}
+
