@@ -137,7 +137,6 @@ export class InventoryLootService {
     const targetId = EquipmentConditionService.resolveTargetId(adventure, targetIdentifier);
     const character = EquipmentConditionService.getCharacter(adventure, targetId);
 
-    // Max carry weight: use custom settings or strength calculation
     let maxWeightKg = adventure.inventorySettings?.maxCarryCapacityKg;
     if (!maxWeightKg || maxWeightKg <= 0) {
       let strengthBonus = 0;
@@ -152,7 +151,6 @@ export class InventoryLootService {
       maxWeightKg = Math.round((25.0 + strengthBonus) * 10) / 10;
     }
 
-    // Compute current weight of all ItemInstances owned by this character
     let totalWeight = 0;
     const ownedInstances = (adventure.itemInstances || []).filter(i => i.owner === targetId);
 
@@ -162,7 +160,6 @@ export class InventoryLootService {
       totalWeight += singleWeight * qty;
     });
 
-    // If target is player and legacy structuredInventory contains customItems not yet mapped
     if (targetId === 'player' && adventure.structuredInventory?.customItems) {
       adventure.structuredInventory.customItems.forEach(ci => {
         const alreadyCounted = ownedInstances.some(inst => inst.id === ci.id || inst.name?.toLowerCase() === ci.name.toLowerCase());
@@ -200,18 +197,14 @@ export class InventoryLootService {
 
     const weight = this.getItemWeightKg(item);
 
-    // CRITICAL SAFETY RESTRICTIONS (Always require confirmation even in auto mode):
-    // 1. Monster or animal carcasses / corpses
     if (item.isCorpseOrBody || weight >= 15.0) {
       return false;
     }
 
-    // 2. Exceeds remaining carry capacity
     if (weight > remainingCapacityKg) {
       return false;
     }
 
-    // 3. Heavy or restricted items
     if (item.isHeavyOrRestricted) {
       return false;
     }
@@ -244,7 +237,6 @@ export class InventoryLootService {
 
     const isHighValue = (options?.estimatedValueGold ?? 0) >= 50;
 
-    // If auto_small: only light common items, herbs, consumables under 1.5 kg, requiring confirmation for quest/rare/valuable
     if (setting === 'auto_small') {
       if (isQuest || isRareOrEpic || isHighValue) {
         return false;
@@ -252,7 +244,6 @@ export class InventoryLootService {
       return weight <= 1.5;
     }
 
-    // If auto_all: allows normal items up to 5.0 kg that fit in capacity, but ALWAYS confirm quest items
     if (setting === 'auto_all') {
       if (isQuest) {
         return false;
@@ -336,10 +327,8 @@ export class InventoryLootService {
 
       // 1. Strict resolution by itemInstanceId if provided
       if (takeReq.itemInstanceId) {
-        // Check canonical itemInstances first
         inst = itemInstances.find(i => i.id === takeReq.itemInstanceId) || null;
 
-        // Check lootSources
         if (!inst) {
           for (const ls of lootSources) {
             const foundInLs = (ls.items || []).find(i => i.id === takeReq.itemInstanceId);
@@ -351,7 +340,6 @@ export class InventoryLootService {
           }
         }
 
-        // Check worldDrops
         if (!inst) {
           const wd = worldDrops.find(w => w.itemInstance.id === takeReq.itemInstanceId);
           if (wd) {
@@ -364,7 +352,6 @@ export class InventoryLootService {
           inst = { ...takeReq.item };
         }
 
-        // STRICT SAFETY: If itemInstanceId was explicitly requested but neither found in state nor provided as item object, DO NOT FALL BACK TO NAME MATCHING!
         if (!inst) {
           rejectedItems.push({
             item: {
@@ -388,20 +375,18 @@ export class InventoryLootService {
 
       const maxFittingQty = singleWeight <= 0 ? reqQty : Math.floor(capacity.remainingCapacityKg / singleWeight);
 
-      // Case A: Cannot fit even 1 unit
       if (maxFittingQty <= 0) {
         rejectedItems.push({
           item: inst,
           reason: `Traglast überschritten (benötigt ${(singleWeight * reqQty).toFixed(1)} kg, verfügbar: ${capacity.remainingCapacityKg.toFixed(1)} kg)`
         });
-        return; // Item REMAINS at source!
+        return;
       }
 
-      // Determine taken vs remaining quantity
       const takenQty = Math.min(reqQty, maxFittingQty);
       const remainingQty = reqQty - takenQty;
 
-      // 2. Ensure ItemDefinition exists in canonical registry
+      // Ensure ItemDefinition exists in canonical registry
       let def = itemDefinitions.find(d => d.id === inst!.itemDefinitionId || (inst!.name && d.name.toLowerCase() === inst!.name.toLowerCase()));
       if (!def) {
         def = {
@@ -414,7 +399,7 @@ export class InventoryLootService {
         itemDefinitions.push(def);
       }
 
-      // 3. Update or add ItemInstance for target owner
+      // Update or add ItemInstance for target owner (preserving concrete itemInstanceId)
       const existingIdx = itemInstances.findIndex(i => i.id === inst!.id);
       const updatedInstance: ItemInstance = {
         ...inst,
@@ -432,7 +417,7 @@ export class InventoryLootService {
         itemInstances.push(updatedInstance);
       }
 
-      // 4. Update source (LootSource or WorldDrop): remove taken quantity, retain remaining quantity!
+      // Update source: remove taken quantity, retain remaining quantity on LootSource or WorldDrop
       if (foundInLootSourceId || options?.sourceId) {
         const lsId = foundInLootSourceId || options?.sourceId;
         lootSources = lootSources.map(ls => {
@@ -459,16 +444,6 @@ export class InventoryLootService {
         } else {
           worldDrops = worldDrops.filter(wd => wd.id !== foundInWorldDropId);
         }
-      }
-
-      // 5. Synchronize legacy derived inventory if player
-      if (targetId === 'player') {
-        const legacyInv = [...(updatedAdv.inventory || [])];
-        const cleanName = updatedInstance.name || 'Gegenstand';
-        if (!legacyInv.some(i => (typeof i === 'string' ? i : (i as any)?.name)?.toLowerCase() === cleanName.toLowerCase())) {
-          legacyInv.push(cleanName);
-        }
-        updatedAdv = { ...updatedAdv, inventory: legacyInv };
       }
 
       acceptedItems.push(updatedInstance);
@@ -657,14 +632,12 @@ export class InventoryLootService {
 
     const effectiveProficiency = Math.min(100, compInfo.proficiency + toolInfo.qualityBonus);
 
-    // Source condition multiplier
     const condClean = sourceCondition.toLowerCase();
     let sourceMultiplier = 1.0;
     if (condClean.includes('verunreinigt') || condClean.includes('schlecht')) sourceMultiplier = 0.85;
     else if (condClean.includes('beschädigt') || condClean.includes('zertrampelt')) sourceMultiplier = 0.7;
     else if (condClean.includes('verwesend') || condClean.includes('alt')) sourceMultiplier = 0.5;
 
-    // Yield quantity & quality
     let yieldMultiplier = 1.0;
     let defaultQuality = 'Solide';
     let defaultCondition = 'gut';
@@ -711,7 +684,6 @@ export class InventoryLootService {
       });
     });
 
-    // Grant practice XP to competency on executor
     if (compInfo.competencyObj && executor && Array.isArray((executor as any).professionCompetencies)) {
       const activity = {
         action: 'work',
@@ -754,6 +726,11 @@ export class InventoryLootService {
 
   /**
    * Harvest monster or animal body with competency integration & persistent loot retention.
+   * Correct order of operations:
+   * 1. Check if items were already generated on LootSource (reuse existing itemInstanceIds!).
+   * 2. If not, generate them ONCE and attach to LootSource.
+   * 3. Perform pickup attempt into target inventory.
+   * 4. Update harvest state (isCrystalsHarvested / isBodyHarvested) ONLY IF ALL generated items have been taken!
    */
   public static harvestMonster(
     adventure: Adventure,
@@ -795,44 +772,80 @@ export class InventoryLootService {
     }
 
     if (action === 'crystals') {
-      if (harvestOptions.isCrystalsHarvested) {
-        return {
-          updatedAdventure: adventure,
-          resultMessage: 'Die Kristalle wurden aus diesem Kadaver bereits geborgen.',
-          gainedItems: [],
-          rejectedItems: [],
-          notifications: []
+      const existingSourceItems = lootSource.items || [];
+      let crystalItemsToTake = existingSourceItems.filter(i =>
+        (i.name || '').toLowerCase().includes('kristall') || (i.category || '').toLowerCase().includes('kristall')
+      );
+
+      let perfSummary = 'Bereits erzeugte Kristalle';
+
+      // 1. Generate crystal items ONLY IF none exist on LootSource and not yet marked harvested
+      if (crystalItemsToTake.length === 0) {
+        if (harvestOptions.isCrystalsHarvested) {
+          return {
+            updatedAdventure: adventure,
+            resultMessage: 'Die Kristalle wurden aus diesem Kadaver bereits geborgen.',
+            gainedItems: [],
+            rejectedItems: [],
+            notifications: []
+          };
+        }
+
+        const baseCrystals = harvestOptions.crystalYield || [
+          { name: `Monsterkristall (${lootSource.title})`, quantity: 1, weightKg: 0.2, category: 'Rohstoffe' }
+        ];
+
+        const perf = this.evaluateHarvestPerformance(executor, updatedAdv, targetId, 'harvest_crystals', 'frisch', baseCrystals);
+        updatedAdv = perf.updatedAdventure;
+        crystalItemsToTake = perf.computedYield;
+        perfSummary = perf.performanceSummary;
+
+        // Store generated crystal items on LootSource ONCE with concrete itemInstanceIds
+        const updatedSourceItems = [...existingSourceItems, ...crystalItemsToTake];
+        updatedAdv = {
+          ...updatedAdv,
+          lootSources: (updatedAdv.lootSources || []).map(ls =>
+            ls.id === lootSourceId
+              ? { ...ls, items: updatedSourceItems }
+              : ls
+          )
         };
       }
 
-      const baseCrystals = harvestOptions.crystalYield || [
-        { name: `Monsterkristall (${lootSource.title})`, quantity: 1, weightKg: 0.2, category: 'Rohstoffe' }
-      ];
-
-      const perf = this.evaluateHarvestPerformance(executor, updatedAdv, targetId, 'harvest_crystals', 'frisch', baseCrystals);
-      updatedAdv = perf.updatedAdventure;
-
-      // Attach generated yield items to lootSource.items
-      const existingItems = lootSource.items || [];
-      const updatedSourceItems = [...existingItems, ...perf.computedYield];
-
-      // Mark crystals harvested on lootSource
-      updatedAdv = {
-        ...updatedAdv,
-        lootSources: (updatedAdv.lootSources || []).map(ls =>
-          ls.id === lootSourceId
-            ? { ...ls, items: updatedSourceItems, harvestOptions: { ...(ls.harvestOptions || {}), isCrystalsHarvested: true } }
-            : ls
-        )
-      };
-
-      // Attempt pickup into executor inventory
-      const pickupRes = this.pickupItems(updatedAdv, targetId, perf.computedYield.map(c => ({ itemInstanceId: c.id, item: c, quantity: c.quantity })), { sourceId: lootSourceId, allowPartial: true });
+      // 2. Attempt pickup into target inventory
+      const pickupRes = this.pickupItems(
+        updatedAdv,
+        targetId,
+        crystalItemsToTake.map(c => ({ itemInstanceId: c.id, item: c, quantity: c.quantity })),
+        { sourceId: lootSourceId, allowPartial: true }
+      );
       updatedAdv = pickupRes.updatedAdventure;
 
+      // 3. Inspect remaining crystals on LootSource
+      const currentLs = (updatedAdv.lootSources || []).find(ls => ls.id === lootSourceId);
+      const remainingCrystalsOnLs = (currentLs?.items || []).filter(i =>
+        (i.name || '').toLowerCase().includes('kristall') || (i.category || '').toLowerCase().includes('kristall')
+      );
+
+      const isFullyHarvested = remainingCrystalsOnLs.length === 0;
+
+      // Set isCrystalsHarvested ONLY IF no crystals remain on LootSource!
+      if (isFullyHarvested) {
+        updatedAdv = {
+          ...updatedAdv,
+          lootSources: (updatedAdv.lootSources || []).map(ls =>
+            ls.id === lootSourceId
+              ? { ...ls, harvestOptions: { ...(ls.harvestOptions || {}), isCrystalsHarvested: true } }
+              : ls
+          )
+        };
+      }
+
       const gainedMsg = pickupRes.acceptedItems.length > 0
-        ? `Monsterkristalle geborgen (${perf.performanceSummary}).`
-        : `Kristalle erzeugt, aber wegen voller Traglast an der Quelle belassen (${perf.performanceSummary}).`;
+        ? (isFullyHarvested
+            ? `Monsterkristalle geborgen (${perfSummary}).`
+            : `Teil der Monsterkristalle geborgen (${perfSummary}). Verbleibende Kristalle liegen an der Quelle.`)
+        : `Kristalle erzeugt, konnten aber wegen voller Traglast nicht aufgenommen werden (${perfSummary}). Sie liegen weiterhin am Kadaver.`;
 
       return {
         updatedAdventure: updatedAdv,
@@ -844,46 +857,77 @@ export class InventoryLootService {
     }
 
     if (action === 'butcher') {
-      if (harvestOptions.isBodyHarvested) {
-        return {
-          updatedAdventure: adventure,
-          resultMessage: 'Dieser Kadaver wurde bereits vollständig zerlegt.',
-          gainedItems: [],
-          rejectedItems: [],
-          notifications: []
+      const existingSourceItems = lootSource.items || [];
+      let butcherItemsToTake = existingSourceItems.filter(i =>
+        !(i.name || '').toLowerCase().includes('kristall')
+      );
+
+      let perfSummary = 'Bereits erzeugte Ressourcen';
+
+      if (butcherItemsToTake.length === 0) {
+        if (harvestOptions.isBodyHarvested) {
+          return {
+            updatedAdventure: adventure,
+            resultMessage: 'Dieser Kadaver wurde bereits vollständig zerlegt.',
+            gainedItems: [],
+            rejectedItems: [],
+            notifications: []
+          };
+        }
+
+        const baseButcherYield = harvestOptions.butcherYield || [
+          { name: `Bestienleder (${lootSource.title})`, quantity: 2, weightKg: 1.5, category: 'Rohstoffe' },
+          { name: `Monsterfleisch (${lootSource.title})`, quantity: 3, weightKg: 2.0, category: 'Nahrung' },
+          { name: `Reißzahn (${lootSource.title})`, quantity: 2, weightKg: 0.3, category: 'Rohstoffe' }
+        ];
+
+        const perf = this.evaluateHarvestPerformance(executor, updatedAdv, targetId, 'butcher', 'frisch', baseButcherYield);
+        updatedAdv = perf.updatedAdventure;
+        butcherItemsToTake = perf.computedYield;
+        perfSummary = perf.performanceSummary;
+
+        const updatedSourceItems = [...existingSourceItems, ...butcherItemsToTake];
+        updatedAdv = {
+          ...updatedAdv,
+          lootSources: (updatedAdv.lootSources || []).map(ls =>
+            ls.id === lootSourceId
+              ? { ...ls, items: updatedSourceItems }
+              : ls
+          )
         };
       }
 
-      const baseButcherYield = harvestOptions.butcherYield || [
-        { name: `Bestienleder (${lootSource.title})`, quantity: 2, weightKg: 1.5, category: 'Rohstoffe' },
-        { name: `Monsterfleisch (${lootSource.title})`, quantity: 3, weightKg: 2.0, category: 'Nahrung' },
-        { name: `Reißzahn (${lootSource.title})`, quantity: 2, weightKg: 0.3, category: 'Rohstoffe' }
-      ];
-
-      const perf = this.evaluateHarvestPerformance(executor, updatedAdv, targetId, 'butcher', 'frisch', baseButcherYield);
-      updatedAdv = perf.updatedAdventure;
-
-      // Attach generated yield items to lootSource.items
-      const existingItems = lootSource.items || [];
-      const updatedSourceItems = [...existingItems, ...perf.computedYield];
-
-      // Mark body butchered on lootSource
-      updatedAdv = {
-        ...updatedAdv,
-        lootSources: (updatedAdv.lootSources || []).map(ls =>
-          ls.id === lootSourceId
-            ? { ...ls, items: updatedSourceItems, harvestOptions: { ...(ls.harvestOptions || {}), isBodyHarvested: true } }
-            : ls
-        )
-      };
-
-      // Attempt pickup into executor inventory
-      const pickupRes = this.pickupItems(updatedAdv, targetId, perf.computedYield.map(p => ({ itemInstanceId: p.id, item: p, quantity: p.quantity })), { sourceId: lootSourceId, allowPartial: true });
+      const pickupRes = this.pickupItems(
+        updatedAdv,
+        targetId,
+        butcherItemsToTake.map(p => ({ itemInstanceId: p.id, item: p, quantity: p.quantity })),
+        { sourceId: lootSourceId, allowPartial: true }
+      );
       updatedAdv = pickupRes.updatedAdventure;
 
+      const currentLs = (updatedAdv.lootSources || []).find(ls => ls.id === lootSourceId);
+      const remainingButcherItemsOnLs = (currentLs?.items || []).filter(i =>
+        !(i.name || '').toLowerCase().includes('kristall')
+      );
+
+      const isFullyHarvested = remainingButcherItemsOnLs.length === 0;
+
+      if (isFullyHarvested) {
+        updatedAdv = {
+          ...updatedAdv,
+          lootSources: (updatedAdv.lootSources || []).map(ls =>
+            ls.id === lootSourceId
+              ? { ...ls, harvestOptions: { ...(ls.harvestOptions || {}), isBodyHarvested: true } }
+              : ls
+          )
+        };
+      }
+
       const gainedMsg = pickupRes.acceptedItems.length > 0
-        ? `Kadaver zerlegt und Ressourcen gewonnen (${perf.performanceSummary}).`
-        : `Zerlegte Teile liegen an der Quelle, konnten aber wegen Traglast nicht aufgenommen werden (${perf.performanceSummary}).`;
+        ? (isFullyHarvested
+            ? `Kadaver zerlegt und Ressourcen gewonnen (${perfSummary}).`
+            : `Teil der zerlegten Ressourcen aufgenommen (${perfSummary}). Der Rest liegt weiterhin an der Quelle.`)
+        : `Zerlegte Teile liegen an der Quelle, konnten aber wegen Traglast nicht aufgenommen werden (${perfSummary}).`;
 
       return {
         updatedAdventure: updatedAdv,
@@ -978,11 +1022,9 @@ export class InventoryLootService {
       };
     }
 
-    // 1. Unequip & detach if equipped
     let unequippedAdv = EquipmentConditionService.detachRestraint(adventure, targetId, itemInstanceId, { itemInstanceId }).updatedAdventure;
     unequippedAdv = EquipmentConditionService.unequipItem(unequippedAdv, targetId, itemInstanceId, { itemInstanceId }).updatedAdventure;
 
-    // 2. Update ItemInstance location & state to ground / world
     const updatedInstances = (unequippedAdv.itemInstances || []).map(i => {
       if (i.id === itemInstanceId) {
         return {
@@ -995,16 +1037,6 @@ export class InventoryLootService {
       return i;
     });
 
-    // 3. Remove from legacy inventory if player
-    let updatedInventory = [...(unequippedAdv.inventory || [])];
-    if (targetId === 'player' && targetInst.name) {
-      const idx = updatedInventory.findIndex(i => (typeof i === 'string' ? i : (i as any)?.name)?.toLowerCase() === targetInst.name!.toLowerCase());
-      if (idx >= 0) {
-        updatedInventory.splice(idx, 1);
-      }
-    }
-
-    // 4. Create WorldDrop record
     const worldDrop: WorldDropItem = {
       id: `drop-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       itemInstance: { ...targetInst, owner: 'world', location: 'Am Boden', currentState: 'abgelegt' },
@@ -1027,7 +1059,6 @@ export class InventoryLootService {
     let updatedAdventure: Adventure = {
       ...unequippedAdv,
       itemInstances: updatedInstances,
-      inventory: updatedInventory,
       worldDrops
     };
 
@@ -1089,7 +1120,6 @@ export class InventoryLootService {
     let resultMessage = `${inst.name || 'Gegenstand'} benutzt.`;
     let consumed = false;
 
-    // 1. Potion / Consumable healing & curing
     if (nameLower.includes('heiltrank') || nameLower.includes('trank') || nameLower.includes('elixier') || nameLower.includes('medizin')) {
       consumed = true;
       if (targetId === 'player') {
@@ -1114,7 +1144,6 @@ export class InventoryLootService {
       resultMessage = `${inst.name} verwendet.`;
     }
 
-    // 2. If consumed, reduce quantity or destroy instance
     if (consumed) {
       const currentQty = inst.quantity || 1;
       if (currentQty > 1) {
