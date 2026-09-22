@@ -3346,10 +3346,12 @@ export interface AIStoryEvent {
 
 export interface AIInventoryChange {
   item: string;
-  action: 'added' | 'removed' | 'updated' | 'equip' | 'unequip' | 'attach' | 'detach';
+  action: 'added' | 'removed' | 'updated' | 'equip' | 'unequip' | 'attach' | 'detach' | 'transfer';
   quantity?: number;
   ownerId?: string;
   ownerName?: string;
+  toOwnerId?: string;
+  toOwnerName?: string;
   slot?: string;
   bodyAreas?: BodyArea[];
   isRestraint?: boolean;

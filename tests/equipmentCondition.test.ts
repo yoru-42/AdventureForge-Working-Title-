@@ -589,4 +589,150 @@ Du findest eine mystische Armbrust und rüstest sie sofort aus.
   assert(finalState.structuredInventory?.weapons?.includes('Mystische Armbrust'), 'Test I4: structuredInventory.weapons synchronisiert');
 }
 
-console.log('\n=== ALL TESTS (ORIGINAL 13 + REGRESSION A-I) PASSED WITH ZERO FAILURES! ===');
+console.log('\n--- STRICT ITEMINSTANCE IDENTITY REGRESSION TESTS (1-7) ---\n');
+
+// 1. Zerstören einer von zwei identischen ItemInstances
+{
+  const adv = createBaseAdventure();
+  adv.itemInstances = [
+    { id: 'item-inst-dagger-1', itemDefinitionId: 'def-dagger', name: 'Dolch', owner: 'player', location: 'Gürtel', quantity: 1, currentState: 'im Inventar' },
+    { id: 'item-inst-dagger-2', itemDefinitionId: 'def-dagger', name: 'Dolch', owner: 'player', location: 'Stiefel', quantity: 1, currentState: 'im Inventar' }
+  ];
+  adv.inventory = ['Dolch', 'Dolch'];
+
+  const updated = EquipmentConditionService.destroyItem(adv, 'player', 'item-inst-dagger-1', { itemInstanceId: 'item-inst-dagger-1' });
+
+  assert((updated.itemInstances || []).length === 1, 'Test ID-1a: Genau eine ItemInstance gelöscht');
+  assert(updated.itemInstances?.[0].id === 'item-inst-dagger-2', 'Test ID-1b: Dolch 2 bleibt unberührt im Besitz des Spielers');
+  assert((updated.inventory || []).length === 1, 'Test ID-1c: Genau ein Eintrag im Inventar-Array verbleibt');
+}
+
+// 2. Transferieren einer von zwei identischen ItemInstances
+{
+  const adv = createBaseAdventure();
+  adv.itemInstances = [
+    { id: 'item-inst-potion-1', itemDefinitionId: 'def-potion', name: 'Heiltrank', owner: 'player', location: 'Tasche', quantity: 1, currentState: 'im Inventar' },
+    { id: 'item-inst-potion-2', itemDefinitionId: 'def-potion', name: 'Heiltrank', owner: 'player', location: 'Tasche', quantity: 1, currentState: 'im Inventar' }
+  ];
+
+  const updated = EquipmentConditionService.transferItem(adv, 'player', 'npc-lyra', 'item-inst-potion-1', { itemInstanceId: 'item-inst-potion-1' });
+
+  const p1 = updated.itemInstances?.find(i => i.id === 'item-inst-potion-1');
+  const p2 = updated.itemInstances?.find(i => i.id === 'item-inst-potion-2');
+
+  assert(p1?.owner === 'npc-lyra', 'Test ID-2a: Heiltrank 1 gehört jetzt Lyra');
+  assert(p2?.owner === 'player', 'Test ID-2b: Heiltrank 2 gehört weiterhin dem Spieler');
+}
+
+// 3. Falscher Owner beim Transferieren (Safe Abort)
+{
+  const adv = createBaseAdventure();
+  adv.itemInstances = [
+    { id: 'item-inst-lyra-gem', itemDefinitionId: 'def-gem', name: 'Rubin', owner: 'npc-lyra', location: 'Tasche', quantity: 1, currentState: 'im Inventar' }
+  ];
+
+  // Spieler versucht fälschlicherweise, Lyras Rubin zu transferieren
+  const updated = EquipmentConditionService.transferItem(adv, 'player', 'npc-lyra', 'item-inst-lyra-gem', { itemInstanceId: 'item-inst-lyra-gem' });
+
+  const gem = updated.itemInstances?.find(i => i.id === 'item-inst-lyra-gem');
+  assert(gem?.owner === 'npc-lyra', 'Test ID-3: Safe Abort bei falschem fromOwner verhindert unberechtigte Zustandsänderung');
+}
+
+// 4. Ungültige ID beim Lösen / Detach (Safe Abort: kein Namens-Fallback)
+{
+  const adv = createBaseAdventure();
+  // Spieler hat echte Eisenfesseln
+  let state = EquipmentConditionService.attachRestraint(adv, 'player', 'Eisenfesseln', ['hands'], {
+    itemInstanceId: 'inst-real-shackles'
+  }).updatedAdventure;
+
+  // Versuch mit einer nicht existierenden ID "inst-nonexistent"
+  const detachRes = EquipmentConditionService.detachRestraint(state, 'player', 'Eisenfesseln', {
+    itemInstanceId: 'inst-nonexistent'
+  });
+
+  const remainingConds = detachRes.updatedAdventure.player.appearance?.activeConditions || [];
+  assert(remainingConds.length === 1 && remainingConds[0].sourceItemInstanceId === 'inst-real-shackles', 'Test ID-4: Ungültige ID fällt NICHT auf Namenssuche zurück; echte Fesseln bleiben aktiv');
+}
+
+// 5. Lösen einer von zwei identischen Fesseln
+{
+  const adv = createBaseAdventure();
+  let state = EquipmentConditionService.attachRestraint(adv, 'player', 'Kette', ['hands'], {
+    itemInstanceId: 'item-inst-chain-hands'
+  }).updatedAdventure;
+  state = EquipmentConditionService.attachRestraint(state, 'player', 'Kette', ['legs'], {
+    itemInstanceId: 'item-inst-chain-legs'
+  }).updatedAdventure;
+
+  assert((state.equipmentState || []).length === 2, 'Test ID-5a: 2 Ketten angelegt');
+
+  // Löse nur die Kette an den Händen
+  state = EquipmentConditionService.detachRestraint(state, 'player', 'item-inst-chain-hands', {
+    itemInstanceId: 'item-inst-chain-hands'
+  }).updatedAdventure;
+
+  const activeConds = state.player.appearance?.activeConditions || [];
+  assert(activeConds.length === 1 && activeConds[0].sourceItemInstanceId === 'item-inst-chain-legs', 'Test ID-5b: Nur Kette an Beinen bleibt aktiv');
+  assert((state.equipmentState || []).length === 1 && state.equipmentState?.[0].itemInstanceId === 'item-inst-chain-legs', 'Test ID-5c: EquipmentState enthält nur noch Beinkette');
+}
+
+// 6. Zerstören einer von zwei identischen Fesseln
+{
+  const adv = createBaseAdventure();
+  let state = EquipmentConditionService.attachRestraint(adv, 'player', 'Lederfessel', ['arms'], {
+    itemInstanceId: 'item-inst-leather-arms'
+  }).updatedAdventure;
+  state = EquipmentConditionService.attachRestraint(state, 'player', 'Lederfessel', ['legs'], {
+    itemInstanceId: 'item-inst-leather-legs'
+  }).updatedAdventure;
+
+  // Zerstöre gezielt nur die Armfessel
+  state = EquipmentConditionService.destroyItem(state, 'player', 'item-inst-leather-arms', {
+    itemInstanceId: 'item-inst-leather-arms'
+  });
+
+  const remainingInsts = state.itemInstances || [];
+  const remainingConds = state.player.appearance?.activeConditions || [];
+
+  assert(remainingInsts.length === 1 && remainingInsts[0].id === 'item-inst-leather-legs', 'Test ID-6a: Nur Beinfessel-Instanz verbleibt');
+  assert(remainingConds.length === 1 && remainingConds[0].sourceItemInstanceId === 'item-inst-leather-legs', 'Test ID-6b: Nur Beinfessel-Condition verbleibt');
+}
+
+// 7. Story-Info bleibt nach Item-Zerstörung erhalten
+{
+  const adv = createBaseAdventure();
+  adv.storyState = {
+    storyEntities: [
+      {
+        id: 'story-ent-ring',
+        title: 'Ring des Königs',
+        category: 'Gegenstände',
+        description: 'Ein uralter Siegelring aus Gold mit Gravur.',
+        subtitle: 'Kapitel 1'
+      }
+    ],
+    lastUpdatedTime: new Date().toISOString()
+  };
+  adv.itemInstances = [
+    {
+      id: 'item-inst-ring-1',
+      itemDefinitionId: 'def-royal-ring',
+      name: 'Ring des Königs',
+      owner: 'player',
+      location: 'Finger',
+      quantity: 1,
+      currentState: 'im Inventar'
+    }
+  ];
+
+  const updated = EquipmentConditionService.destroyItem(adv, 'player', 'item-inst-ring-1', {
+    itemInstanceId: 'item-inst-ring-1'
+  });
+
+  assert((updated.itemInstances || []).length === 0, 'Test ID-7a: Physische ItemInstance zerstört');
+  const storyEntity = updated.storyState?.storyEntities?.find(e => e.title === 'Ring des Königs');
+  assert(Boolean(storyEntity && storyEntity.category === 'Gegenstände'), 'Test ID-7b: StoryEntity bleibt unverändert in storyEntities erhalten');
+}
+
+console.log('\n=== ALL TESTS (ORIGINAL 13 + REGRESSION A-I + IDENTITY 1-7) PASSED WITH ZERO FAILURES! ===');

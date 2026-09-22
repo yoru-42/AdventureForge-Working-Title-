@@ -328,29 +328,43 @@ export class EquipmentConditionService {
     // Check if searchKey is an exact itemInstanceId
     const isExactInstanceId = Boolean(options?.itemInstanceId) ||
       adventureEquipment.some(e => e.itemInstanceId === searchKey) ||
-      itemInstances.some(i => i.id === searchKey);
+      itemInstances.some(i => i.id === searchKey) ||
+      searchKey.startsWith('item-inst-');
 
     const removedInstanceIds = new Set<string>();
 
     if (isExactInstanceId) {
       const targetInstId = options?.itemInstanceId || searchKey;
       const equipIndex = adventureEquipment.findIndex(e => e.ownerId === targetId && e.itemInstanceId === targetInstId);
+      
+      const targetChar = this.getCharacter(adventure, targetId);
+      const hasCondition = (targetChar?.appearance?.activeConditions || []).some(
+        c => (c.sourceItemInstanceId && c.sourceItemInstanceId === targetInstId) || c.id === targetInstId
+      );
+      const hasOwnedInstance = itemInstances.some(i => i.id === targetInstId && i.owner === targetId);
+
+      if (equipIndex === -1 && !hasCondition && !hasOwnedInstance) {
+        // SAFE ABORT: target instance is not attached or owned by targetId. Do NOT remove anything!
+        return {
+          updatedAdventure: adventure,
+          removed: false
+        };
+      }
+
       if (equipIndex >= 0) {
         adventureEquipment.splice(equipIndex, 1);
-        removedInstanceIds.add(targetInstId);
         removed = true;
-      } else {
-        // Even if not in equipmentState, mark instance ID for condition cleanup
-        removedInstanceIds.add(targetInstId);
       }
+      if (hasCondition || equipIndex >= 0) {
+        removed = true;
+      }
+      removedInstanceIds.add(targetInstId);
     } else {
-      // Fallback: match by name or condition ID
+      // Fallback: match by exact name or condition ID
       const matchingEquip = adventureEquipment.find(e =>
         e.ownerId === targetId &&
         (e.itemInstanceId === searchKey ||
-         e.itemName.toLowerCase() === cleanSearchLower ||
-         e.itemName.toLowerCase().includes(cleanSearchLower) ||
-         cleanSearchLower.includes(e.itemName.toLowerCase()))
+         e.itemName.toLowerCase() === cleanSearchLower)
       );
 
       if (matchingEquip) {
@@ -360,9 +374,22 @@ export class EquipmentConditionService {
       }
     }
 
+    if (!removed && removedInstanceIds.size === 0 && !isExactInstanceId) {
+      // Check if there is an active condition matching name
+      const targetChar = this.getCharacter(adventure, targetId);
+      const matchingCond = (targetChar?.appearance?.activeConditions || []).find(
+        c => c.name.toLowerCase() === cleanSearchLower || c.id === searchKey
+      );
+      if (matchingCond) {
+        if (matchingCond.sourceItemInstanceId) {
+          removedInstanceIds.add(matchingCond.sourceItemInstanceId);
+        }
+      }
+    }
+
     // Update matching item instance states
     itemInstances = itemInstances.map(inst => {
-      if (removedInstanceIds.has(inst.id) || (!isExactInstanceId && inst.owner === targetId && inst.name?.toLowerCase() === cleanSearchLower && inst.currentState === 'angelegt / aktiv')) {
+      if (removedInstanceIds.has(inst.id)) {
         return {
           ...inst,
           currentState: 'abgelegt / gelöst',
@@ -377,26 +404,26 @@ export class EquipmentConditionService {
     let updatedNpcs = [...(adventure.npcs || [])];
 
     if (targetId === 'player') {
+      let condRemoved = false;
       const currentConds = (updatedPlayer.appearance?.activeConditions || []).filter(c => {
         if (c.sourceItemInstanceId && removedInstanceIds.has(c.sourceItemInstanceId)) {
-          removed = true;
+          condRemoved = true;
           return false;
         }
         if (c.id === searchKey) {
-          removed = true;
+          condRemoved = true;
           return false;
         }
-        if (!isExactInstanceId && removedInstanceIds.size === 0) {
-          if (c.name.toLowerCase() === cleanSearchLower || c.name.toLowerCase().includes(cleanSearchLower) || cleanSearchLower.includes(c.name.toLowerCase())) {
-            // Only remove if it doesn't belong to another active restraint instance
-            if (!c.sourceItemInstanceId || !adventureEquipment.some(e => e.itemInstanceId === c.sourceItemInstanceId)) {
-              removed = true;
-              return false;
-            }
+        if (!isExactInstanceId && removedInstanceIds.size === 0 && !condRemoved) {
+          if (c.name.toLowerCase() === cleanSearchLower) {
+            condRemoved = true;
+            return false;
           }
         }
         return true;
       });
+      if (condRemoved) removed = true;
+
       updatedPlayer = {
         ...updatedPlayer,
         appearance: {
@@ -409,25 +436,26 @@ export class EquipmentConditionService {
       const npcIdx = updatedNpcs.findIndex(n => n.id === targetId);
       if (npcIdx >= 0) {
         const npc = updatedNpcs[npcIdx];
+        let condRemoved = false;
         const currentConds = (npc.appearance?.activeConditions || []).filter(c => {
           if (c.sourceItemInstanceId && removedInstanceIds.has(c.sourceItemInstanceId)) {
-            removed = true;
+            condRemoved = true;
             return false;
           }
           if (c.id === searchKey) {
-            removed = true;
+            condRemoved = true;
             return false;
           }
-          if (!isExactInstanceId && removedInstanceIds.size === 0) {
-            if (c.name.toLowerCase() === cleanSearchLower || c.name.toLowerCase().includes(cleanSearchLower) || cleanSearchLower.includes(c.name.toLowerCase())) {
-              if (!c.sourceItemInstanceId || !adventureEquipment.some(e => e.itemInstanceId === c.sourceItemInstanceId)) {
-                removed = true;
-                return false;
-              }
+          if (!isExactInstanceId && removedInstanceIds.size === 0 && !condRemoved) {
+            if (c.name.toLowerCase() === cleanSearchLower) {
+              condRemoved = true;
+              return false;
             }
           }
           return true;
         });
+        if (condRemoved) removed = true;
+
         updatedNpcs[npcIdx] = {
           ...npc,
           appearance: {
@@ -627,9 +655,9 @@ export class EquipmentConditionService {
   /**
    * Unequip an item from a character.
    * Priority:
-   * 1. Exact itemInstanceId match
-   * 2. Slot match
-   * 3. Name fallback
+   * 1. Exact itemInstanceId match (safe abort if not equipped on target)
+   * 2. Slot match (legacy fallback)
+   * 3. Name match (legacy fallback)
    * - Accurately updates ItemInstance state (currentState = 'im Inventar', location = 'Inventar')
    */
   public static unequipItem(
@@ -652,7 +680,8 @@ export class EquipmentConditionService {
 
     const isExactInstanceId = Boolean(options?.itemInstanceId) ||
       adventureEquipment.some(e => e.itemInstanceId === searchKey) ||
-      itemInstances.some(i => i.id === searchKey);
+      itemInstances.some(i => i.id === searchKey) ||
+      searchKey.startsWith('item-inst-');
 
     const unequippedInstanceIds = new Set<string>();
 
@@ -663,34 +692,42 @@ export class EquipmentConditionService {
         adventureEquipment.splice(equipIdx, 1);
         unequippedInstanceIds.add(targetInstId);
       } else {
-        unequippedInstanceIds.add(targetInstId);
+        // Safe abort: not equipped on this character
+        return {
+          updatedAdventure: adventure,
+          unequipped: false
+        };
       }
     } else {
       // Check for slot match
-      const matchingSlotEquip = adventureEquipment.filter(e => e.ownerId === targetId && e.slot && e.slot.toLowerCase() === cleanSearchLower && !e.isRestraint);
-      if (matchingSlotEquip.length > 0) {
-        matchingSlotEquip.forEach(e => {
-          unequippedInstanceIds.add(e.itemInstanceId);
-        });
-        adventureEquipment = adventureEquipment.filter(e => !matchingSlotEquip.includes(e));
+      const matchingSlotEquip = adventureEquipment.find(e => e.ownerId === targetId && e.slot && e.slot.toLowerCase() === cleanSearchLower && !e.isRestraint);
+      if (matchingSlotEquip) {
+        unequippedInstanceIds.add(matchingSlotEquip.itemInstanceId);
+        adventureEquipment = adventureEquipment.filter(e => e !== matchingSlotEquip);
       } else {
-        // Match by item name
-        const matchingNameEquip = adventureEquipment.filter(e =>
+        // Match by item name (first matching only!)
+        const matchingNameEquip = adventureEquipment.find(e =>
           e.ownerId === targetId &&
           (e.itemName.toLowerCase() === cleanSearchLower || e.itemName.toLowerCase().includes(cleanSearchLower))
         );
-        matchingNameEquip.forEach(e => {
-          unequippedInstanceIds.add(e.itemInstanceId);
-        });
-        adventureEquipment = adventureEquipment.filter(e => !matchingNameEquip.includes(e));
+        if (matchingNameEquip) {
+          unequippedInstanceIds.add(matchingNameEquip.itemInstanceId);
+          adventureEquipment = adventureEquipment.filter(e => e !== matchingNameEquip);
+        }
       }
     }
 
     const unequipped = unequippedInstanceIds.size > 0;
+    if (!unequipped) {
+      return {
+        updatedAdventure: adventure,
+        unequipped: false
+      };
+    }
 
     // Update unequipped item instances
     itemInstances = itemInstances.map(inst => {
-      if (unequippedInstanceIds.has(inst.id) || (!isExactInstanceId && inst.owner === targetId && inst.name?.toLowerCase() === cleanSearchLower && inst.currentState === 'ausgerüstet')) {
+      if (unequippedInstanceIds.has(inst.id)) {
         return {
           ...inst,
           currentState: 'im Inventar',
@@ -706,7 +743,7 @@ export class EquipmentConditionService {
     if (targetId === 'player') {
       updatedPlayer = {
         ...updatedPlayer,
-        equipment: (updatedPlayer.equipment || []).filter(e => !unequippedInstanceIds.has(e.itemInstanceId) && (isExactInstanceId ? true : e.itemName.toLowerCase() !== cleanSearchLower && (e.slot ? e.slot.toLowerCase() !== cleanSearchLower : true)))
+        equipment: (updatedPlayer.equipment || []).filter(e => !unequippedInstanceIds.has(e.itemInstanceId))
       };
     } else {
       const npcIdx = updatedNpcs.findIndex(n => n.id === targetId);
@@ -714,7 +751,7 @@ export class EquipmentConditionService {
         const npc = updatedNpcs[npcIdx];
         updatedNpcs[npcIdx] = {
           ...npc,
-          equipment: (npc.equipment || []).filter(e => !unequippedInstanceIds.has(e.itemInstanceId) && (isExactInstanceId ? true : e.itemName.toLowerCase() !== cleanSearchLower && (e.slot ? e.slot.toLowerCase() !== cleanSearchLower : true)))
+          equipment: (npc.equipment || []).filter(e => !unequippedInstanceIds.has(e.itemInstanceId))
         };
       }
     }
@@ -831,25 +868,41 @@ export class EquipmentConditionService {
   public static removeCondition(
     adventure: Adventure,
     targetIdentifier: string,
-    conditionIdentifier: string
+    conditionIdentifier: string,
+    options?: {
+      sourceItemInstanceId?: string;
+      conditionId?: string;
+    }
   ): {
     updatedAdventure: Adventure;
     removed: boolean;
   } {
     const targetId = this.resolveTargetId(adventure, targetIdentifier);
-    const cleanSearch = conditionIdentifier.trim().toLowerCase();
+    const searchKey = (options?.sourceItemInstanceId || options?.conditionId || conditionIdentifier).trim();
+    const cleanSearchLower = searchKey.toLowerCase();
     let removed = false;
 
     let updatedPlayer = { ...adventure.player };
     let updatedNpcs = [...(adventure.npcs || [])];
 
+    const isExactInstanceId = Boolean(options?.sourceItemInstanceId) ||
+      (options?.conditionId && options.conditionId.startsWith('cond-')) ||
+      (adventure.itemInstances || []).some(i => i.id === searchKey);
+
     if (targetId === 'player') {
+      let hasRemovedOne = false;
       const conds = (updatedPlayer.appearance?.activeConditions || []).filter(c => {
-        if (c.id === conditionIdentifier || (c.sourceItemInstanceId && c.sourceItemInstanceId === conditionIdentifier)) {
-          removed = true;
-          return false;
+        if (isExactInstanceId) {
+          if (c.sourceItemInstanceId === searchKey || c.id === searchKey) {
+            removed = true;
+            return false;
+          }
+          return true;
         }
-        if (c.name.toLowerCase() === cleanSearch) {
+
+        // Legacy name match (remove only first)
+        if (!hasRemovedOne && (c.name.toLowerCase() === cleanSearchLower || c.id === searchKey)) {
+          hasRemovedOne = true;
           removed = true;
           return false;
         }
@@ -866,12 +919,19 @@ export class EquipmentConditionService {
       const npcIdx = updatedNpcs.findIndex(n => n.id === targetId);
       if (npcIdx >= 0) {
         const npc = updatedNpcs[npcIdx];
+        let hasRemovedOne = false;
         const conds = (npc.appearance?.activeConditions || []).filter(c => {
-          if (c.id === conditionIdentifier || (c.sourceItemInstanceId && c.sourceItemInstanceId === conditionIdentifier)) {
-            removed = true;
-            return false;
+          if (isExactInstanceId) {
+            if (c.sourceItemInstanceId === searchKey || c.id === searchKey) {
+              removed = true;
+              return false;
+            }
+            return true;
           }
-          if (c.name.toLowerCase() === cleanSearch) {
+
+          // Legacy name match (remove only first)
+          if (!hasRemovedOne && (c.name.toLowerCase() === cleanSearchLower || c.id === searchKey)) {
+            hasRemovedOne = true;
             removed = true;
             return false;
           }
@@ -899,73 +959,156 @@ export class EquipmentConditionService {
 
   /**
    * Transfer an item from one character/owner to another.
-   * Preserves exact itemInstanceId and updates ownership cleanly.
+   * Priority 1: Exact itemInstanceId. Aborts safely if item doesn't exist or doesn't belong to fromOwner.
+   * Priority 2: Legacy fallback by name.
    */
   public static transferItem(
     adventure: Adventure,
     fromTargetIdentifier: string,
     toTargetIdentifier: string,
-    itemInstanceIdOrName: string
+    itemInstanceIdOrName: string,
+    options?: {
+      itemInstanceId?: string;
+    }
   ): Adventure {
     const fromId = this.resolveTargetId(adventure, fromTargetIdentifier);
     const toId = this.resolveTargetId(adventure, toTargetIdentifier);
-    const searchKey = itemInstanceIdOrName.trim();
+    const targetInstId = (options?.itemInstanceId || itemInstanceIdOrName).trim();
+    const cleanSearchLower = targetInstId.toLowerCase();
 
-    // 1. Detach/Unequip specific instance from source owner
-    let detached = this.detachRestraint(adventure, fromId, searchKey);
-    let updated = this.unequipItem(detached.updatedAdventure, fromId, searchKey).updatedAdventure;
+    const itemInstances = [...(adventure.itemInstances || [])];
+    const isExactInstanceId = Boolean(options?.itemInstanceId) ||
+      itemInstances.some(i => i.id === targetInstId) ||
+      (adventure.equipmentState || []).some(e => e.itemInstanceId === targetInstId) ||
+      targetInstId.startsWith('item-inst-');
 
-    // 2. Transfer ItemInstance ownership without duplicating
-    let itemInstances = (updated.itemInstances || []).map(inst => {
-      if (inst.owner === fromId && (inst.id === searchKey || inst.name?.toLowerCase() === searchKey.toLowerCase())) {
-        return {
-          ...inst,
-          owner: toId,
-          location: `Im Besitz von ${toId === 'player' ? 'Spieler' : toId}`,
-          currentState: 'im Inventar'
-        };
+    if (isExactInstanceId) {
+      // 1. Must find the exact ItemInstance owned by fromId
+      const targetInst = itemInstances.find(i => i.id === targetInstId && i.owner === fromId);
+      if (!targetInst) {
+        // SAFE ABORT: Do NOT transfer, do NOT search by name, do NOT pick any other instance!
+        return adventure;
       }
-      return inst;
-    });
 
-    return {
-      ...updated,
-      itemInstances
-    };
+      // 2. Detach restraint & unequip from fromId for this exact instance
+      let detachedAdv = this.detachRestraint(adventure, fromId, targetInstId, { itemInstanceId: targetInstId }).updatedAdventure;
+      let unequippedAdv = this.unequipItem(detachedAdv, fromId, targetInstId, { itemInstanceId: targetInstId }).updatedAdventure;
+
+      // 3. Update ONLY this concrete ItemInstance
+      const updatedInstances = (unequippedAdv.itemInstances || []).map(inst => {
+        if (inst.id === targetInstId) {
+          return {
+            ...inst,
+            owner: toId,
+            location: `Im Besitz von ${toId === 'player' ? (adventure.player?.name || 'Spieler') : toId}`,
+            currentState: 'im Inventar'
+          };
+        }
+        return inst;
+      });
+
+      return {
+        ...unequippedAdv,
+        itemInstances: updatedInstances
+      };
+    }
+
+    // Legacy fallback: Search for ONE instance owned by fromId with matching name
+    const legacyInst = itemInstances.find(i => i.owner === fromId && i.name?.toLowerCase() === cleanSearchLower);
+    if (legacyInst) {
+      return this.transferItem(adventure, fromId, toId, legacyInst.id, { itemInstanceId: legacyInst.id });
+    }
+
+    // Fallback for legacy string inventory
+    if (fromId === 'player') {
+      const playerInv = [...(adventure.inventory || [])];
+      const invIdx = playerInv.findIndex(i => (typeof i === 'string' ? i : (i as any)?.name)?.toLowerCase() === cleanSearchLower);
+      if (invIdx >= 0) {
+        const itemObj = playerInv.splice(invIdx, 1)[0];
+        let updated = { ...adventure, inventory: playerInv };
+        if (toId === 'player') {
+          updated.inventory = [...(updated.inventory || []), itemObj];
+        }
+        return updated;
+      }
+    }
+
+    return adventure;
   }
 
   /**
    * Destroy an item instance completely.
-   * Priority: exact itemInstanceId to only destroy that specific instance.
+   * Priority: Exact itemInstanceId to only destroy that specific instance.
+   * Preserves all other identical instances and preserves Story-Info completely.
    */
   public static destroyItem(
     adventure: Adventure,
     targetIdentifier: string,
-    itemInstanceIdOrName: string
+    itemInstanceIdOrName: string,
+    options?: {
+      itemInstanceId?: string;
+    }
   ): Adventure {
     const targetId = this.resolveTargetId(adventure, targetIdentifier);
-    const searchKey = itemInstanceIdOrName.trim();
-    const cleanSearchLower = searchKey.toLowerCase();
+    const targetInstId = (options?.itemInstanceId || itemInstanceIdOrName).trim();
+    const cleanSearchLower = targetInstId.toLowerCase();
 
-    let detached = this.detachRestraint(adventure, targetId, searchKey);
-    let updated = this.unequipItem(detached.updatedAdventure, targetId, searchKey).updatedAdventure;
+    const itemInstances = [...(adventure.itemInstances || [])];
+    const isExactInstanceId = Boolean(options?.itemInstanceId) ||
+      itemInstances.some(i => i.id === targetInstId) ||
+      (adventure.equipmentState || []).some(e => e.itemInstanceId === targetInstId) ||
+      targetInstId.startsWith('item-inst-');
 
-    let itemInstances = (updated.itemInstances || []).filter(inst => {
-      if (inst.owner === targetId && (inst.id === searchKey || inst.name?.toLowerCase() === cleanSearchLower)) {
-        return false;
+    if (isExactInstanceId) {
+      // 1. Must find the exact ItemInstance owned by targetId
+      const targetInst = itemInstances.find(i => i.id === targetInstId && i.owner === targetId);
+      if (!targetInst) {
+        // SAFE ABORT: wrong owner or non-existent instance
+        return adventure;
       }
-      return true;
-    });
 
-    let inventory = (updated.inventory || []).filter(i => {
-      const name = typeof i === 'string' ? i : (i as any)?.name;
-      return name?.toLowerCase() !== cleanSearchLower;
-    });
+      // 2. Detach & unequip exact instance
+      let detachedAdv = this.detachRestraint(adventure, targetId, targetInstId, { itemInstanceId: targetInstId }).updatedAdventure;
+      let unequippedAdv = this.unequipItem(detachedAdv, targetId, targetInstId, { itemInstanceId: targetInstId }).updatedAdventure;
+
+      // 3. Remove ONLY that single ItemInstance (NO other instance with same name!)
+      const updatedItemInstances = (unequippedAdv.itemInstances || []).filter(inst => inst.id !== targetInstId);
+
+      // 4. In legacy inventory array: remove at most ONE matching entry if player
+      let updatedInventory = [...(unequippedAdv.inventory || [])];
+      if (targetId === 'player') {
+        const itemIdx = updatedInventory.findIndex(i => (typeof i === 'string' ? i : (i as any)?.name)?.toLowerCase() === targetInst.name.toLowerCase());
+        if (itemIdx >= 0) {
+          updatedInventory.splice(itemIdx, 1);
+        }
+      }
+
+      // CRITICAL: storyEntities in storyState remain PRESERVED (Story-Info != physical item instance)
+      return {
+        ...unequippedAdv,
+        itemInstances: updatedItemInstances,
+        inventory: updatedInventory
+      };
+    }
+
+    // Legacy fallback: Search for ONE instance owned by targetId with matching name
+    const legacyInst = itemInstances.find(i => i.owner === targetId && i.name?.toLowerCase() === cleanSearchLower);
+    if (legacyInst) {
+      return this.destroyItem(adventure, targetId, legacyInst.id, { itemInstanceId: legacyInst.id });
+    }
+
+    // Fallback for legacy string inventory only
+    let updatedInventory = [...(adventure.inventory || [])];
+    const invIdx = updatedInventory.findIndex(i => (typeof i === 'string' ? i : (i as any)?.name)?.toLowerCase() === cleanSearchLower);
+    if (invIdx >= 0) {
+      updatedInventory.splice(invIdx, 1);
+    }
+    let detachedAdv = this.detachRestraint(adventure, targetId, cleanSearchLower).updatedAdventure;
+    let unequippedAdv = this.unequipItem(detachedAdv, targetId, cleanSearchLower).updatedAdventure;
 
     return {
-      ...updated,
-      itemInstances,
-      inventory
+      ...unequippedAdv,
+      inventory: updatedInventory
     };
   }
 
@@ -1034,7 +1177,7 @@ export class EquipmentConditionService {
         if (!cleanItem) return;
         const targetId = this.resolveTargetId(currentAdventure, inv.ownerId || inv.ownerName || 'player');
 
-        if (inv.action === 'attach' || (inv.isRestraint && inv.action !== 'removed' && inv.action !== 'detach' && inv.action !== 'unequip')) {
+        if (inv.action === 'attach' || (inv.isRestraint && inv.action !== 'removed' && inv.action !== 'detach' && inv.action !== 'unequip' && inv.action !== 'transfer')) {
           const res = this.attachRestraint(currentAdventure, targetId, cleanItem, inv.bodyAreas, {
             description: inv.description,
             condition: inv.condition,
@@ -1071,8 +1214,12 @@ export class EquipmentConditionService {
         } else if (inv.action === 'unequip') {
           const res = this.unequipItem(currentAdventure, targetId, cleanItem, { itemInstanceId: inv.itemInstanceId });
           currentAdventure = res.updatedAdventure;
+        } else if (inv.action === 'transfer') {
+          const fromId = this.resolveTargetId(currentAdventure, inv.ownerId || inv.ownerName || 'player');
+          const toId = this.resolveTargetId(currentAdventure, (inv as any).toOwnerId || (inv as any).toOwnerName || (inv as any).targetCharacterId || 'player');
+          currentAdventure = this.transferItem(currentAdventure, fromId, toId, inv.itemInstanceId || cleanItem, { itemInstanceId: inv.itemInstanceId });
         } else if (inv.action === 'removed') {
-          currentAdventure = this.destroyItem(currentAdventure, targetId, inv.itemInstanceId || cleanItem);
+          currentAdventure = this.destroyItem(currentAdventure, targetId, inv.itemInstanceId || cleanItem, { itemInstanceId: inv.itemInstanceId });
         } else if (inv.action === 'added') {
           let updatedInv = [...(currentAdventure.inventory || [])];
           const lower = cleanItem.toLowerCase();
@@ -1130,7 +1277,7 @@ export class EquipmentConditionService {
             const res = this.detachRestraint(currentAdventure, targetId, cleanName, { itemInstanceId: bc.sourceItemInstanceId });
             currentAdventure = res.updatedAdventure;
           } else {
-            const res = this.removeCondition(currentAdventure, targetId, bc.sourceItemInstanceId || cleanName);
+            const res = this.removeCondition(currentAdventure, targetId, bc.sourceItemInstanceId || cleanName, { sourceItemInstanceId: bc.sourceItemInstanceId });
             currentAdventure = res.updatedAdventure;
           }
         }

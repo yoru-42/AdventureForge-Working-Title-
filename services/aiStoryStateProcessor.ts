@@ -296,7 +296,7 @@ export class AIStoryStateProcessor {
 
     // 6. Validate inventoryChanges
     if (Array.isArray(raw.inventoryChanges)) {
-      const allowedActions = ['added', 'removed', 'updated', 'equip', 'unequip', 'attach', 'detach'];
+      const allowedActions = ['added', 'removed', 'updated', 'equip', 'unequip', 'attach', 'detach', 'transfer'];
       validated.inventoryChanges = raw.inventoryChanges.filter((inv: any) => {
         if (!inv || typeof inv !== 'object') return false;
         if (typeof inv.item !== 'string' || !inv.item.trim()) return false;
@@ -307,6 +307,8 @@ export class AIStoryStateProcessor {
         quantity: typeof inv.quantity === 'number' ? inv.quantity : 1,
         ownerId: typeof inv.ownerId === 'string' ? inv.ownerId : undefined,
         ownerName: typeof inv.ownerName === 'string' ? inv.ownerName : undefined,
+        toOwnerId: typeof inv.toOwnerId === 'string' ? inv.toOwnerId : (typeof inv.targetCharacterId === 'string' ? inv.targetCharacterId : undefined),
+        toOwnerName: typeof inv.toOwnerName === 'string' ? inv.toOwnerName : undefined,
         slot: typeof inv.slot === 'string' ? inv.slot : undefined,
         bodyAreas: Array.isArray(inv.bodyAreas) ? inv.bodyAreas.map((a: any) => String(a)) : undefined,
         isRestraint: Boolean(inv.isRestraint || inv.action === 'attach'),
