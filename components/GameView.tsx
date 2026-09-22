@@ -525,7 +525,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
   const pendingStoryEntitiesCount = React.useMemo(() => {
     const entities = adventure.storyState?.storyEntities || [];
-    return entities.filter(e => !e.promotedToCodex).length;
+    return entities.filter(e => !e.promotedToCodex && e.isNewInStory !== false).length;
   }, [adventure.storyState?.storyEntities]);
 
   const sanitizeCodexDetails = (category: string, details: Record<string, any> = {}) => {
@@ -546,6 +546,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   };
 
   const handlePromoteEntityToCodex = (entity: StoryEntityItem) => {
+    const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
     const currentLore = adventure.loreDatabase || [];
     const exists = currentLore.some(e => e.category === entity.category && e.title.toLowerCase() === entity.title.toLowerCase());
     
@@ -567,6 +568,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
     onUpdateAdventure({
       ...adventure,
+      chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       loreDatabase: newLore,
       storyState: {
         ...(adventure.storyState || { storyEntities: [] }),
@@ -586,6 +588,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
   const handlePromoteMultipleToCodex = (entities: StoryEntityItem[]) => {
     if (!entities || entities.length === 0) return;
+    const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
     let newLore = [...(adventure.loreDatabase || [])];
     const promotedIds = new Set(entities.map(e => e.id));
 
@@ -609,6 +612,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
 
     onUpdateAdventure({
       ...adventure,
+      chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       loreDatabase: newLore,
       storyState: {
         ...(adventure.storyState || { storyEntities: [] }),
@@ -626,10 +630,59 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     ]);
   };
 
+  const handleKeepTemporaryEntity = (entityId: string) => {
+    const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
+    const updatedStoryEntities = (adventure.storyState?.storyEntities || []).map(e =>
+      e.id === entityId ? { ...e, isNewInStory: false } : e
+    );
+    onUpdateAdventure({
+      ...adventure,
+      chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
+      storyState: {
+        ...(adventure.storyState || { storyEntities: [] }),
+        storyEntities: updatedStoryEntities
+      }
+    });
+  };
+
+  const handleKeepMultipleTemporary = (entities: StoryEntityItem[]) => {
+    if (!entities || entities.length === 0) return;
+    const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
+    const ids = new Set(entities.map(e => e.id));
+    const updatedStoryEntities = (adventure.storyState?.storyEntities || []).map(e =>
+      ids.has(e.id) ? { ...e, isNewInStory: false } : e
+    );
+    onUpdateAdventure({
+      ...adventure,
+      chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
+      storyState: {
+        ...(adventure.storyState || { storyEntities: [] }),
+        storyEntities: updatedStoryEntities
+      }
+    });
+  };
+
   const handleDismissEntity = (entityId: string) => {
+    const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
     const updatedStoryEntities = (adventure.storyState?.storyEntities || []).filter(e => e.id !== entityId);
     onUpdateAdventure({
       ...adventure,
+      chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
+      storyState: {
+        ...(adventure.storyState || { storyEntities: [] }),
+        storyEntities: updatedStoryEntities
+      }
+    });
+  };
+
+  const handleDismissMultiple = (entities: StoryEntityItem[]) => {
+    if (!entities || entities.length === 0) return;
+    const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
+    const ids = new Set(entities.map(e => e.id));
+    const updatedStoryEntities = (adventure.storyState?.storyEntities || []).filter(e => !ids.has(e.id));
+    onUpdateAdventure({
+      ...adventure,
+      chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
       storyState: {
         ...(adventure.storyState || { storyEntities: [] }),
         storyEntities: updatedStoryEntities
@@ -2724,7 +2777,10 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       }
 
       if (updated) {
-        onUpdateAdventure(currentAdv);
+        onUpdateAdventure({
+          ...currentAdv,
+          chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : currentAdv.chatHistory
+        });
       }
     }
   }, [adventure.id, adventure.chatHistory, adventure.firstMessage, adventure.prologue]);
@@ -4483,7 +4539,7 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     }
 
     const updatedStoryState: StoryInfoState = {
-      ...(currentAdventure.storyState || { storyEntities: [] }),
+      ...(baseAdventure.storyState || currentAdventure.storyState || { storyEntities: [] }),
       storyEntities: updatedStoryEntities,
       lastUpdatedTime: new Date().toISOString()
     };
@@ -11530,9 +11586,14 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           onPromoteEntityToCodex={handlePromoteEntityToCodex}
           onPromoteMultipleToCodex={handlePromoteMultipleToCodex}
           onDismissEntity={handleDismissEntity}
+          onKeepTemporary={handleKeepTemporaryEntity}
+          onKeepMultipleTemporary={handleKeepMultipleTemporary}
+          onDismissMultiple={handleDismissMultiple}
           onUpdateNotes={(notes) => {
+            const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : messages;
             onUpdateAdventure({
               ...adventure,
+              chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : adventure.chatHistory,
               summaryLog: notes
             });
           }}

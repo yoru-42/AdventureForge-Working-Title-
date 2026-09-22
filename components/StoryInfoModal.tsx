@@ -39,6 +39,9 @@ interface StoryInfoModalProps {
   onPromoteEntityToCodex: (entity: StoryEntityItem) => void;
   onPromoteMultipleToCodex: (entities: StoryEntityItem[]) => void;
   onDismissEntity: (entityId: string) => void;
+  onKeepTemporary?: (entityId: string) => void;
+  onKeepMultipleTemporary?: (entities: StoryEntityItem[]) => void;
+  onDismissMultiple?: (entities: StoryEntityItem[]) => void;
   onUpdateNotes?: (notes: string) => void;
 }
 
@@ -49,6 +52,9 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
   onPromoteEntityToCodex,
   onPromoteMultipleToCodex,
   onDismissEntity,
+  onKeepTemporary,
+  onKeepMultipleTemporary,
+  onDismissMultiple,
   onUpdateNotes
 }) => {
   const [expandedEntityIds, setExpandedEntityIds] = useState<Record<string, boolean>>({});
@@ -130,6 +136,28 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
     const selectedList = pendingEntities.filter(e => selectedEntityIds[e.id]);
     if (selectedList.length === 0) return;
     onPromoteMultipleToCodex(selectedList);
+    setSelectedEntityIds({});
+  };
+
+  const handleKeepSelected = () => {
+    const selectedList = pendingEntities.filter(e => selectedEntityIds[e.id]);
+    if (selectedList.length === 0) return;
+    if (onKeepMultipleTemporary) {
+      onKeepMultipleTemporary(selectedList);
+    } else if (onKeepTemporary) {
+      selectedList.forEach(e => onKeepTemporary(e.id));
+    }
+    setSelectedEntityIds({});
+  };
+
+  const handleDismissSelected = () => {
+    const selectedList = pendingEntities.filter(e => selectedEntityIds[e.id]);
+    if (selectedList.length === 0) return;
+    if (onDismissMultiple) {
+      onDismissMultiple(selectedList);
+    } else {
+      selectedList.forEach(e => onDismissEntity(e.id));
+    }
     setSelectedEntityIds({});
   };
 
@@ -399,7 +427,7 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
                 </div>
 
                 {pendingEntities.length > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={handleSelectAll}
                       className="px-3 py-1.5 text-xs rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors flex items-center gap-1.5"
@@ -420,10 +448,28 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
                     <button
                       onClick={handlePromoteSelected}
                       disabled={!Object.values(selectedEntityIds).some(Boolean)}
-                      className="px-3 py-1.5 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white font-medium transition-colors flex items-center gap-1.5 shadow-sm"
+                      className="px-3 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-medium transition-colors flex items-center gap-1.5 shadow-sm"
                     >
                       <BookmarkPlus className="w-3.5 h-3.5" />
                       Auswahl in Codex übernehmen
+                    </button>
+
+                    <button
+                      onClick={handleKeepSelected}
+                      disabled={!Object.values(selectedEntityIds).some(Boolean)}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-amber-300 border border-slate-700 font-medium transition-colors flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Check className="w-3.5 h-3.5 text-amber-400" />
+                      Auswahl temporär behalten
+                    </button>
+
+                    <button
+                      onClick={handleDismissSelected}
+                      disabled={!Object.values(selectedEntityIds).some(Boolean)}
+                      className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 hover:bg-rose-950/40 hover:text-rose-300 disabled:opacity-40 text-slate-300 border border-slate-700 font-medium transition-colors flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      Auswahl verwerfen
                     </button>
                   </div>
                 )}
@@ -529,6 +575,17 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
                               <BookmarkPlus className="w-3.5 h-3.5" />
                               In Codex übernehmen
                             </button>
+
+                            {onKeepTemporary && (
+                              <button
+                                onClick={() => onKeepTemporary(entity.id)}
+                                className="px-2.5 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-amber-950/40 hover:border-amber-700/60 text-slate-300 hover:text-amber-200 border border-slate-700/80 transition-colors flex items-center gap-1"
+                                title="Temporär behalten (Markierung entfernen)"
+                              >
+                                <Check className="w-3.5 h-3.5 text-amber-400" />
+                                Temporär behalten
+                              </button>
+                            )}
 
                             <button
                               onClick={() => onDismissEntity(entity.id)}

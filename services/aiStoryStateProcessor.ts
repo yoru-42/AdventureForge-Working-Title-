@@ -182,23 +182,36 @@ export class AIStoryStateProcessor {
     if (Array.isArray(raw.discoveredEntities)) {
       validated.discoveredEntities = raw.discoveredEntities.filter((e: any) => {
         if (!e || typeof e !== 'object') return false;
-        if (typeof e.name !== 'string' || !e.name.trim()) return false;
-        const validTypes = ['character', 'building', 'room', 'location', 'territory', 'item', 'creature', 'organization', 'event'];
-        if (typeof e.type !== 'string' || !validTypes.includes(e.type.toLowerCase())) return false;
+        const name = e.name || e.title;
+        if (typeof name !== 'string' || !name.trim()) return false;
         return true;
-      }).map((e: any) => ({
-        type: e.type.toLowerCase() as any,
-        id: typeof e.id === 'string' && e.id.trim() ? e.id.trim() : undefined,
-        name: String(e.name).trim(),
-        role: typeof e.role === 'string' ? e.role : undefined,
-        description: typeof e.description === 'string' ? e.description : undefined,
-        locationContext: e.locationContext && typeof e.locationContext === 'object' ? {
-          locationName: typeof e.locationContext.locationName === 'string' ? e.locationContext.locationName : undefined,
-          buildingName: typeof e.locationContext.buildingName === 'string' ? e.locationContext.buildingName : undefined,
-          roomName: typeof e.locationContext.roomName === 'string' ? e.locationContext.roomName : undefined
-        } : undefined,
-        details: e.details && typeof e.details === 'object' ? e.details : undefined
-      }));
+      }).map((e: any) => {
+        const rawType = String(e.type || e.category || 'lore').toLowerCase();
+        let normType: any = 'event';
+        if (rawType.includes('char') || rawType.includes('person') || rawType.includes('npc')) normType = 'character';
+        else if (rawType.includes('gegner') || rawType.includes('feind') || rawType.includes('monster') || rawType.includes('creature') || rawType.includes('enemy')) normType = 'creature';
+        else if (rawType.includes('gebäud') || rawType.includes('building')) normType = 'building';
+        else if (rawType.includes('raum') || rawType.includes('räume') || rawType.includes('room')) normType = 'room';
+        else if (rawType.includes('ort') || rawType.includes('location')) normType = 'location';
+        else if (rawType.includes('territor') || rawType.includes('weltkarte')) normType = 'territory';
+        else if (rawType.includes('gegen') || rawType.includes('item') || rawType.includes('waff')) normType = 'item';
+        else if (rawType.includes('frakt') || rawType.includes('org') || rawType.includes('gild')) normType = 'organization';
+        else if (rawType.includes('event') || rawType.includes('quest') || rawType.includes('ereignis')) normType = 'event';
+
+        return {
+          type: normType,
+          id: typeof e.id === 'string' && e.id.trim() ? e.id.trim() : undefined,
+          name: String(e.name || e.title).trim(),
+          role: typeof e.role === 'string' ? e.role : undefined,
+          description: typeof e.description === 'string' ? e.description : undefined,
+          locationContext: e.locationContext && typeof e.locationContext === 'object' ? {
+            locationName: typeof e.locationContext.locationName === 'string' ? e.locationContext.locationName : undefined,
+            buildingName: typeof e.locationContext.buildingName === 'string' ? e.locationContext.buildingName : undefined,
+            roomName: typeof e.locationContext.roomName === 'string' ? e.locationContext.roomName : undefined
+          } : undefined,
+          details: e.details && typeof e.details === 'object' ? e.details : undefined
+        };
+      });
     }
 
     // 2. Validate locationChange
@@ -264,7 +277,20 @@ export class AIStoryStateProcessor {
       }));
     }
 
-    // 6. Validate relationshipChanges
+    // 6. Validate inventoryChanges
+    if (Array.isArray(raw.inventoryChanges)) {
+      validated.inventoryChanges = raw.inventoryChanges.filter((inv: any) => {
+        if (!inv || typeof inv !== 'object') return false;
+        if (typeof inv.item !== 'string' || !inv.item.trim()) return false;
+        return true;
+      }).map((inv: any) => ({
+        item: String(inv.item).trim(),
+        action: (inv.action === 'added' || inv.action === 'removed' || inv.action === 'updated') ? inv.action : 'added',
+        quantity: typeof inv.quantity === 'number' ? inv.quantity : 1
+      }));
+    }
+
+    // 7. Validate relationshipChanges
     if (Array.isArray(raw.relationshipChanges)) {
       validated.relationshipChanges = raw.relationshipChanges.filter((r: any) => {
         if (!r || typeof r !== 'object') return false;
@@ -278,7 +304,7 @@ export class AIStoryStateProcessor {
       }));
     }
 
-    // 7. Validate worldChanges
+    // 8. Validate worldChanges
     if (Array.isArray(raw.worldChanges)) {
       validated.worldChanges = raw.worldChanges.filter((w: any) => {
         if (!w || typeof w !== 'object') return false;
@@ -316,9 +342,14 @@ export class AIStoryStateProcessor {
     if (blockMatch) {
       jsonString = blockMatch[1].trim();
       cleanedNarrativeText = cleanedNarrativeText.replace(blockMatch[0], '');
+      // Strip outer markdown code blocks if the AI placed ```json inside <STORY_STATE_CHANGES>
+      const innerCodeBlock = jsonString.match(/```(?:json[^\n]*)?\s*([\s\S]*?)\s*```/i);
+      if (innerCodeBlock) {
+        jsonString = innerCodeBlock[1].trim();
+      }
     } else {
-      // Fallback: check if trailing json code block exists at the end of text
-      const codeBlockMatch = rawText.match(/```(?:json)?\s*(\{\s*"discoveredEntities"[\s\S]*?\})\s*```/i);
+      // Fallback: check if json code block exists (e.g. ```json or ```json:story_state)
+      const codeBlockMatch = rawText.match(/```(?:json[^\n]*)?\s*(\{[\s\S]*?(?:discoveredEntities|locationChange|presenceChanges|events|inventoryChanges|knowledgeUpdates)[\s\S]*?\})\s*```/i);
       if (codeBlockMatch) {
         jsonString = codeBlockMatch[1].trim();
         cleanedNarrativeText = cleanedNarrativeText.replace(codeBlockMatch[0], '');
@@ -384,7 +415,7 @@ export class AIStoryStateProcessor {
 
     // 3. Process Presence Changes
     if (Array.isArray(changes.presenceChanges) && changes.presenceChanges.length > 0) {
-      state = this.processPresenceChanges(state, changes.presenceChanges);
+      state = this.processPresenceChanges(state, changes.presenceChanges, notifications);
     }
 
     // 4. Process Knowledge Updates
@@ -397,12 +428,17 @@ export class AIStoryStateProcessor {
       state = this.processEvents(state, changes.events, notifications);
     }
 
-    // 6. Process Relationships
+    // 6. Process Inventory Changes
+    if (Array.isArray(changes.inventoryChanges) && changes.inventoryChanges.length > 0) {
+      state = this.processInventoryChanges(state, changes.inventoryChanges, notifications);
+    }
+
+    // 7. Process Relationships
     if (Array.isArray(changes.relationshipChanges) && changes.relationshipChanges.length > 0) {
       state = this.processRelationshipChanges(state, changes.relationshipChanges);
     }
 
-    // 7. Process World Changes
+    // 8. Process World Changes
     if (Array.isArray(changes.worldChanges) && changes.worldChanges.length > 0) {
       state = this.processWorldChanges(state, changes.worldChanges);
     }
@@ -581,7 +617,60 @@ export class AIStoryStateProcessor {
       regionName: locChange.regionName || existingContext.regionName
     };
 
-    const updatedAdventure = LocationContextService.updateCurrentLocation(adventure, newContext);
+    let updatedAdventure = LocationContextService.updateCurrentLocation(adventure, newContext);
+
+    const storyEntities = [...(updatedAdventure.storyState?.storyEntities || [])];
+    const loreDb = updatedAdventure.loreDatabase || [];
+
+    const ensureDiscoveredLocationEntity = (name: string, category: 'Orte' | 'Gebäude' | 'Räume') => {
+      const clean = name.trim();
+      if (!clean || clean.length < 2) return;
+      const lower = clean.toLowerCase();
+      const inStory = storyEntities.some(s => s.category === category && s.title.trim().toLowerCase() === lower);
+      const inLore = loreDb.some(l => l.category === category && l.title.trim().toLowerCase() === lower);
+      if (!inStory && !inLore) {
+        storyEntities.push({
+          id: `story-ent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          category,
+          title: clean,
+          description: `Neu entdeckter ${category === 'Orte' ? 'Ort' : category === 'Gebäude' ? 'Gebäudekomplex' : 'Raum'}: ${clean}.`,
+          details: {
+            locationName: newContext.locationName,
+            buildingName: newContext.buildingName
+          },
+          createdAt: new Date().toISOString(),
+          isNewInStory: true,
+          promotedToCodex: false
+        });
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'add',
+          title: `${clean} (${category})`,
+          category: 'Story-Info'
+        });
+      }
+    };
+
+    if (locChange.locationName) ensureDiscoveredLocationEntity(locChange.locationName, 'Orte');
+    if (locChange.buildingName) ensureDiscoveredLocationEntity(locChange.buildingName, 'Gebäude');
+    if (locChange.roomName) ensureDiscoveredLocationEntity(locChange.roomName, 'Räume');
+
+    updatedAdventure = {
+      ...updatedAdventure,
+      storyState: {
+        ...(updatedAdventure.storyState || {
+          currentLocationName: '',
+          currentTerritoryName: '',
+          activeSituation: '',
+          activeGoals: [],
+          relationships: [],
+          storyEntities: [],
+          lastUpdatedTime: new Date().toISOString()
+        }),
+        storyEntities,
+        lastUpdatedTime: new Date().toISOString()
+      } as StoryInfoState
+    };
 
     const locLabel = newContext.roomName
       ? `${newContext.roomName} (${newContext.buildingName || newContext.locationName})`
@@ -601,14 +690,19 @@ export class AIStoryStateProcessor {
    * Processes structured Presence Changes.
    * Enforces rule: Known ≠ Present ≠ Scene Participant ≠ Combat Participant.
    * 'mentioned_only' does NOT grant physical presence or scene participation.
+   * If a character is marked present or scene_participant and does not exist yet, creates NPC & Story-Info entry.
    */
   private static processPresenceChanges(
     adventure: Adventure,
-    presenceChanges: AIPresenceChange[]
+    presenceChanges: AIPresenceChange[],
+    notifications: any[] = []
   ): Adventure {
     const npcs = [...(adventure.npcs || [])];
+    const storyEntities = [...(adventure.storyState?.storyEntities || [])];
+    const loreDb = adventure.loreDatabase || [];
     const currentLoc = LocationContextService.resolveCurrentLocation(adventure);
     const holdings = adventure.world?.economyConfig?.holdings || [];
+    const playerName = (adventure.player?.name || 'Spieler').trim().toLowerCase();
 
     presenceChanges.forEach(p => {
       if (!p || (!p.characterName && !p.characterId)) return;
@@ -618,9 +712,9 @@ export class AIStoryStateProcessor {
         name: p.characterName
       });
 
-      if (npc) {
-        const now = new Date().toISOString();
+      const now = new Date().toISOString();
 
+      if (npc) {
         if (p.state === 'mentioned_only') {
           // Mentioned only: record mention timestamp & situation without modifying presenceState, sceneId, or location
           npc.lastMentionedAt = now;
@@ -664,12 +758,116 @@ export class AIStoryStateProcessor {
           npc.currentLocationContext = targetLoc;
           npc.currentSituation = finalState === 'scene_participant' ? 'Nimmt aktiv an der Szene teil' : 'Am Ort anwesend';
         }
+      } else if (p.state === 'present' || p.state === 'scene_participant') {
+        // Character not found in existing npcs, but has physical presence or scene participation!
+        const isPlayer = p.characterName && (
+          p.characterName.trim().toLowerCase() === playerName ||
+          (adventure.player?.name && p.characterName.trim().toLowerCase() === adventure.player.name.trim().toLowerCase())
+        );
+        if (!isPlayer && p.characterName && p.characterName.trim()) {
+          const cleanName = p.characterName.trim();
+          const existingLore = loreDb.find(l =>
+            (p.characterId && l.id === p.characterId) ||
+            l.title.trim().toLowerCase() === cleanName.toLowerCase()
+          );
+          const existingStoryEnt = storyEntities.find(e =>
+            (p.characterId && e.id === p.characterId) ||
+            e.title.trim().toLowerCase() === cleanName.toLowerCase()
+          );
+
+          const entityId = p.characterId || existingStoryEnt?.id || existingLore?.id || `npc-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+          let targetLoc: CurrentLocationContext = currentLoc;
+          if (p.locationContext && (p.locationContext.locationName || p.locationContext.buildingName || p.locationContext.roomName)) {
+            const matchedBuilding = p.locationContext.buildingName
+              ? LocationContextService.resolveBuilding(holdings, p.locationContext.buildingName, p.locationContext.locationName || currentLoc.locationName)
+              : undefined;
+            const matchedRoom = LocationContextService.resolveRoom(matchedBuilding, p.locationContext.roomName);
+            targetLoc = {
+              locationName: p.locationContext.locationName || currentLoc.locationName,
+              buildingId: matchedBuilding?.id,
+              buildingName: matchedBuilding?.name || p.locationContext.buildingName,
+              roomId: matchedRoom.roomId,
+              roomName: matchedRoom.roomName,
+              territoryName: currentLoc.territoryName,
+              regionName: currentLoc.regionName,
+              sceneId: currentLoc.sceneId
+            };
+          }
+
+          const targetSceneId = currentLoc.sceneId;
+          const finalState: 'absent' | 'present' | 'scene_participant' = (p.state === 'scene_participant' && (!targetSceneId || targetSceneId.trim() === '')) ? 'present' : p.state;
+
+          npcs.push({
+            id: entityId,
+            name: cleanName,
+            role: 'Anwesender Charakter',
+            bio: 'In der Geschichte anwesender Charakter.',
+            personality: 'Unbekannt',
+            relationship: 'Neu anwesend',
+            conduct: 'Neutral',
+            currentSituation: finalState === 'scene_participant' ? 'Nimmt aktiv an der Szene teil' : 'Am Ort anwesend',
+            currentLocationContext: targetLoc,
+            presenceState: {
+              state: finalState,
+              sceneId: finalState === 'scene_participant' ? targetSceneId : undefined,
+              locationContext: targetLoc,
+              updatedAt: now
+            },
+            appearance: {
+              hairColor: 'Unbekannt',
+              eyeColor: 'Unbekannt',
+              age: 'Unbekannt',
+              build: 'Unbekannt',
+              gender: 'Unbekannt'
+            },
+            campaignPowerLevels: {},
+            attributes: [],
+            isHostile: false
+          });
+
+          if (!existingLore && !existingStoryEnt) {
+            storyEntities.push({
+              id: entityId,
+              category: 'Charaktere',
+              title: cleanName,
+              description: `In der Geschichte anwesender Charakter (${cleanName}).`,
+              details: {
+                npcId: entityId,
+                role: 'Charakter'
+              },
+              createdAt: now,
+              isNewInStory: true,
+              promotedToCodex: false
+            });
+            notifications.push({
+              id: Math.random().toString(),
+              type: 'add',
+              title: `${cleanName} (Charaktere)`,
+              category: 'Story-Info'
+            });
+          } else if (existingStoryEnt && !existingStoryEnt.details?.npcId) {
+            existingStoryEnt.details = { ...existingStoryEnt.details, npcId: entityId };
+          }
+        }
       }
     });
 
     return {
       ...adventure,
-      npcs
+      npcs,
+      storyState: {
+        ...(adventure.storyState || {
+          currentLocationName: '',
+          currentTerritoryName: '',
+          activeSituation: '',
+          activeGoals: [],
+          relationships: [],
+          storyEntities: [],
+          lastUpdatedTime: new Date().toISOString()
+        }),
+        storyEntities,
+        lastUpdatedTime: new Date().toISOString()
+      } as StoryInfoState
     };
   }
 
@@ -706,6 +904,7 @@ export class AIStoryStateProcessor {
    * Processes Events & Tasks.
    * Problems in the world do NOT automatically become assigned player tasks.
    * Only entries with isPlayerTask === true are added to active goals.
+   * Also ensures new events land in temporary Story Entities.
    */
   private static processEvents(
     adventure: Adventure,
@@ -714,7 +913,8 @@ export class AIStoryStateProcessor {
   ): Adventure {
     const storyState = adventure.storyState ? {
       ...adventure.storyState,
-      activeGoals: [...(adventure.storyState.activeGoals || [])]
+      activeGoals: [...(adventure.storyState.activeGoals || [])],
+      storyEntities: [...(adventure.storyState.storyEntities || [])]
     } : {
       currentLocationName: '',
       currentTerritoryName: '',
@@ -725,16 +925,48 @@ export class AIStoryStateProcessor {
       lastUpdatedTime: new Date().toISOString()
     };
 
+    const storyEntities = storyState.storyEntities;
+    const loreDb = adventure.loreDatabase || [];
+
     events.forEach(e => {
       if (!e || !e.title) return;
-      if (e.isPlayerTask && e.title) {
-        const goalExists = storyState.activeGoals.some(g => g.toLowerCase() === e.title.toLowerCase());
+      const cleanTitle = e.title.trim();
+      if (!cleanTitle) return;
+
+      const lower = cleanTitle.toLowerCase();
+      const inStory = storyEntities.some(s => s.title.trim().toLowerCase() === lower);
+      const inLore = loreDb.some(l => l.title.trim().toLowerCase() === lower);
+
+      if (!inStory && !inLore) {
+        storyEntities.push({
+          id: `story-event-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          category: 'Story & Quests',
+          title: cleanTitle,
+          description: e.description || `Ereignis / Quest: ${cleanTitle}`,
+          details: {
+            type: e.type,
+            isPlayerTask: e.isPlayerTask
+          },
+          createdAt: new Date().toISOString(),
+          isNewInStory: true,
+          promotedToCodex: false
+        });
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'add',
+          title: `${cleanTitle} (Story & Quests)`,
+          category: 'Story-Info'
+        });
+      }
+
+      if (e.isPlayerTask) {
+        const goalExists = storyState.activeGoals.some(g => g.toLowerCase() === lower);
         if (!goalExists) {
-          storyState.activeGoals.push(e.title);
+          storyState.activeGoals.push(cleanTitle);
           notifications.push({
             id: Math.random().toString(),
             type: 'add',
-            title: `Aufgabe: ${e.title}`,
+            title: `Aufgabe: ${cleanTitle}`,
             category: 'Story & Quests'
           });
         }
@@ -746,6 +978,78 @@ export class AIStoryStateProcessor {
     return {
       ...adventure,
       storyState: storyState as StoryInfoState
+    };
+  }
+
+  /**
+   * Processes Inventory Changes.
+   * New items land in temporary Story Entities and are added to inventory.
+   */
+  private static processInventoryChanges(
+    adventure: Adventure,
+    inventoryChanges: AIInventoryChange[],
+    notifications: any[]
+  ): Adventure {
+    const storyEntities = [...(adventure.storyState?.storyEntities || [])];
+    const loreDb = adventure.loreDatabase || [];
+    let updatedInventory = [...(adventure.inventory || [])];
+
+    inventoryChanges.forEach(inv => {
+      if (!inv || !inv.item) return;
+      const cleanItem = inv.item.trim();
+      if (!cleanItem) return;
+
+      const lower = cleanItem.toLowerCase();
+      if (inv.action === 'added') {
+        const existingIdx = updatedInventory.findIndex(i => typeof i === 'string' ? i.toLowerCase() === lower : (i as any)?.name?.toLowerCase() === lower);
+        if (existingIdx === -1) {
+          updatedInventory.push(cleanItem as any);
+        }
+
+        const inStory = storyEntities.some(s => s.category === 'Gegenstände' && s.title.trim().toLowerCase() === lower);
+        const inLore = loreDb.some(l => l.category === 'Gegenstände' && l.title.trim().toLowerCase() === lower);
+        if (!inStory && !inLore) {
+          storyEntities.push({
+            id: `story-item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+            category: 'Gegenstände',
+            title: cleanItem,
+            description: `Im Laufe der Geschichte gefundener / erhaltener Gegenstand (${cleanItem}).`,
+            details: {
+              action: 'added',
+              quantity: inv.quantity || 1
+            },
+            createdAt: new Date().toISOString(),
+            isNewInStory: true,
+            promotedToCodex: false
+          });
+          notifications.push({
+            id: Math.random().toString(),
+            type: 'add',
+            title: `${cleanItem} (Gegenstände)`,
+            category: 'Story-Info'
+          });
+        }
+      } else if (inv.action === 'removed') {
+        updatedInventory = updatedInventory.filter(i => typeof i === 'string' ? i.toLowerCase() !== lower : (i as any)?.name?.toLowerCase() !== lower);
+      }
+    });
+
+    return {
+      ...adventure,
+      inventory: updatedInventory,
+      storyState: {
+        ...(adventure.storyState || {
+          currentLocationName: '',
+          currentTerritoryName: '',
+          activeSituation: '',
+          activeGoals: [],
+          relationships: [],
+          storyEntities: [],
+          lastUpdatedTime: new Date().toISOString()
+        }),
+        storyEntities,
+        lastUpdatedTime: new Date().toISOString()
+      } as StoryInfoState
     };
   }
 

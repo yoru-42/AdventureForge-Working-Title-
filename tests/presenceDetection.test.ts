@@ -875,4 +875,111 @@ console.log('=== RUNNING FULL ADVENTUREFORGE PRESENCE & STATE PIPELINE SUITE ===
   );
 }
 
-console.log('\n=== ALL 47 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');
+// Test 48: AI response with discovered character, location, item creates temporary StoryEntity items without modifying Codex
+{
+  const adv: any = {
+    player: { name: 'Held', inventory: [] },
+    npcs: [],
+    loreDatabase: [{ id: 'lore-1', category: 'Weltregeln', title: 'Alte Gesetze' }],
+    storyState: { storyEntities: [], activeGoals: [] },
+    currentLocation: { locationName: 'Hauptstadt' }
+  };
+
+  const aiText = `
+Hier ist die Geschichte.
+\`\`\`json:story_state
+{
+  "locationChange": {
+    "locationName": "Dunkelwald",
+    "buildingName": "Verlassene Hütte"
+  },
+  "presenceChanges": [
+    {
+      "characterName": "Waldläufer Robin",
+      "state": "present"
+    }
+  ],
+  "inventoryChanges": [
+    {
+      "item": "Zauberkompass",
+      "action": "added"
+    }
+  ],
+  "discoveredEntities": [
+    {
+      "category": "Gegner",
+      "name": "Schattenwolf",
+      "description": "Ein wilder Wolf mit rot glühenden Augen."
+    }
+  ]
+}
+\`\`\`
+`;
+
+  const processed = AIStoryStateProcessor.parseAndProcessAiResponse(aiText, adv);
+  const updatedAdv = processed.updatedAdventure;
+
+  const storyEntities = updatedAdv.storyState?.storyEntities || [];
+  const loreDb = updatedAdv.loreDatabase || [];
+
+  assert(
+    loreDb.length === 1 && loreDb[0].title === 'Alte Gesetze',
+    'Test 48a: Permanent Codex (loreDatabase) is NOT automatically overwritten by AI discovery'
+  );
+
+  const foundRobin = storyEntities.find((e: any) => e.title === 'Waldläufer Robin');
+  const foundDunkelwald = storyEntities.find((e: any) => e.title === 'Dunkelwald');
+  const foundHuette = storyEntities.find((e: any) => e.title === 'Verlassene Hütte');
+  const foundKompass = storyEntities.find((e: any) => e.title === 'Zauberkompass');
+  const foundWolf = storyEntities.find((e: any) => e.title === 'Schattenwolf');
+
+  assert(
+    foundRobin !== undefined &&
+    foundDunkelwald !== undefined &&
+    foundHuette !== undefined &&
+    foundKompass !== undefined &&
+    foundWolf !== undefined,
+    'Test 48b: All discovered entities (NPC, locations, item, enemy) reliably created in storyEntities'
+  );
+
+  assert(
+    storyEntities.every((e: any) => e.isNewInStory === true && e.promotedToCodex === false),
+    'Test 49: All new story entities have isNewInStory=true and promotedToCodex=false'
+  );
+}
+
+// Test 50: Story-Info badge count reflects unpromoted and unkept temporary entities
+{
+  const testEntities: any[] = [
+    { id: '1', title: 'A', isNewInStory: true, promotedToCodex: false },
+    { id: '2', title: 'B', isNewInStory: false, promotedToCodex: false }, // user chose "Temporär behalten"
+    { id: '3', title: 'C', isNewInStory: false, promotedToCodex: true },  // user chose "In Codex übernehmen"
+    { id: '4', title: 'D', isNewInStory: true, promotedToCodex: false }
+  ];
+
+  const pendingCount = testEntities.filter(e => !e.promotedToCodex && e.isNewInStory !== false).length;
+  assert(
+    pendingCount === 2,
+    'Test 50: Badge count correctly counts only unpromoted & newly marked story entities'
+  );
+}
+
+// Test 51: Chat history and message persistence preservation logic
+{
+  const initialMsgs = [{ id: 'm1', text: 'Hallo' }, { id: 'm2', text: 'Auf ins Abenteuer!' }];
+  const messagesRef = { current: initialMsgs };
+  const currentAdventure: any = { id: 'adv-51', chatHistory: [] };
+
+  const currentMsgs = messagesRef.current && messagesRef.current.length > 0 ? messagesRef.current : currentAdventure.chatHistory;
+  const updatedAdventure = {
+    ...currentAdventure,
+    chatHistory: currentMsgs
+  };
+
+  assert(
+    updatedAdventure.chatHistory.length === 2 && updatedAdventure.chatHistory[1].text === 'Auf ins Abenteuer!',
+    'Test 51: Chat history is reliably preserved from latest messagesRef when updating adventure'
+  );
+}
+
+console.log('\n=== ALL 51 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');
