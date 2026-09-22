@@ -6,6 +6,7 @@ import {
   AIKnowledgeUpdate,
   AIStoryEvent,
   AIInventoryChange,
+  AIBodyConditionChange,
   AIRelationshipChange,
   AIWorldChange,
   AIStoryStateChanges,
@@ -21,6 +22,7 @@ import {
 import { jsonrepair } from 'jsonrepair';
 import { LocationContextService } from './locationContextService';
 import { CharacterKnowledgeService } from './characterKnowledgeService';
+import { EquipmentConditionService } from './equipmentConditionService';
 
 export interface EnsureStoryEntityOptions {
   id?: string;
@@ -91,6 +93,7 @@ Zusätzlich zu deiner narrativen Antwort MUSST du am Ende deiner Ausgabe zwingen
     }
   ],
   "inventoryChanges": [],
+  "bodyConditionChanges": [],
   "relationshipChanges": [],
   "worldChanges": []
 }
@@ -109,6 +112,9 @@ STRIKTE REGELN FÜR DEN STRUKTURIERTEN ZUSTAND:
    - Wähle 'learnedByPlayer': true NUR dann, wenn die Information dem Spieler in der Szene explizit mitgeteilt wurde.
 5. AUFGABEN & EVENTS:
    - Ein Problem in der Welt erzeugt NICHT automatisch eine aktive Spieleraufgabe. Setze 'isPlayerTask': true NUR wenn die Aufgabe dem Spieler plausibel erteilt wurde.
+6. INVENTAR, AUSRÜSTUNG & KÖRPERLICHE ZUSTÄNDE:
+   - Wenn Charaktere gefesselt, gebunden, verletzt oder ausgerüstet werden, nutze 'inventoryChanges' (mit action 'attach', 'detach', 'equip', 'unequip', 'added', 'removed') oder 'bodyConditionChanges' (mit action 'added', 'removed', 'updated').
+   - WICHTIG: 'Nicht erwähnt bedeutet nicht entfernt!' Aktive Fesseln, Ausrüstungen und körperliche Zustände bleiben dauerhaft bestehen, bis sie explizit mit 'detach', 'unequip' oder 'removed' beendet werden.
 `;
 
 export class AIStoryStateProcessor {
@@ -290,18 +296,51 @@ export class AIStoryStateProcessor {
 
     // 6. Validate inventoryChanges
     if (Array.isArray(raw.inventoryChanges)) {
+      const allowedActions = ['added', 'removed', 'updated', 'equip', 'unequip', 'attach', 'detach'];
       validated.inventoryChanges = raw.inventoryChanges.filter((inv: any) => {
         if (!inv || typeof inv !== 'object') return false;
         if (typeof inv.item !== 'string' || !inv.item.trim()) return false;
         return true;
       }).map((inv: any) => ({
         item: String(inv.item).trim(),
-        action: (inv.action === 'added' || inv.action === 'removed' || inv.action === 'updated') ? inv.action : 'added',
-        quantity: typeof inv.quantity === 'number' ? inv.quantity : 1
+        action: allowedActions.includes(inv.action) ? inv.action : 'added',
+        quantity: typeof inv.quantity === 'number' ? inv.quantity : 1,
+        ownerId: typeof inv.ownerId === 'string' ? inv.ownerId : undefined,
+        ownerName: typeof inv.ownerName === 'string' ? inv.ownerName : undefined,
+        slot: typeof inv.slot === 'string' ? inv.slot : undefined,
+        bodyAreas: Array.isArray(inv.bodyAreas) ? inv.bodyAreas.map((a: any) => String(a)) : undefined,
+        isRestraint: Boolean(inv.isRestraint || inv.action === 'attach'),
+        condition: typeof inv.condition === 'string' ? inv.condition : undefined,
+        itemInstanceId: typeof inv.itemInstanceId === 'string' ? inv.itemInstanceId : undefined,
+        itemDefinitionId: typeof inv.itemDefinitionId === 'string' ? inv.itemDefinitionId : undefined,
+        description: typeof inv.description === 'string' ? inv.description : undefined
       }));
     }
 
-    // 7. Validate relationshipChanges
+    // 7. Validate bodyConditionChanges
+    if (Array.isArray(raw.bodyConditionChanges)) {
+      const allowedActions = ['added', 'removed', 'updated'];
+      validated.bodyConditionChanges = raw.bodyConditionChanges.filter((bc: any) => {
+        if (!bc || typeof bc !== 'object') return false;
+        if (typeof bc.name !== 'string' || !bc.name.trim()) return false;
+        return true;
+      }).map((bc: any) => ({
+        name: String(bc.name).trim(),
+        action: allowedActions.includes(bc.action) ? bc.action : 'added',
+        type: typeof bc.type === 'string' ? bc.type as any : undefined,
+        characterId: typeof bc.characterId === 'string' ? bc.characterId : undefined,
+        characterName: typeof bc.characterName === 'string' ? bc.characterName : undefined,
+        bodyAreas: Array.isArray(bc.bodyAreas) ? bc.bodyAreas.map((a: any) => String(a)) : undefined,
+        sourceItemInstanceId: typeof bc.sourceItemInstanceId === 'string' ? bc.sourceItemInstanceId : undefined,
+        isRestraint: Boolean(bc.isRestraint || bc.type === 'restraint'),
+        description: typeof bc.description === 'string' ? bc.description : undefined,
+        duration: typeof bc.duration === 'string' ? bc.duration : undefined,
+        severity: typeof bc.severity === 'string' ? bc.severity as any : undefined,
+        isActive: bc.isActive !== undefined ? Boolean(bc.isActive) : true
+      }));
+    }
+
+    // 8. Validate relationshipChanges
     if (Array.isArray(raw.relationshipChanges)) {
       validated.relationshipChanges = raw.relationshipChanges.filter((r: any) => {
         if (!r || typeof r !== 'object') return false;
@@ -315,7 +354,7 @@ export class AIStoryStateProcessor {
       }));
     }
 
-    // 8. Validate worldChanges
+    // 9. Validate worldChanges
     if (Array.isArray(raw.worldChanges)) {
       validated.worldChanges = raw.worldChanges.filter((w: any) => {
         if (!w || typeof w !== 'object') return false;
@@ -439,9 +478,10 @@ export class AIStoryStateProcessor {
       state = this.processEvents(state, changes.events, notifications);
     }
 
-    // 6. Process Inventory Changes
-    if (Array.isArray(changes.inventoryChanges) && changes.inventoryChanges.length > 0) {
-      state = this.processInventoryChanges(state, changes.inventoryChanges, notifications);
+    // 6. Process Inventory & Equipment & Body Condition Changes
+    if ((Array.isArray(changes.inventoryChanges) && changes.inventoryChanges.length > 0) ||
+        (Array.isArray(changes.bodyConditionChanges) && changes.bodyConditionChanges.length > 0)) {
+      state = this.processInventoryChanges(state, changes.inventoryChanges || [], changes.bodyConditionChanges || [], notifications);
     }
 
     // 7. Process Relationships
@@ -1069,42 +1109,50 @@ export class AIStoryStateProcessor {
   }
 
   /**
-   * Processes Inventory Changes.
-   * New items land in temporary Story Entities and are added to inventory.
+   * Processes Inventory, Equipment, Restraint & Body Condition Changes.
+   * New items land in temporary Story Entities and are added to inventory / equipment.
    */
   private static processInventoryChanges(
     adventure: Adventure,
     inventoryChanges: AIInventoryChange[],
+    bodyConditionChanges: AIBodyConditionChange[],
     notifications: any[]
   ): Adventure {
-    let storyEntities = [...(adventure.storyState?.storyEntities || [])];
-    const loreDb = adventure.loreDatabase || [];
-    let updatedInventory = [...(adventure.inventory || [])];
+    // 1. First process canonical item & equipment & condition state through service
+    let updatedAdventure = EquipmentConditionService.processAiStateChanges(
+      adventure,
+      inventoryChanges,
+      bodyConditionChanges,
+      notifications
+    );
+
+    let storyEntities = [...(updatedAdventure.storyState?.storyEntities || [])];
+    const loreDb = updatedAdventure.loreDatabase || [];
 
     inventoryChanges.forEach(inv => {
       if (!inv || !inv.item) return;
       const cleanItem = inv.item.trim();
       if (!cleanItem) return;
 
-      const lower = cleanItem.toLowerCase();
-      if (inv.action === 'added') {
-        const existingIdx = updatedInventory.findIndex(i => typeof i === 'string' ? i.toLowerCase() === lower : (i as any)?.name?.toLowerCase() === lower);
-        if (existingIdx === -1) {
-          updatedInventory.push(cleanItem as any);
-        }
-
+      if (inv.action === 'added' || inv.action === 'attach' || inv.action === 'equip') {
+        const isRestraint = inv.action === 'attach' || inv.isRestraint;
         const ensured = this.ensureStoryEntity(storyEntities, {
           category: 'Gegenstände',
           title: cleanItem,
-          description: `Im Laufe der Geschichte gefundener / erhaltener Gegenstand (${cleanItem}).`,
+          description: isRestraint
+            ? `Im Laufe der Geschichte angelegte Fesselung / Fixierung (${cleanItem}).`
+            : `Im Laufe der Geschichte gefundener / erhaltener Gegenstand (${cleanItem}).`,
           details: {
-            action: 'added',
-            quantity: inv.quantity || 1
+            action: inv.action,
+            quantity: inv.quantity || 1,
+            isRestraint,
+            bodyAreas: inv.bodyAreas,
+            ownerId: inv.ownerId || inv.ownerName || 'player'
           }
         }, loreDb);
         storyEntities = ensured.updatedList;
 
-        if (ensured.isNew) {
+        if (ensured.isNew && inv.action === 'added') {
           notifications.push({
             id: Math.random().toString(),
             type: 'add',
@@ -1112,16 +1160,13 @@ export class AIStoryStateProcessor {
             category: 'Story-Info'
           });
         }
-      } else if (inv.action === 'removed') {
-        updatedInventory = updatedInventory.filter(i => typeof i === 'string' ? i.toLowerCase() !== lower : (i as any)?.name?.toLowerCase() !== lower);
       }
     });
 
     return {
-      ...adventure,
-      inventory: updatedInventory,
+      ...updatedAdventure,
       storyState: {
-        ...(adventure.storyState || {
+        ...(updatedAdventure.storyState || {
           currentLocationName: '',
           currentTerritoryName: '',
           activeSituation: '',

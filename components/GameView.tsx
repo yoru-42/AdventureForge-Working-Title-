@@ -2408,18 +2408,23 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     const structuredInv = adventure.structuredInventory;
     const getVal = (val: any) => typeof val === 'string' ? val : (val?.name || '');
     const inventoryList = (adventure.inventory || []).map(getVal).filter(Boolean);
-    
-    if (!structuredInv) {
-      if (inventoryList.length > 0) {
-        return `Tasche: ${inventoryList.join(', ')}`;
-      }
-      return 'Keine Gegenstände oder Ausrüstung im Inventar.';
-    }
 
     const parts: string[] = [];
+
+    // Active Restraints / Fesselungen & Fixierungen
+    const activeRestraints = (adventure.player.appearance?.activeConditions || [])
+      .filter(c => (c.isRestraint || c.type === 'restraint' || c.category?.toLowerCase().includes('fessel')) && c.isActive);
+    const equipRestraints = (adventure.equipmentState || []).filter(e => e.ownerId === 'player' && e.equipped && e.isRestraint);
+
+    if (activeRestraints.length > 0 || equipRestraints.length > 0) {
+      const restraintNames = new Set<string>();
+      activeRestraints.forEach(r => restraintNames.add(`${r.name} (fixiert an ${r.bodyAreas ? r.bodyAreas.join(', ') : 'Hände/Arme'})`));
+      equipRestraints.forEach(e => restraintNames.add(`${e.itemName} (fixiert an ${e.bodyAreas ? e.bodyAreas.join(', ') : 'Hände/Arme'})`));
+      parts.push(`⚠️ AKTIVE KÖRPERLICHE FESSELUNGEN / FIXIERUNGEN (DAUERHAFT AKTIV & ZWINGEND ZU BEACHTEN): ${Array.from(restraintNames).join('; ')}\n        [REGEL: Diese Fesselung/Einschränkung bleibt uneingeschränkt bestehen und behindert den Charakter bei Aktionen, bis sie in der Spielwelt explizit gelöst oder zerstört wird!]`);
+    }
     
     // Armor/Clothing
-    const armor = structuredInv.armor || {};
+    const armor = structuredInv?.armor || {};
     const armorParts: string[] = [];
     if (armor.head) armorParts.push(`Kopf: ${getVal(armor.head)}`);
     if (armor.chest) armorParts.push(`Torso/Kleidung: ${getVal(armor.chest)}`);
@@ -2433,7 +2438,7 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     }
 
     // Accessories
-    const acc = structuredInv.accessories || {};
+    const acc = structuredInv?.accessories || {};
     const accParts: string[] = [];
     if (acc.finger) accParts.push(`Finger: ${getVal(acc.finger)}`);
     if (acc.neck) accParts.push(`Hals: ${getVal(acc.neck)}`);
@@ -2445,20 +2450,20 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     }
 
     // Weapons
-    const weapons = (structuredInv.weapons || []).map(getVal).filter(Boolean);
+    const weapons = (structuredInv?.weapons || []).map(getVal).filter(Boolean);
     if (weapons.length > 0) {
       parts.push(`Ausgerüstete Waffen: ${weapons.join(', ')}`);
     }
 
     // General items
-    const general = (structuredInv.generalItems || []).map(getVal).filter(Boolean);
-    const allItems = [...general, ...inventoryList];
+    const general = (structuredInv?.generalItems || []).map(getVal).filter(Boolean);
+    const allItems = Array.from(new Set([...general, ...inventoryList]));
     if (allItems.length > 0) {
       parts.push(`Im Besitz (Tasche/Verbrauchsgüter): ${allItems.join(', ')}`);
     }
 
     // Money
-    if (structuredInv.money !== undefined) {
+    if (structuredInv?.money !== undefined) {
       parts.push(`Vermögen: ${structuredInv.money} ${structuredInv.currencyLabel || 'Goldstücke'}`);
     }
 

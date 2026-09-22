@@ -11,21 +11,50 @@ export interface StatusElement {
   value: string;
 }
 
-export type BodyConditionType = 'gender_change' | 'race_change' | 'curse' | 'blessing' | 'magical_mutation';
+export type BodyArea =
+  | 'head'
+  | 'face'
+  | 'neck'
+  | 'shoulders'
+  | 'arms'
+  | 'hands'
+  | 'chest'
+  | 'back'
+  | 'waist'
+  | 'legs'
+  | 'feet'
+  | 'whole_body'
+  | string;
+
+export type BodyConditionType =
+  | 'gender_change'
+  | 'race_change'
+  | 'curse'
+  | 'blessing'
+  | 'magical_mutation'
+  | 'restraint'
+  | 'injury'
+  | 'physical_condition'
+  | 'special';
 
 export interface BodyCondition {
   id: string;
   name: string;
   type: BodyConditionType;
-  category?: string; // 'Geschlechtswechsel' | 'Rassenwechsel' | 'Fluch' | 'Segen' | 'Mutation' | 'Spezial'
-  icon?: string; // Emoji oder Symbol (z.B. '⚧️', '🧝', '☠️', '🪽', '🦊', '🦇', '🔥', '❄️')
+  category?: string; // 'Geschlechtswechsel' | 'Rassenwechsel' | 'Fluch' | 'Segen' | 'Mutation' | 'Spezial' | 'Fesselung / Fixierung' | 'Verletzung' | 'Körperlicher Zustand'
+  icon?: string;
   isActive: boolean;
   severity?: 'leicht' | 'mittel' | 'stark' | 'vollständig';
-  source?: string; // z.B. 'Göttin der Sonne', 'Uralter Hexenfluch', 'Verwandlungstrank', 'Blutritual'
-  duration?: string; // 'Permanent', 'Bis Sonnenaufgang', 'Temporär', 'Bis Fluch gebrochen'
+  source?: string; // z.B. 'Eisenfesseln', 'Göttin der Sonne', 'Uralter Hexenfluch', 'Verwandlungstrank', 'Blutritual'
+  duration?: string; // 'Permanent', 'Bis Sonnenaufgang', 'Temporär', 'Bis Fluch gebrochen', 'Bis gelöst'
   triggerCondition?: string; // z.B. 'Jeden Vollmond', 'Bei Absinken der HP unter 30%', 'Bei Sonnenuntergang', 'Nutzung von Magie', 'Alle 3 Tage', 'Nach Rast', 'Dauerhaft'
   linkedTransformationId?: string; // Verknüpfte Transformation / Auslöser-Form (z.B. ID einer Fähigkeit)
   description: string;
+
+  // Körperbereiche & Ausrüstungs-Referenzen
+  bodyAreas?: BodyArea[];
+  sourceItemInstanceId?: string;
+  isRestraint?: boolean;
 
   // Physische & visuelle Körper-Modifikatoren
   overrideGender?: 'Männlich' | 'Weiblich' | 'Androgyn' | 'Hermaphrodit' | 'Keines' | string;
@@ -45,12 +74,27 @@ export interface BodyCondition {
   healingFactorModifier?: number; // z.B. +2 Stufen Heilfaktor
   
   // HUD & Rollenspiel-Eigenschaften
-  statusTag?: string; // z.B. '🪽 Gesegnet', '☠️ Gorgonen-Fluch', '⚧️ Feminisierung'
+  statusTag?: string; // z.B. 'Fesselung', 'Gesegnet', 'Gorgonen-Fluch'
   statBuffs?: {
     hpBonus?: number;
     mpBonus?: number;
     staminaBonus?: number;
   };
+}
+
+export interface EquipmentState {
+  itemInstanceId: string;
+  itemDefinitionId?: string;
+  itemName: string;
+  ownerId: string; // 'player' | Character-ID
+  equipped: boolean;
+  isRestraint?: boolean;
+  slot?: 'weapon' | 'shield' | 'head' | 'chest' | 'hands' | 'legs' | 'feet' | 'finger' | 'neck' | 'wrist' | 'waist' | 'back' | 'pocket' | 'bag' | 'inventory' | string;
+  bodyAreas?: BodyArea[];
+  condition?: string;
+  attachedAt?: string;
+  source?: string;
+  description?: string;
 }
 
 export interface SilhouetteState {
@@ -872,6 +916,8 @@ export interface Character {
   characterKnowledge?: CharacterKnowledge; // Strukturiertes Charakterwissen & Wissensstand
   currentLocationContext?: CurrentLocationContext;
   presenceState?: CharacterPresenceState;
+  equipment?: EquipmentState[];
+  inventoryEntries?: InventoryEntry[];
 }
 
 export type InformationType =
@@ -3200,6 +3246,10 @@ export interface Adventure {
   loreDatabase?: LoreEntry[];
   inventory: string[];
   structuredInventory?: StructuredInventory;
+  itemDefinitions?: ItemDefinition[];
+  itemInstances?: ItemInstance[];
+  inventoryEntries?: InventoryEntry[];
+  equipmentState?: EquipmentState[];
   prologue: string;
   firstMessage?: string;
   chatHistory: ChatMessage[];
@@ -3296,8 +3346,32 @@ export interface AIStoryEvent {
 
 export interface AIInventoryChange {
   item: string;
-  action: 'added' | 'removed' | 'updated';
+  action: 'added' | 'removed' | 'updated' | 'equip' | 'unequip' | 'attach' | 'detach';
   quantity?: number;
+  ownerId?: string;
+  ownerName?: string;
+  slot?: string;
+  bodyAreas?: BodyArea[];
+  isRestraint?: boolean;
+  condition?: string;
+  itemInstanceId?: string;
+  itemDefinitionId?: string;
+  description?: string;
+}
+
+export interface AIBodyConditionChange {
+  action: 'added' | 'removed' | 'updated';
+  name: string;
+  type?: BodyConditionType;
+  characterId?: string;
+  characterName?: string;
+  bodyAreas?: BodyArea[];
+  sourceItemInstanceId?: string;
+  isRestraint?: boolean;
+  description?: string;
+  duration?: string;
+  severity?: 'leicht' | 'mittel' | 'stark' | 'vollständig';
+  isActive?: boolean;
 }
 
 export interface AIRelationshipChange {
@@ -3319,6 +3393,7 @@ export interface AIStoryStateChanges {
   knowledgeUpdates?: AIKnowledgeUpdate[];
   events?: AIStoryEvent[];
   inventoryChanges?: AIInventoryChange[];
+  bodyConditionChanges?: AIBodyConditionChange[];
   relationshipChanges?: AIRelationshipChange[];
   worldChanges?: AIWorldChange[];
 }
