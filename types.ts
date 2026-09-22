@@ -2756,6 +2756,101 @@ export interface ItemInstance {
   currentState?: string;
   durability?: number;
   maxDurability?: number;
+  weightKg?: number; // Gewicht in Kilogramm
+  category?: string;
+  isCorpseOrBody?: boolean; // Kennzeichnet Tier- oder Monsterkadaver
+  isHarvestable?: boolean; // Erlaubt Zerlegen / Kristalle sammeln
+  isHeavyOrRestricted?: boolean;
+  sourceLootId?: string; // Verweis auf ursprüngliche Lootquelle
+}
+
+export type LootSourceType =
+  | 'world_item'
+  | 'chest'
+  | 'defeated_enemy'
+  | 'corpse'
+  | 'animal_body'
+  | 'monster_body'
+  | 'battlefield'
+  | 'resource_node';
+
+export interface LootSourceHarvestOptions {
+  allowExamine?: boolean;
+  allowHarvestCrystals?: boolean;
+  crystalYield?: { name: string; quantity: number; weightKg?: number; category?: string }[];
+  allowButcher?: boolean;
+  butcherYield?: { name: string; quantity: number; weightKg?: number; category?: string }[];
+  allowTakeBody?: boolean;
+  bodyItem?: ItemInstance;
+  isBodyHarvested?: boolean;
+  isCrystalsHarvested?: boolean;
+}
+
+export interface LootSource {
+  id: string;
+  type: LootSourceType;
+  title: string;
+  description?: string;
+  sourceCharacterId?: string;
+  sourceCharacterName?: string;
+  locationContext?: CurrentLocationContext;
+  items: ItemInstance[];
+  rawResources?: { name: string; quantity: number; unit?: string; category?: string; weightKg?: number }[];
+  harvestOptions?: LootSourceHarvestOptions;
+  factionOwner?: string;
+  isSearched?: boolean;
+  createdAt?: string;
+}
+
+export interface PendingPickupProposal {
+  id: string;
+  sourceTitle: string;
+  sourceType: LootSourceType;
+  items: ItemInstance[];
+  lootSourceId?: string;
+  sourceCharacterId?: string;
+  isDangerousOrHeavy?: boolean;
+  requiresExplicitConfirmation?: boolean;
+  timestamp?: string;
+}
+
+export interface InventoryNotification {
+  id: string;
+  itemName: string;
+  quantity: number;
+  weightKg?: number;
+  action: 'gained' | 'lost' | 'equipped' | 'unequipped' | 'dropped' | 'harvested' | 'used';
+  timestamp?: string;
+}
+
+export interface CollectionTask {
+  id: string;
+  title: string;
+  description?: string;
+  targetQuantity: number;
+  collectedQuantity: number;
+  unit?: string;
+  itemKeywords?: string[];
+  sourceLocation?: string;
+  assignedToCharacterId?: string; // 'player' oder Begleiter-NPC ID oder 'party'
+  assignedToCharacterName?: string;
+  targetStorage?: 'player' | 'party' | 'faction_storage' | string;
+  status: 'active' | 'completed' | 'abandoned';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WorldDropItem {
+  id: string;
+  itemInstance: ItemInstance;
+  locationContext?: CurrentLocationContext;
+  droppedAtTime?: string;
+  droppedByCharacterId?: string;
+}
+
+export interface InventorySettings {
+  pickupConfirmationMode?: 'always_confirm' | 'auto_small' | 'auto_all';
+  maxCarryCapacityKg?: number;
 }
 
 /**
@@ -3264,6 +3359,11 @@ export interface Adventure {
   dynamicWorldState?: DynamicWorldState;
   storyState?: StoryInfoState;
   characterKnowledge?: CharacterKnowledge;
+  lootSources?: LootSource[];
+  pendingPickup?: PendingPickupProposal | null;
+  worldDrops?: WorldDropItem[];
+  collectionTasks?: CollectionTask[];
+  inventorySettings?: InventorySettings;
   emotionState?: UserEmotionState;
   physicalChangeHistory?: PhysicalChangeHistoryEntry[];
   npcAppearanceMemory?: Record<string, NPCAppearanceObservation>;

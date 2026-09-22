@@ -32,6 +32,13 @@ import { getAllAdventureCharacters } from '../utils/storyStateExtractor';
 import { LocationContextService } from '../services/locationContextService';
 import { AIStoryStateProcessor, STRUCTURED_STORY_STATE_DIRECTIVE } from '../services/aiStoryStateProcessor';
 import { CharacterPortrait } from './CharacterPortrait';
+import { ItemPickupModal } from './ItemPickupModal';
+import { CombatInventoryModal } from './CombatInventoryModal';
+import { PostCombatPanel } from './PostCombatPanel';
+import { CollectionTasksModal } from './CollectionTasksModal';
+import { InventorySettingsModal } from './InventorySettingsModal';
+import { InventoryLootService } from '../services/inventoryLootService';
+import { LootSource, PendingPickupProposal } from '../types';
 
 
 const baseEmotions = [
@@ -522,6 +529,11 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [showNavigationModal, setShowNavigationModal] = useState(false);
   const [showTradeModal, setShowTradeModal] = useState(false);
   const [showStoryInfoModal, setShowStoryInfoModal] = useState(false);
+  const [activeLootModalSource, setActiveLootModalSource] = useState<LootSource | null>(null);
+  const [showCollectionTasksModal, setShowCollectionTasksModal] = useState(false);
+  const [showInventorySettingsModal, setShowInventorySettingsModal] = useState(false);
+  const [showCombatInventoryModal, setShowCombatInventoryModal] = useState(false);
+  const [showPostCombatPanel, setShowPostCombatPanel] = useState(false);
 
   const pendingStoryEntitiesCount = React.useMemo(() => {
     const entities = adventure.storyState?.storyEntities || [];
@@ -6407,12 +6419,16 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
   };
 
   const handleCancelCombat = () => {
+    const hadOpponents = opponents.length > 0;
     setIsCombatActive(false);
     setIsCombatMenuExpanded(false);
     setCombatSubMenu('main');
     clearCombatActionQueue();
     setSelectedEnemyId('');
     setSelectedEnemyIds([]);
+    if (hadOpponents) {
+      setShowPostCombatPanel(true);
+    }
 
     const currentLocContext = LocationContextService.resolveCurrentLocation(adventure);
     const updatedAdventure = LocationContextService.updateCurrentLocation(adventure, currentLocContext);
@@ -8800,6 +8816,17 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           )}
 
 
+            {showPostCombatPanel && (
+              <PostCombatPanel
+                adventure={adventure}
+                onUpdateAdventure={onUpdateAdventure}
+                onOpenLootSource={(ls) => setActiveLootModalSource(ls)}
+                onOpenCollectionTasks={() => setShowCollectionTasksModal(true)}
+                onContinue={() => setShowPostCombatPanel(false)}
+                defeatedOpponents={opponents.map(o => ({ id: o.id, name: o.name }))}
+              />
+            )}
+
             {error && (
               <div className="mb-2 p-2 bg-red-950/90 border border-red-800/40 rounded-xl text-red-200 text-xs flex justify-between items-center shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-bottom-1 duration-200 gap-2">
                 <span className="flex-1 pr-2">{error}</span>
@@ -8862,6 +8889,18 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
      
               <div className="w-px h-6 bg-slate-700 mx-1"></div>
 
+              {isCombatActive && (
+                <button
+                  type="button"
+                  onClick={() => setShowCombatInventoryModal(true)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-900/60 border border-emerald-600/70 text-emerald-300 hover:bg-emerald-800/80 text-[11px] font-bold transition-all flex items-center gap-1.5 shadow"
+                  title="Kampfinventar & Schnellzugriff öffnen"
+                >
+                  <i className="fa-solid fa-flask text-xs"></i>
+                  <span>Kampfmittel</span>
+                </button>
+              )}
+
               {!isCombatActive && (
                 <>
                   <button
@@ -8885,6 +8924,31 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   <div className="w-px h-6 bg-slate-700 mx-1"></div>
                 </>
               )}
+
+              {/* Sammelaufträge Button */}
+              <button
+                type="button"
+                onClick={() => setShowCollectionTasksModal(true)}
+                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:bg-slate-700 hover:text-sky-300 transition-all flex items-center justify-center shadow-lg active:scale-95 relative"
+                title="Sammelaufträge & Bergungslogistik"
+              >
+                <i className="fa-solid fa-clipboard-list text-xs"></i>
+                {(adventure.collectionTasks || []).filter(t => t.status === 'active').length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-sky-500 text-slate-950 font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center">
+                    {(adventure.collectionTasks || []).filter(t => t.status === 'active').length}
+                  </span>
+                )}
+              </button>
+
+              {/* Inventar-Einstellungen */}
+              <button
+                type="button"
+                onClick={() => setShowInventorySettingsModal(true)}
+                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95"
+                title="Inventar- & Aufnahmeeinstellungen"
+              >
+                <i className="fa-solid fa-sliders text-xs"></i>
+              </button>
      
               <button
                 onClick={() => insertFormatting('*', '*')}
@@ -11639,6 +11703,57 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             </div>
           </div>
         </div>
+      )}
+
+      {/* Item Pickup Confirmation Modal */}
+      {adventure.pendingPickup && (
+        <ItemPickupModal
+          adventure={adventure}
+          proposal={adventure.pendingPickup}
+          onUpdateAdventure={onUpdateAdventure}
+          onClose={() => onUpdateAdventure({ ...adventure, pendingPickup: null })}
+        />
+      )}
+
+      {/* Loot Source Modal */}
+      {activeLootModalSource && (
+        <ItemPickupModal
+          adventure={adventure}
+          lootSource={activeLootModalSource}
+          onUpdateAdventure={onUpdateAdventure}
+          onClose={() => setActiveLootModalSource(null)}
+        />
+      )}
+
+      {/* Combat Inventory Modal */}
+      {showCombatInventoryModal && (
+        <CombatInventoryModal
+          adventure={adventure}
+          onUpdateAdventure={onUpdateAdventure}
+          onClose={() => setShowCombatInventoryModal(false)}
+          playerHp={playerHp}
+          playerMaxHp={playerMaxHp}
+          playerMp={playerMp}
+          playerMaxMp={playerMaxMp}
+        />
+      )}
+
+      {/* Collection Tasks Modal */}
+      {showCollectionTasksModal && (
+        <CollectionTasksModal
+          adventure={adventure}
+          onUpdateAdventure={onUpdateAdventure}
+          onClose={() => setShowCollectionTasksModal(false)}
+        />
+      )}
+
+      {/* Inventory Settings Modal */}
+      {showInventorySettingsModal && (
+        <InventorySettingsModal
+          adventure={adventure}
+          onUpdateAdventure={onUpdateAdventure}
+          onClose={() => setShowInventorySettingsModal(false)}
+        />
       )}
     </div>
   );

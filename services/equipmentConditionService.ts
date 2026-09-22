@@ -11,8 +11,10 @@ import {
   InventoryEntry,
   StructuredInventory,
   AIInventoryChange,
-  AIBodyConditionChange
+  AIBodyConditionChange,
+  PendingPickupProposal
 } from '../types';
+import { InventoryLootService } from './inventoryLootService';
 
 export class EquipmentConditionService {
   /**
@@ -1221,15 +1223,63 @@ export class EquipmentConditionService {
         } else if (inv.action === 'removed') {
           currentAdventure = this.destroyItem(currentAdventure, targetId, inv.itemInstanceId || cleanItem, { itemInstanceId: inv.itemInstanceId });
         } else if (inv.action === 'added') {
-          let updatedInv = [...(currentAdventure.inventory || [])];
-          const lower = cleanItem.toLowerCase();
-          if (!updatedInv.some(i => typeof i === 'string' ? i.toLowerCase() === lower : (i as any)?.name?.toLowerCase() === lower)) {
-            updatedInv.push(cleanItem);
-          }
-          currentAdventure = {
-            ...currentAdventure,
-            inventory: updatedInv
+          const singleWeight = InventoryLootService.inferWeightFromText(cleanItem, inv.description);
+          const instId = inv.itemInstanceId || `item-inst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+          const defId = inv.itemDefinitionId || `item-def-${cleanItem.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+
+          const tempInst: ItemInstance = {
+            id: instId,
+            itemDefinitionId: defId,
+            name: cleanItem,
+            condition: inv.condition || 'gut',
+            quantity: 1,
+            weightKg: singleWeight,
+            category: 'Gegenstände',
+            owner: targetId
           };
+
+          if (targetId === 'player') {
+            const mode = currentAdventure.inventorySettings?.pickupConfirmationMode || 'always_confirm';
+            const capacity = InventoryLootService.getCarryCapacity(currentAdventure, 'player');
+            const autoAllowed = InventoryLootService.isAutoPickupAllowed(tempInst, mode, capacity.remainingCapacityKg);
+
+            if (autoAllowed) {
+              const pickupRes = InventoryLootService.pickupItems(currentAdventure, 'player', [{ item: tempInst }]);
+              currentAdventure = pickupRes.updatedAdventure;
+              notifications.push(...pickupRes.notifications.map(n => ({
+                id: Math.random().toString(),
+                type: 'add',
+                title: `[Gegenstand erhalten] +1 ${cleanItem}`,
+                category: 'Gegenstände'
+              })));
+            } else {
+              // Not auto-picked up -> Create PendingPickupProposal so player can decide
+              const proposal: PendingPickupProposal = {
+                id: `pickup-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                sourceTitle: cleanItem,
+                sourceType: 'world_item',
+                items: [tempInst],
+                timestamp: new Date().toISOString()
+              };
+              currentAdventure = {
+                ...currentAdventure,
+                pendingPickup: proposal
+              };
+              notifications.push({
+                id: Math.random().toString(),
+                type: 'add',
+                title: `[Gegenstand entdeckt] ${cleanItem} (${singleWeight.toFixed(1)} kg) - Aufnahme bestätigen?`,
+                category: 'Gegenstände'
+              });
+            }
+          } else {
+            // NPC inventory
+            const itemInstances = [...(currentAdventure.itemInstances || []), tempInst];
+            currentAdventure = {
+              ...currentAdventure,
+              itemInstances
+            };
+          }
         }
       });
     }
