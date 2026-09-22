@@ -416,7 +416,7 @@ export class AIStoryStateProcessor {
 
     // 1. Process Discovered Entities
     if (Array.isArray(changes.discoveredEntities) && changes.discoveredEntities.length > 0) {
-      state = this.processDiscoveredEntities(state, changes.discoveredEntities, notifications);
+      state = this.processDiscoveredEntities(state, changes.discoveredEntities, notifications, changes.presenceChanges);
     }
 
     // 2. Process Location Change
@@ -520,9 +520,27 @@ export class AIStoryStateProcessor {
       return { updatedList: list, entity: updatedEntity, isNew: false };
     }
 
-    // If already in Codex, we do not mark it as a new pending Story-Info unless explicitly set
+    // If already in Codex and not explicitly forced as newInStory:
+    // Do NOT push a redundant promotedToCodex: true item into storyEntities!
     const isAlreadyInCodex = Boolean(existingLore);
-    const entityId = targetId || linkedNpcId || existingLore?.id || `story-ent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    if (isAlreadyInCodex && !options.isNewInStory) {
+      return {
+        updatedList: list,
+        entity: {
+          id: existingLore!.id,
+          category: options.category,
+          title: existingLore!.title,
+          description: existingLore!.description,
+          details: existingLore!.details,
+          createdAt: now,
+          isNewInStory: false,
+          promotedToCodex: true
+        },
+        isNew: false
+      };
+    }
+
+    const entityId = targetId || linkedNpcId || `story-ent-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const finalDetails = { ...(options.details || {}) };
     if (linkedNpcId && !finalDetails.npcId) {
       finalDetails.npcId = linkedNpcId;
@@ -535,12 +553,27 @@ export class AIStoryStateProcessor {
       description: options.description || `Neuer Story-Eintrag (${cleanTitle}).`,
       details: finalDetails,
       createdAt: now,
-      isNewInStory: options.isNewInStory !== undefined ? options.isNewInStory : !isAlreadyInCodex,
-      promotedToCodex: options.promotedToCodex !== undefined ? options.promotedToCodex : isAlreadyInCodex
+      isNewInStory: options.isNewInStory !== undefined ? options.isNewInStory : true,
+      promotedToCodex: options.promotedToCodex !== undefined ? options.promotedToCodex : false
     };
 
     list.push(newEntity);
-    return { updatedList: list, entity: newEntity, isNew: !isAlreadyInCodex };
+    return { updatedList: list, entity: newEntity, isNew: true };
+  }
+
+  /**
+   * Generates a deterministic fingerprint for initial story message / prologue content.
+   */
+  public static computeMessageFingerprint(text: string): string {
+    if (!text || !text.trim()) return '';
+    const clean = text.trim();
+    let hash = 0;
+    for (let i = 0; i < clean.length; i++) {
+      const char = clean.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash |= 0;
+    }
+    return `fp-${clean.length}-${hash}`;
   }
 
   /**
@@ -552,7 +585,8 @@ export class AIStoryStateProcessor {
   private static processDiscoveredEntities(
     adventure: Adventure,
     entities: AIEntityDiscovery[],
-    notifications: any[] = []
+    notifications: any[] = [],
+    presenceChanges: AIPresenceChange[] = []
   ): Adventure {
     const updatedNpcs = [...(adventure.npcs || [])];
     const loreDb = [...(adventure.loreDatabase || [])];
@@ -633,18 +667,31 @@ export class AIStoryStateProcessor {
             };
           }
 
+          // Rule 5: Discovered ≠ Present! Default to 'absent' unless explicitly marked present
+          const isExplicitlyPresent = discovery.details?.isExplicitlyPresent === true ||
+            (presenceChanges && presenceChanges.some(p =>
+              (p.characterId && p.characterId === ensured.entity.id) ||
+              (p.characterName && p.characterName.trim().toLowerCase() === cleanName.toLowerCase())
+            ) && presenceChanges.find(p =>
+              (p.characterId && p.characterId === ensured.entity.id) ||
+              (p.characterName && p.characterName.trim().toLowerCase() === cleanName.toLowerCase())
+            )?.state !== 'mentioned_only' && presenceChanges.find(p =>
+              (p.characterId && p.characterId === ensured.entity.id) ||
+              (p.characterName && p.characterName.trim().toLowerCase() === cleanName.toLowerCase())
+            )?.state !== 'absent');
+
           updatedNpcs.push({
             id: ensured.entity.id,
             name: cleanName,
             role: discovery.role || (discovery.type === 'creature' ? 'Gegner' : 'Bewohner'),
-            bio: discovery.description || 'In der Geschichte anwesender Charakter.',
+            bio: discovery.description || 'In der Geschichte erwähnter Charakter.',
             personality: 'Unbekannt',
             relationship: 'Neu entdeckt',
             conduct: 'Neutral',
-            currentSituation: 'Neu entdeckt',
+            currentSituation: isExplicitlyPresent ? 'Neu entdeckt (am Ort anwesend)' : 'Neu entdeckt (nicht anwesend)',
             currentLocationContext: initialLocContext,
             presenceState: {
-              state: 'present',
+              state: isExplicitlyPresent ? 'present' : 'absent',
               locationContext: initialLocContext,
               updatedAt: new Date().toISOString()
             },
@@ -676,72 +723,7 @@ export class AIStoryStateProcessor {
       ...adventure,
       npcs: updatedNpcs,
       storyState: {
-        ...adventure.storyState,
-        storyEntities,
-        lastUpdatedTime: new Date().toISOString()
-      } as StoryInfoState
-    };
-  }
-
-  /**
-   * Processes structured Location Change.
-   * Hierarchical priority: Room > Building > Location > Territory > Region.
-   * Updates Adventure.currentLocation canonical context.
-   * Does NOT alter global world currentLocationId or overwrite world settings.
-   */
-  private static processLocationChange(
-    adventure: Adventure,
-    locChange: AILocationChange,
-    notifications: any[]
-  ): Adventure {
-    const existingContext = LocationContextService.resolveCurrentLocation(adventure);
-
-    const newContext: CurrentLocationContext = {
-      locationName: locChange.locationName || existingContext.locationName,
-      buildingId: locChange.buildingId || existingContext.buildingId,
-      buildingName: locChange.buildingName || existingContext.buildingName,
-      roomId: locChange.roomId || existingContext.roomId,
-      roomName: locChange.roomName || existingContext.roomName,
-      territoryName: locChange.territoryName || existingContext.territoryName,
-      regionName: locChange.regionName || existingContext.regionName
-    };
-
-    let updatedAdventure = LocationContextService.updateCurrentLocation(adventure, newContext);
-
-    let storyEntities = [...(updatedAdventure.storyState?.storyEntities || [])];
-    const loreDb = updatedAdventure.loreDatabase || [];
-
-    const ensureDiscoveredLocationEntity = (name: string, category: 'Orte' | 'Gebäude' | 'Räume') => {
-      const clean = name.trim();
-      if (!clean || clean.length < 2) return;
-      const ensured = this.ensureStoryEntity(storyEntities, {
-        category,
-        title: clean,
-        description: `Neu entdeckter ${category === 'Orte' ? 'Ort' : category === 'Gebäude' ? 'Gebäudekomplex' : 'Raum'}: ${clean}.`,
-        details: {
-          locationName: newContext.locationName,
-          buildingName: newContext.buildingName
-        }
-      }, loreDb);
-      storyEntities = ensured.updatedList;
-      if (ensured.isNew) {
-        notifications.push({
-          id: Math.random().toString(),
-          type: 'add',
-          title: `${clean} (${category})`,
-          category: 'Story-Info'
-        });
-      }
-    };
-
-    if (locChange.locationName) ensureDiscoveredLocationEntity(locChange.locationName, 'Orte');
-    if (locChange.buildingName) ensureDiscoveredLocationEntity(locChange.buildingName, 'Gebäude');
-    if (locChange.roomName) ensureDiscoveredLocationEntity(locChange.roomName, 'Räume');
-
-    updatedAdventure = {
-      ...updatedAdventure,
-      storyState: {
-        ...(updatedAdventure.storyState || {
+        ...(adventure.storyState || {
           currentLocationName: '',
           currentTerritoryName: '',
           activeSituation: '',
@@ -754,6 +736,34 @@ export class AIStoryStateProcessor {
         lastUpdatedTime: new Date().toISOString()
       } as StoryInfoState
     };
+  }
+
+  /**
+   * Processes structured Location Change.
+   * Hierarchical priority: Room > Building > Location > Territory > Region.
+   * Updates Adventure.currentLocation canonical context.
+   * Does NOT alter global world currentLocationId or overwrite world settings.
+   * Location change ≠ Discovery (does not generate unprompted Story-Info entries).
+   */
+  private static processLocationChange(
+    adventure: Adventure,
+    locChange: AILocationChange,
+    notifications: any[] = []
+  ): Adventure {
+    const existingContext = LocationContextService.resolveCurrentLocation(adventure);
+
+    const newContext: CurrentLocationContext = {
+      locationName: locChange.locationName || existingContext.locationName,
+      buildingId: locChange.buildingId || existingContext.buildingId,
+      buildingName: locChange.buildingName || existingContext.buildingName,
+      roomId: locChange.roomId || existingContext.roomId,
+      roomName: locChange.roomName || existingContext.roomName,
+      territoryName: locChange.territoryName || existingContext.territoryName,
+      regionName: locChange.regionName || existingContext.regionName,
+      sceneId: locChange.sceneId || existingContext.sceneId
+    };
+
+    let updatedAdventure = LocationContextService.updateCurrentLocation(adventure, newContext);
 
     const locLabel = newContext.roomName
       ? `${newContext.roomName} (${newContext.buildingName || newContext.locationName})`

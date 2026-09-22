@@ -2776,38 +2776,43 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     }
 
     // Initial load state processing: process firstMessage / prologue via AIStoryStateProcessor if not already processed
-    if (!adventure.storyState?.processedFirstMessage) {
+    const messageToProcess = (adventure.firstMessage || adventure.prologue || '').trim();
+    const currentFingerprint = AIStoryStateProcessor.computeMessageFingerprint(messageToProcess);
+
+    if (
+      messageToProcess &&
+      currentFingerprint &&
+      adventure.storyState?.processedFirstMessageFingerprint !== currentFingerprint
+    ) {
       let currentAdv = { ...adventure };
-      let updated = false;
+      try {
+        const processed = AIStoryStateProcessor.parseAndProcessAiResponse(messageToProcess, currentAdv);
+        currentAdv = processed.updatedAdventure;
 
-      if (adventure.firstMessage) {
-        const processed = AIStoryStateProcessor.parseAndProcessAiResponse(adventure.firstMessage, currentAdv);
-        if (processed.hasStructuredData) {
-          currentAdv = processed.updatedAdventure;
-          updated = true;
-        }
+        const finalStoryState: StoryInfoState = {
+          ...(currentAdv.storyState || {
+            currentLocationName: '',
+            currentTerritoryName: '',
+            activeSituation: '',
+            activeGoals: [],
+            relationships: [],
+            storyEntities: [],
+            lastUpdatedTime: new Date().toISOString()
+          }),
+          processedFirstMessage: true,
+          processedFirstMessageFingerprint: currentFingerprint
+        };
+
+        currentAdv = {
+          ...currentAdv,
+          storyState: finalStoryState,
+          chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : currentAdv.chatHistory
+        };
+        adventureRef.current = currentAdv;
+        onUpdateAdventure(currentAdv);
+      } catch (err) {
+        console.warn("[GameView] Error processing initial firstMessage / prologue:", err);
       }
-
-      const finalStoryState: StoryInfoState = {
-        ...(currentAdv.storyState || {
-          currentLocationName: '',
-          currentTerritoryName: '',
-          activeSituation: '',
-          activeGoals: [],
-          relationships: [],
-          storyEntities: [],
-          lastUpdatedTime: new Date().toISOString()
-        }),
-        processedFirstMessage: true
-      };
-
-      currentAdv = {
-        ...currentAdv,
-        storyState: finalStoryState,
-        chatHistory: currentMsgs && currentMsgs.length > 0 ? currentMsgs : currentAdv.chatHistory
-      };
-      adventureRef.current = currentAdv;
-      onUpdateAdventure(currentAdv);
     }
   }, [adventure.id, adventure.chatHistory, adventure.firstMessage, adventure.prologue]);
 
@@ -3598,112 +3603,11 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
 
       if (category === 'Weltkarte') {
         const synced = syncLocationToWorld(title, description, {});
-        notifications.push({
-          id: Math.random().toString(),
-          type: 'add',
-          title: synced.travelTime ? `${title} (${synced.travelTime})` : title,
-          category: 'Weltkarte'
-        });
-        continue;
-      }
-
-      let existsIdx = -1;
-      if (category === 'Charaktere' || category === 'Gegner') {
-        existsIdx = updatedLore.findIndex(e => (e.category === 'Charaktere' || e.category === 'Gegner') && (isNameMatch(e.title, e.details?.nickname, title) || isSimilarLoreTitle(e.title, title)));
-      } else {
-        existsIdx = updatedLore.findIndex(e => e.category === category && isSimilarLoreTitle(e.title, title));
-      }
-
-      if (existsIdx === -1) {
-        let details: any = {};
-        if (category === 'Gegenstände') {
-          const combined = (title + ' ' + description).toLowerCase();
-          let itemType = 'Werkzeuge & Alltags-Gegenstände';
-          let rarity = 'Gewöhnlich';
-          let owner = updatedPlayer.name || 'Spieler';
-
-          // Extract owner if explicitly mentioned in description (e.g. "Besitzer: Zoro" or "Besitz von Luffy")
-          const ownerMatch = description.match(/(?:besitzer|owner|besitz von|in den händen von)\s*:\s*([^,\.\n\|]+)/i) ||
-                             description.match(/(?:gehört|im besitz von)\s+([A-Za-z0-9äöüÄÖÜß\s]+?)(?:[,\.\n]|$)/i);
-          if (ownerMatch && ownerMatch[1]) {
-            const parsedOwner = ownerMatch[1].trim();
-            if (parsedOwner) {
-              owner = parsedOwner;
-            }
-          }
-
-          const weaponKeywords = ['schwert', 'bogen', 'dolch', 'klinge', 'degen', 'gewehr', 'pistole', 'lanze', 'speer', 'axt', 'tsuki no wa', 'säbel', 'katana', 'waffe', 'weapon', 'messer', 'schild', 'drachenschwert', 'lanze', 'kolben', 'hammer'];
-          const armorKeywords = ['kleidung', 'rüstung', 'hemd', 'mantel', 'stiefel', 'handschuhe', 'helm', 'hose', 'panzer', 'robe', 'tunik', 'gewand', 'rüstungsteil'];
-          const accessoryKeywords = ['ring', 'kette', 'amulett', 'halskette', 'armband', 'ohrring', 'schmuck', 'juwel', 'krone', 'reliquie', 'talisman'];
-          const consumableKeywords = ['trank', 'potion', 'elixier', 'apfel', 'brot', 'heiltrank', 'medizin', 'kraut', 'pille', 'nahrung'];
-          const questKeywords = ['schlüssel', 'brief', 'karte', 'buch', 'dokument', 'notiz', 'siegel', 'quest', 'pergament', 'beweis'];
-
-          if (weaponKeywords.some(kw => combined.includes(kw))) {
-            itemType = 'Waffen';
-          } else if (armorKeywords.some(kw => combined.includes(kw))) {
-            itemType = 'Rüstung / Kleidung';
-          } else if (accessoryKeywords.some(kw => combined.includes(kw))) {
-            itemType = 'Artefakte / Zubehör';
-          } else if (consumableKeywords.some(kw => combined.includes(kw))) {
-            itemType = 'Verbrauchsgüter';
-          } else if (questKeywords.some(kw => combined.includes(kw))) {
-            itemType = 'Questgegenstände / Story-Objekte';
-          }
-
-          if (combined.includes('drachenschwert') || combined.includes('saijo o wazamono') || combined.includes('legendär') || combined.includes('göttlich') || combined.includes('artefakt') || combined.includes('supreme grade') || combined.includes('drachen-schwert')) {
-            rarity = 'Legendär';
-          } else if (combined.includes('episch') || combined.includes('meisterhaft') || combined.includes('o wazamono') || combined.includes('great grade')) {
-            rarity = 'Episch';
-          } else if (combined.includes('selten') || combined.includes('rar') || combined.includes('wazamono') || combined.includes('wertvoll')) {
-            rarity = 'Selten';
-          } else if (combined.includes('ungewöhnlich')) {
-            rarity = 'Ungewöhnlich';
-          }
-
-          let isUnique = 'Massenware / Gewöhnlich';
-          if (rarity === 'Legendär' || rarity === 'Episch' || combined.includes('einzigartig') || combined.includes('unikat') || combined.includes('artefakt')) {
-            isUnique = 'Unikat (Existiert nur 1x auf der Welt)';
-          } else if (rarity === 'Selten' || combined.includes('selten')) {
-            isUnique = 'Seltenes Einzelstück';
-          }
-
-          const isPlayerOwned = isPlayerMatch(owner);
-          let currentLocation = isPlayerOwned ? 'Im Besitz des Spielers' : `Im Besitz von ${owner}`;
-          if (combined.includes('gestohlen') || combined.includes('entwendet') || combined.includes('geklaut')) {
-            currentLocation = 'Gestohlen / Entwendet';
-          } else if (combined.includes('verschollen') || combined.includes('verloren') || combined.includes('ruinen')) {
-            currentLocation = 'Verschollen in der Welt';
-          }
-
-          details = {
-            itemType,
-            rarity,
-            owner,
-            isUnique,
-            currentLocation
-          };
-
-          // Synchronize with player's structuredInventory
-          if (isPlayerOwned) {
-            if (itemType === 'Waffen' || weaponKeywords.some(kw => combined.includes(kw))) {
-              if (!updatedStructuredInventory.weapons) updatedStructuredInventory.weapons = [];
-              if (!updatedStructuredInventory.weapons.some((w: string) => w.trim().toLowerCase() === title.trim().toLowerCase())) {
-                updatedStructuredInventory.weapons.push(title);
-              }
-            } else {
-              if (!updatedStructuredInventory.generalItems) updatedStructuredInventory.generalItems = [];
-              if (!updatedStructuredInventory.generalItems.some((i: string) => i.trim().toLowerCase() === title.trim().toLowerCase())) {
-                updatedStructuredInventory.generalItems.push(title);
-              }
-            }
-          }
-        }
-
         const ensured = AIStoryStateProcessor.ensureStoryEntity(updatedStoryEntities, {
-          category,
+          category: 'Weltkarte',
           title,
           description,
-          details
+          details: { travelTime: synced.travelTime }
         }, updatedLore);
         updatedStoryEntities = ensured.updatedList;
 
@@ -3711,40 +3615,112 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
           notifications.push({
             id: Math.random().toString(),
             type: 'add',
-            title: `[Story-Info] Neu: ${title}`,
-            category
+            title: synced.travelTime ? `${title} (${synced.travelTime})` : title,
+            category: 'Weltkarte'
           });
         }
-      } else {
-        const existingEntry = updatedLore[existsIdx];
-        let mergedDetails = { ...existingEntry.details };
-        if (category === 'Gegenstände') {
-          const ownerMatch = description.match(/(?:besitzer|owner|besitz von|in den händen von)\s*:\s*([^,\.\n\|]+)/i);
-          if (ownerMatch && ownerMatch[1]) {
-            mergedDetails.owner = ownerMatch[1].trim();
+        continue;
+      }
+
+      let details: any = {};
+      if (category === 'Gegenstände') {
+        const combined = (title + ' ' + description).toLowerCase();
+        let itemType = 'Werkzeuge & Alltags-Gegenstände';
+        let rarity = 'Gewöhnlich';
+        let owner = updatedPlayer.name || 'Spieler';
+
+        // Extract owner if explicitly mentioned in description (e.g. "Besitzer: Zoro" or "Besitz von Luffy")
+        const ownerMatch = description.match(/(?:besitzer|owner|besitz von|in den händen von)\s*:\s*([^,\.\n\|]+)/i) ||
+                           description.match(/(?:gehört|im besitz von)\s+([A-Za-z0-9äöüÄÖÜß\s]+?)(?:[,\.\n]|$)/i);
+        if (ownerMatch && ownerMatch[1]) {
+          const parsedOwner = ownerMatch[1].trim();
+          if (parsedOwner) {
+            owner = parsedOwner;
           }
         }
 
-        const newDescTrimmed = description?.trim() || '';
-        const oldDescTrimmed = existingEntry.description?.trim() || '';
-        const descChanged = newDescTrimmed && newDescTrimmed !== oldDescTrimmed;
+        const weaponKeywords = ['schwert', 'bogen', 'dolch', 'klinge', 'degen', 'gewehr', 'pistole', 'lanze', 'speer', 'axt', 'tsuki no wa', 'säbel', 'katana', 'waffe', 'weapon', 'messer', 'schild', 'drachenschwert', 'lanze', 'kolben', 'hammer'];
+        const armorKeywords = ['kleidung', 'rüstung', 'hemd', 'mantel', 'stiefel', 'handschuhe', 'helm', 'hose', 'panzer', 'robe', 'tunik', 'gewand', 'rüstungsteil'];
+        const accessoryKeywords = ['ring', 'kette', 'amulett', 'halskette', 'armband', 'ohrring', 'schmuck', 'juwel', 'krone', 'reliquie', 'talisman'];
+        const consumableKeywords = ['trank', 'potion', 'elixier', 'apfel', 'brot', 'heiltrank', 'medizin', 'kraut', 'pille', 'nahrung'];
+        const questKeywords = ['schlüssel', 'brief', 'karte', 'buch', 'dokument', 'notiz', 'siegel', 'quest', 'pergament', 'beweis'];
 
-        updatedLore[existsIdx] = {
-          ...existingEntry,
-          description: descChanged ? description : existingEntry.description,
-          details: mergedDetails,
-          isUnlocked: true
+        if (weaponKeywords.some(kw => combined.includes(kw))) {
+          itemType = 'Waffen';
+        } else if (armorKeywords.some(kw => combined.includes(kw))) {
+          itemType = 'Rüstung / Kleidung';
+        } else if (accessoryKeywords.some(kw => combined.includes(kw))) {
+          itemType = 'Artefakte / Zubehör';
+        } else if (consumableKeywords.some(kw => combined.includes(kw))) {
+          itemType = 'Verbrauchsgüter';
+        } else if (questKeywords.some(kw => combined.includes(kw))) {
+          itemType = 'Questgegenstände / Story-Objekte';
+        }
+
+        if (combined.includes('drachenschwert') || combined.includes('saijo o wazamono') || combined.includes('legendär') || combined.includes('göttlich') || combined.includes('artefakt') || combined.includes('supreme grade') || combined.includes('drachen-schwert')) {
+          rarity = 'Legendär';
+        } else if (combined.includes('episch') || combined.includes('meisterhaft') || combined.includes('o wazamono') || combined.includes('great grade')) {
+          rarity = 'Episch';
+        } else if (combined.includes('selten') || combined.includes('rar') || combined.includes('wazamono') || combined.includes('wertvoll')) {
+          rarity = 'Selten';
+        } else if (combined.includes('ungewöhnlich')) {
+          rarity = 'Ungewöhnlich';
+        }
+
+        let isUnique = 'Massenware / Gewöhnlich';
+        if (rarity === 'Legendär' || rarity === 'Episch' || combined.includes('einzigartig') || combined.includes('unikat') || combined.includes('artefakt')) {
+          isUnique = 'Unikat (Existiert nur 1x auf der Welt)';
+        } else if (rarity === 'Selten' || combined.includes('selten')) {
+          isUnique = 'Seltenes Einzelstück';
+        }
+
+        const isPlayerOwned = isPlayerMatch(owner);
+        let currentLocation = isPlayerOwned ? 'Im Besitz des Spielers' : `Im Besitz von ${owner}`;
+        if (combined.includes('gestohlen') || combined.includes('entwendet') || combined.includes('geklaut')) {
+          currentLocation = 'Gestohlen / Entwendet';
+        } else if (combined.includes('verschollen') || combined.includes('verloren') || combined.includes('ruinen')) {
+          currentLocation = 'Verschollen in der Welt';
+        }
+
+        details = {
+          itemType,
+          rarity,
+          owner,
+          isUnique,
+          currentLocation
         };
 
-        // Only add a notification if the entry was locked previously or newly unlocked
-        if (!existingEntry.isUnlocked) {
-          notifications.push({
-            id: Math.random().toString(),
-            type: 'add',
-            title: `${title} (Freigeschaltet)`,
-            category
-          });
+        // Synchronize with player's structuredInventory
+        if (isPlayerOwned) {
+          if (itemType === 'Waffen' || weaponKeywords.some(kw => combined.includes(kw))) {
+            if (!updatedStructuredInventory.weapons) updatedStructuredInventory.weapons = [];
+            if (!updatedStructuredInventory.weapons.some((w: string) => w.trim().toLowerCase() === title.trim().toLowerCase())) {
+              updatedStructuredInventory.weapons.push(title);
+            }
+          } else {
+            if (!updatedStructuredInventory.generalItems) updatedStructuredInventory.generalItems = [];
+            if (!updatedStructuredInventory.generalItems.some((i: string) => i.trim().toLowerCase() === title.trim().toLowerCase())) {
+              updatedStructuredInventory.generalItems.push(title);
+            }
+          }
         }
+      }
+
+      const ensured = AIStoryStateProcessor.ensureStoryEntity(updatedStoryEntities, {
+        category,
+        title,
+        description,
+        details
+      }, updatedLore);
+      updatedStoryEntities = ensured.updatedList;
+
+      if (ensured.isNew) {
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'add',
+          title: `[Story-Info] Neu: ${title}`,
+          category
+        });
       }
     }
 
@@ -3764,12 +3740,26 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
         parentPlaceId: tParent
       });
 
-      notifications.push({
-        id: Math.random().toString(),
-        type: 'add',
-        title: `${tName} (${tTravel || tType})`,
-        category: 'Weltkarte'
-      });
+      const ensured = AIStoryStateProcessor.ensureStoryEntity(updatedStoryEntities, {
+        category: 'Weltkarte',
+        title: tName,
+        description: tDesc || `Gebiet/Territorium: ${tName} (${tType}).`,
+        details: {
+          type: tType,
+          parentPlaceId: tParent,
+          travelTime: tTravel
+        }
+      }, updatedLore);
+      updatedStoryEntities = ensured.updatedList;
+
+      if (ensured.isNew) {
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'add',
+          title: `${tName} (${tTravel || tType})`,
+          category: 'Weltkarte'
+        });
+      }
     }
 
     // Parse CONDITION_ADD: [[CONDITION_ADD: Name | Typ | Beschreibung | Quelle]]

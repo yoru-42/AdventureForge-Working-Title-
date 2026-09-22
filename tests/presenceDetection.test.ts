@@ -907,7 +907,27 @@ Hier ist die Geschichte.
   ],
   "discoveredEntities": [
     {
-      "category": "Gegner",
+      "type": "character",
+      "name": "Waldläufer Robin",
+      "description": "Ein erfahrener Fährtensucher."
+    },
+    {
+      "type": "location",
+      "name": "Dunkelwald",
+      "description": "Ein dichter, dunkler Wald."
+    },
+    {
+      "type": "building",
+      "name": "Verlassene Hütte",
+      "description": "Eine alte Holzhütte."
+    },
+    {
+      "type": "item",
+      "name": "Zauberkompass",
+      "description": "Ein leuchtender Kompass."
+    },
+    {
+      "type": "creature",
       "name": "Schattenwolf",
       "description": "Ein wilder Wolf mit rot glühenden Augen."
     }
@@ -1082,4 +1102,69 @@ Hier ist die Geschichte.
   );
 }
 
-console.log('\n=== ALL 55 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');
+// Test 56: computeMessageFingerprint produces deterministic hashes and detects differences
+{
+  const msgA = 'Willkommen im Abenteuer! Du stehst vor dem Tor.';
+  const msgB = 'Willkommen im Abenteuer! Du stehst vor dem Palast.';
+  const fpA1 = AIStoryStateProcessor.computeMessageFingerprint(msgA);
+  const fpA2 = AIStoryStateProcessor.computeMessageFingerprint(msgA);
+  const fpB = AIStoryStateProcessor.computeMessageFingerprint(msgB);
+
+  assert(
+    fpA1 === fpA2 && fpA1 !== fpB && fpA1.startsWith('fp-'),
+    'Test 56: computeMessageFingerprint is deterministic and detects message content changes'
+  );
+}
+
+// Test 57: Discovered character defaults to absent unless explicitly marked present
+{
+  const adv: any = {
+    npcs: [],
+    loreDatabase: [],
+    storyState: { storyEntities: [] },
+    currentLocation: { locationName: 'Falkengrund' }
+  };
+
+  const discoveryInput = [
+    { name: 'Dorfältester Otto', type: 'character' as const, description: 'Der alte Älteste des Dorfes.' },
+    { name: 'Wache Torben', type: 'character' as const, description: 'Wache am Stadttor.' }
+  ];
+
+  const presenceInput = [
+    { characterName: 'Wache Torben', state: 'present' as const }
+  ];
+
+  const processed = (AIStoryStateProcessor as any).processDiscoveredEntities(adv, discoveryInput, [], presenceInput);
+  const otto = processed.npcs.find((n: any) => n.name === 'Dorfältester Otto');
+  const torben = processed.npcs.find((n: any) => n.name === 'Wache Torben');
+
+  assert(
+    otto && otto.presenceState.state === 'absent' &&
+    torben && torben.presenceState.state === 'present',
+    'Test 57: Discovered character defaults to absent unless explicitly present in presenceChanges'
+  );
+}
+
+// Test 58: processLocationChange updates currentLocation without generating unprompted Story-Info entities
+{
+  const adv: any = {
+    npcs: [],
+    loreDatabase: [],
+    storyState: { storyEntities: [] },
+    currentLocation: { locationName: 'Altes Dorf' }
+  };
+
+  const processed = (AIStoryStateProcessor as any).processLocationChange(adv, {
+    locationName: 'Neuer Bergpass',
+    buildingName: 'Wachstation'
+  }, []);
+
+  assert(
+    processed.currentLocation.locationName === 'Neuer Bergpass' &&
+    processed.currentLocation.buildingName === 'Wachstation' &&
+    (processed.storyState?.storyEntities || []).length === 0,
+    'Test 58: Location change updates context without polluting storyEntities without discovery'
+  );
+}
+
+console.log('\n=== ALL 58 ADVENTUREFORGE INTEGRATION & PRESENCE TESTS PASSED PERFECTLY ===');

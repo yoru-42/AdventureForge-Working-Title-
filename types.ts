@@ -3186,6 +3186,7 @@ export interface StoryInfoState {
   storyEntities: StoryEntityItem[];
   characterKnowledge?: CharacterKnowledge;
   processedFirstMessage?: boolean;
+  processedFirstMessageFingerprint?: string;
   lastUpdatedTime?: string;
 }
 
@@ -3264,6 +3265,7 @@ export interface AILocationChange {
   roomName?: string;
   territoryName?: string;
   regionName?: string;
+  sceneId?: string;
 }
 
 export interface AIPresenceChange {
