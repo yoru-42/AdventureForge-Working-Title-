@@ -534,6 +534,8 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [showInventorySettingsModal, setShowInventorySettingsModal] = useState(false);
   const [showCombatInventoryModal, setShowCombatInventoryModal] = useState(false);
   const [showPostCombatPanel, setShowPostCombatPanel] = useState(false);
+  const [isMoreMenuExpanded, setIsMoreMenuExpanded] = useState(false);
+  const [moreSubView, setMoreSubView] = useState<'main' | 'emotions' | 'tones' | 'favorites'>('main');
 
   const pendingStoryEntitiesCount = React.useMemo(() => {
     const entities = adventure.storyState?.storyEntities || [];
@@ -8725,151 +8727,225 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               </div>
             )}
             
-            {/* Icon-Leiste über dem Chat-Eingabefeld */}
-            <div className="flex items-center gap-3 mb-2 px-3">
-              <button 
-                id="combat-toggle-btn"
-                onClick={() => {
-                  setIsCombatMenuExpanded(!isCombatMenuExpanded);
-                  if (!isCombatMenuExpanded) {
-                    setCombatSubMenu(isCombatActive ? 'main' : 'start');
-                  }
-                  setIsDialogueMenuExpanded(false);
-                }}
-                className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all shadow-xl active:scale-95 ${
-                  isCombatActive 
-                    ? 'bg-red-600 border-red-400 animate-pulse text-white shadow-red-900/50' 
-                    : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-amber-500 hover:text-amber-500 shadow-slate-950/50'
-                }`}
-                title={isCombatActive ? "JRPG Kampf-Steuerung" : "Kampf-Modus starten"}
-              >
-                <i className="fa-solid fa-bolt text-sm"></i>
-              </button>
-
-              <button 
-                id="dialogue-toggle-btn"
-                onClick={() => {
-                  setIsDialogueMenuExpanded(!isDialogueMenuExpanded);
-                  if (!isDialogueMenuExpanded) {
-                    setIsCombatMenuExpanded(false);
-                    // Autofill first NPC for speech if available
-                    if (availableDialogueNpcs && availableDialogueNpcs.length > 0) {
-                      if (!dialogueSpeakerId || !availableDialogueNpcs.some(n => n.id === dialogueSpeakerId)) setDialogueSpeakerId(availableDialogueNpcs[0].id);
-                      if (availableDialogueNpcs.length > 1 && (!dialogueTargetId || !availableDialogueNpcs.some(n => n.id === dialogueTargetId))) setDialogueTargetId(availableDialogueNpcs[1].id);
-                    }
-                  }
-                }}
-                className={`w-9 h-9 rounded-full border-2 flex items-center justify-center transition-all shadow-xl active:scale-95 ${
-                  isDialogueActive 
-                    ? 'bg-amber-500 border-amber-300 text-slate-950 shadow-amber-950/50' 
-                    : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-amber-500 hover:text-amber-500 shadow-slate-950/50'
-                }`}
-                title={isDialogueActive ? "Reiner Dialog-Modus aktiv" : "Reinen Dialog-Modus starten"}
-              >
-                <i className="fa-solid fa-comments text-xs"></i>
-              </button>
-     
-              <div className="w-px h-6 bg-slate-700 mx-1"></div>
-
-              {isCombatActive && (
-                <button
-                  type="button"
-                  onClick={() => setShowCombatInventoryModal(true)}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-900/60 border border-emerald-600/70 text-emerald-300 hover:bg-emerald-800/80 text-[11px] font-bold transition-all flex items-center gap-1.5 shadow"
-                  title="Kampfinventar & Schnellzugriff öffnen"
-                >
-                  <i className="fa-solid fa-flask text-xs"></i>
-                  <span>Kampfmittel</span>
-                </button>
-              )}
-
-              {!isCombatActive && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleRestAction('short')}
-                    className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-emerald-400 hover:bg-emerald-950 hover:border-emerald-500 hover:text-emerald-350 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
-                    title="Kurze Rast einlegen (+30% HP, MP & Kräfte)"
+            {/* Aufklappbares Mehr-Steuerpanel */}
+            {isMoreMenuExpanded && (
+              <div id="more-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+                
+                {/* HEADER WITH CONTEXTUAL BACK BUTTON */}
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    {moreSubView !== 'main' ? (
+                      <button 
+                        onClick={() => setMoreSubView('main')}
+                        className="text-amber-500 hover:text-amber-400 transition-colors text-xs flex items-center gap-1 font-semibold"
+                      >
+                        <i className="fa-solid fa-arrow-left"></i>
+                        <span>Zurück</span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-ellipsis text-amber-500"></i>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
+                          Zusätzliche Aktionen
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => setIsMoreMenuExpanded(false)}
+                    className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1"
                   >
-                    <i className="fa-solid fa-mug-hot group-hover:-translate-y-0.5 transition-transform text-sm"></i>
+                    <i className="fa-solid fa-xmark"></i>
                   </button>
+                </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleRestAction('long')}
-                    className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-indigo-400 hover:bg-indigo-950 hover:border-indigo-500 hover:text-indigo-350 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
-                    title="Schlafen / Lange Rast (+100% HP, MP, Ausdauer & Kräfte)"
-                  >
-                    <i className="fa-solid fa-bed group-hover:-translate-y-0.5 transition-transform text-sm"></i>
-                  </button>
-                  
-                  <div className="w-px h-6 bg-slate-700 mx-1"></div>
-                </>
-              )}
+                {/* VIEW: MAIN GRID */}
+                {moreSubView === 'main' && (
+                  <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+                    
+                    {/* Kurze Rast */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRestAction('short');
+                        setIsMoreMenuExpanded(false);
+                      }}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/30 transition-all text-left flex items-center gap-2.5"
+                    >
+                      <i className="fa-solid fa-mug-hot text-emerald-400 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate">Kurze Rast</div>
+                        <div className="text-[9px] text-slate-500 truncate">+30% HP & MP</div>
+                      </div>
+                    </button>
 
-              {/* Sammelaufträge Button */}
-              <button
-                type="button"
-                onClick={() => setShowCollectionTasksModal(true)}
-                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-sky-400 hover:bg-slate-700 hover:text-sky-300 transition-all flex items-center justify-center shadow-lg active:scale-95 relative"
-                title="Sammelaufträge & Bergungslogistik"
-              >
-                <i className="fa-solid fa-clipboard-list text-xs"></i>
-                {(adventure.collectionTasks || []).filter(t => t.status === 'active').length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-sky-500 text-slate-950 font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center">
-                    {(adventure.collectionTasks || []).filter(t => t.status === 'active').length}
-                  </span>
+                    {/* Lange Rast */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRestAction('long');
+                        setIsMoreMenuExpanded(false);
+                      }}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-indigo-500/30 transition-all text-left flex items-center gap-2.5"
+                    >
+                      <i className="fa-solid fa-bed text-indigo-400 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate">Schlafen</div>
+                        <div className="text-[9px] text-slate-500 truncate">Lange Rast</div>
+                      </div>
+                    </button>
+
+                    {/* Handel & Verträge */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTradeModal(true);
+                        setIsMoreMenuExpanded(false);
+                      }}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/30 transition-all text-left flex items-center gap-2.5"
+                    >
+                      <i className="fa-solid fa-handshake text-emerald-400 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate">Handel</div>
+                        <div className="text-[9px] text-slate-500 truncate">Tauschen & Verträge</div>
+                      </div>
+                    </button>
+
+                    {/* Sammelaufträge */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCollectionTasksModal(true);
+                        setIsMoreMenuExpanded(false);
+                      }}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-sky-500/30 transition-all text-left flex items-center gap-2.5 relative"
+                    >
+                      <i className="fa-solid fa-clipboard-list text-sky-400 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate flex items-center gap-1.5">
+                          <span>Aufträge</span>
+                          {(adventure.collectionTasks || []).filter(t => t.status === 'active').length > 0 && (
+                            <span className="bg-sky-500 text-slate-950 font-bold text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-mono shrink-0">
+                              {(adventure.collectionTasks || []).filter(t => t.status === 'active').length}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[9px] text-slate-500 truncate">Sammeln & Bergung</div>
+                      </div>
+                    </button>
+
+                    {/* Aufgaben & Betriebsführung */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowWorkMenu(true);
+                        setIsMoreMenuExpanded(false);
+                      }}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/30 transition-all text-left flex items-center gap-2.5 relative"
+                    >
+                      <i className="fa-solid fa-list-check text-amber-400 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate flex items-center gap-1.5">
+                          <span>Betrieb</span>
+                          {pendingWorkTasksCount > 0 && (
+                            <span className="bg-amber-500 text-slate-950 font-bold text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-mono shrink-0">
+                              {pendingWorkTasksCount}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[9px] text-slate-500 truncate">Betriebsführung</div>
+                      </div>
+                    </button>
+
+                    {/* Aufnahme-Einstellungen */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowInventorySettingsModal(true);
+                        setIsMoreMenuExpanded(false);
+                      }}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-500/30 transition-all text-left flex items-center gap-2.5"
+                    >
+                      <i className="fa-solid fa-sliders text-slate-400 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate">Einstellung</div>
+                        <div className="text-[9px] text-slate-500 truncate">Aufnahme-Optionen</div>
+                      </div>
+                    </button>
+
+                    {/* Handlung beschreiben */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        insertFormatting('*', '*');
+                        setIsMoreMenuExpanded(false);
+                      }}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-500/30 transition-all text-left flex items-center gap-2.5"
+                    >
+                      <i className="fa-solid fa-person-running text-slate-300 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate">Handlung</div>
+                        <div className="text-[9px] text-slate-500 truncate">Formatieren (*...*)</div>
+                      </div>
+                    </button>
+
+                    {/* Emotionen */}
+                    <button
+                      type="button"
+                      onClick={() => setMoreSubView('emotions')}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/30 transition-all text-left flex items-center gap-2.5"
+                    >
+                      <i className="fa-regular fa-face-smile text-amber-400 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate">Emotionen</div>
+                        <div className="text-[9px] text-slate-500 truncate">Gesichtsausdruck</div>
+                      </div>
+                    </button>
+
+                    {/* Stimme/Tonart */}
+                    <button
+                      type="button"
+                      onClick={() => setMoreSubView('tones')}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-sky-500/30 transition-all text-left flex items-center gap-2.5"
+                    >
+                      <i className="fa-solid fa-microphone-lines text-sky-400 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate">Stimmen-Ton</div>
+                        <div className="text-[9px] text-slate-500 truncate">Tonart wählen</div>
+                      </div>
+                    </button>
+
+                    {/* Favoriten */}
+                    <button
+                      type="button"
+                      onClick={() => setMoreSubView('favorites')}
+                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/30 transition-all text-left flex items-center gap-2.5"
+                    >
+                      <i className="fa-solid fa-star text-amber-500 text-sm shrink-0"></i>
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-200 truncate">Favoriten</div>
+                        <div className="text-[9px] text-slate-500 truncate">Lieblingstechniken</div>
+                      </div>
+                    </button>
+
+                  </div>
                 )}
-              </button>
 
-              {/* Inventar-Einstellungen */}
-              <button
-                type="button"
-                onClick={() => setShowInventorySettingsModal(true)}
-                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95"
-                title="Inventar- & Aufnahmeeinstellungen"
-              >
-                <i className="fa-solid fa-sliders text-xs"></i>
-              </button>
-     
-              <button
-                onClick={() => insertFormatting('*', '*')}
-                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
-                title="Handlung beschreiben (*...*)"
-              >
-                <i className="fa-solid fa-person-running group-hover:-translate-y-0.5 transition-transform"></i>
-              </button>
-              
-              <div className="relative">
-                <button
-                  onClick={() => { 
-                    setShowEmotionMenu(!showEmotionMenu); 
-                    setShowToneMenu(false); 
-                    setShowFavoritesMenu(false); 
-                    setEmotionSearch('');
-                  }}
-                  className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
-                  title="Gesichtsausdruck beschreiben"
-                >
-                  <i className="fa-regular fa-face-smile group-hover:-translate-y-0.5 transition-transform"></i>
-                </button>
-                {showEmotionMenu && (
-                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
-                    <div className="p-1.5 px-3 text-[10px] uppercase font-bold text-slate-400 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
-                      <span>Emotion</span>
-                      <span className="text-[8px] text-slate-500 lowercase">oft benutzt oben</span>
-                    </div>
-                    <div className="p-1.5 bg-slate-900/60 border-b border-slate-700/80">
+                {/* VIEW: EMOTIONS */}
+                {moreSubView === 'emotions' && (
+                  <div className="space-y-2.5">
+                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-1.5 flex items-center gap-2">
+                      <i className="fa-solid fa-magnifying-glass text-slate-500 text-xs ml-1.5 shrink-0"></i>
                       <input
                         type="text"
                         value={emotionSearch}
                         onChange={(e) => setEmotionSearch(e.target.value)}
                         placeholder="Emotion suchen..."
-                        className="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/80"
+                        className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-600"
                         autoFocus
                       />
                     </div>
-                    <div className="max-h-60 overflow-y-auto">
+                    <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar bg-slate-950/30 rounded-xl p-1 border border-slate-850">
                       {sortedEmotions
                         .filter(e => e.toLowerCase().includes(emotionSearch.toLowerCase().trim()))
                         .map(e => {
@@ -8880,118 +8956,93 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                               onClick={() => {
                                 insertFormatting(`[schaut ${e}] `, '');
                                 handleSelectEmotion(e);
-                                setShowEmotionMenu(false);
+                                setIsMoreMenuExpanded(false);
                                 setEmotionSearch('');
                               }}
-                              className="block w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                              className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center justify-between"
                             >
-                              <span className="flex items-center justify-between w-full">
-                                <span>{e}</span>
-                                {count > 0 && <span className="text-[9px] text-amber-500 font-extrabold flex items-center gap-0.5 font-mono"> {count}</span>}
-                              </span>
+                              <span>{e}</span>
+                              {count > 0 && (
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold">
+                                  {count}x genutzt
+                                </span>
+                              )}
                             </button>
                           );
                         })}
                       {sortedEmotions.filter(e => e.toLowerCase().includes(emotionSearch.toLowerCase().trim())).length === 0 && (
-                        <div className="p-3 text-xs text-slate-500 text-center">Keine passenden Begriffe</div>
+                        <div className="p-3 text-xs text-slate-500 text-center italic">Keine passende Emotion gefunden</div>
                       )}
                     </div>
                   </div>
                 )}
-              </div>
-              
-              <div className="relative">
-                <button
-                  onClick={() => { 
-                    setShowToneMenu(!showToneMenu); 
-                    setShowEmotionMenu(false); 
-                    setShowFavoritesMenu(false); 
-                    setToneSearch('');
-                  }}
-                  className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
-                  title="Stimme/Tonart beschreiben"
-                >
-                  <i className="fa-solid fa-microphone-lines group-hover:-translate-y-0.5 transition-transform"></i>
-                </button>
-                {showToneMenu && (
-                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
-                    <div className="p-1.5 px-3 text-[10px] uppercase font-bold text-slate-400 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
-                      <span>Tonart</span>
-                      <span className="text-[8px] text-slate-500 lowercase">oft benutzt oben</span>
-                    </div>
-                    <div className="p-1.5 bg-slate-900/60 border-b border-slate-700/80">
+
+                {/* VIEW: TONES */}
+                {moreSubView === 'tones' && (
+                  <div className="space-y-2.5">
+                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-1.5 flex items-center gap-2">
+                      <i className="fa-solid fa-magnifying-glass text-slate-500 text-xs ml-1.5 shrink-0"></i>
                       <input
                         type="text"
                         value={toneSearch}
                         onChange={(e) => setToneSearch(e.target.value)}
                         placeholder="Tonart suchen..."
-                        className="w-full bg-slate-950 border border-slate-700/80 rounded px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/80"
+                        className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-600"
                         autoFocus
                       />
                     </div>
-                    <div className="max-h-60 overflow-y-auto">
+                    <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar bg-slate-950/30 rounded-xl p-1 border border-slate-850">
                       {sortedTones
                         .filter(t => t.toLowerCase().includes(toneSearch.toLowerCase().trim()))
-                        .map(e => {
-                          const count = toneUsage[e] || 0;
+                        .map(t => {
+                          const count = toneUsage[t] || 0;
                           return (
                             <button
-                              key={e}
+                              key={t}
                               onClick={() => {
-                                insertFormatting(`[spricht ${e}] `, '');
-                                handleSelectTone(e);
-                                setShowToneMenu(false);
+                                insertFormatting(`[spricht ${t}] `, '');
+                                handleSelectTone(t);
+                                setIsMoreMenuExpanded(false);
                                 setToneSearch('');
                               }}
-                              className="block w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                              className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center justify-between"
                             >
-                              <span className="flex items-center justify-between w-full">
-                                <span>{e}</span>
-                                {count > 0 && <span className="text-[9px] text-amber-500 font-extrabold flex items-center gap-0.5 font-mono"> {count}</span>}
-                              </span>
+                              <span>{t}</span>
+                              {count > 0 && (
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold">
+                                  {count}x genutzt
+                                </span>
+                              )}
                             </button>
                           );
                         })}
                       {sortedTones.filter(t => t.toLowerCase().includes(toneSearch.toLowerCase().trim())).length === 0 && (
-                        <div className="p-3 text-xs text-slate-500 text-center">Keine passenden Begriffe</div>
+                        <div className="p-3 text-xs text-slate-500 text-center italic">Keine passende Tonart gefunden</div>
                       )}
                     </div>
                   </div>
                 )}
-              </div>
 
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => { setShowFavoritesMenu(!showFavoritesMenu); setShowEmotionMenu(false); setShowToneMenu(false); }}
-                  className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-amber-400 transition-all flex items-center justify-center shadow-lg active:scale-95 group"
-                  title="Lieblingstechniken (Favoriten)"
-                >
-                  <i className="fa-solid fa-star text-amber-400 group-hover:scale-110 transition-transform"></i>
-                </button>
-                {showFavoritesMenu && (
-                  <div className="absolute bottom-full left-0 mb-2 w-72 bg-slate-900 border border-slate-750 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                    <div className="p-2.5 px-3 text-[10px] uppercase font-extrabold text-amber-500 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5"><i className="fa-solid fa-star text-amber-400"></i> Favoriten</span>
-                      <button onClick={() => setShowFavoritesMenu(false)} className="text-slate-500 hover:text-slate-300 text-xs"></button>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto p-1.5 space-y-1 bg-slate-950/40">
+                {/* VIEW: FAVORITES */}
+                {moreSubView === 'favorites' && (
+                  <div className="space-y-2">
+                    <div className="max-h-56 overflow-y-auto pr-1 space-y-1 bg-slate-950/40 p-1.5 rounded-xl border border-slate-850">
                       {getFavoriteTechniques().length === 0 ? (
                         <div className="p-4 text-center text-xs text-slate-500 italic leading-relaxed">
                           Keine Favoriten markiert.<br />
-                          Markiere Techniken, Ultimative Techniken oder Transformationen im <span className="text-amber-500/95 font-bold">Logbuch</span> mit dem Stern-Symbol.
+                          Markiere Techniken im Logbuch mit dem Stern-Symbol.
                         </div>
                       ) : (
                         getFavoriteTechniques().map((tech, i) => (
                           <button
-                            key={tech.id ? `fav-tech-${tech.id}-${i}` : `fav-tech-${i}`}
+                            key={tech.id ? `fav-tech-more-${tech.id}-${i}` : `fav-tech-more-${i}`}
                             type="button"
                             onClick={() => {
                               const actionText = tech.category === 'Transformationen' || tech.isTransformation
                                 ? `*aktiviert ${tech.name}*`
                                 : `*setzt ${tech.name} ein*`;
                               insertFormatting(actionText, '');
-                              setShowFavoritesMenu(false);
+                              setIsMoreMenuExpanded(false);
                             }}
                             className="w-full text-left p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-850/60 hover:border-amber-500/30 transition-all flex flex-col gap-1"
                           >
@@ -9017,55 +9068,129 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     </div>
                   </div>
                 )}
+
               </div>
+            )}
 
-              <div className="w-px h-6 bg-slate-700 mx-1"></div>
-
+            {/* Zentrale Chat-Steuerleiste */}
+            <div className="flex items-center justify-between gap-1 bg-slate-900 border border-slate-800/80 rounded-2xl p-1.5 mb-2.5 mx-1 shadow-lg backdrop-blur-md z-25 font-sans">
+              
+              {/* KAMPF BUTTON */}
               <button
                 type="button"
-                onClick={() => setShowNavigationModal(true)}
-                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-teal-400 hover:bg-teal-950 hover:border-teal-500 hover:text-teal-300 transition-all flex items-center justify-center shadow-lg active:scale-95 group relative"
+                id="combat-toggle-btn"
+                onClick={() => {
+                  setIsCombatMenuExpanded(!isCombatMenuExpanded);
+                  if (!isCombatMenuExpanded) {
+                    setCombatSubMenu(isCombatActive ? 'main' : 'start');
+                  }
+                  setIsDialogueMenuExpanded(false);
+                  setIsMoreMenuExpanded(false);
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 ${
+                  isCombatActive
+                    ? 'bg-red-600/25 border border-red-500 text-red-200 hover:bg-red-600/35'
+                    : isCombatMenuExpanded
+                    ? 'bg-slate-800 border border-slate-700 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title={isCombatActive ? "JRPG-Kampfsteuerung" : "Kampf vorbereiten"}
+              >
+                <i className={`fa-solid fa-hand-fist text-sm ${isCombatActive ? 'text-red-500 animate-pulse' : ''}`}></i>
+                <span className="hidden sm:inline truncate">
+                  {isCombatActive ? 'Kampf aktiv' : 'Kampf'}
+                </span>
+              </button>
+
+              {/* DIALOG BUTTON */}
+              <button
+                type="button"
+                id="dialogue-toggle-btn"
+                onClick={() => {
+                  setIsDialogueMenuExpanded(!isDialogueMenuExpanded);
+                  if (!isDialogueMenuExpanded) {
+                    setIsCombatMenuExpanded(false);
+                    setIsMoreMenuExpanded(false);
+                    if (availableDialogueNpcs && availableDialogueNpcs.length > 0) {
+                      if (!dialogueSpeakerId || !availableDialogueNpcs.some(n => n.id === dialogueSpeakerId)) setDialogueSpeakerId(availableDialogueNpcs[0].id);
+                      if (availableDialogueNpcs.length > 1 && (!dialogueTargetId || !availableDialogueNpcs.some(n => n.id === dialogueTargetId))) setDialogueTargetId(availableDialogueNpcs[1].id);
+                    }
+                  }
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 ${
+                  isDialogueActive
+                    ? 'bg-amber-500/20 border border-amber-500 text-amber-200 hover:bg-amber-500/30'
+                    : isDialogueMenuExpanded
+                    ? 'bg-slate-800 border border-slate-700 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Reinen Dialog-Modus starten"
+              >
+                <i className={`fa-solid fa-comments text-sm ${isDialogueActive ? 'text-amber-500' : ''}`}></i>
+                <span className="hidden sm:inline truncate">
+                  {isDialogueActive ? 'Dialog aktiv' : 'Dialog'}
+                </span>
+              </button>
+
+              {/* REISE BUTTON */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNavigationModal(true);
+                  setIsCombatMenuExpanded(false);
+                  setIsDialogueMenuExpanded(false);
+                  setIsMoreMenuExpanded(false);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent transition-all active:scale-95 whitespace-nowrap min-w-0"
                 title="Navigation & Reiseziel"
               >
-                <i className="fa-solid fa-compass group-hover:scale-110 transition-transform text-sm"></i>
+                <i className="fa-solid fa-compass text-sm text-teal-400"></i>
+                <span className="hidden sm:inline truncate">Reise</span>
               </button>
 
+              {/* STORY BUTTON */}
               <button
                 type="button"
-                onClick={() => setShowTradeModal(true)}
-                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-emerald-400 hover:bg-emerald-950 hover:border-emerald-500 hover:text-emerald-300 transition-all flex items-center justify-center shadow-lg active:scale-95 group relative"
-                title="Handel & Verträge"
+                onClick={() => {
+                  setShowStoryInfoModal(true);
+                  setIsCombatMenuExpanded(false);
+                  setIsDialogueMenuExpanded(false);
+                  setIsMoreMenuExpanded(false);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent transition-all active:scale-95 whitespace-nowrap min-w-0 relative"
+                title="Story-Info & temporäre Story-Daten"
               >
-                <i className="fa-solid fa-handshake group-hover:scale-110 transition-transform text-sm"></i>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowWorkMenu(true)}
-                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-amber-400 hover:bg-amber-950 hover:border-amber-500 hover:text-amber-300 transition-all flex items-center justify-center shadow-lg active:scale-95 group relative"
-                title="Aufgaben & Betriebsführung"
-              >
-                <i className="fa-solid fa-list-check group-hover:scale-110 transition-transform"></i>
-                {pendingWorkTasksCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-slate-950 font-bold text-[9px] flex items-center justify-center font-mono">
-                    {pendingWorkTasksCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowStoryInfoModal(true)}
-                className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 text-indigo-400 hover:bg-indigo-950 hover:border-indigo-500 hover:text-indigo-300 transition-all flex items-center justify-center shadow-lg active:scale-95 group relative"
-                title="Story-Info & Temporäre Daten"
-              >
-                <Info className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                <Info className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span className="hidden sm:inline truncate">Story</span>
                 {pendingStoryEntitiesCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-indigo-500 text-white font-bold text-[9px] flex items-center justify-center font-mono">
+                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-extrabold bg-indigo-500 text-white rounded-full font-mono shrink-0">
                     {pendingStoryEntitiesCount}
                   </span>
                 )}
               </button>
+
+              {/* MEHR BUTTON */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMoreMenuExpanded(!isMoreMenuExpanded);
+                  setIsCombatMenuExpanded(false);
+                  setIsDialogueMenuExpanded(false);
+                  if (!isMoreMenuExpanded) {
+                    setMoreSubView('main');
+                  }
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 ${
+                  isMoreMenuExpanded
+                    ? 'bg-slate-800 border border-slate-700 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Zusätzliche Aktionen & Einstellungen"
+              >
+                <i className="fa-solid fa-ellipsis text-sm text-amber-500"></i>
+                <span className="hidden sm:inline truncate">Mehr</span>
+              </button>
+
             </div>
 
             <div className={`relative flex items-center gap-2 bg-slate-900/80 border rounded-3xl p-1 shadow-2xl backdrop-blur-md transition-all ${
