@@ -317,89 +317,153 @@ console.log('=== RUNNING INVENTORY & LOOT SERVICE TESTS ===\n');
 }
 
 // 5. ABSCHLUSSKORREKTUR TESTS (TESTS A BIS K)
-// Test A: Always Confirm -> unbestätigter Pickup blockiert, Proposal vorhanden
+// Test A: Kein Proposal -> confirmPickup scheitert, Inventar unverändert, kein Proposal erzeugt
 {
   const adv = createBaseAdventure();
-  const newItem = { action: 'added' as const, item: 'Seltene Schriftrolle', ownerId: 'player' };
-  let notifications: any[] = [];
-  const advWithProposal = EquipmentConditionService.processAiStateChanges(adv, [newItem], [], notifications);
-
-  assert(Boolean(advWithProposal.pendingPickup), 'Test A: always_confirm erzeugt PendingPickupProposal');
-  assert(!advWithProposal.itemInstances.some(i => i.name === 'Seltene Schriftrolle' && i.owner === 'player'), 'Test A: Item ohne Bestätigung noch NICHT im Besitz');
+  delete adv.pendingPickup;
+  const res = InventoryLootService.confirmPickup(adv, 'player', [{ itemInstanceId: 'inst-123', quantity: 1 }]);
+  assert(res.acceptedItems.length === 0, 'Test A: confirmPickup ohne pendingPickup nimmt nichts auf');
+  assert(!res.updatedAdventure.pendingPickup, 'Test A: Kein neues Proposal erzeugt');
+  assert(res.updatedAdventure.itemInstances.length === 0, 'Test A: Inventar unverändert');
 }
 
-// Test B: Gültige Bestätigung -> Inventar aktualisiert, Proposal gelöscht
-{
-  const adv = createBaseAdventure();
-  const newItem = { action: 'added' as const, item: 'Zauberstab', ownerId: 'player' };
-  let notifications: any[] = [];
-  const advProp = EquipmentConditionService.processAiStateChanges(adv, [newItem], [], notifications);
-
-  const proposal = advProp.pendingPickup!;
-  const confirmRes = InventoryLootService.confirmPickup(advProp, 'player', proposal);
-
-  assert(confirmRes.acceptedItems.length === 1, 'Test B: confirmPickup nimmt Gegenstand erfolgreich auf');
-  assert(confirmRes.updatedAdventure.itemInstances.some(i => i.name === 'Zauberstab' && i.owner === 'player'), 'Test B: Item nach Bestätigung im Inventar');
-  assert(confirmRes.updatedAdventure.pendingPickup === null, 'Test B: Proposal nach vollständiger Bestätigung bereinigt');
-}
-
-// Test C: Falsche ItemInstanceId -> Abweisung, kein Inventareintrag
+// Test B: Falsche ID -> Proposal hat item-inst-A, Bestätigung fordert item-inst-B -> Abweisung
 {
   const adv = createBaseAdventure();
   const proposal: PendingPickupProposal = {
-    id: 'prop-1',
+    id: 'prop-b',
     sourceTitle: 'Truhe',
     sourceType: 'chest',
-    items: [{ id: 'inst-real-id', itemDefinitionId: 'def-1', name: 'Dolch', quantity: 1, weightKg: 0.5 }],
+    items: [{ id: 'item-inst-A', itemDefinitionId: 'def-a', name: 'Dolch', quantity: 1, weightKg: 0.5 }],
     timestamp: new Date().toISOString()
   };
   const advProp = { ...adv, pendingPickup: proposal };
 
-  const confirmRes = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'inst-fake-id', quantity: 1 }]);
-  assert(confirmRes.acceptedItems.length === 0, 'Test C: Falsche ItemInstanceId wird abgewiesen');
-  assert(confirmRes.rejectedItems.length > 0, 'Test C: Rejection Grund für falsche ID vorhanden');
-  assert(!confirmRes.updatedAdventure.itemInstances.some(i => i.name === 'Dolch' && i.owner === 'player'), 'Test C: Kein Inventareintrag bei falscher ID');
+  const res = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'item-inst-B', quantity: 1 }]);
+  assert(res.acceptedItems.length === 0, 'Test B: Falsche ID wird abgewiesen');
+  assert(!res.updatedAdventure.itemInstances.some(i => i.id === 'item-inst-B'), 'Test B: Kein Inventareintrag für unpassende ID');
 }
 
-// Test D: Zu große Bestätigungsmenge -> Deckelung auf vorhandene Proposalmenge
+// Test C: Richtige ID -> Pickup erfolgreich
 {
   const adv = createBaseAdventure();
   const proposal: PendingPickupProposal = {
-    id: 'prop-qty',
-    sourceTitle: 'Sack',
-    sourceType: 'world_item',
-    items: [{ id: 'inst-coins', itemDefinitionId: 'def-coin', name: 'Goldmünzen', quantity: 3, weightKg: 0.1 }],
+    id: 'prop-c',
+    sourceTitle: 'Kiste',
+    sourceType: 'chest',
+    items: [{ id: 'item-inst-A', itemDefinitionId: 'def-a', name: 'Schwert', quantity: 5, weightKg: 1.0 }],
     timestamp: new Date().toISOString()
   };
   const advProp = { ...adv, pendingPickup: proposal };
 
-  const confirmRes = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'inst-coins', quantity: 5 }]);
-  assert(confirmRes.acceptedItems.length === 1 && confirmRes.acceptedItems[0].quantity === 3, 'Test D: Menge auf vorgeschlagene 3 Stück gedeckelt');
+  const res = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'item-inst-A', quantity: 5 }]);
+  assert(res.acceptedItems.length === 1 && res.acceptedItems[0].quantity === 5, 'Test C: Bestätigung mit korrekter ID nimmt 5 Schwerter auf');
+  assert(!res.updatedAdventure.pendingPickup, 'Test C: Proposal nach vollständiger Bestätigung gelöscht');
 }
 
-// Test E: Ungültiges Proposal / Fehlende ID -> Abweisung ohne Inventarmutation
+// Test D: Teilbestätigung -> Proposal hat 5, Bestätigung fordert 2 -> 2 aufgenommen, 3 verbleiben
 {
   const adv = createBaseAdventure();
-  const confirmRes = InventoryLootService.confirmPickup(adv, 'player', [{ itemInstanceId: 'non-existent-id-999' }]);
-  assert(confirmRes.acceptedItems.length === 0, 'Test E: confirmPickup ohne gültigen Vorschlag/Quelle abgewiesen');
-  assert(confirmRes.updatedAdventure.itemInstances.length === 0, 'Test E: Keine Inventarmutation bei ungültigem Proposal');
+  const itemInst: ItemInstance = { id: 'item-inst-A', itemDefinitionId: 'def-a', name: 'Trank', quantity: 5, weightKg: 0.5 };
+  const ls: LootSource = { id: 'ls-d', type: 'chest', title: 'Truhe', items: [itemInst] };
+  const advReg = InventoryLootService.registerLootSource(adv, ls).updatedAdventure;
+  const proposal: PendingPickupProposal = {
+    id: 'prop-d',
+    sourceTitle: 'Truhe',
+    sourceType: 'chest',
+    lootSourceId: 'ls-d',
+    items: [itemInst],
+    timestamp: new Date().toISOString()
+  };
+  const advProp = { ...advReg, pendingPickup: proposal };
+
+  const res = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'item-inst-A', quantity: 2 }]);
+  assert(res.acceptedItems.length === 1 && res.acceptedItems[0].quantity === 2, 'Test D: 2 von 5 Tränken aufgenommen');
+  assert(Boolean(res.updatedAdventure.pendingPickup), 'Test D: Rest-Proposal bleibt vorhanden');
 }
 
-// Test F: Direkte pickupItems-Aufrufe -> Direkte Aufnahme blockiert bei always_confirm
+// Test E: Zu große Bestätigungsmenge -> Proposal hat 5, Bestätigung fordert 8 -> Abweisung
 {
   const adv = createBaseAdventure();
-  const item: ItemInstance = { id: 'inst-herb-direct', itemDefinitionId: 'def-herb', name: 'Heilkraut', weightKg: 0.1, quantity: 1 };
-  const directRes = InventoryLootService.pickupItems(adv, 'player', [{ itemInstanceId: item.id, item }]);
+  const proposal: PendingPickupProposal = {
+    id: 'prop-e',
+    sourceTitle: 'Truhe',
+    sourceType: 'chest',
+    items: [{ id: 'item-inst-A', itemDefinitionId: 'def-a', name: 'Pfeile', quantity: 5, weightKg: 0.1 }],
+    timestamp: new Date().toISOString()
+  };
+  const advProp = { ...adv, pendingPickup: proposal };
 
-  assert(directRes.acceptedItems.length === 0, 'Test F: Direkte pickupItems() ohne confirm ist bei always_confirm blockiert');
-  assert(Boolean(directRes.updatedAdventure.pendingPickup), 'Test F: Proposal wurde stattdessen erzeugt');
+  const res = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'item-inst-A', quantity: 8 }]);
+  assert(res.acceptedItems.length === 0, 'Test E: Zu große Bestätigungsmenge wird strikt abgewiesen');
+  assert(res.rejectedItems.length > 0, 'Test E: Abweisungsgrund für überschrittene Menge vorhanden');
+  assert(res.updatedAdventure.itemInstances.length === 0, 'Test E: Keine automatische Reduzierung / kein Pickup');
 }
 
-// Test G: Monsterernte bei always_confirm -> kein sofortiger Inventarzugang, Proposal vorhanden
+// Test F: Gleichnamiges anderes Item -> Proposal hat item-inst-A, Welt hat item-inst-B -> Abweisung
+{
+  const adv = createBaseAdventure();
+  const peltB: ItemInstance = { id: 'item-inst-B', itemDefinitionId: 'def-p', name: 'Wolfsfell', quantity: 1, weightKg: 1.0 };
+  const ls: LootSource = { id: 'ls-f', type: 'chest', title: 'Truhe', items: [peltB] };
+  const advReg = InventoryLootService.registerLootSource(adv, ls).updatedAdventure;
+
+  const proposal: PendingPickupProposal = {
+    id: 'prop-f',
+    sourceTitle: 'Andere Quelle',
+    sourceType: 'chest',
+    items: [{ id: 'item-inst-A', itemDefinitionId: 'def-p', name: 'Wolfsfell', quantity: 1, weightKg: 1.0 }],
+    timestamp: new Date().toISOString()
+  };
+  const advProp = { ...advReg, pendingPickup: proposal };
+
+  const res = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'item-inst-B', quantity: 1 }]);
+  assert(res.acceptedItems.length === 0, 'Test F: Gleichnamiges anderes Item außerhalb des Proposals wird abgewiesen');
+}
+
+// Test G: Item existiert noch in Quelle -> Erfolgreicher Pickup
+{
+  const adv = createBaseAdventure();
+  const herb: ItemInstance = { id: 'item-inst-g', itemDefinitionId: 'def-h', name: 'Heilkraut', quantity: 1, weightKg: 0.1 };
+  const ls: LootSource = { id: 'ls-g', type: 'resource_node', title: 'Busch', items: [herb] };
+  const advReg = InventoryLootService.registerLootSource(adv, ls).updatedAdventure;
+  const proposal: PendingPickupProposal = {
+    id: 'prop-g',
+    sourceTitle: 'Busch',
+    sourceType: 'resource_node',
+    lootSourceId: 'ls-g',
+    items: [herb],
+    timestamp: new Date().toISOString()
+  };
+  const advProp = { ...advReg, pendingPickup: proposal };
+
+  const res = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'item-inst-g', quantity: 1 }]);
+  assert(res.acceptedItems.length === 1, 'Test G: Vorhandener Gegenstand an Quelle erfolgreich aufgenommen');
+}
+
+// Test H: Item inzwischen verschwunden -> Abweisung bei Quellprüfung
+{
+  const adv = createBaseAdventure();
+  const ls: LootSource = { id: 'ls-h', type: 'chest', title: 'Leere Truhe', items: [] };
+  const advReg = InventoryLootService.registerLootSource(adv, ls).updatedAdventure;
+  const proposal: PendingPickupProposal = {
+    id: 'prop-h',
+    sourceTitle: 'Truhe',
+    sourceType: 'chest',
+    lootSourceId: 'ls-h',
+    items: [{ id: 'item-inst-vanished', itemDefinitionId: 'def-v', name: 'Verschwundener Ring', quantity: 1, weightKg: 0.1 }],
+    timestamp: new Date().toISOString()
+  };
+  const advProp = { ...advReg, pendingPickup: proposal };
+
+  const res = InventoryLootService.confirmPickup(advProp, 'player', [{ itemInstanceId: 'item-inst-vanished', quantity: 1 }]);
+  assert(res.acceptedItems.length === 0, 'Test H: Aus Quelle verschwundener Gegenstand wird bei Quellprüfung abgewiesen');
+}
+
+// Test I: Monsterernte bei always_confirm -> pendingPickup, Bestätigung nimmt Item auf
 {
   const adv = createBaseAdventure();
   const ls: LootSource = {
-    id: 'loot-beast-g',
+    id: 'loot-beast-i',
     type: 'monster_body',
     title: 'Schattenwolf',
     items: [],
@@ -409,34 +473,42 @@ console.log('=== RUNNING INVENTORY & LOOT SERVICE TESTS ===\n');
     }
   };
   const advReg = InventoryLootService.registerLootSource(adv, ls).updatedAdventure;
-  const harvRes = InventoryLootService.harvestMonster(advReg, 'loot-beast-g', 'crystals', 'player');
+  const harvRes = InventoryLootService.harvestMonster(advReg, 'loot-beast-i', 'crystals', 'player');
 
-  assert(harvRes.gainedItems.length === 0, 'Test G: Monsterernte bewirkt KEINEN sofortigen Inventarzugang bei always_confirm');
-  assert(Boolean(harvRes.updatedAdventure.pendingPickup), 'Test G: PendingPickupProposal nach harvestMonster vorhanden');
+  assert(harvRes.gainedItems.length === 0, 'Test I: Monsterernte bewirkt KEINEN sofortigen Inventarzugang bei always_confirm');
+  assert(Boolean(harvRes.updatedAdventure.pendingPickup), 'Test I: PendingPickupProposal nach harvestMonster vorhanden');
+
+  const confirmRes = InventoryLootService.confirmPickup(harvRes.updatedAdventure, 'player', harvRes.updatedAdventure.pendingPickup!, { sourceId: 'loot-beast-i' });
+  assert(confirmRes.acceptedItems.length === 1, 'Test I: Bestätigte Monsterernte nimmt Item in Inventar auf');
+  assert(confirmRes.updatedAdventure.itemInstances.some(i => i.name.includes('Schattenkristall') && i.owner === 'player'), 'Test I: Item ist im Inventar des Spielers');
 }
 
-// Test H: Bestätigte Monsterernte -> Inventar erhält tatsächliche ItemInstance
+// Test J: WorldDrop mit Proposal erfolgreich, ohne Proposal abgelehnt
 {
   const adv = createBaseAdventure();
-  const ls: LootSource = {
-    id: 'loot-beast-h',
-    type: 'monster_body',
-    title: 'Schattenwolf',
-    items: [],
-    harvestOptions: {
-      allowHarvestCrystals: true,
-      crystalYield: [{ name: 'Schattenkristall', quantity: 1, weightKg: 0.5, category: 'Rohstoffe' }]
-    }
+  const item: ItemInstance = { id: 'wd-item-1', itemDefinitionId: 'def-wd', name: 'Münzbeutel', quantity: 1, weightKg: 0.2 };
+  const advWithDrop: Adventure = {
+    ...adv,
+    worldDrops: [{ id: 'drop-1', itemInstance: item, droppedAtTime: new Date().toISOString() }]
   };
-  const advReg = InventoryLootService.registerLootSource(adv, ls).updatedAdventure;
-  const harvRes = InventoryLootService.harvestMonster(advReg, 'loot-beast-h', 'crystals', 'player');
-  const confirmRes = InventoryLootService.confirmPickup(harvRes.updatedAdventure, 'player', harvRes.updatedAdventure.pendingPickup!, { sourceId: 'loot-beast-h' });
 
-  assert(confirmRes.acceptedItems.length === 1, 'Test H: Bestätigte Monsterernte nimmt Item in Inventar auf');
-  assert(confirmRes.updatedAdventure.itemInstances.some(i => i.name.includes('Schattenkristall') && i.owner === 'player'), 'Test H: Item ist im Inventar des Spielers');
+  const noPropRes = InventoryLootService.confirmPickup(advWithDrop, 'player', [{ itemInstanceId: 'wd-item-1', quantity: 1 }]);
+  assert(noPropRes.acceptedItems.length === 0, 'Test J: confirmPickup ohne Proposal für WorldDrop wird abgelehnt');
+
+  const prop: PendingPickupProposal = {
+    id: 'prop-wd',
+    sourceTitle: 'Boden',
+    sourceType: 'world_item',
+    items: [item],
+    timestamp: new Date().toISOString()
+  };
+  const advWithProp = { ...advWithDrop, pendingPickup: prop };
+
+  const withPropRes = InventoryLootService.confirmPickup(advWithProp, 'player', [{ itemInstanceId: 'wd-item-1', quantity: 1 }]);
+  assert(withPropRes.acceptedItems.length === 1, 'Test J: confirmPickup mit Proposal für WorldDrop ist erfolgreich');
 }
 
-// Test I: Auto Small
+// Test K: Auto Pickup Einstellungen funktionieren weiterhin ohne manuelles Proposal
 {
   const advSmall = {
     ...createBaseAdventure(),
@@ -446,38 +518,7 @@ console.log('=== RUNNING INVENTORY & LOOT SERVICE TESTS ===\n');
     }
   };
   const lightHerb: ItemInstance = { id: 'inst-light-herb', itemDefinitionId: 'def-herb', name: 'Waldkräuter', quantity: 1, weightKg: 0.2 };
-  assert(InventoryLootService.isAutoPickupAllowed(lightHerb, 'auto_small', 20.0), 'Test I: Kleines normales Item darf auto-aufgenommen werden');
-}
-
-// Test J: Same-Name Items -> Gezielte Aufnahme über itemInstanceId
-{
-  const adv = createBaseAdventure();
-  const peltA: ItemInstance = { id: 'inst-pelt-A', itemDefinitionId: 'def-pelt', name: 'Wolfsfell', quantity: 5, weightKg: 1.0 };
-  const peltB: ItemInstance = { id: 'inst-pelt-B', itemDefinitionId: 'def-pelt', name: 'Wolfsfell', quantity: 1, weightKg: 1.0 };
-  const ls: LootSource = { id: 'loot-pelts-j', type: 'chest', title: 'Truhe', items: [peltA, peltB] };
-  const advReg = InventoryLootService.registerLootSource(adv, ls).updatedAdventure;
-
-  const pickupB = InventoryLootService.confirmPickup(advReg, 'player', [{ itemInstanceId: 'inst-pelt-B', quantity: 1 }], { sourceId: 'loot-pelts-j' });
-  assert(pickupB.acceptedItems.length === 1 && pickupB.acceptedItems[0].id === 'inst-pelt-B', 'Test J: Gezielt nur inst-pelt-B aufgenommen');
-  const lsItems = pickupB.updatedAdventure.lootSources?.find(s => s.id === 'loot-pelts-j')?.items || [];
-  assert(lsItems.length === 1 && lsItems[0].id === 'inst-pelt-A' && lsItems[0].quantity === 5, 'Test J: inst-pelt-A unverändert an Quelle');
-}
-
-// Test K: Teilaufnahme mit Menge 4 aus 10 -> Rest-ID mit Menge 6 entsteht
-{
-  const adv = createBaseAdventure();
-  const herbInst: ItemInstance = { id: 'inst-herb-10', itemDefinitionId: 'def-herb', name: 'Schattenkraut', quantity: 10, weightKg: 1.0, owner: 'world' };
-  const ls: LootSource = { id: 'loot-patch-k', type: 'resource_node', title: 'Fundstelle', items: [herbInst] };
-  let advCap4 = InventoryLootService.registerLootSource(adv, ls).updatedAdventure;
-  advCap4 = { ...advCap4, inventorySettings: { pickupConfirmationMode: 'always_confirm', maxCarryCapacityKg: 4.0 } };
-
-  const pickup1 = InventoryLootService.confirmPickup(advCap4, 'player', [{ itemInstanceId: 'inst-herb-10', quantity: 10 }], { sourceId: 'loot-patch-k' });
-  assert(pickup1.acceptedItems.length === 1 && pickup1.acceptedItems[0].quantity === 4, 'Test K: Genau 4 von 10 Kräutern aufgenommen');
-
-  const lsAfter = pickup1.updatedAdventure.lootSources?.find(s => s.id === 'loot-patch-k');
-  assert(lsAfter?.items.length === 1, 'Test K: Quelle enthält Restmenge');
-  assert(lsAfter!.items[0].id !== 'inst-herb-10', 'Test K: Restmenge hat NEUE ItemInstanceId erhalten');
-  assert(lsAfter!.items[0].quantity === 6, 'Test K: Restmenge beträgt exakt 6');
+  assert(InventoryLootService.isAutoPickupAllowed(lightHerb, 'auto_small', 20.0), 'Test K: Auto-Pickup erlaubt kleine normale Gegenstände');
 }
 
 console.log(`\n=== TEST RUN COMPLETE ===`);

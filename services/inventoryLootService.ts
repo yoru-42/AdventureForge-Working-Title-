@@ -288,14 +288,15 @@ export class InventoryLootService {
   }
 
   /**
-   * Explicit confirmation chain wrapper for PendingPickupProposal or explicit items.
+   * Explicit confirmation chain wrapper for PendingPickupProposal.
    * Controlled public route for confirmed pickups.
-   * Validates exact itemInstanceId, proposal presence, and quantity limits before executing pickup.
+   * STRICT REQUIREMENT: Confirmation is ONLY allowed for items present in an existing adventure.pendingPickup!
+   * Never searches lootSources/worldDrops directly if no pendingPickup proposal exists.
    */
   public static confirmPickup(
     adventure: Adventure,
     targetIdentifier: string = 'player',
-    proposalOrItems: PendingPickupProposal | { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[],
+    proposalOrItems?: PendingPickupProposal | { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[],
     options?: {
       sourceId?: string;
       allowPartial?: boolean;
@@ -307,91 +308,140 @@ export class InventoryLootService {
     notifications: InventoryNotification[];
   } {
     const targetId = EquipmentConditionService.resolveTargetId(adventure, targetIdentifier);
-    let itemsToValidate: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[] = [];
-    let pending = adventure.pendingPickup;
+    const pending = adventure.pendingPickup;
 
+    // Determine requested items list
+    let requestedItemsList: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[] = [];
     if (Array.isArray(proposalOrItems)) {
-      itemsToValidate = proposalOrItems;
-    } else if (proposalOrItems && Array.isArray(proposalOrItems.items)) {
-      itemsToValidate = proposalOrItems.items.map(i => ({
+      requestedItemsList = proposalOrItems;
+    } else if (proposalOrItems && Array.isArray((proposalOrItems as PendingPickupProposal).items)) {
+      requestedItemsList = (proposalOrItems as PendingPickupProposal).items.map(i => ({
         itemInstanceId: i.id,
         item: i,
         quantity: i.quantity || 1
       }));
-      if (!pending) {
-        pending = proposalOrItems;
-      }
+    } else if (pending && Array.isArray(pending.items)) {
+      requestedItemsList = pending.items.map(i => ({
+        itemInstanceId: i.id,
+        item: i,
+        quantity: i.quantity || 1
+      }));
+    }
+
+    // STRICT RULE 1: confirmPickup MUST FAIL if adventure.pendingPickup does NOT exist!
+    if (!pending || !Array.isArray(pending.items) || pending.items.length === 0) {
+      return {
+        updatedAdventure: adventure,
+        acceptedItems: [],
+        rejectedItems: requestedItemsList.map(req => ({
+          item: req.item || {
+            id: req.itemInstanceId || 'unknown',
+            itemDefinitionId: 'unknown',
+            name: 'Gegenstand'
+          },
+          reason: 'Bestätigung abgelehnt: Kein ausstehender Aufnahme-Vorschlag (pendingPickup) vorhanden.'
+        })),
+        notifications: []
+      };
     }
 
     const validatedItemsToTake: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[] = [];
     const rejectedItems: { item: ItemInstance; reason: string }[] = [];
-    let detectedSourceId: string | null = options?.sourceId || null;
+    let detectedSourceId: string | null = options?.sourceId || pending.lootSourceId || null;
 
-    itemsToValidate.forEach(req => {
+    requestedItemsList.forEach(req => {
       const targetInstId = req.itemInstanceId || req.item?.id;
 
-      // Strict resolution by itemInstanceId if supplied - NEVER fall back to name matching!
-      let candidateInPending: ItemInstance | null = null;
-      if (pending && Array.isArray(pending.items)) {
-        if (targetInstId) {
-          candidateInPending = pending.items.find(i => i.id === targetInstId) || null;
-        }
-      }
-
-      let candidateInSource: ItemInstance | null = null;
-
-      if (targetInstId) {
-        for (const ls of (adventure.lootSources || [])) {
-          if (options?.sourceId && ls.id !== options.sourceId) continue;
-          const found = (ls.items || []).find(i => i.id === targetInstId);
-          if (found) {
-            candidateInSource = found;
-            detectedSourceId = ls.id;
-            break;
-          }
-        }
-        if (!candidateInSource) {
-          const wd = (adventure.worldDrops || []).find(w => w.itemInstance.id === targetInstId);
-          if (wd) {
-            candidateInSource = wd.itemInstance;
-          }
-        }
-      }
-
-      const sourceInst = candidateInPending || candidateInSource || (targetInstId ? null : req.item || null);
-
-      if (!sourceInst) {
+      if (!targetInstId) {
         rejectedItems.push({
-          item: req.item || { id: targetInstId || 'unknown', itemDefinitionId: 'def', name: 'Unbekannter Gegenstand' },
-          reason: 'Bestätigung ungültig: Gegenstand nicht im Vorschlag oder der Quelle gefunden.'
+          item: req.item || { id: 'unknown', itemDefinitionId: 'unknown', name: 'Gegenstand' },
+          reason: 'Bestätigung abgelehnt: Keine konkrete itemInstanceId angegeben.'
         });
         return;
       }
 
-      const proposedQty = sourceInst.quantity || 1;
-      const requestedQty = req.quantity || proposedQty;
+      // STRICT RULE 2: Item MUST be present in pending.items! NEVER fall back to source/world drops/names!
+      const candidateInPending = pending.items.find(i => i.id === targetInstId);
+      if (!candidateInPending) {
+        rejectedItems.push({
+          item: req.item || { id: targetInstId, itemDefinitionId: 'unknown', name: 'Gegenstand' },
+          reason: `Bestätigung abgelehnt: Gegenstand (${targetInstId}) ist nicht im ausstehenden Vorschlag enthalten.`
+        });
+        return;
+      }
+
+      // STRICT RULE 3: Requested quantity CANNOT exceed proposed quantity!
+      const proposedQty = candidateInPending.quantity || 1;
+      const requestedQty = req.quantity ?? proposedQty;
 
       if (requestedQty > proposedQty) {
-        const validQty = Math.min(requestedQty, proposedQty);
-        if (validQty <= 0) {
-          rejectedItems.push({
-            item: sourceInst,
-            reason: 'Bestätigung ungültig: Die angeforderte Menge ist nicht mehr im Vorschlag vorhanden.'
-          });
-          return;
-        }
-        validatedItemsToTake.push({
-          itemInstanceId: sourceInst.id,
-          item: sourceInst,
-          quantity: validQty
+        rejectedItems.push({
+          item: candidateInPending,
+          reason: `Bestätigung abgelehnt: Die angeforderte Menge (${requestedQty}) überschreitet die im Vorschlag enthaltene Menge (${proposedQty}).`
         });
-      } else {
-        validatedItemsToTake.push({
-          itemInstanceId: sourceInst.id,
-          item: sourceInst,
-          quantity: requestedQty
-        });
+        return;
       }
+
+      // STRICT RULE 4: Check matching sourceId if present
+      if (options?.sourceId && pending.lootSourceId && options.sourceId !== pending.lootSourceId) {
+        rejectedItems.push({
+          item: candidateInPending,
+          reason: `Bestätigung abgelehnt: Die angeforderte Quelle (${options.sourceId}) stimmt nicht mit der Quelle des Vorschlags (${pending.lootSourceId}) überein.`
+        });
+        return;
+      }
+
+      // STRICT RULE 5: Check current presence in world/source AFTER proposal validation
+      let presentInWorld = false;
+
+      const sourceIdToMatch = options?.sourceId || pending.lootSourceId;
+      const targetLs = sourceIdToMatch ? (adventure.lootSources || []).find(s => s.id === sourceIdToMatch) : null;
+
+      if (targetLs) {
+        // If tied to a specific loot source, item MUST exist in that loot source's items!
+        presentInWorld = (targetLs.items || []).some(i => i.id === targetInstId);
+        if (presentInWorld && !detectedSourceId) {
+          detectedSourceId = targetLs.id;
+        }
+      } else {
+        // Check lootSources, worldDrops, canonical itemInstances
+        for (const ls of (adventure.lootSources || [])) {
+          if ((ls.items || []).some(i => i.id === targetInstId)) {
+            presentInWorld = true;
+            if (!detectedSourceId) detectedSourceId = ls.id;
+            break;
+          }
+        }
+
+        if (!presentInWorld) {
+          const wd = (adventure.worldDrops || []).find(w => w.itemInstance.id === targetInstId);
+          if (wd) presentInWorld = true;
+        }
+
+        if (!presentInWorld) {
+          const inCanonical = (adventure.itemInstances || []).find(i => i.id === targetInstId && i.owner !== 'player');
+          if (inCanonical) presentInWorld = true;
+        }
+
+        // If no lootSource or worldDrop is bound (e.g. AI state change proposal or standalone world item)
+        if (!presentInWorld && (pending.sourceType === 'world_item' || !pending.lootSourceId)) {
+          presentInWorld = true;
+        }
+      }
+
+      if (!presentInWorld) {
+        rejectedItems.push({
+          item: candidateInPending,
+          reason: `Bestätigung abgelehnt: Gegenstand (${targetInstId}) existiert nicht mehr an der Quelle oder wurde zwischenzeitlich entfernt.`
+        });
+        return;
+      }
+
+      validatedItemsToTake.push({
+        itemInstanceId: targetInstId,
+        item: candidateInPending,
+        quantity: requestedQty
+      });
     });
 
     if (validatedItemsToTake.length === 0) {
@@ -411,6 +461,31 @@ export class InventoryLootService {
     );
 
     let updatedAdv = executionResult.updatedAdventure;
+
+    // Update pendingPickup proposal after execution
+    if (updatedAdv.pendingPickup && Array.isArray(updatedAdv.pendingPickup.items)) {
+      const currentPending = updatedAdv.pendingPickup;
+      const remainingPendingItems = currentPending.items.filter(pItem => {
+        const accepted = executionResult.acceptedItems.find(a => a.id === pItem.id);
+        if (!accepted) return true;
+        return false;
+      });
+
+      if (remainingPendingItems.length === 0) {
+        updatedAdv = {
+          ...updatedAdv,
+          pendingPickup: undefined
+        };
+      } else {
+        updatedAdv = {
+          ...updatedAdv,
+          pendingPickup: {
+            ...currentPending,
+            items: remainingPendingItems
+          }
+        };
+      }
+    }
 
     if (options?.sourceId || detectedSourceId) {
       updatedAdv = this.syncLootSourceHarvestState(updatedAdv, (options?.sourceId || detectedSourceId)!);
@@ -626,7 +701,8 @@ export class InventoryLootService {
       if (!inst) return;
 
       const singleWeight = this.getItemWeightKg(inst);
-      const reqQty = takeReq.quantity || inst.quantity || 1;
+      const totalAvailableQty = inst.quantity || 1;
+      const reqQty = takeReq.quantity || totalAvailableQty;
       const capacity = this.getCarryCapacity(updatedAdv, targetId);
 
       const maxFittingQty = singleWeight <= 0 ? reqQty : Math.floor(capacity.remainingCapacityKg / singleWeight);
@@ -640,7 +716,7 @@ export class InventoryLootService {
       }
 
       const takenQty = Math.min(reqQty, maxFittingQty);
-      const remainingQty = reqQty - takenQty;
+      const remainingQty = totalAvailableQty - takenQty;
 
       // When partial quantity is taken, generate a NEW unique ID for the remaining portion
       const restInstanceId = remainingQty > 0
