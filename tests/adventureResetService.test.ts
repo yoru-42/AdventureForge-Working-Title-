@@ -15,7 +15,9 @@ import {
   PendingPickupProposal, 
   PendingItemTransferProposal,
   StoryInfoState,
-  CharacterKnowledge
+  CharacterKnowledge,
+  WorldSetting,
+  Territory
 } from '../types';
 
 let testCount = 0;
@@ -39,8 +41,9 @@ function runTests() {
   const baselinePlayer: Character = {
     id: 'char-player',
     name: 'Eldrin',
-    gender: 'Männlich',
     role: 'Krieger',
+    personality: 'Mutig',
+    bio: 'Ein erfahrener Abenteurer.',
     appearance: {
       hairColor: 'Schwarz',
       eyeColor: 'Blau',
@@ -48,17 +51,20 @@ function runTests() {
       build: 'Muskulös',
       gender: 'Männlich'
     },
+    attributes: [
+      { name: 'Stärke', value: 50, max: 100 },
+      { name: 'Ausdauer', value: 40, max: 100 }
+    ],
     campaignPowerLevels: {
-      'Stärke': { value: 50, xp: 0 },
-      'Ausdauer': { value: 40, xp: 0 }
+      'Stärke': { value: 50, potentialMax: 100, xp: 0 },
+      'Ausdauer': { value: 40, potentialMax: 100, xp: 0 }
     },
-    conditions: ['Gesund'],
     activeConditions: []
   };
 
   const baselineItemA: ItemInstance = {
     id: 'item-sword-start',
-    definitionId: 'def-iron-sword',
+    itemDefinitionId: 'def-iron-sword',
     name: 'Eisenschwert',
     owner: 'player',
     quantity: 1,
@@ -68,25 +74,63 @@ function runTests() {
   };
 
   const baselineEquipmentA: EquipmentState = {
-    id: 'equip-1',
     itemInstanceId: 'item-sword-start',
-    characterId: 'player',
-    slot: 'main_hand',
+    itemDefinitionId: 'def-iron-sword',
+    itemName: 'Eisenschwert',
+    ownerId: 'player',
+    equipped: true,
+    slot: 'weapon',
     bodyAreas: ['hands']
   };
 
   const baselineLoreCodex: LoreEntry = {
     id: 'lore-kingdom',
     title: 'Königreich Valoria',
-    category: 'Geschichte',
-    content: 'Ein uraltes Königreich im Hochland.'
+    category: 'Weltregeln',
+    description: 'Ein uraltes Königreich im Hochland.',
+    isUnlocked: true
   };
 
   const baselineNpc: NPC = {
     id: 'npc-aldric',
     name: 'Aldric',
     role: 'Wirt',
-    personality: 'Freundlich'
+    personality: 'Freundlich',
+    bio: 'Der Wirt der alten Taverne.',
+    appearance: {
+      hairColor: 'Grau',
+      eyeColor: 'Braun',
+      age: '55',
+      build: 'Kräftig',
+      gender: 'Männlich'
+    },
+    attributes: [],
+    isHostile: false
+  };
+
+  const baselineTerritory: Territory = {
+    id: 'terr-1',
+    name: 'Tal der Nebel',
+    description: 'Ein nebliges Tal voller Geheimnisse.',
+    type: 'region',
+    parentId: 'terr-root',
+    x: 0,
+    y: 0
+  };
+
+  const baselineWorld: WorldSetting = {
+    title: 'Die Vergessenen Reiche',
+    description: 'Eine weitläufige Fantasy-Welt.',
+    era: 'Mittelalter',
+    tone: 'Heroisch',
+    territories: [baselineTerritory],
+    connections: [],
+    startLocationId: 'loc-tavern',
+    currentLocationId: 'loc-tavern',
+    campaignPowerSettings: {
+      'Stärke': { min: 10, max: 100, levelUpLogic: 'xp_threshold' },
+      'Ausdauer': { min: 10, max: 100, levelUpLogic: 'xp_threshold' }
+    }
   };
 
   const sampleAdventure: Adventure = {
@@ -100,21 +144,7 @@ function runTests() {
       { id: 'first-msg', role: 'model', text: 'Du erwachst in einer kühlen Kammer der Taverne.' }
     ],
     player: baselinePlayer,
-    world: {
-      territories: [
-        {
-          id: 'terr-1',
-          name: 'Tal der Nebel',
-          locations: [
-            { id: 'loc-tavern', name: 'Alte Taverne', description: 'Ein warmer Zufluchtsort.' },
-            { id: 'loc-dungeon', name: 'Finsterer Kerker', description: 'Ein modriger Ort.' }
-          ]
-        }
-      ],
-      connections: [],
-      startLocationId: 'loc-tavern',
-      currentLocationId: 'loc-tavern'
-    },
+    world: baselineWorld,
     npcs: [baselineNpc],
     loreDatabase: [baselineLoreCodex],
     inventory: ['Eisenschwert'],
@@ -130,7 +160,8 @@ function runTests() {
       lastUpdatedTime: '2026-09-23T00:00:00.000Z'
     },
     characterKnowledge: {
-      topics: ['Valoria']
+      knownCharacters: ['npc-aldric'],
+      knownLocations: ['loc-tavern']
     },
     statusElements: [
       { id: 'st-time', label: 'Zeit', value: '08:00' },
@@ -140,7 +171,7 @@ function runTests() {
   };
 
   // Ensure initial snapshots
-  const adventureWithSnapshots = AdventureResetService.ensureInitialSnapshots(sampleAdventure);
+  const adventureWithSnapshots = AdventureResetService.ensureInitialSnapshots(sampleAdventure, true);
 
   // ==========================================
   // Test A – Spieler
@@ -149,8 +180,8 @@ function runTests() {
     const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
     adv.player.name = 'Veränderter Eldrin';
     adv.player.campaignPowerLevels['Stärke'].value = 999;
-    adv.player.physicalChangeHistory = [{ id: 'p1', timestamp: 'now', change: 'Verwandelt' }];
-    adv.player.emotionState = { mood: 'panisch' };
+    adv.player.physicalChangeHistory = [{ id: 'p1', timestamp: 'now', stageName: 'Metamorphose', changes: [], summary: 'Verwandelt', transformationIntensity: 50 }];
+    adv.player.emotionState = { emotion: 'panisch', intensity: 'stark' };
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
     assert(resetAdv.player.name === 'Eldrin', 'Test A: Spielername auf Initialwert zurückgesetzt');
@@ -180,7 +211,16 @@ function runTests() {
   {
     const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
     adv.npcs[0].personality = 'Feindselig';
-    adv.npcs.push({ id: 'dyn-npc-bandit', name: 'Räuber', role: 'Gegner' });
+    adv.npcs.push({
+      id: 'dyn-npc-bandit',
+      name: 'Räuber',
+      role: 'Gegner',
+      personality: 'Aggressiv',
+      bio: 'Ein Bandit.',
+      appearance: { hairColor: 'Braun', eyeColor: 'Braun', age: '30', build: 'Mittel', gender: 'Männlich' },
+      attributes: [],
+      isHostile: true
+    });
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
     assert(resetAdv.npcs.length === 1, 'Test C: Dynamischer NPC entfernt');
@@ -193,7 +233,13 @@ function runTests() {
   // ==========================================
   {
     const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    adv.loreDatabase.push({ id: 'dyn-lore-secret', title: 'Geheimgang', category: 'Orte', content: 'Hinter dem Fass.' });
+    adv.loreDatabase.push({
+      id: 'dyn-lore-secret',
+      title: 'Geheimgang',
+      category: 'Orte',
+      description: 'Hinter dem Fass.',
+      isUnlocked: true
+    });
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
     assert(resetAdv.loreDatabase?.length === 1, 'Test D: Dynamischer Lore-Eintrag entfernt');
@@ -235,8 +281,8 @@ function runTests() {
   {
     const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
     adv.characterKnowledge = {
-      topics: ['Valoria', 'Geheimes Ritual', 'Drachenhort'],
-      discoveredSecrets: ['Verräter im Rat']
+      knownCharacters: ['npc-aldric', 'npc-unknown-mage'],
+      knownLocations: ['loc-tavern', 'loc-secret-dungeon']
     };
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
@@ -250,7 +296,7 @@ function runTests() {
     const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
     const newItemB: ItemInstance = {
       id: 'dyn-item-potion',
-      definitionId: 'def-heal-pot',
+      itemDefinitionId: 'def-heal-pot',
       name: 'Heiltrank',
       owner: 'player',
       quantity: 5,
@@ -272,6 +318,7 @@ function runTests() {
     // Equip another item during gameplay
     const helmet: ItemInstance = {
       id: 'dyn-item-helm',
+      itemDefinitionId: 'def-helm',
       name: 'Eisenhelm',
       owner: 'player',
       quantity: 1,
@@ -279,9 +326,11 @@ function runTests() {
     };
     adv.itemInstances.push(helmet);
     adv.equipmentState.push({
-      id: 'equip-helm',
       itemInstanceId: 'dyn-item-helm',
-      characterId: 'player',
+      itemDefinitionId: 'def-helm',
+      itemName: 'Eisenhelm',
+      ownerId: 'player',
+      equipped: true,
       slot: 'head',
       bodyAreas: ['head']
     });
@@ -300,9 +349,10 @@ function runTests() {
       {
         id: 'cond-shackles',
         name: 'Gefesselt',
-        type: 'fesselung',
+        type: 'restraint',
         bodyAreas: ['hands'],
         sourceItemInstanceId: 'item-shackles-101',
+        description: 'Schwere Fesseln',
         isActive: true
       }
     ];
@@ -325,7 +375,7 @@ function runTests() {
       fromOwnerName: 'Aldric',
       toOwnerId: 'player',
       toOwnerName: 'Eldrin',
-      status: 'pending'
+      createdAt: Date.now()
     };
     adv.pendingTransfer = pendingTransferProposal;
 
@@ -340,14 +390,18 @@ function runTests() {
     const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
     const pendingPickupProposal: PendingPickupProposal = {
       id: 'pickup-456',
-      sourceId: 'loot-chest-1',
-      sourceType: 'container',
-      itemInstanceId: 'inst-ruby',
-      itemName: 'Rubin',
-      quantity: 1,
-      weightKg: 0.1,
-      requiresConfirmation: true,
-      reason: 'Wertvoll'
+      sourceTitle: 'Schatztruhe',
+      sourceType: 'chest',
+      items: [
+        {
+          id: 'inst-ruby',
+          itemDefinitionId: 'def-ruby',
+          name: 'Rubin',
+          quantity: 1,
+          weightKg: 0.1
+        }
+      ],
+      requiresExplicitConfirmation: true
     };
     adv.pendingPickup = pendingPickupProposal;
 
@@ -356,22 +410,53 @@ function runTests() {
   }
 
   // ==========================================
-  // Test M – CollectionTask
+  // Test M – CollectionTask (Single)
   // ==========================================
   {
     const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
     const task: CollectionTask = {
       id: 'task-wood',
-      resourceType: 'Holz',
+      title: 'Holzsammeln',
       targetQuantity: 10,
       collectedQuantity: 4,
-      targetLocationId: 'loc-forest',
-      status: 'in_progress'
+      status: 'active'
     };
     adv.collectionTasks = [task];
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert((resetAdv.collectionTasks || []).length === 0, 'Test M: Dynamischer CollectionTask nach Reset entfernt');
+    assert(Array.isArray(resetAdv.collectionTasks) && resetAdv.collectionTasks.length === 0, 'Test M: Einzelner CollectionTask nach Reset entfernt (collectionTasks === [])');
+  }
+
+  // ==========================================
+  // Test M2 – Mehrere CollectionTasks
+  // ==========================================
+  {
+    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const taskA: CollectionTask = {
+      id: 'task-a',
+      title: 'Kräuter sammeln',
+      targetQuantity: 5,
+      collectedQuantity: 2,
+      status: 'active'
+    };
+    const taskB: CollectionTask = {
+      id: 'task-b',
+      title: 'Erz abbauen',
+      targetQuantity: 3,
+      collectedQuantity: 3,
+      status: 'completed'
+    };
+    const taskC: CollectionTask = {
+      id: 'task-c',
+      title: 'Wasser holen',
+      targetQuantity: 1,
+      collectedQuantity: 0,
+      status: 'active'
+    };
+    adv.collectionTasks = [taskA, taskB, taskC];
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(Array.isArray(resetAdv.collectionTasks) && resetAdv.collectionTasks.length === 0, 'Test M2: Mehrere CollectionTasks (A, B, C) nach Reset komplett geleert');
   }
 
   // ==========================================
@@ -381,18 +466,18 @@ function runTests() {
     const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
     const dynLoot: LootSource = {
       id: 'loot-dead-wolf',
-      sourceType: 'monster',
-      sourceName: 'Erlegter Wolf',
-      locationId: 'loc-tavern',
-      isExhausted: false,
-      isBodyHarvested: false,
-      harvestAttemptsLeft: 1
+      type: 'monster_body',
+      title: 'Erlegter Wolf',
+      items: []
     };
     const dynDrop: WorldDropItem = {
       id: 'drop-gold',
-      locationId: 'loc-tavern',
-      name: 'Goldmünzen',
-      quantity: 20
+      itemInstance: {
+        id: 'inst-gold-coins',
+        itemDefinitionId: 'def-gold',
+        name: 'Goldmünzen',
+        quantity: 20
+      }
     };
     adv.lootSources = [dynLoot];
     adv.worldDrops = [dynDrop];
@@ -460,8 +545,9 @@ function runTests() {
     adv.loreDatabase.push({
       id: 'lore-user-codex-entry',
       title: 'Das Buch der Ahnen',
-      category: 'Artefakte',
-      content: 'Vom Spieler bewusst in den Codex eingetragen.'
+      category: 'Gegenstände',
+      description: 'Vom Spieler bewusst in den Codex eingetragen.',
+      isUnlocked: true
     });
     // Ensure this entry is in initial or permanent lore database
     adv.initialLoreDatabase = JSON.parse(JSON.stringify(adv.loreDatabase));
@@ -470,13 +556,187 @@ function runTests() {
     adv.loreDatabase.push({
       id: 'dyn-lore-temporary-rumor',
       title: 'Flüchtiges Gerücht',
-      category: 'Gerüchte',
-      content: 'Jemand hat etwas gesehen.'
+      category: 'Weltregeln',
+      description: 'Jemand hat etwas gesehen.',
+      isUnlocked: true
     });
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
     assert(resetAdv.loreDatabase?.some((l: LoreEntry) => l.id === 'lore-user-codex-entry') === true, 'Test R: Vom Spieler gespeicherter Codex-Eintrag bleibt nach Reset erhalten');
     assert(resetAdv.loreDatabase?.some((l: LoreEntry) => l.id === 'dyn-lore-temporary-rumor') === false, 'Test R: Dynamisches Gerücht wurde entfernt');
+  }
+
+  // ==========================================
+  // Test S – Legacy Snapshot Protection
+  // ==========================================
+  {
+    // A legacy adventure that has been played (contains user turns) and has no initialPlayer snapshot
+    const playedLegacyAdventure: Adventure = {
+      id: 'adv-legacy-played',
+      authorId: 'user-1',
+      isPublic: false,
+      prologue: 'Alte Geschichte...',
+      statusElements: [],
+      chatHistory: [
+        { id: '1', role: 'model', text: 'Prolog...' },
+        { id: '2', role: 'user', text: 'Ich greife den Drachen an und trainiere hart.' },
+        { id: '3', role: 'model', text: 'Du bist jetzt Level 10 mit 999 Stärke geworden.' }
+      ],
+      player: {
+        id: 'char-legacy',
+        name: 'Alter Held',
+        role: 'Kämpfer',
+        personality: 'Zäh',
+        bio: 'Ein Veteran.',
+        appearance: { hairColor: 'Grau', eyeColor: 'Braun', age: '45', build: 'Breit', gender: 'Männlich' },
+        attributes: [],
+        campaignPowerLevels: {
+          'Stärke': { value: 999, potentialMax: 1000, xp: 5000 },
+          'Ausdauer': { value: 850, potentialMax: 1000, xp: 4000 }
+        }
+      },
+      world: {
+        title: 'Alte Welt',
+        description: 'Ein vergessenes Land.',
+        era: 'Klassisch',
+        tone: 'Dunkel',
+        territories: [],
+        connections: [],
+        campaignPowerSettings: {
+          'Stärke': { min: 10, max: 100, levelUpLogic: 'xp_threshold' },
+          'Ausdauer': { min: 15, max: 100, levelUpLogic: 'xp_threshold' }
+        }
+      },
+      npcs: [],
+      loreDatabase: [],
+      inventory: []
+    };
+
+    // 1. ensureInitialSnapshots should NOT blindly declare current level 999 state as initialPlayer
+    const snapshotted = AdventureResetService.ensureInitialSnapshots(playedLegacyAdventure, false);
+    assert(snapshotted.initialPlayer === undefined, 'Test S1: ensureInitialSnapshots deklariert veränderten Legacy-Zustand NICHT blind als initialPlayer');
+
+    // 2. resetAdventureToInitialState safely reconstructs player baseline to configured minimums (min=10, min=15)
+    const resetLegacy = AdventureResetService.resetAdventureToInitialState(playedLegacyAdventure);
+    assert(resetLegacy.player.campaignPowerLevels?.['Stärke']?.value === 10, 'Test S2: Legacy-Spieler Stärke wird sicher auf Minimum (10) zurückgesetzt');
+    assert(resetLegacy.player.campaignPowerLevels?.['Ausdauer']?.value === 15, 'Test S3: Legacy-Spieler Ausdauer wird sicher auf Minimum (15) zurückgesetzt');
+  }
+
+  // ==========================================
+  // Test T – Vollständiger Integrationstest (Multi-State-Reset & Persistence Flow)
+  // ==========================================
+  {
+    const initialAdv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+
+    // Heavy mutations across all game systems during a session:
+    initialAdv.player.name = 'Mutierter Spieler';
+    initialAdv.player.campaignPowerLevels['Stärke'].value = 350;
+    initialAdv.world.currentLocationId = 'loc-dungeon';
+    initialAdv.itemInstances.push({
+      id: 'dyn-item-dragon-gem',
+      itemDefinitionId: 'def-gem',
+      name: 'Drachenjuwel',
+      owner: 'player',
+      quantity: 1,
+      weightKg: 0.5
+    });
+    initialAdv.equipmentState.push({
+      itemInstanceId: 'dyn-item-dragon-gem',
+      itemDefinitionId: 'def-gem',
+      itemName: 'Drachenjuwel',
+      ownerId: 'player',
+      equipped: true,
+      slot: 'ring_1',
+      bodyAreas: ['hands']
+    });
+    initialAdv.storyState.storyEntities.push({
+      id: 'entity-boss',
+      title: 'Drache',
+      category: 'Gegner',
+      description: 'Mächtiges Monster'
+    });
+    initialAdv.characterKnowledge.knownLocations = ['loc-tavern', 'loc-secret-boss'];
+    initialAdv.pendingPickup = {
+      id: 'pick-1',
+      sourceTitle: 'Schatztruhe',
+      sourceType: 'chest',
+      items: [
+        {
+          id: 'gem',
+          itemDefinitionId: 'def-gem',
+          name: 'Juwel',
+          quantity: 1,
+          weightKg: 0.1
+        }
+      ],
+      requiresExplicitConfirmation: true
+    };
+    initialAdv.pendingTransfer = {
+      id: 'trans-1',
+      itemInstanceId: 'gem',
+      itemName: 'Juwel',
+      quantity: 1,
+      fromOwnerId: 'npc-aldric',
+      fromOwnerName: 'Aldric',
+      toOwnerId: 'player',
+      toOwnerName: 'Spieler',
+      createdAt: Date.now()
+    };
+    initialAdv.collectionTasks = [
+      { id: 'col-1', title: 'Holz', targetQuantity: 10, collectedQuantity: 5, status: 'active' }
+    ];
+    initialAdv.worldTime = { day: 12, hour: 18, minute: 30 };
+
+    // Execute centralized reset
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(initialAdv);
+
+    // Simulate saving to persistence and reloading
+    const persistedString = JSON.stringify(resetAdv);
+    const reloaded: Adventure = JSON.parse(persistedString);
+
+    // Verify all baseline restorations
+    assert(reloaded.player.name === 'Eldrin', 'Test T1: Spielername nach Reset & Reload baseline');
+    assert(reloaded.player.campaignPowerLevels?.['Stärke']?.value === 50, 'Test T2: Spielerwerte nach Reset & Reload baseline');
+    assert(reloaded.world.currentLocationId === 'loc-tavern', 'Test T3: Weltort nach Reset & Reload baseline');
+    assert(reloaded.itemInstances?.length === 1 && reloaded.itemInstances[0].id === 'item-sword-start', 'Test T4: ItemInstances nach Reset & Reload baseline');
+    assert(reloaded.equipmentState?.length === 1 && reloaded.equipmentState[0].itemInstanceId === 'item-sword-start', 'Test T5: EquipmentState nach Reset & Reload baseline');
+    assert(reloaded.storyState?.storyEntities?.length === 0, 'Test T6: StoryEntities nach Reset & Reload geleert');
+    assert(JSON.stringify(reloaded.characterKnowledge) === JSON.stringify(adventureWithSnapshots.initialCharacterKnowledge), 'Test T7: CharacterKnowledge nach Reset & Reload baseline');
+    assert(reloaded.pendingPickup === null, 'Test T8: pendingPickup nach Reset & Reload null');
+    assert(reloaded.pendingTransfer === null, 'Test T9: pendingTransfer nach Reset & Reload null');
+    assert(reloaded.collectionTasks?.length === 0, 'Test T10: collectionTasks nach Reset & Reload leer');
+    assert(reloaded.worldTime?.day === 1 && reloaded.worldTime?.hour === 8, 'Test T11: worldTime nach Reset & Reload baseline');
+  }
+
+  // ==========================================
+  // Test U – First Message Flow Absicherung
+  // ==========================================
+  {
+    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const firstMsgText = adv.firstMessage;
+    const fp = AIStoryStateProcessor.computeMessageFingerprint(firstMsgText);
+
+    // Durchlauf 1: First Message verarbeitet
+    adv.storyState.processedFirstMessage = true;
+    adv.storyState.processedFirstMessageFingerprint = fp;
+
+    // Reset ausführen
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.storyState?.processedFirstMessage === false, 'Test U1: Reset setzt processedFirstMessage auf false');
+    assert(resetAdv.storyState?.processedFirstMessageFingerprint === '', 'Test U2: Reset leert processedFirstMessageFingerprint');
+
+    // Durchlauf 2: First Message wird erneut sauber verarbeitet
+    const parseResult = AIStoryStateProcessor.parseAndProcessAiResponse(
+      firstMsgText,
+      resetAdv
+    );
+    const reprocessedAdv = parseResult.updatedAdventure;
+    const reprocessedFp = AIStoryStateProcessor.computeMessageFingerprint(firstMsgText);
+    reprocessedAdv.storyState!.processedFirstMessage = true;
+    reprocessedAdv.storyState!.processedFirstMessageFingerprint = reprocessedFp;
+
+    assert(reprocessedAdv.storyState?.processedFirstMessage === true, 'Test U3: Durchlauf 2 markiert processedFirstMessage erfolgreich');
+    assert(reprocessedAdv.storyState?.processedFirstMessageFingerprint === fp, 'Test U4: Fingerprint stimmt deterministisch überein');
   }
 
   console.log('\n=== TEST RUN COMPLETE ===');

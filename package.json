@@ -9,7 +9,7 @@
     "start": "node server.ts",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/inventoryLootService.test.ts"
+    "test": "tsx tests/runAllTests.ts"
   },
   "dependencies": {
     "@google/genai": "^1.41.0",

@@ -918,6 +918,9 @@ export interface Character {
   presenceState?: CharacterPresenceState;
   equipment?: EquipmentState[];
   inventoryEntries?: InventoryEntry[];
+  conditions?: BodyCondition[];
+  activeConditions?: BodyCondition[];
+  temporaryConditions?: any[];
 }
 
 export type InformationType =

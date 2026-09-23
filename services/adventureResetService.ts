@@ -11,7 +11,8 @@ import {
   StoryInfoState, 
   StructuredInventory, 
   WorldSetting, 
-  WorldTime 
+  WorldTime,
+  CollectionTask
 } from '../types';
 import { EquipmentConditionService } from './equipmentConditionService';
 
@@ -25,85 +26,103 @@ function deepClone<T>(obj: T): T {
 
 export class AdventureResetService {
   /**
-   * Ensures that all initial snapshot fields (initialPlayer, initialWorld, initialItemInstances, etc.)
-   * are populated on an adventure. This guarantees that any adventure has a pristine snapshot
-   * of its baseline state to return to upon restart.
+   * Checks whether an adventure is in a fresh/unplayed initial state.
+   * An adventure is fresh if no user chat messages exist and total messages <= 2 (prologue/firstMessage only).
    */
-  public static ensureInitialSnapshots(adventure: Adventure): Adventure {
+  public static isFreshAdventure(adventure: Adventure): boolean {
+    if (!adventure) return false;
+    const history = adventure.chatHistory || [];
+    const userMessages = history.filter(m => m.role === 'user');
+    return userMessages.length === 0 && history.length <= 2;
+  }
+
+  /**
+   * Populates initial snapshot fields (initialPlayer, initialWorld, initialItemInstances, etc.)
+   * for fresh adventures or creation contexts.
+   * 
+   * For already-progressed legacy adventures (lacking initial snapshots), this does NOT
+   * silently declare the current mutated player/world state as the pristine initial snapshot.
+   */
+  public static ensureInitialSnapshots(adventure: Adventure, forceCreationContext = false): Adventure {
     if (!adventure) return adventure;
 
     const cloned = { ...adventure };
+    const canSnapshotFromCurrent = forceCreationContext || this.isFreshAdventure(cloned);
 
-    if (!cloned.initialPlayer && cloned.player) {
-      cloned.initialPlayer = deepClone(cloned.player);
+    if (canSnapshotFromCurrent) {
+      if (!cloned.initialPlayer && cloned.player) {
+        cloned.initialPlayer = deepClone(cloned.player);
+      }
+      if (!cloned.initialWorld && cloned.world) {
+        cloned.initialWorld = deepClone(cloned.world);
+      }
+      if (!cloned.initialLoreDatabase && cloned.loreDatabase) {
+        cloned.initialLoreDatabase = deepClone(cloned.loreDatabase);
+      }
+      if (!cloned.initialNpcs && cloned.npcs) {
+        cloned.initialNpcs = deepClone(cloned.npcs);
+      }
+      if (!cloned.initialInventory && cloned.inventory) {
+        cloned.initialInventory = deepClone(cloned.inventory);
+      }
+      if (!cloned.initialItemInstances && cloned.itemInstances) {
+        cloned.initialItemInstances = deepClone(cloned.itemInstances);
+      }
+      if (!cloned.initialInventoryEntries && cloned.inventoryEntries) {
+        cloned.initialInventoryEntries = deepClone(cloned.inventoryEntries);
+      }
+      if (!cloned.initialEquipmentState && cloned.equipmentState) {
+        cloned.initialEquipmentState = deepClone(cloned.equipmentState);
+      }
+      if (!cloned.initialStructuredInventory && cloned.structuredInventory) {
+        cloned.initialStructuredInventory = deepClone(cloned.structuredInventory);
+      }
+      if (!cloned.initialStoryState && cloned.storyState) {
+        cloned.initialStoryState = deepClone(cloned.storyState);
+      }
+      if (!cloned.initialCharacterKnowledge && cloned.characterKnowledge) {
+        cloned.initialCharacterKnowledge = deepClone(cloned.characterKnowledge);
+      }
+      if (!cloned.initialCurrentLocation && cloned.currentLocation) {
+        cloned.initialCurrentLocation = deepClone(cloned.currentLocation);
+      }
+      if (!cloned.initialLootSources && cloned.lootSources) {
+        cloned.initialLootSources = deepClone(cloned.lootSources);
+      }
+      if (!cloned.initialWorldDrops && cloned.worldDrops) {
+        cloned.initialWorldDrops = deepClone(cloned.worldDrops);
+      }
     }
-    if (!cloned.initialWorld && cloned.world) {
-      cloned.initialWorld = deepClone(cloned.world);
-    }
+
+    // Default static baselines that are always safe to populate if missing
     if (!cloned.initialWorldTime) {
-      cloned.initialWorldTime = cloned.worldTime ? deepClone(cloned.worldTime) : { day: 1, hour: 8, minute: 0 };
+      cloned.initialWorldTime = { day: 1, hour: 8, minute: 0 };
     }
     if (!cloned.initialStatusElements && cloned.statusElements) {
       cloned.initialStatusElements = deepClone(cloned.statusElements);
-    }
-    if (!cloned.initialStructuredInventory && cloned.structuredInventory) {
-      cloned.initialStructuredInventory = deepClone(cloned.structuredInventory);
-    }
-    if (!cloned.initialLoreDatabase && cloned.loreDatabase) {
-      cloned.initialLoreDatabase = deepClone(cloned.loreDatabase);
-    }
-    if (!cloned.initialNpcs && cloned.npcs) {
-      cloned.initialNpcs = deepClone(cloned.npcs);
-    }
-    if (!cloned.initialInventory && cloned.inventory) {
-      cloned.initialInventory = deepClone(cloned.inventory);
-    }
-    if (!cloned.initialItemInstances && cloned.itemInstances) {
-      cloned.initialItemInstances = deepClone(cloned.itemInstances);
-    }
-    if (!cloned.initialInventoryEntries && cloned.inventoryEntries) {
-      cloned.initialInventoryEntries = deepClone(cloned.inventoryEntries);
-    }
-    if (!cloned.initialEquipmentState && cloned.equipmentState) {
-      cloned.initialEquipmentState = deepClone(cloned.equipmentState);
-    }
-    if (!cloned.initialStoryState && cloned.storyState) {
-      cloned.initialStoryState = deepClone(cloned.storyState);
-    }
-    if (!cloned.initialCharacterKnowledge && cloned.characterKnowledge) {
-      cloned.initialCharacterKnowledge = deepClone(cloned.characterKnowledge);
-    }
-    if (!cloned.initialCurrentLocation && cloned.currentLocation) {
-      cloned.initialCurrentLocation = deepClone(cloned.currentLocation);
-    }
-    if (!cloned.initialLootSources && cloned.lootSources) {
-      cloned.initialLootSources = deepClone(cloned.lootSources);
-    }
-    if (!cloned.initialWorldDrops && cloned.worldDrops) {
-      cloned.initialWorldDrops = deepClone(cloned.worldDrops);
-    }
-    if (!cloned.initialCollectionTasks && cloned.collectionTasks) {
-      cloned.initialCollectionTasks = deepClone(cloned.collectionTasks);
     }
 
     return cloned;
   }
 
   /**
-   * Resets an active adventure back to its saved initial starting state.
+   * Resets an active adventure back to its initial starting state.
    * Discards all runtime alterations, dynamic additions, active proposals, tasks, and combat states.
    * Preserves permanent definitions, codex entries, and initial configuration snapshots.
    */
   public static resetAdventureToInitialState(adventure: Adventure): Adventure {
     if (!adventure) return adventure;
 
-    // 1. Restore Player to Initial Snapshot
+    // 1. Restore Player to Initial Snapshot (or safe baseline reconstruction for legacy adventures)
     let resetPlayer: Character;
+    let isLegacyReconstructed = false;
+
     if (adventure.initialPlayer) {
       resetPlayer = deepClone(adventure.initialPlayer);
     } else {
+      // Legacy fallback: reconstruct player baseline by resetting power levels to configured minimums
+      isLegacyReconstructed = true;
       resetPlayer = deepClone(adventure.player) || {} as Character;
-      // If no initialPlayer snapshot exists, reset campaignPowerLevels to minimums or defaults
       if (resetPlayer.campaignPowerLevels) {
         const updatedLevels = { ...resetPlayer.campaignPowerLevels };
         Object.keys(updatedLevels).forEach(key => {
@@ -234,7 +253,6 @@ export class AdventureResetService {
     // CRITICAL: Clear processedFirstMessage & fingerprint so prologue / firstMessage can be reprocessed
     resetStoryState.processedFirstMessage = false;
     resetStoryState.processedFirstMessageFingerprint = '';
-    resetStoryState.temporaryStoryEntities = [];
 
     // 8. Restore / Reset Character Knowledge
     let resetCharacterKnowledge: any;
@@ -244,16 +262,14 @@ export class AdventureResetService {
       resetCharacterKnowledge = {};
     }
 
-    // 9. Restore / Reset Loot, Drops & Collection Tasks
+    // 9. Reset Loot, Drops & Collection Tasks (CollectionTasks are strictly runtime and always reset to [])
     const resetLootSources = adventure.initialLootSources 
       ? deepClone(adventure.initialLootSources) 
       : [];
     const resetWorldDrops = adventure.initialWorldDrops 
       ? deepClone(adventure.initialWorldDrops) 
       : [];
-    const resetCollectionTasks = adventure.initialCollectionTasks 
-      ? deepClone(adventure.initialCollectionTasks) 
-      : [];
+    const resetCollectionTasks: CollectionTask[] = [];
 
     // 10. Restore Status Elements & World Time
     const resetStatusElements = adventure.initialStatusElements
