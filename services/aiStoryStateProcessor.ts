@@ -544,9 +544,36 @@ export class AIStoryStateProcessor {
           ateId: ac.ateId,
           actionDescription: 'Aktion durch Geschichte verarbeitet',
           effectOnThread: ac.playerImpact || 'Ablauf durch Story-Ereignis beeinflusst',
-          accelerateStage: ac.newStageIndex !== undefined
+          newStageIndex: ac.newStageIndex,
+          newStatus: ac.newStatus
         });
       });
+    }
+
+    // 10. Process New Active Time Events (ATEs)
+    if (Array.isArray(changes.newActiveTimeEvents) && changes.newActiveTimeEvents.length > 0) {
+      const existingAtes = ActiveTimeEventService.getActiveTimeEvents(state);
+      const createdAtes = [...existingAtes];
+      changes.newActiveTimeEvents.forEach(nate => {
+        if (!nate || !nate.title) return;
+        const newAte = ActiveTimeEventService.createATE({
+          title: nate.title,
+          summary: nate.summary || nate.title,
+          category: nate.category,
+          status: nate.status,
+          revealLevel: nate.revealLevel,
+          originLocationName: nate.originLocationName,
+          backgroundContext: nate.backgroundContext,
+          participants: nate.participants,
+          stages: nate.stages,
+          convergenceCondition: nate.convergenceCondition,
+          structuredConvergenceCondition: nate.structuredConvergenceCondition,
+          convergenceConsequence: nate.convergenceConsequence,
+          worldTime: state.worldTime
+        });
+        createdAtes.push(newAte);
+      });
+      state = ActiveTimeEventService.setActiveTimeEvents(state, createdAtes);
     }
 
     return state;

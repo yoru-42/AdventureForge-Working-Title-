@@ -4,6 +4,7 @@ import { GeminiService } from './geminiService';
 import { TravelService, RouteResolution } from './travelService';
 import { CharacterKnowledgeService } from './characterKnowledgeService';
 import { LocationContextService } from './locationContextService';
+import { ActiveTimeEventService } from './activeTimeEventService';
 import { STRUCTURED_STORY_STATE_DIRECTIVE } from './aiStoryStateProcessor';
 import type { ProcessPlayerTurnParams, ProcessPlayerTurnResult } from './turnTypes';
 
@@ -70,20 +71,26 @@ export class GameTurnService {
     }
 
     // Step 2: EXACTLY ONE WorldSimulationStep call
+    const currentLocName = adventure.currentLocation?.locationName || adventure.world?.locations?.[0]?.name;
     const simResult = mode === 'dialogue'
       ? WorldSimulationService.runSimulationStep({
           world: adventure.world,
+          adventure,
+          currentLocationName: currentLocName,
           mode: 'dialogue',
           dialogueParticipantCount: activeParticipantCount,
           actionText
         })
       : WorldSimulationService.runSimulationStep({
           world: adventure.world,
+          adventure,
+          currentLocationName: currentLocName,
           mode: 'action',
           actionText
         });
 
     const activeWorld = simResult.updatedWorld;
+    const currentAdventure = simResult.updatedAdventure || { ...adventure, world: activeWorld };
 
     // Step 3: Construct messages and AI prompt
     const userMsg: ChatMessage = {
@@ -93,7 +100,7 @@ export class GameTurnService {
       isDialogue: mode === 'dialogue',
       dialogueType,
       dialogueSpeakerId: mode === 'dialogue' ? (dialogueType === 'user_npc' ? 'player' : speakerNpc?.id) : undefined,
-      dialogueSpeakerName: mode === 'dialogue' ? (dialogueType === 'user_npc' ? (adventure.player?.nickname || adventure.player?.name) : speakerName) : undefined,
+      dialogueSpeakerName: mode === 'dialogue' ? (dialogueType === 'user_npc' ? (currentAdventure.player?.nickname || currentAdventure.player?.name) : speakerName) : undefined,
       dialogueTargetId: mode === 'dialogue' ? targetNpc?.id : undefined,
       dialogueTargetName: targetName,
       dialogueParticipantIds: mode === 'dialogue' ? (
@@ -103,10 +110,12 @@ export class GameTurnService {
       ) : undefined
     };
 
-    const currentChatHistory = adventure.chatHistory || [];
+    const currentChatHistory = currentAdventure.chatHistory || [];
     const updatedMessagesForAi = [...currentChatHistory, userMsg];
 
     let rawAiResponse = '';
+
+    const ateContext = ActiveTimeEventService.getATEContextForAI(currentAdventure);
 
     if (generateAiResponse) {
       rawAiResponse = await generateAiResponse({
@@ -120,67 +129,75 @@ export class GameTurnService {
         if (simResult.playerVisibleSummary) {
           simulationInstruction = `\nDYNAMISCHE WELT-SIMULATION & EREIGNISSE (EINGETRETEN IN DIESEM ZUG):\n${simResult.playerVisibleSummary}\n`;
         }
-        const currentStatsStr = (adventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
+        const currentStatsStr = (currentAdventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
         const campaignPowerInstruction = activeWorld.campaignPowerSettings ? "Grundwerte: " + JSON.stringify(activeWorld.campaignPowerSettings) : "";
         
-        const locationContext = LocationContextService.resolveCurrentLocation(adventure);
+        const locationContext = LocationContextService.resolveCurrentLocation(currentAdventure);
         const locationBlock = LocationContextService.formatLocationPromptBlock(locationContext, 'DIALOG');
 
-        const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || adventure.world.title}".
+        let systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || currentAdventure.world.title}".
 ${simulationInstruction}
-WELT: ${activeWorld.description || adventure.world.description} (Ton: ${activeWorld.tone || adventure.world.tone})
+WELT: ${activeWorld.description || currentAdventure.world.description} (Ton: ${activeWorld.tone || currentAdventure.world.tone})
 ${campaignPowerInstruction}
 
 ${locationBlock}
 
 SPIELER-CHARAKTER:
-${adventure.player.name} (${adventure.player.role}). 
-- Bio: ${adventure.player.bio}
-- Aktuelle Lage: ${adventure.player.currentSituation}
-- Ziel: ${adventure.player.goal}
+${currentAdventure.player.name} (${currentAdventure.player.role}). 
+- Bio: ${currentAdventure.player.bio}
+- Aktuelle Lage: ${currentAdventure.player.currentSituation}
+- Ziel: ${currentAdventure.player.goal}
 
 AKTUELLE WERTE: ${currentStatsStr}
 
 WICHTIGSTE REGEL:
 Halte dich STRIKT an die Anweisung, AUSSCHLIESSLICH gesprochenes Wort auszugeben! Keine Erzählungen, keine Handlungen in Sternchen, keine Szenenbeschreibungen. Nur der nackte, gesprochene Text.`;
 
-        const response = await GeminiService.chat(updatedMessagesForAi, systemInstruction, activeWorld.isNsfw, adventure.summaryLog);
+        if (ateContext) {
+          systemInstruction += `\n\n${ateContext}`;
+        }
+
+        const response = await GeminiService.chat(updatedMessagesForAi, systemInstruction, activeWorld.isNsfw, currentAdventure.summaryLog);
         rawAiResponse = response.text || '';
       } else {
         let simulationInstruction = '';
         if (simResult.playerVisibleSummary) {
           simulationInstruction = `\nDYNAMISCHE WELT-SIMULATION & EREIGNISSE (EINGETRETEN IN DIESEM ZUG):\n${simResult.playerVisibleSummary}\n`;
         }
-        const currentStatsStr = (adventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
+        const currentStatsStr = (currentAdventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
         const campaignPowerInstruction = activeWorld.campaignPowerSettings ? "Grundwerte: " + JSON.stringify(activeWorld.campaignPowerSettings) : "";
-        const locationContext = LocationContextService.resolveCurrentLocation(adventure);
+        const locationContext = LocationContextService.resolveCurrentLocation(currentAdventure);
         const locationBlock = LocationContextService.formatLocationPromptBlock(
           locationContext,
-          adventure.combatState?.isCombatActive ? 'COMBAT' : 'STORY'
+          currentAdventure.combatState?.isCombatActive ? 'COMBAT' : 'STORY'
         );
 
-        const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || adventure.world.title}".
+        let systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || currentAdventure.world.title}".
 ${simulationInstruction}
-WELT: ${activeWorld.description || adventure.world.description} (Ton: ${activeWorld.tone || adventure.world.tone})
+WELT: ${activeWorld.description || currentAdventure.world.description} (Ton: ${activeWorld.tone || currentAdventure.world.tone})
 ${campaignPowerInstruction}
 
 ${locationBlock}
 
 SPIELER-CHARAKTER:
-${adventure.player.name} (${adventure.player.role}). 
-- Bio: ${adventure.player.bio}
-- Aktuelle Lage: ${adventure.player.currentSituation}
-- Ziel: ${adventure.player.goal}
+${currentAdventure.player.name} (${currentAdventure.player.role}). 
+- Bio: ${currentAdventure.player.bio}
+- Aktuelle Lage: ${currentAdventure.player.currentSituation}
+- Ziel: ${currentAdventure.player.goal}
 
 AKTUELLE WERTE: ${currentStatsStr}
 
 ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
 
+        if (ateContext) {
+          systemInstruction += `\n\n${ateContext}`;
+        }
+
         const response = await GeminiService.chat(
           updatedMessagesForAi,
           systemInstruction,
           activeWorld.isNsfw,
-          adventure.summaryLog
+          currentAdventure.summaryLog
         );
         rawAiResponse = response.text || '';
       }

@@ -9,7 +9,9 @@ import {
   WorldFactChangeLogEntry,
   Territory,
   WorldLocationReference,
-  EconomyHolding
+  EconomyHolding,
+  Adventure,
+  ActiveTimeEvent
 } from '../types';
 import { WorldIntegrationService } from './worldIntegrationService';
 import { ActiveTimeEventService } from './activeTimeEventService';
@@ -18,6 +20,8 @@ export const MAX_EVENT_PROCESSING_DEPTH = 10;
 
 export interface SimulationStepParams {
   world: WorldSetting;
+  adventure?: Adventure;
+  currentLocationName?: string;
   minutesToAdd?: number;
   seed?: number;
   actionText?: string;
@@ -27,6 +31,10 @@ export interface SimulationStepParams {
 
 export interface SimulationStepResult {
   updatedWorld: WorldSetting;
+  updatedAdventure?: Adventure;
+  advancedATEs?: ActiveTimeEvent[];
+  convergedATEs?: ActiveTimeEvent[];
+  newCluesGenerated?: string[];
   timeStart: WorldTime;
   timeEnd: WorldTime;
   processedEvents: WorldEvent[];
@@ -529,15 +537,34 @@ export class WorldSimulationService {
     const finalScheduledEvents = Array.from(eventMap.values()).filter(e => e.status === 'scheduled');
     const finalHistoryEvents = Array.from(eventMap.values()).filter(e => e.status === 'resolved' || e.status === 'cancelled');
 
-    // Evaluate Active Time Events (ATE) if activeTimeEvents exist on world
-    if (currentWorld.activeTimeEvents && currentWorld.activeTimeEvents.length > 0) {
-      const dummyAdventure: any = { world: currentWorld, worldTime: timeEnd, activeTimeEvents: currentWorld.activeTimeEvents };
+    // Evaluate Active Time Events (ATE) if activeTimeEvents exist on world or adventure
+    let updatedAdventure: Adventure | undefined = params.adventure ? { ...params.adventure, world: currentWorld, worldTime: timeEnd } : undefined;
+    let advancedATEs: ActiveTimeEvent[] = [];
+    let convergedATEs: ActiveTimeEvent[] = [];
+    let newCluesGenerated: string[] = [];
+
+    const targetAdventureForAte = updatedAdventure || ({
+      world: currentWorld,
+      worldTime: timeEnd,
+      activeTimeEvents: currentWorld.activeTimeEvents || []
+    } as any);
+
+    const atesToEval = ActiveTimeEventService.getActiveTimeEvents(targetAdventureForAte);
+    if (atesToEval.length > 0) {
+      const playerLocName = params.currentLocationName || targetAdventureForAte.currentLocation?.locationName || currentWorld.locations?.[0]?.name;
       const ateRes = ActiveTimeEventService.evaluateAndAdvanceATEs({
-        adventure: dummyAdventure,
-        elapsedMinutes: actualMinsToAdd
+        adventure: targetAdventureForAte,
+        elapsedMinutes: actualMinsToAdd,
+        currentLocationName: playerLocName
       });
-      if (ateRes.updatedAdventure.world?.activeTimeEvents) {
-        currentWorld.activeTimeEvents = ateRes.updatedAdventure.world.activeTimeEvents;
+
+      updatedAdventure = ateRes.updatedAdventure;
+      advancedATEs = ateRes.advancedATEs;
+      convergedATEs = ateRes.convergedATEs;
+      newCluesGenerated = ateRes.newCluesGenerated;
+
+      if (updatedAdventure.world?.activeTimeEvents) {
+        currentWorld.activeTimeEvents = updatedAdventure.world.activeTimeEvents;
       }
     }
 
@@ -554,10 +581,19 @@ export class WorldSimulationService {
       }
     };
 
+    if (updatedAdventure) {
+      updatedAdventure.world = updatedWorld;
+      updatedAdventure.worldTime = timeEnd;
+    }
+
     const playerVisibleSummary = playerVisibleMessages.join('\n');
 
     return {
       updatedWorld,
+      updatedAdventure,
+      advancedATEs,
+      convergedATEs,
+      newCluesGenerated,
       timeStart,
       timeEnd,
       processedEvents,

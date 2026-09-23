@@ -7,9 +7,10 @@ import {
   ATERevealLevel,
   Adventure,
   WorldTime,
-  CharacterKnowledgeEntry
+  ATEConvergenceCondition
 } from '../types';
 import { CharacterKnowledgeService } from './characterKnowledgeService';
+import { WorldSimulationService } from './worldSimulationService';
 
 export interface ATEEvaluationResult {
   updatedAdventure: Adventure;
@@ -59,6 +60,7 @@ export class ActiveTimeEventService {
     participants?: Partial<ATEParticipant>[];
     stages?: Partial<ATEStage>[];
     convergenceCondition?: string;
+    structuredConvergenceCondition?: ATEConvergenceCondition;
     convergenceConsequence?: string;
     worldTime?: WorldTime;
   }): ActiveTimeEvent {
@@ -119,18 +121,108 @@ export class ActiveTimeEventService {
       originLocationId: params.originLocationId,
       originLocationName: params.originLocationName,
       backgroundContext: params.backgroundContext || 'Etablierte Hintergrundgeschichte in der Spielwelt.',
-      convergenceCondition: params.convergenceCondition || 'Sobald der Spieler und die Beteiligten aufeinandertreffen.',
+      convergenceCondition: params.convergenceCondition || 'Sobald der Spieler und die Beteiligten aufeinandertreffen und Vorbereitungen abgeschlossen sind.',
+      structuredConvergenceCondition: params.structuredConvergenceCondition,
       convergenceConsequence: params.convergenceConsequence || 'Der Handlungsstrang bricht direkt in das Hauptgeschehen ein.',
       isConverged: false,
       playerImpactLogs: [],
       createdAtWorldTime: currentTime,
-      lastUpdatedWorldTime: currentTime
+      lastUpdatedWorldTime: currentTime,
+      accumulatedTimeMinutes: 0
     };
   }
 
   /**
-   * Evaluates all active ATEs against elapsed world time, current player location, and world facts.
-   * Advances stages, generates indirect non-spoiling foreshadowing clues into CharacterKnowledge, and handles convergence.
+   * Evaluates structured or textual convergence conditions.
+   * CRITICAL: Reaching the final stage index or being in the same location ALONE does NOT automatically trigger convergence!
+   */
+  public static evaluateConvergenceCondition(
+    ate: ActiveTimeEvent,
+    adventure: Adventure,
+    currentLocationName?: string
+  ): { satisfied: boolean; reason?: string } {
+    if (ate.status !== 'active') {
+      return { satisfied: false, reason: `ATE is not in active status (current: ${ate.status}).` };
+    }
+
+    // Evaluate structured convergence condition if present
+    if (ate.structuredConvergenceCondition) {
+      const sCond = ate.structuredConvergenceCondition;
+
+      // 1. Stage Index requirement
+      if (sCond.requiredStageIndex !== undefined) {
+        if (ate.currentStageIndex < sCond.requiredStageIndex) {
+          return { satisfied: false, reason: `Stage index ${ate.currentStageIndex} is lower than required ${sCond.requiredStageIndex}.` };
+        }
+      }
+
+      // 2. Location Requirement
+      if (sCond.requiredLocationName || sCond.requiredLocationId) {
+        const playerLocName = currentLocationName || adventure.currentLocation?.locationName || '';
+        const playerLocId = adventure.currentLocation?.locationId || '';
+
+        const nameMatch = sCond.requiredLocationName
+          ? playerLocName.toLowerCase().includes(sCond.requiredLocationName.toLowerCase())
+          : true;
+        const idMatch = sCond.requiredLocationId
+          ? playerLocId === sCond.requiredLocationId
+          : true;
+
+        if (!nameMatch && !idMatch) {
+          return { satisfied: false, reason: `Player location '${playerLocName}' does not match required location.` };
+        }
+      }
+
+      // 3. Required World Facts / Knowledge
+      if (sCond.requiredWorldFacts && sCond.requiredWorldFacts.length > 0) {
+        const worldFacts = adventure.world?.facts || [];
+        const knowledgeEntries = adventure.characterKnowledge?.discoveredInformation || [];
+
+        const allMet = sCond.requiredWorldFacts.every(rf => {
+          const inFacts = worldFacts.some((f: any) => f.predicate === rf || f.factText?.includes(rf) || f.note?.includes(rf));
+          const inKnowledge = knowledgeEntries.some((k: any) => k.summary?.includes(rf) || k.description?.includes(rf));
+          return inFacts || inKnowledge;
+        });
+
+        if (!allMet) {
+          return { satisfied: false, reason: 'Required world facts or character knowledge missing.' };
+        }
+      }
+
+      // 4. Minimum Elapsed World Time
+      if (sCond.minWorldTimeMinutes !== undefined) {
+        const currentWorldTime = adventure.worldTime || { day: 1, hour: 8, minute: 0 };
+        const createdWorldTime = ate.createdAtWorldTime || { day: 1, hour: 8, minute: 0 };
+        const totalElapsed = WorldSimulationService.toTotalMinutes(currentWorldTime) - WorldSimulationService.toTotalMinutes(createdWorldTime);
+
+        if (totalElapsed < sCond.minWorldTimeMinutes) {
+          return { satisfied: false, reason: `Elapsed time (${totalElapsed}m) is less than required minimum (${sCond.minWorldTimeMinutes}m).` };
+        }
+      }
+
+      return { satisfied: true };
+    }
+
+    // Textual condition evaluation:
+    // Requires that the final stage (or stage >= 1) is reached AND player location matches or explicit player impact/trigger recorded
+    const isAtFinalStage = ate.currentStageIndex >= ate.stages.length - 1;
+    const playerLoc = currentLocationName || adventure.currentLocation?.locationName || '';
+    const isAtTargetLocation = ate.originLocationName && playerLoc
+      ? playerLoc.toLowerCase().includes(ate.originLocationName.toLowerCase()) || ate.originLocationName.toLowerCase().includes(playerLoc.toLowerCase())
+      : false;
+    const hasPlayerImpact = ate.playerImpactLogs && ate.playerImpactLogs.length > 0;
+
+    // Convergence requires: at final stage AND (player at target location OR player interacted with thread)
+    if (isAtFinalStage && (isAtTargetLocation || hasPlayerImpact)) {
+      return { satisfied: true };
+    }
+
+    return { satisfied: false, reason: 'Textual convergence criteria not yet met.' };
+  }
+
+  /**
+   * Evaluates all active ATEs against cumulative elapsed world time, current player location, and world facts.
+   * Advances stages using cumulative time, generates foreshadowing clues into CharacterKnowledge, and handles convergence via structured conditions.
    */
   public static evaluateAndAdvanceATEs(params: {
     adventure: Adventure;
@@ -149,6 +241,7 @@ export class ActiveTimeEventService {
     }
 
     const currentWorldTime = currentAdventure.worldTime || { day: 1, hour: 8, minute: 0 };
+    const currentTotalMins = WorldSimulationService.toTotalMinutes(currentWorldTime);
     const advancedATEs: ActiveTimeEvent[] = [];
     const newCluesGenerated: string[] = [];
     const convergedATEs: ActiveTimeEvent[] = [];
@@ -157,24 +250,28 @@ export class ActiveTimeEventService {
       if (ate.status !== 'active') return ate;
 
       let updatedAte = { ...ate };
-      let stageChanged = false;
 
-      // Check if next stage exists
-      const nextStageIndex = updatedAte.currentStageIndex + 1;
-      if (nextStageIndex < updatedAte.stages.length) {
-        const nextStage = updatedAte.stages[nextStageIndex];
+      // Compute cumulative elapsed time from ATE creation
+      const createdTotalMins = WorldSimulationService.toTotalMinutes(updatedAte.createdAtWorldTime || currentWorldTime);
+      const totalElapsedMinutes = Math.max(0, currentTotalMins - createdTotalMins);
+      updatedAte.accumulatedTimeMinutes = totalElapsedMinutes;
 
-        // Evaluate trigger conditions
+      // Stage Advancement Loop (sequential step through ALL due stages)
+      let stageAdvanced = true;
+      while (stageAdvanced && updatedAte.currentStageIndex < updatedAte.stages.length - 1) {
+        const candidateNextIndex = updatedAte.currentStageIndex + 1;
+        const nextStage = updatedAte.stages[candidateNextIndex];
+
         let isTriggered = false;
 
-        // Time trigger
+        // 1. Cumulative Time Trigger (evaluated against total elapsed minutes from ATE creation)
         if (nextStage.triggerTimeMinutes !== undefined && nextStage.triggerTimeMinutes > 0) {
-          if (params.elapsedMinutes >= nextStage.triggerTimeMinutes) {
+          if (totalElapsedMinutes >= nextStage.triggerTimeMinutes) {
             isTriggered = true;
           }
         }
 
-        // Location trigger
+        // 2. Location Trigger (player location)
         if (params.currentLocationName && nextStage.triggerLocations && nextStage.triggerLocations.length > 0) {
           const locMatch = nextStage.triggerLocations.some(
             loc => loc.toLowerCase() === params.currentLocationName?.toLowerCase()
@@ -184,27 +281,32 @@ export class ActiveTimeEventService {
           }
         }
 
-        // Advance stage if triggered
+        // 3. Fact Trigger
+        if (nextStage.triggerFacts && nextStage.triggerFacts.length > 0) {
+          const worldFacts = currentAdventure.world?.facts || [];
+          const allFactsPresent = nextStage.triggerFacts.every(
+            tf => worldFacts.some((f: any) => f.predicate === tf || f.factText?.includes(tf) || f.note?.includes(tf))
+          );
+          if (allFactsPresent) {
+            isTriggered = true;
+          }
+        }
+
         if (isTriggered) {
-          updatedAte.currentStageIndex = nextStageIndex;
-          updatedAte.lastUpdatedWorldTime = {
-            day: currentWorldTime.day,
-            hour: currentWorldTime.hour,
-            minute: currentWorldTime.minute
-          };
+          updatedAte.currentStageIndex = candidateNextIndex;
+          updatedAte.lastUpdatedWorldTime = { ...currentWorldTime };
+          updatedAte.lastExecutedStageWorldTime = { ...currentWorldTime };
 
           const updatedStages = [...updatedAte.stages];
-          updatedStages[nextStageIndex] = {
+          updatedStages[candidateNextIndex] = {
             ...nextStage,
-            executedAtWorldTime: {
-              day: currentWorldTime.day,
-              hour: currentWorldTime.hour,
-              minute: currentWorldTime.minute
-            }
+            executedAtWorldTime: { ...currentWorldTime }
           };
           updatedAte.stages = updatedStages;
-          stageChanged = true;
-          advancedATEs.push(updatedAte);
+
+          if (!advancedATEs.some(a => a.id === updatedAte.id)) {
+            advancedATEs.push(updatedAte);
+          }
 
           // Handle foreshadowing clues (without revealing internal truth)
           if (nextStage.foreshadowingClues && nextStage.foreshadowingClues.length > 0) {
@@ -226,16 +328,15 @@ export class ActiveTimeEventService {
               });
             });
           }
+          // Continue loop to see if the next stage is ALSO due in this time window!
+        } else {
+          stageAdvanced = false;
         }
       }
 
-      // Evaluate Convergence
-      const isFinalStage = updatedAte.currentStageIndex >= updatedAte.stages.length - 1;
-      const isLocConvergence = params.currentLocationName && updatedAte.participants.some(
-        p => p.currentLocationName && p.currentLocationName.toLowerCase() === params.currentLocationName?.toLowerCase()
-      );
-
-      if ((isFinalStage || isLocConvergence) && updatedAte.status === 'active') {
+      // Evaluate Convergence (Controlled convergence based on structured or textual conditions)
+      const convEval = this.evaluateConvergenceCondition(updatedAte, currentAdventure, params.currentLocationName);
+      if (convEval.satisfied) {
         updatedAte.status = 'converged';
         updatedAte.isConverged = true;
         updatedAte.revealLevel = 'fully_revealed';
@@ -277,6 +378,8 @@ export class ActiveTimeEventService {
     effectOnThread: string;
     delayMinutes?: number;
     accelerateStage?: boolean;
+    newStageIndex?: number;
+    newStatus?: ATEStatus;
   }): Adventure {
     const ates = this.getActiveTimeEvents(params.adventure);
     const worldTime = params.adventure.worldTime || { day: 1, hour: 8, minute: 0 };
@@ -295,16 +398,20 @@ export class ActiveTimeEventService {
         }
       ];
 
+      let newStageIdx = ate.currentStageIndex;
+      if (params.newStageIndex !== undefined) {
+        newStageIdx = Math.min(ate.stages.length - 1, Math.max(0, params.newStageIndex));
+      } else if (params.accelerateStage && ate.currentStageIndex < ate.stages.length - 1) {
+        newStageIdx += 1;
+      }
+
       let updatedAte: ActiveTimeEvent = {
         ...ate,
+        currentStageIndex: newStageIdx,
+        status: params.newStatus || ate.status,
         playerImpactLogs: updatedLogs,
         revealLevel: ate.revealLevel === 'hidden' ? 'partially_revealed' : ate.revealLevel
       };
-
-      // Accelerate or delay stages if requested
-      if (params.accelerateStage && updatedAte.currentStageIndex < updatedAte.stages.length - 1) {
-        updatedAte.currentStageIndex += 1;
-      }
 
       return updatedAte;
     });
@@ -330,6 +437,7 @@ export class ActiveTimeEventService {
       '2. Verwende die enthaltene "interne Wahrheit" als KAUSALE GRUNDLAGE für die Welt und das Handeln der NPCs.',
       '3. VERRATE DEM SPIELER NICHT direkt die interne Wahrheit/Geheimnisse, sondern nur kaskadierend wahrnehmbare Gerüchte/Hinweise (Foreshadowing).',
       '4. Figuren reagieren konsistent nach ihren angegebenen Zielen & Motivationen. Keine Figuren dürfen grundlos aus dem Nichts auftauchen.',
+      '5. Bestimme NIEMALS automatisch die Handlungen, Gefühle oder Dialoge des Spielers. Der Spieler behält die volle Autonomie.',
       ''
     ];
 

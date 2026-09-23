@@ -2,6 +2,7 @@ import { Adventure, WorldSetting, WorldLocationReference, Territory, LoreEntry, 
 import { WorldIntegrationService } from './worldIntegrationService';
 import { WorldSimulationService, SimulationStepResult } from './worldSimulationService';
 import { LocationContextService } from './locationContextService';
+import { ActiveTimeEventService } from './activeTimeEventService';
 import type { ProcessPlayerTurnParams, ProcessPlayerTurnResult } from './turnTypes';
 import { GeminiService } from './geminiService';
 
@@ -495,12 +496,15 @@ export class TravelService {
 
     const simResult = WorldSimulationService.runSimulationStep({
       world: adventure.world,
+      adventure,
+      currentLocationName: currentLocName,
       minutesToAdd: travelMinutes,
       mode: 'action',
       actionText
     });
 
     const activeWorld = simResult.updatedWorld;
+    const currentAdventure = simResult.updatedAdventure || { ...adventure, world: activeWorld };
 
     // Step 4: Check Interruption (BattleInstance spawned during travel)
     const hasCombatInterruption = simResult.spawnedBattleInstances.length > 0;
@@ -516,7 +520,7 @@ export class TravelService {
         const interRes = WorldIntegrationService.resolveLocationReference({
           idOrName: battleInst.locationId,
           world: activeWorld,
-          loreDatabase: adventure.loreDatabase
+          loreDatabase: currentAdventure.loreDatabase
         });
         if (interRes.value) {
           resolvedInterLocation = interRes.value;
@@ -528,7 +532,7 @@ export class TravelService {
         const interRes = WorldIntegrationService.resolveLocationReference({
           idOrName: battleInst.locationName,
           world: activeWorld,
-          loreDatabase: adventure.loreDatabase
+          loreDatabase: currentAdventure.loreDatabase
         });
         if (interRes.value) {
           resolvedInterLocation = interRes.value;
@@ -556,19 +560,19 @@ export class TravelService {
       activeWorld.dynamicWorldState.currentTerritoryId = finalLocation.territoryId;
     } else {
       // Leave position unchanged from the last confirmed world state
-      activeWorld.currentLocationId = adventure.world.currentLocationId;
-      activeWorld.currentTerritoryId = adventure.world.currentTerritoryId;
+      activeWorld.currentLocationId = currentAdventure.world.currentLocationId;
+      activeWorld.currentTerritoryId = currentAdventure.world.currentTerritoryId;
       if (activeWorld.dynamicWorldState) {
-        activeWorld.dynamicWorldState.currentLocationId = adventure.world.currentLocationId;
-        activeWorld.dynamicWorldState.currentTerritoryId = adventure.world.currentTerritoryId;
+        activeWorld.dynamicWorldState.currentLocationId = currentAdventure.world.currentLocationId;
+        activeWorld.dynamicWorldState.currentTerritoryId = currentAdventure.world.currentTerritoryId;
       }
     }
 
     const updatedPlayer = {
-      ...adventure.player,
+      ...currentAdventure.player,
       appearance: {
-        ...adventure.player.appearance,
-        currentLocation: finalLocation ? finalLocation.name : adventure.player.appearance.currentLocation
+        ...currentAdventure.player.appearance,
+        currentLocation: finalLocation ? finalLocation.name : currentAdventure.player.appearance.currentLocation
       }
     };
 
@@ -579,9 +583,10 @@ export class TravelService {
       text: actionText
     };
 
-    const updatedMessagesForAi = [...(adventure.chatHistory || []), userMsg];
+    const updatedMessagesForAi = [...(currentAdventure.chatHistory || []), userMsg];
 
     let rawAiResponse = '';
+    const ateContext = ActiveTimeEventService.getATEContextForAI(currentAdventure);
 
     if (generateAiResponse) {
       rawAiResponse = await generateAiResponse({
@@ -612,11 +617,11 @@ export class TravelService {
 - Status: ${travelStatusDesc}
 - Aktueller Standort: ${finalLocation ? finalLocation.name : (updatedPlayer.appearance.currentLocation || 'unbestimmt')}`;
 
-      const currentStatsStr = (adventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
+      const currentStatsStr = (currentAdventure.statusElements || []).map(el => `${el.label}: ${el.value || '0'}`).join(' | ');
 
-      const systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || adventure.world.title}".
+      let systemInstruction = `Du bist ein Weltklasse Dungeon Master für "${activeWorld.title || currentAdventure.world.title}".
 ${simulationInstruction}
-WELT: ${activeWorld.description || adventure.world.description} (Ton: ${activeWorld.tone || adventure.world.tone})
+WELT: ${activeWorld.description || currentAdventure.world.description} (Ton: ${activeWorld.tone || currentAdventure.world.tone})
 ${travelContextInstruction}
 
 SPIELER-CHARAKTER:
@@ -627,11 +632,15 @@ ${updatedPlayer.name} (${updatedPlayer.role}).
 
 AKTUELLE WERTE: ${currentStatsStr}`;
 
+      if (ateContext) {
+        systemInstruction += `\n\n${ateContext}`;
+      }
+
       const response = await GeminiService.chat(
         updatedMessagesForAi,
         systemInstruction,
         activeWorld.isNsfw,
-        adventure.summaryLog
+        currentAdventure.summaryLog
       );
       rawAiResponse = response.text || '';
     }

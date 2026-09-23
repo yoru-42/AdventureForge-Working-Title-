@@ -1883,6 +1883,17 @@ export interface ATEPlayerImpactLog {
   effectOnThread: string;
 }
 
+export interface ATEConvergenceCondition {
+  requiredLocationId?: string;
+  requiredLocationName?: string;
+  requiredStageIndex?: number;
+  requiredWorldFacts?: string[];
+  requiredCharacterIds?: string[];
+  requiredFactionIds?: string[];
+  minWorldTimeMinutes?: number;
+  customPredicate?: string;
+}
+
 export interface ActiveTimeEvent {
   id: string;
   title: string;
@@ -1900,11 +1911,14 @@ export interface ActiveTimeEvent {
   associatedFactionIds?: string[];
   associatedLoreIds?: string[];
   convergenceCondition?: string;
+  structuredConvergenceCondition?: ATEConvergenceCondition;
   convergenceConsequence?: string;
   isConverged?: boolean;
   playerImpactLogs?: ATEPlayerImpactLog[];
   createdAtWorldTime?: { day: number; hour: number; minute: number };
   lastUpdatedWorldTime?: { day: number; hour: number; minute: number };
+  accumulatedTimeMinutes?: number;
+  lastExecutedStageWorldTime?: { day: number; hour: number; minute: number };
 }
 
 export interface EncounterForce {
@@ -3593,6 +3607,7 @@ export interface AIStoryStateChanges {
   relationshipChanges?: AIRelationshipChange[];
   worldChanges?: AIWorldChange[];
   ateChanges?: { ateId: string; newStageIndex?: number; newStatus?: ATEStatus; newClues?: string[]; playerImpact?: string }[];
+  newActiveTimeEvents?: Partial<ActiveTimeEvent>[];
 }
 
 export interface AIServiceResponse {
