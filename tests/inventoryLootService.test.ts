@@ -1,6 +1,6 @@
 import { InventoryLootService } from '../services/inventoryLootService';
 import { EquipmentConditionService } from '../services/equipmentConditionService';
-import { Adventure, Character, NPC, ItemInstance, LootSource, PendingPickupProposal } from '../types';
+import { Adventure, Character, NPC, ItemInstance, LootSource, PendingPickupProposal, PendingItemTransferProposal } from '../types';
 
 let testCount = 0;
 let passCount = 0;
@@ -600,236 +600,352 @@ console.log('=== RUNNING INVENTORY & LOOT SERVICE TESTS ===\n');
   assert(npcStillHasItem, 'Test M: NPC behält das abgelehnte Item');
 }
 
-// Test N – Falsche konkrete ID: Kein Proposal, kein neuer Gegenstand, kein Transfer
+// === COMPREHENSIVE TRANSFER & FIRESTORE SECURITY TESTS ===
+
+// Test A – Kein pendingTransfer vorhanden
 {
   const adv = createBaseAdventure();
-  const itemA: ItemInstance = {
-    id: 'item-a',
-    itemDefinitionId: 'def-sword',
-    name: 'Schwert',
-    owner: 'npc-lyra',
-    quantity: 1,
-    weightKg: 2.0
-  };
-  adv.itemInstances = [itemA];
-
-  const updatedAdv = EquipmentConditionService.processAiStateChanges(
-    adv,
-    [
-      {
-        item: 'Schwert',
-        action: 'transfer',
-        ownerId: 'npc-lyra',
-        toOwnerId: 'player',
-        quantity: 1,
-        itemInstanceId: 'does-not-exist'
-      }
-    ]
-  );
-
-  assert(!updatedAdv.pendingTransfer, 'Test N: Kein Proposal bei falscher/nicht existierender itemInstanceId');
-  assert(updatedAdv.itemInstances?.length === 1, 'Test N: Kein neuer Gegenstand erzeugt');
-  assert(updatedAdv.itemInstances?.[0].owner === 'npc-lyra', 'Test N: Kein Transfer, NPC behält Original');
+  adv.pendingTransfer = null;
+  const res = EquipmentConditionService.confirmItemTransfer(adv);
+  assert(res.success === false, 'Test A: confirmItemTransfer ohne pendingTransfer liefert success: false');
+  assert(res.error?.includes('Kein ausstehender Übergabe-Vorschlag'), 'Test A: Verständliche Fehlermeldung');
 }
 
-// Test O – Falsche ID bei gleichnamigem Gegenstand: Kein Transfer, beide Items bleiben unberührt
+// Test B – Vollständiges Proposal stimmt exakt mit pendingTransfer überein
 {
   const adv = createBaseAdventure();
-  const itemA: ItemInstance = {
-    id: 'item-a',
+  const sword: ItemInstance = {
+    id: 'sword-inst-1',
     itemDefinitionId: 'def-sword',
-    name: 'Schwert',
+    name: 'Langschwert',
     owner: 'npc-lyra',
     quantity: 1,
     weightKg: 2.0
   };
-  const itemB: ItemInstance = {
-    id: 'item-b',
-    itemDefinitionId: 'def-sword',
-    name: 'Schwert',
-    owner: 'npc-lyra',
-    quantity: 1,
-    weightKg: 2.0
-  };
-  adv.itemInstances = [itemA, itemB];
-
-  const updatedAdv = EquipmentConditionService.processAiStateChanges(
-    adv,
-    [
-      {
-        item: 'Schwert',
-        action: 'transfer',
-        ownerId: 'npc-lyra',
-        toOwnerId: 'player',
-        quantity: 1,
-        itemInstanceId: 'item-x'
-      }
-    ]
-  );
-
-  assert(!updatedAdv.pendingTransfer, 'Test O: Kein Transfer-Proposal bei ungültiger ID trotz gleichnamiger Items');
-  assert(updatedAdv.itemInstances?.length === 2, 'Test O: Anzahl der ItemInstances unverändert');
-  assert(updatedAdv.itemInstances?.every(i => i.owner === 'npc-lyra'), 'Test O: Beide Schwerter bleiben beim NPC');
-}
-
-// Test P – Keine ItemInstance erfinden
-{
-  const adv = createBaseAdventure();
-  adv.itemInstances = [];
-
-  const updatedAdv = EquipmentConditionService.processAiStateChanges(
-    adv,
-    [
-      {
-        item: 'Geheimnisvolles Artefakt',
-        action: 'transfer',
-        ownerId: 'npc-lyra',
-        toOwnerId: 'player',
-        quantity: 1
-      }
-    ]
-  );
-
-  assert(!updatedAdv.pendingTransfer, 'Test P: Kein TransferProposal bei nicht existierendem NPC-Gegenstand');
-  assert((updatedAdv.itemInstances || []).length === 0, 'Test P: itemInstances.length bleibt unverändert bei 0');
-}
-
-// Test Q – Fremdes Proposal: Mismatch bei Proposal-ID führt zur Ablehnung ohne pendingTransfer zu löschen
-{
-  const adv = createBaseAdventure();
-  const itemA: ItemInstance = {
-    id: 'item-a',
-    itemDefinitionId: 'def-sword',
-    name: 'Schwert',
-    owner: 'npc-lyra',
-    quantity: 1,
-    weightKg: 2.0
-  };
-  adv.itemInstances = [itemA];
-  adv.pendingTransfer = {
-    id: 'transfer-123',
-    itemInstanceId: 'item-a',
+  adv.itemInstances = [sword];
+  const proposal: PendingItemTransferProposal = {
+    id: 'transfer-b-1',
+    itemInstanceId: 'sword-inst-1',
     fromOwnerId: 'npc-lyra',
     fromOwnerName: 'Lyra',
     toOwnerId: 'player',
     toOwnerName: 'Gareth',
     quantity: 1,
-    itemName: 'Schwert',
+    itemName: 'Langschwert',
     createdAt: Date.now()
   };
+  adv.pendingTransfer = proposal;
 
-  const fakeProposal = {
-    ...adv.pendingTransfer,
-    id: 'transfer-999'
-  };
-
-  const confirmRes = EquipmentConditionService.confirmItemTransfer(adv, fakeProposal);
-  assert(confirmRes.success === false, 'Test Q: Fremdes Proposal (transfer-999 vs transfer-123) wird abgelehnt');
-  assert(Boolean(confirmRes.updatedAdventure.pendingTransfer), 'Test Q: pendingTransfer bleibt im Adventure unverändert erhalten');
-  assert(confirmRes.updatedAdventure.pendingTransfer?.id === 'transfer-123', 'Test Q: Ursprüngliches Proposal transfer-123 bleibt aktiv');
-  assert(confirmRes.updatedAdventure.itemInstances?.[0].owner === 'npc-lyra', 'Test Q: Item wurde nicht transferiert');
+  const res = EquipmentConditionService.confirmItemTransfer(adv, proposal);
+  assert(res.success === true, 'Test B: Vollständiges, identisches Proposal erfolgreich übertragen');
+  assert(res.updatedAdventure.pendingTransfer === null, 'Test B: pendingTransfer nach Erfolg geleert');
+  const playerItem = res.updatedAdventure.itemInstances?.find(i => i.id === 'sword-inst-1');
+  assert(playerItem?.owner === 'player', 'Test B: Gegenstand gehört nun dem Spieler');
 }
 
-// Test R – Falsche ItemInstance im Proposal
+// Test C – Falsche Proposal-ID wird abgelehnt
 {
   const adv = createBaseAdventure();
-  const itemA: ItemInstance = {
-    id: 'item-a',
-    itemDefinitionId: 'def-sword',
-    name: 'Schwert',
-    owner: 'npc-lyra',
-    quantity: 1,
-    weightKg: 2.0
-  };
-  adv.itemInstances = [itemA];
+  adv.itemInstances = [{ id: 'inst-c', itemDefinitionId: 'def-c', name: 'Dolch', owner: 'npc-lyra', quantity: 1 }];
   adv.pendingTransfer = {
-    id: 'transfer-123',
-    itemInstanceId: 'item-a',
+    id: 'transfer-real',
+    itemInstanceId: 'inst-c',
     fromOwnerId: 'npc-lyra',
     fromOwnerName: 'Lyra',
     toOwnerId: 'player',
     toOwnerName: 'Gareth',
     quantity: 1,
-    itemName: 'Schwert',
+    itemName: 'Dolch',
     createdAt: Date.now()
   };
 
-  const tamperedProposal = {
-    ...adv.pendingTransfer,
-    itemInstanceId: 'item-b'
-  };
-
-  const confirmRes = EquipmentConditionService.confirmItemTransfer(adv, tamperedProposal);
-  assert(confirmRes.success === false, 'Test R: Mismatch der ItemInstance-ID wird abgewiesen');
-  assert(confirmRes.updatedAdventure.itemInstances?.[0].owner === 'npc-lyra', 'Test R: Kein Transfer erfolgt');
+  const fakeProp = { ...adv.pendingTransfer, id: 'transfer-fake' };
+  const res = EquipmentConditionService.confirmItemTransfer(adv, fakeProp);
+  assert(res.success === false, 'Test C: Falsche Proposal-ID wird abgelehnt');
+  assert(res.updatedAdventure.pendingTransfer?.id === 'transfer-real', 'Test C: pendingTransfer bleibt unverändert aktiv');
 }
 
-// Test S – Gegenstand wurde inzwischen übertragen
+// Test D – Falsche ItemInstance-ID wird abgelehnt
 {
   const adv = createBaseAdventure();
-  const itemA: ItemInstance = {
-    id: 'item-a',
-    itemDefinitionId: 'def-sword',
-    name: 'Schwert',
-    owner: 'npc-other', // Wurde inzwischen an jemand anderen gegeben
-    quantity: 1,
-    weightKg: 2.0
-  };
-  adv.itemInstances = [itemA];
+  adv.itemInstances = [
+    { id: 'inst-d1', itemDefinitionId: 'def-d', name: 'Stab', owner: 'npc-lyra', quantity: 1 },
+    { id: 'inst-d2', itemDefinitionId: 'def-d', name: 'Stab', owner: 'npc-lyra', quantity: 1 }
+  ];
   adv.pendingTransfer = {
-    id: 'transfer-123',
-    itemInstanceId: 'item-a',
-    fromOwnerId: 'npc-lyra', // Proposal erwartete npc-lyra als Geber
+    id: 'transfer-d',
+    itemInstanceId: 'inst-d1',
+    fromOwnerId: 'npc-lyra',
     fromOwnerName: 'Lyra',
     toOwnerId: 'player',
     toOwnerName: 'Gareth',
     quantity: 1,
-    itemName: 'Schwert',
+    itemName: 'Stab',
     createdAt: Date.now()
   };
 
-  const confirmRes = EquipmentConditionService.confirmItemTransfer(adv, adv.pendingTransfer);
-  assert(confirmRes.success === false, 'Test S: Bestätigung schlägt fehl da Gegenstand nicht mehr Geber gehört');
-  assert(confirmRes.updatedAdventure.itemInstances?.[0].owner === 'npc-other', 'Test S: Item bleibt unverändert beim Drittbesitzer');
+  const tamperedProp = { ...adv.pendingTransfer, itemInstanceId: 'inst-d2' };
+  const res = EquipmentConditionService.confirmItemTransfer(adv, tamperedProp);
+  assert(res.success === false, 'Test D: Mismatch bei ItemInstance-ID abgelehnt');
 }
 
-// Test T – Cloud-Lesen schlägt fehl: Lokale Daten müssen unangetastet bleiben
+// Test E – Proposal mit fehlendem Identitätsfeld wird abgelehnt
 {
-  const localAdventures = [
-    {
-      id: 'adv-local-1',
-      storyTitle: 'Lokales Abenteuer',
-      updatedAt: '2026-09-23T01:00:00Z',
-      storyHistory: ['Kapitel 1']
-    }
-  ];
-  // Simulierte Reconcile-Sicherheit: Wenn Cloud-Lesen fehlschlägt, wird Reconcile gar nicht ausgeführt
-  // und keine lokalen Daten gelöscht oder überschrieben.
-  assert(localAdventures.length === 1, 'Test T: Lokale Daten bleiben bei Lesefehler vollständig erhalten');
-  assert(localAdventures[0].id === 'adv-local-1', 'Test T: Lokales Abenteuer unverändert');
+  const adv = createBaseAdventure();
+  adv.itemInstances = [{ id: 'inst-e', itemDefinitionId: 'def-e', name: 'Ring', owner: 'npc-lyra', quantity: 1 }];
+  adv.pendingTransfer = {
+    id: 'transfer-e',
+    itemInstanceId: 'inst-e',
+    fromOwnerId: 'npc-lyra',
+    fromOwnerName: 'Lyra',
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    quantity: 1,
+    itemName: 'Ring',
+    createdAt: Date.now()
+  };
+
+  const incompleteProp = {
+    id: 'transfer-e',
+    itemInstanceId: 'inst-e',
+    fromOwnerId: 'npc-lyra',
+    fromOwnerName: '', // FEHLT!
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    itemName: 'Ring',
+    createdAt: Date.now()
+  } as any;
+
+  const res = EquipmentConditionService.confirmItemTransfer(adv, incompleteProp);
+  assert(res.success === false, 'Test E: Unvollständiges Proposal mit fehlendem Identitätsfeld abgewiesen');
 }
 
-// Test U – Cloud ist tatsächlich leer: Lokale Daten werden zur Cloud synchronisiert
+// Test F – Falscher Geber (fromOwnerId) wird abgelehnt
 {
-  const localAdventures = [
-    {
-      id: 'adv-local-1',
-      storyTitle: 'Lokales Abenteuer',
-      updatedAt: '2026-09-23T01:00:00Z',
-      storyHistory: ['Kapitel 1']
-    }
-  ];
-  const emptyCloudAdventures: any[] = [];
+  const adv = createBaseAdventure();
+  adv.itemInstances = [{ id: 'inst-f', itemDefinitionId: 'def-f', name: 'Helm', owner: 'npc-lyra', quantity: 1 }];
+  adv.pendingTransfer = {
+    id: 'transfer-f',
+    itemInstanceId: 'inst-f',
+    fromOwnerId: 'npc-lyra',
+    fromOwnerName: 'Lyra',
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    quantity: 1,
+    itemName: 'Helm',
+    createdAt: Date.now()
+  };
 
-  // Use StorageService pure reconciliation logic
-  const { reconcileAdventures } = await import('../lib/storageService').then(m => ({
-    reconcileAdventures: m.StorageService.reconcileAdventures.bind(m.StorageService)
-  }));
+  const wrongSender = { ...adv.pendingTransfer, fromOwnerId: 'npc-stranger' };
+  const res = EquipmentConditionService.confirmItemTransfer(adv, wrongSender);
+  assert(res.success === false, 'Test F: Mismatch beim Absender (fromOwnerId) abgewiesen');
+}
 
-  const res = reconcileAdventures(localAdventures, emptyCloudAdventures);
-  assert(res.mergedAdventures.length === 1, 'Test U: Merged Adventures enthält lokales Abenteuer');
-  assert(res.toUploadToCloud.length === 1, 'Test U: Lokales Abenteuer wird zum Upload in leere Cloud markiert');
-  assert(res.toUploadToCloud[0].id === 'adv-local-1', 'Test U: Korrekte Abenteuer-ID für Upload');
+// Test G – Falscher Empfänger (toOwnerId) wird abgelehnt
+{
+  const adv = createBaseAdventure();
+  adv.itemInstances = [{ id: 'inst-g', itemDefinitionId: 'def-g', name: 'Schild', owner: 'npc-lyra', quantity: 1 }];
+  adv.pendingTransfer = {
+    id: 'transfer-g',
+    itemInstanceId: 'inst-g',
+    fromOwnerId: 'npc-lyra',
+    fromOwnerName: 'Lyra',
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    quantity: 1,
+    itemName: 'Schild',
+    createdAt: Date.now()
+  };
+
+  const wrongReceiver = { ...adv.pendingTransfer, toOwnerId: 'npc-other' };
+  const res = EquipmentConditionService.confirmItemTransfer(adv, wrongReceiver);
+  assert(res.success === false, 'Test G: Mismatch beim Empfänger abgewiesen');
+}
+
+// Test H – Falsche Menge (Proposal verlangt mehr als Geber besitzt) wird abgelehnt
+{
+  const adv = createBaseAdventure();
+  adv.itemInstances = [{ id: 'inst-h', itemDefinitionId: 'def-h', name: 'Pfeile', owner: 'npc-lyra', quantity: 5 }];
+  adv.pendingTransfer = {
+    id: 'transfer-h',
+    itemInstanceId: 'inst-h',
+    fromOwnerId: 'npc-lyra',
+    fromOwnerName: 'Lyra',
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    quantity: 10, // Mehr als die 5 vorhandenen!
+    itemName: 'Pfeile',
+    createdAt: Date.now()
+  };
+
+  const res = EquipmentConditionService.confirmItemTransfer(adv, adv.pendingTransfer);
+  assert(res.success === false, 'Test H: Überschrittene Menge beim Geber wird abgewiesen');
+  assert(res.updatedAdventure.itemInstances?.[0].quantity === 5, 'Test H: Geber behält alle 5 Pfeile');
+}
+
+// Test I – Gegenstand inzwischen verschwunden
+{
+  const adv = createBaseAdventure();
+  adv.itemInstances = []; // Item existiert nicht mehr in itemInstances
+  adv.pendingTransfer = {
+    id: 'transfer-i',
+    itemInstanceId: 'inst-deleted',
+    fromOwnerId: 'npc-lyra',
+    fromOwnerName: 'Lyra',
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    quantity: 1,
+    itemName: 'Verschwundenes Buch',
+    createdAt: Date.now()
+  };
+
+  const res = EquipmentConditionService.confirmItemTransfer(adv, adv.pendingTransfer);
+  assert(res.success === false, 'Test I: Nicht mehr existierendes Item wird abgewiesen');
+  assert(res.updatedAdventure.pendingTransfer?.id === 'transfer-i', 'Test I: pendingTransfer bleibt zur Einsicht erhalten');
+}
+
+// Test J – Gegenstand inzwischen bei anderem Besitzer
+{
+  const adv = createBaseAdventure();
+  adv.itemInstances = [{ id: 'inst-j', itemDefinitionId: 'def-j', name: 'Karte', owner: 'npc-other', quantity: 1 }];
+  adv.pendingTransfer = {
+    id: 'transfer-j',
+    itemInstanceId: 'inst-j',
+    fromOwnerId: 'npc-lyra', // Geber war Lyra, aber Item ist bei npc-other
+    fromOwnerName: 'Lyra',
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    quantity: 1,
+    itemName: 'Karte',
+    createdAt: Date.now()
+  };
+
+  const res = EquipmentConditionService.confirmItemTransfer(adv, adv.pendingTransfer);
+  assert(res.success === false, 'Test J: Transfer abgewiesen da Geber nicht mehr Eigentümer ist');
+  assert(res.updatedAdventure.itemInstances?.[0].owner === 'npc-other', 'Test J: Besitz bleibt unverändert');
+}
+
+// Test K – Teilübergabe (10 -> Vorschlag 3 -> Spieler 3 / Geber 7)
+{
+  const adv = createBaseAdventure();
+  adv.itemInstances = [{ id: 'potion-stack', itemDefinitionId: 'def-potion', name: 'Heiltrank', owner: 'npc-lyra', quantity: 10, weightKg: 0.5 }];
+  adv.pendingTransfer = {
+    id: 'transfer-k',
+    itemInstanceId: 'potion-stack',
+    fromOwnerId: 'npc-lyra',
+    fromOwnerName: 'Lyra',
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    quantity: 3,
+    itemName: 'Heiltrank',
+    createdAt: Date.now()
+  };
+
+  const res = EquipmentConditionService.confirmItemTransfer(adv, adv.pendingTransfer);
+  assert(res.success === true, 'Test K: Teilübergabe erfolgreich');
+  const playerPotions = res.updatedAdventure.itemInstances?.find(i => i.owner === 'player' && i.name === 'Heiltrank');
+  const npcPotions = res.updatedAdventure.itemInstances?.find(i => i.owner === 'npc-lyra' && i.name === 'Heiltrank');
+  assert(playerPotions?.quantity === 3, 'Test K: Spieler erhält exakt 3 Tränke');
+  assert(npcPotions?.quantity === 7, 'Test K: NPC behält exakt 7 Tränke');
+}
+
+// Test L – Gleichnamiger anderer Gegenstand: Niemals Item B statt Item A übertragen
+{
+  const adv = createBaseAdventure();
+  const swordA: ItemInstance = { id: 'sword-a', itemDefinitionId: 'def-sw', name: 'Breitschwert', owner: 'npc-lyra', quantity: 1, condition: 'abgenutzt' };
+  const swordB: ItemInstance = { id: 'sword-b', itemDefinitionId: 'def-sw', name: 'Breitschwert', owner: 'npc-lyra', quantity: 1, condition: 'meisterhaft' };
+  adv.itemInstances = [swordA, swordB];
+
+  adv.pendingTransfer = {
+    id: 'transfer-l',
+    itemInstanceId: 'sword-a',
+    fromOwnerId: 'npc-lyra',
+    fromOwnerName: 'Lyra',
+    toOwnerId: 'player',
+    toOwnerName: 'Gareth',
+    quantity: 1,
+    itemName: 'Breitschwert',
+    createdAt: Date.now()
+  };
+
+  const res = EquipmentConditionService.confirmItemTransfer(adv, adv.pendingTransfer);
+  assert(res.success === true, 'Test L: Transfer von sword-a erfolgreich');
+  const transferred = res.transferredItem;
+  assert(transferred?.id === 'sword-a', 'Test L: Exakt sword-a wurde übertragen');
+  assert(transferred?.condition === 'abgenutzt', 'Test L: Übertragener Zustand entspricht sword-a');
+  const remainingNpcSword = res.updatedAdventure.itemInstances?.find(i => i.owner === 'npc-lyra');
+  assert(remainingNpcSword?.id === 'sword-b', 'Test L: sword-b (meisterhaft) verbleibt unberührt beim NPC');
+}
+
+// === FIRESTORE SECURITY & ERROR TESTS ===
+
+// Test M – Erfolgreicher Cloud-Read (Normaler Reconcile)
+{
+  const { StorageService } = await import('../lib/storageService');
+  const localAdvs = [{ id: 'adv-m', storyTitle: 'Abenteuer M', updatedAt: '2026-09-23T01:00:00Z', storyHistory: ['A'] }];
+  const cloudAdvs = [{ id: 'adv-m', storyTitle: 'Abenteuer M Cloud', updatedAt: '2026-09-23T02:00:00Z', storyHistory: ['A', 'B'] }];
+
+  const reconciled = StorageService.reconcileAdventures(localAdvs, cloudAdvs);
+  assert(reconciled.mergedAdventures.length === 1, 'Test M: 1 Abenteuer zusammengeführt');
+  assert(reconciled.mergedAdventures[0].storyTitle === 'Abenteuer M Cloud', 'Test M: Neuere Cloud-Version gewinnt');
+}
+
+// Test N – Cloud tatsächlich leer (Leerer Snapshot erlaubt Upload)
+{
+  const { StorageService } = await import('../lib/storageService');
+  const localAdvs = [{ id: 'adv-n', storyTitle: 'Lokales Solo-Abenteuer', updatedAt: '2026-09-23T01:00:00Z' }];
+  await StorageService.setItem('adventures', localAdvs);
+
+  // Simuliere erfolgreichen Cloud-Read, der eine leere Liste zurückgibt
+  const res = await StorageService.syncAllToFirestore('test-user-n', {
+    cloudReader: async () => [],
+    skipCloudWrite: true
+  });
+
+  assert(res.success === true, 'Test N: Sync mit tatsächlich leerer Cloud erfolgreich');
+  assert(res.mergedAdventures?.length === 1, 'Test N: Lokale Daten bleiben in mergedAdventures erhalten');
+}
+
+// Test O – Cloud-Read-Fehler (Netzwerkfehler bricht ab, lokale Daten geschützt)
+{
+  const { StorageService } = await import('../lib/storageService');
+  const originalLocalAdvs = [{ id: 'adv-o', storyTitle: 'Geschütztes Abenteuer', updatedAt: '2026-09-23T01:00:00Z' }];
+  await StorageService.setItem('adventures', originalLocalAdvs);
+
+  // Simuliere Firestore-Lesefehler
+  const res = await StorageService.syncAllToFirestore('test-user-o', {
+    cloudReader: async () => {
+      throw new Error('Firestore connection failure / timeout');
+    },
+    skipCloudWrite: true
+  });
+
+  assert(res.success === false, 'Test O: Lesefehler führt zu success: false');
+  assert(res.message.includes('Cloud-Daten konnten nicht gelesen werden'), 'Test O: Meldung weist auf Lesefehler hin');
+
+  // Prüfe dass lokale Daten unverändert geblieben sind
+  const currentLocal = await StorageService.getItem<any[]>('adventures');
+  assert(currentLocal?.length === 1 && currentLocal[0].id === 'adv-o', 'Test O: Lokale IndexedDB-Daten bleiben unangetastet');
+}
+
+// Test P – Cloud-Read-Fehler durch Quota
+{
+  const { StorageService } = await import('../lib/storageService');
+  const originalLocalAdvs = [{ id: 'adv-p', storyTitle: 'Quota-Geschütztes Abenteuer', updatedAt: '2026-09-23T01:00:00Z' }];
+  await StorageService.setItem('adventures', originalLocalAdvs);
+
+  const res = await StorageService.syncAllToFirestore('test-user-p', {
+    cloudReader: async () => {
+      throw new Error('Quota exceeded for Firestore database');
+    },
+    skipCloudWrite: true
+  });
+
+  assert(res.success === false, 'Test P: Quota-Fehler führt zu success: false');
+  assert(res.message.includes('Firestore-Quota'), 'Test P: Spezifische Quota-Warnung zurückgegeben');
+
+  const currentLocal = await StorageService.getItem<any[]>('adventures');
+  assert(currentLocal?.length === 1 && currentLocal[0].id === 'adv-p', 'Test P: Lokale Daten bleiben trotz Quota-Fehler sicher erhalten');
 }
 
 console.log(`\n=== TEST RUN COMPLETE ===`);

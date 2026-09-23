@@ -225,7 +225,13 @@ export class StorageService {
    * NEVER overwrites newer local data with older cloud data,
    * and NEVER overwrites newer cloud data with older local data.
    */
-  static async syncAllToFirestore(userId?: string): Promise<{
+  static async syncAllToFirestore(
+    userId?: string,
+    testOptions?: {
+      cloudReader?: (targetUid: string) => Promise<any[]>;
+      skipCloudWrite?: boolean;
+    }
+  ): Promise<{
     success: boolean;
     message: string;
     timestamp?: string;
@@ -247,17 +253,21 @@ export class StorageService {
     const localAdventures = (await this.getItem<any[]>('adventures')) || [];
 
     // 2. Fetch existing cloud adventures with strict error handling
-    const cloudAdventures: any[] = [];
+    let cloudAdventures: any[] = [];
     try {
-      const advColRef = collection(db, 'users', targetUid, 'adventures');
-      const querySnap = await getDocs(advColRef);
-      if (!querySnap.empty) {
-        querySnap.forEach(docSnap => {
-          const d = docSnap.data();
-          if (d && d.data && d.data.id) {
-            cloudAdventures.push(d.data);
-          }
-        });
+      if (testOptions?.cloudReader) {
+        cloudAdventures = await testOptions.cloudReader(targetUid);
+      } else {
+        const advColRef = collection(db, 'users', targetUid, 'adventures');
+        const querySnap = await getDocs(advColRef);
+        if (!querySnap.empty) {
+          querySnap.forEach(docSnap => {
+            const d = docSnap.data();
+            if (d && d.data && d.data.id) {
+              cloudAdventures.push(d.data);
+            }
+          });
+        }
       }
     } catch (err: any) {
       console.warn('Could not read existing cloud adventures:', err);
@@ -282,51 +292,53 @@ export class StorageService {
       // 4. Save merged adventures locally
       await this.setItem('adventures', mergedAdventures);
 
-      // 5. Upload items needing cloud sync
-      for (const adv of toUploadToCloud) {
-        if (adv && adv.id) {
-          const safeAdvId = String(adv.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
-          const cleanAdv = sanitizeForFirestore(adv);
-          const advDocRef = doc(db, 'users', targetUid, 'adventures', safeAdvId);
-          await setDoc(advDocRef, { data: cleanAdv }, { merge: true });
+      // 5. Upload items needing cloud sync (skip in unit test if skipCloudWrite is set)
+      if (!testOptions?.skipCloudWrite) {
+        for (const adv of toUploadToCloud) {
+          if (adv && adv.id) {
+            const safeAdvId = String(adv.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
+            const cleanAdv = sanitizeForFirestore(adv);
+            const advDocRef = doc(db, 'users', targetUid, 'adventures', safeAdvId);
+            await setDoc(advDocRef, { data: cleanAdv }, { merge: true });
+          }
         }
-      }
 
-      // 6. Update adventures manifest in cloud
-      const rawManifest = mergedAdventures.map(a => ({
-        id: a?.id || '',
-        storyTitle: a?.storyTitle || a?.world?.title || '',
-        authorId: a?.authorId || targetUid,
-        updatedAt: a?.updatedAt || a?.lastSaved || new Date().toISOString()
-      }));
-      const cleanManifest = sanitizeForFirestore(rawManifest);
-      const manifestRef = doc(db, 'users', targetUid, 'data', 'adventures_manifest');
-      await setDoc(manifestRef, { data: cleanManifest }, { merge: true });
+        // 6. Update adventures manifest in cloud
+        const rawManifest = mergedAdventures.map(a => ({
+          id: a?.id || '',
+          storyTitle: a?.storyTitle || a?.world?.title || '',
+          authorId: a?.authorId || targetUid,
+          updatedAt: a?.updatedAt || a?.lastSaved || new Date().toISOString()
+        }));
+        const cleanManifest = sanitizeForFirestore(rawManifest);
+        const manifestRef = doc(db, 'users', targetUid, 'data', 'adventures_manifest');
+        await setDoc(manifestRef, { data: cleanManifest }, { merge: true });
 
-      // 7. Sync userProfile safely
-      const localProfile = await this.getItem<any>('userProfile');
-      if (localProfile) {
-        try {
-          const profileRef = doc(db, 'users', targetUid, 'data', 'userProfile');
-          const cloudProfileSnap = await getDoc(profileRef);
-          let profileToKeep = localProfile;
-          if (cloudProfileSnap.exists()) {
-            const cloudProfData = cloudProfileSnap.data()?.data;
-            if (cloudProfData) {
-              const localProfTs = new Date(localProfile.updatedAt || 0).getTime();
-              const cloudProfTs = new Date(cloudProfData.updatedAt || 0).getTime();
-              if (cloudProfTs > localProfTs) {
-                profileToKeep = cloudProfData;
-                await this.setItem('userProfile', cloudProfData);
+        // 7. Sync userProfile safely
+        const localProfile = await this.getItem<any>('userProfile');
+        if (localProfile) {
+          try {
+            const profileRef = doc(db, 'users', targetUid, 'data', 'userProfile');
+            const cloudProfileSnap = await getDoc(profileRef);
+            let profileToKeep = localProfile;
+            if (cloudProfileSnap.exists()) {
+              const cloudProfData = cloudProfileSnap.data()?.data;
+              if (cloudProfData) {
+                const localProfTs = new Date(localProfile.updatedAt || 0).getTime();
+                const cloudProfTs = new Date(cloudProfData.updatedAt || 0).getTime();
+                if (cloudProfTs > localProfTs) {
+                  profileToKeep = cloudProfData;
+                  await this.setItem('userProfile', cloudProfData);
+                }
               }
             }
+            if (profileToKeep === localProfile) {
+              const cleanProfile = sanitizeForFirestore(localProfile);
+              await setDoc(profileRef, { data: cleanProfile }, { merge: true });
+            }
+          } catch (err) {
+            console.warn('Profile sync fallback:', err);
           }
-          if (profileToKeep === localProfile) {
-            const cleanProfile = sanitizeForFirestore(localProfile);
-            await setDoc(profileRef, { data: cleanProfile }, { merge: true });
-          }
-        } catch (err) {
-          console.warn('Profile sync fallback:', err);
         }
       }
 

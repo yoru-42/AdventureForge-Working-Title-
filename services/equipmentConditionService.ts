@@ -1200,39 +1200,73 @@ export class EquipmentConditionService {
       };
     }
 
-    // If caller provided a proposal object, it MUST strictly match the active pending proposal!
+    // If caller provided a proposal object, it MUST fully and exactly match activeProp across all identity fields!
     if (proposal) {
-      if (proposal.id && proposal.id !== activeProp.id) {
+      // 1. Ensure all essential identity fields are present
+      if (
+        !proposal.id ||
+        !proposal.itemInstanceId ||
+        !proposal.fromOwnerId ||
+        !proposal.fromOwnerName ||
+        !proposal.toOwnerId ||
+        !proposal.toOwnerName ||
+        !proposal.itemName
+      ) {
+        return {
+          updatedAdventure: adventure,
+          success: false,
+          error: 'Unvollständiges Übergabe-Proposal: Erforderliche Identitätsfelder fehlen.'
+        };
+      }
+
+      // 2. Exact equality checks for all identity fields
+      if (proposal.id !== activeProp.id) {
         return {
           updatedAdventure: adventure,
           success: false,
           error: `Proposal-ID (${proposal.id}) stimmt nicht mit dem aktiven Vorschlag (${activeProp.id}) überein.`
         };
       }
-      if (proposal.itemInstanceId && proposal.itemInstanceId !== activeProp.itemInstanceId) {
+      if (proposal.itemInstanceId !== activeProp.itemInstanceId) {
         return {
           updatedAdventure: adventure,
           success: false,
           error: `ItemInstance-ID (${proposal.itemInstanceId}) stimmt nicht mit dem aktiven Vorschlag (${activeProp.itemInstanceId}) überein.`
         };
       }
-      if (proposal.fromOwnerId && this.resolveTargetId(adventure, proposal.fromOwnerId) !== this.resolveTargetId(adventure, activeProp.fromOwnerId)) {
+      if (this.resolveTargetId(adventure, proposal.fromOwnerId) !== this.resolveTargetId(adventure, activeProp.fromOwnerId) ||
+          proposal.fromOwnerName !== activeProp.fromOwnerName) {
         return {
           updatedAdventure: adventure,
           success: false,
-          error: 'Absender stimmt nicht mit dem aktiven Vorschlag überein.'
+          error: 'Absender stimmt nicht exakt mit dem aktiven Vorschlag überein.'
         };
       }
-      if (proposal.toOwnerId && this.resolveTargetId(adventure, proposal.toOwnerId) !== this.resolveTargetId(adventure, activeProp.toOwnerId)) {
+      if (this.resolveTargetId(adventure, proposal.toOwnerId) !== this.resolveTargetId(adventure, activeProp.toOwnerId) ||
+          proposal.toOwnerName !== activeProp.toOwnerName) {
         return {
           updatedAdventure: adventure,
           success: false,
-          error: 'Empfänger stimmt nicht mit dem aktiven Vorschlag überein.'
+          error: 'Empfänger stimmt nicht exakt mit dem aktiven Vorschlag überein.'
+        };
+      }
+      if ((proposal.quantity ?? 1) !== (activeProp.quantity ?? 1)) {
+        return {
+          updatedAdventure: adventure,
+          success: false,
+          error: `Übergebene Menge (${proposal.quantity}) weicht vom aktiven Vorschlag (${activeProp.quantity}) ab.`
+        };
+      }
+      if (proposal.itemName !== activeProp.itemName) {
+        return {
+          updatedAdventure: adventure,
+          success: false,
+          error: `Itemname (${proposal.itemName}) weicht vom aktiven Vorschlag (${activeProp.itemName}) ab.`
         };
       }
     }
 
-    // Always use activeProp as the single source of truth for transfer parameters
+    // Always use activeProp as the single authoritative source of truth for transfer parameters
     const prop = activeProp;
 
     const toId = this.resolveTargetId(adventure, prop.toOwnerId);
