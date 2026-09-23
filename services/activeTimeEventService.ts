@@ -258,6 +258,8 @@ export class ActiveTimeEventService {
           if (!isNaN(reqTime) && totalElapsed < reqTime) {
             return { satisfied: false, reason: `Custom predicate requires time >= ${reqTime}.` };
           }
+        } else {
+          return { satisfied: false, reason: `Unsupported custom predicate: ${predStr}` };
         }
       }
 

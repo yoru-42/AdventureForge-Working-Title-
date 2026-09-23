@@ -633,6 +633,124 @@ export function runATETests(): { passed: number; failed: number; errors: string[
     errors.push(`Test 19 Exception: ${err.message}`);
   }
 
+  // -------------------------------------------------------------
+  // Test 20: Custom Predicate Verification (Test 20)
+  // -------------------------------------------------------------
+  try {
+    // 20a: Unknown Custom Predicate fails to satisfy & remains active
+    const unknownAte = ActiveTimeEventService.createATE({
+      id: 'ate_unknown_pred',
+      title: 'Geheimnisvolle Mächte',
+      summary: 'Ein ununterstütztes Prädikat.',
+      stages: [{ stageIndex: 0, title: 'Start', triggerTimeMinutes: 0 }],
+      structuredConvergenceCondition: {
+        requiredStageIndex: 0,
+        customPredicate: 'police_arrived'
+      },
+      convergenceConsequence: 'Die Polizei greift ein.'
+    });
+
+    let adv = createTestAdventure();
+    adv.activeTimeEvents = [unknownAte];
+    let res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    let ates = ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure);
+    assert(ates[0].status === 'active', 'Test 20a: Unknown custom predicate stays active');
+
+    // 20b: stage>=N predicate evaluation
+    const stagePredAte = ActiveTimeEventService.createATE({
+      id: 'ate_stage_pred',
+      title: 'Stufen-Verschwörung',
+      summary: 'Erfordert Stufe >= 1.',
+      stages: [
+        { stageIndex: 0, title: 'Start', triggerTimeMinutes: 0 },
+        { stageIndex: 1, title: 'Mittelteil', triggerTimeMinutes: 60 }
+      ],
+      structuredConvergenceCondition: {
+        requiredStageIndex: 1,
+        customPredicate: 'stage>=1'
+      },
+      convergenceConsequence: 'Etwas passiert auf Stufe 1.'
+    });
+
+    adv = createTestAdventure();
+    adv.activeTimeEvents = [stagePredAte];
+
+    // Case 1: At stage 0 (elapsed 10m) -> Should not satisfy stage>=1
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    ates = ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure);
+    assert(ates[0].status === 'active', 'Test 20b-1: At stage 0, stage>=1 is not satisfied');
+
+    // Case 2: At stage 1 (elapsed 70m) -> Should satisfy stage>=1 and converge
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 70 });
+    ates = ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure);
+    assert(ates[0].status === 'converged', 'Test 20b-2: At stage 1, stage>=1 is satisfied and converged');
+
+    // 20c: time>=N predicate evaluation
+    const timePredAte = ActiveTimeEventService.createATE({
+      id: 'ate_time_pred',
+      title: 'Zeit-Verschwörung',
+      summary: 'Erfordert Zeit >= 120.',
+      stages: [
+        { stageIndex: 0, title: 'Start', triggerTimeMinutes: 0 }
+      ],
+      structuredConvergenceCondition: {
+        requiredStageIndex: 0,
+        customPredicate: 'time>=120'
+      },
+      convergenceConsequence: 'Etwas passiert nach 120 Minuten.'
+    });
+
+    adv = createTestAdventure();
+    adv.activeTimeEvents = [timePredAte];
+
+    // Case 1: Under 120m (elapsed 50m) -> Should not satisfy time>=120
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 50 });
+    ates = ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure);
+    assert(ates[0].status === 'active', 'Test 20c-1: Under 120 minutes, time>=120 is not satisfied');
+
+    // Case 2: Over 120m (elapsed 130m) -> Should satisfy time>=120 and converge
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 130 });
+    ates = ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure);
+    assert(ates[0].status === 'converged', 'Test 20c-2: Over 120 minutes, time>=120 is satisfied and converged');
+
+    // 20d: player_impact predicate evaluation
+    const impactPredAte = ActiveTimeEventService.createATE({
+      id: 'ate_impact_pred',
+      title: 'Spieler-Verschwörung',
+      summary: 'Erfordert Spieler-Einfluss.',
+      stages: [
+        { stageIndex: 0, title: 'Start', triggerTimeMinutes: 0 }
+      ],
+      structuredConvergenceCondition: {
+        requiredStageIndex: 0,
+        customPredicate: 'player_impact:true'
+      },
+      convergenceConsequence: 'Etwas passiert nach Spieler-Interaktion.'
+    });
+
+    adv = createTestAdventure();
+    adv.activeTimeEvents = [impactPredAte];
+
+    // Case 1: No player impact logs -> Should not satisfy player_impact
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    ates = ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure);
+    assert(ates[0].status === 'active', 'Test 20d-1: Without player impact log, player_impact is not satisfied');
+
+    // Case 2: With player impact logs -> Should satisfy player_impact and converge
+    adv.activeTimeEvents[0].playerImpactLogs = [{
+      timestamp: new Date().toISOString(),
+      actionDescription: 'Der Spieler hat die Wache alarmiert.',
+      effectOnThread: 'Die Wachen greifen ein.'
+    }];
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    ates = ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure);
+    assert(ates[0].status === 'converged', 'Test 20d-2: With player impact log, player_impact is satisfied and converged');
+
+  } catch (err: any) {
+    failed++;
+    errors.push(`Test 20 Exception: ${err.message}`);
+  }
+
   console.log(`\nATE V2 TEST RESULTS: ${passed} Passed, ${failed} Failed.`);
   return { passed, failed, errors };
 }
