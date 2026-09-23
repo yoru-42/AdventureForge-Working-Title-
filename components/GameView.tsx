@@ -267,16 +267,16 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       });
 
       const hasChanges = playerMigrated ||
-        !adventure.initialPlayer ||
-        !adventure.initialWorld ||
-        !adventure.initialWorldTime ||
-        !adventure.initialStatusElements ||
-        (!adventure.initialStructuredInventory && !!adventure.structuredInventory) ||
-        !adventure.initialLoreDatabase ||
-        !adventure.initialNpcs ||
-        !adventure.initialInventory ||
-        (!adventure.initialItemInstances && !!adventure.itemInstances) ||
-        (!adventure.initialEquipmentState && !!adventure.equipmentState);
+        (!!snapshottedAdv.initialPlayer && !adventure.initialPlayer) ||
+        (!!snapshottedAdv.initialWorld && !adventure.initialWorld) ||
+        (!!snapshottedAdv.initialWorldTime && !adventure.initialWorldTime) ||
+        (!!snapshottedAdv.initialStatusElements && !adventure.initialStatusElements) ||
+        (!!snapshottedAdv.initialStructuredInventory && !adventure.initialStructuredInventory) ||
+        (!!snapshottedAdv.initialLoreDatabase && !adventure.initialLoreDatabase) ||
+        (!!snapshottedAdv.initialNpcs && !adventure.initialNpcs) ||
+        (!!snapshottedAdv.initialInventory && !adventure.initialInventory) ||
+        (!!snapshottedAdv.initialItemInstances && !adventure.initialItemInstances) ||
+        (!!snapshottedAdv.initialEquipmentState && !adventure.initialEquipmentState);
 
       if (hasChanges) {
         onUpdateAdventureRef.current(snapshottedAdv);

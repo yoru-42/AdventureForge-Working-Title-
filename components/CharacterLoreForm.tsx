@@ -519,7 +519,9 @@ export const CharacterLoreForm: React.FC<Props> = ({
     const s = sourceInv || {};
     const e = existingInv || {};
 
-    const extractedCustomItems: CustomInventoryItem[] = Array.isArray(e.customItems) ? [...e.customItems] : [];
+    const extractedCustomItems: CustomInventoryItem[] = keepExisting
+      ? (Array.isArray(e.customItems) ? [...e.customItems] : [])
+      : (Array.isArray(s.customItems) ? [...s.customItems] : (Array.isArray(e.customItems) ? [...e.customItems] : []));
 
     const helperAddCustomItem = (itemObj: any, defaultSlot: 'weapon' | 'head' | 'chest' | 'hands' | 'legs' | 'feet' | 'finger' | 'neck' | 'wrist' | 'waist' | 'back' | 'inventory', defaultCategory: string) => {
       if (!itemObj || typeof itemObj !== 'object' || !itemObj.name) return;

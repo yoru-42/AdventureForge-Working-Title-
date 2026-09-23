@@ -92,14 +92,14 @@ export class AdventureResetService {
       if (!cloned.initialWorldDrops && cloned.worldDrops) {
         cloned.initialWorldDrops = deepClone(cloned.worldDrops);
       }
-    }
-
-    // Default static baselines that are always safe to populate if missing
-    if (!cloned.initialWorldTime) {
-      cloned.initialWorldTime = { day: 1, hour: 8, minute: 0 };
-    }
-    if (!cloned.initialStatusElements && cloned.statusElements) {
-      cloned.initialStatusElements = deepClone(cloned.statusElements);
+      if (!cloned.initialStatusElements && cloned.statusElements) {
+        cloned.initialStatusElements = deepClone(cloned.statusElements);
+      }
+      if (!cloned.initialWorldTime && cloned.worldTime) {
+        cloned.initialWorldTime = deepClone(cloned.worldTime);
+      } else if (!cloned.initialWorldTime) {
+        cloned.initialWorldTime = { day: 1, hour: 8, minute: 0 };
+      }
     }
 
     return cloned;

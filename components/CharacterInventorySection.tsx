@@ -324,6 +324,27 @@ export const CharacterInventorySection: React.FC<Props> = ({
       customItems: updatedList,
       weapons: updatedWeapons
     });
+
+    if (itemToDelete && onUpdateLore && Array.isArray(lore)) {
+      const normName = (itemToDelete.name || '').toLowerCase().trim();
+      const updatedLore = lore.filter(l => {
+        if (itemToDelete.codexItemId && l.id === itemToDelete.codexItemId) return false;
+        if (l.category === 'Gegenstände' && (l.title || '').toLowerCase().trim() === normName) {
+          const owner = (l.details?.owner || '').trim().toLowerCase();
+          const cName = (characterName || '').trim().toLowerCase();
+          if (!owner || owner === cName || (cName === 'spieler' && owner === 'player') || (cName === 'player' && owner === 'spieler')) {
+            return false;
+          }
+        }
+        return true;
+      });
+      if (updatedLore.length !== lore.length) {
+        onUpdateLore(updatedLore);
+      }
+    }
+
+    setSaveSuccessMsg(`Gegenstand '${itemToDelete?.name || ''}' wurde gelöscht.`);
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
   // Toggle equipped state
@@ -588,7 +609,26 @@ export const CharacterInventorySection: React.FC<Props> = ({
       accessories: nextAccessories
     });
 
-    setSaveSuccessMsg(`Gegenstand '${itemTitle}' wurde aus dem Inventar entfernt.`);
+    // 6. Synchronize with Codex / Lore database if onUpdateLore is provided
+    if (onUpdateLore && Array.isArray(lore)) {
+      const updatedLore = lore.filter(l => {
+        if (itemId && l.id === itemId) return false;
+        if (l.category === 'Gegenstände' && (l.title || '').toLowerCase().trim() === normTitle) {
+          const owner = (l.details?.owner || '').trim().toLowerCase();
+          const cName = (characterName || '').trim().toLowerCase();
+          if (!owner || owner === cName || (cName === 'spieler' && owner === 'player') || (cName === 'player' && owner === 'spieler')) {
+            return false;
+          }
+        }
+        return true;
+      });
+
+      if (updatedLore.length !== lore.length) {
+        onUpdateLore(updatedLore);
+      }
+    }
+
+    setSaveSuccessMsg(`Gegenstand '${itemTitle}' wurde entfernt.`);
     setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
@@ -799,7 +839,7 @@ export const CharacterInventorySection: React.FC<Props> = ({
                   )}
 
                   {item.description && (
-                    <p className="text-[11px] text-slate-400 line-clamp-2 italic">
+                    <p className="text-[11px] text-slate-400 whitespace-normal break-words italic">
                       "{renderSafeText(item.description)}"
                     </p>
                   )}
@@ -1201,20 +1241,32 @@ export const CharacterInventorySection: React.FC<Props> = ({
                             type="button"
                             onClick={() => handleRemoveCodexItemFromInventory(item.title, item.id)}
                             className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 rounded-lg text-[9px] font-bold transition-all cursor-pointer shrink-0"
-                            title="Aus Inventar entfernen / löschen"
+                            title="Aus Inventar und Codex entfernen"
                           >
                             <i className="fa-solid fa-trash-can"></i>
                           </button>
                         </>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleAddCodexItemToInventory(item)}
-                          className="w-full py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
-                        >
-                          <i className="fa-solid fa-plus text-[9px]"></i>
-                          <span>Hinzufügen</span>
-                        </button>
+                        <div className="flex items-center justify-between gap-2 w-full">
+                          <button
+                            type="button"
+                            onClick={() => handleAddCodexItemToInventory(item)}
+                            className="flex-1 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer"
+                          >
+                            <i className="fa-solid fa-plus text-[9px]"></i>
+                            <span>Hinzufügen</span>
+                          </button>
+                          {onUpdateLore && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCodexItemFromInventory(item.title, item.id)}
+                              className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 rounded-lg text-[9px] font-bold transition-all cursor-pointer shrink-0"
+                              title="Aus Codex / Liste löschen"
+                            >
+                              <i className="fa-solid fa-trash-can"></i>
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -2589,7 +2641,7 @@ export const CharacterInventorySection: React.FC<Props> = ({
                       </div>
 
                       {item.description && (
-                        <p className="text-[11px] text-slate-400 line-clamp-2 italic">
+                        <p className="text-[11px] text-slate-400 whitespace-normal break-words italic">
                           "{item.description}"
                         </p>
                       )}
@@ -2609,17 +2661,30 @@ export const CharacterInventorySection: React.FC<Props> = ({
                           className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                         >
                           <i className="fa-solid fa-trash-can"></i>
-                          <span>Aus Inventar löschen</span>
+                          <span>Aus Inventar &amp; Codex löschen</span>
                         </button>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleAddCodexItemToInventory(item)}
-                          className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <i className="fa-solid fa-plus"></i>
-                          <span>Ins Inventar übernehmen</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAddCodexItemToInventory(item)}
+                            className="px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <i className="fa-solid fa-plus"></i>
+                            <span>Ins Inventar übernehmen</span>
+                          </button>
+                          {onUpdateLore && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCodexItemFromInventory(item.title, item.id)}
+                              className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                              title="Aus Codex löschen"
+                            >
+                              <i className="fa-solid fa-trash-can"></i>
+                              <span>Löschen</span>
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
