@@ -701,9 +701,9 @@ export const CharacterInventorySection: React.FC<Props> = ({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            {customItems.map(item => (
+            {customItems.map((item, itemIdx) => (
               <div
-                key={item.id}
+                key={`custom-inv-${item.id || item.name || 'item'}-${itemIdx}`}
                 className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
                   item.equipped
                     ? 'bg-slate-950/80 border-amber-500/40 shadow-sm'
@@ -1167,11 +1167,11 @@ export const CharacterInventorySection: React.FC<Props> = ({
 
             {/* Grid of Codex Items */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
-              {displayedCodexItems.map(item => {
+              {displayedCodexItems.map((item, itemIdx) => {
                 const status = checkInInventory(item.title, item.id);
                 return (
                   <div
-                    key={item.id}
+                    key={`codex-inv-${item.id || item.title || 'item'}-${itemIdx}`}
                     className="p-3 bg-slate-900 border border-slate-800/80 rounded-xl flex flex-col justify-between gap-3 text-xs hover:border-slate-700 transition-all shadow-sm"
                   >
                     <div className="space-y-1">
@@ -2555,11 +2555,11 @@ export const CharacterInventorySection: React.FC<Props> = ({
 
             {/* Item Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[55vh] overflow-y-auto pr-1">
-              {displayedCodexItems.map(item => {
+              {displayedCodexItems.map((item, itemIdx) => {
                 const status = checkInInventory(item.title, item.id);
                 return (
                   <div
-                    key={item.id}
+                    key={`codex-grid-item-${item.id || item.title || 'item'}-${itemIdx}`}
                     className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
                       status.inInventory
                         ? 'bg-slate-950/90 border-emerald-500/30 shadow-sm'

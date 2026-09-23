@@ -1025,8 +1025,8 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
               </div>
 
               {/* Dynamic Mapped customStatAllocations */}
-              {customStatAllocations.map(alloc => (
-                <div key={alloc.id} className="bg-slate-900 border border-slate-800/60 rounded-xl p-4 space-y-3 flex flex-col justify-between shadow-sm relative group/card">
+              {customStatAllocations.map((alloc, aIdx) => (
+                <div key={`statalloc-${alloc.id || 'a'}-${aIdx}`} className="bg-slate-900 border border-slate-800/60 rounded-xl p-4 space-y-3 flex flex-col justify-between shadow-sm relative group/card">
                   
                   {/* Delete icon */}
                   <button
@@ -1203,8 +1203,8 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
                         Keine Kosten-Ressourcen definiert. Erstelle eine (z.B. &ldquo;MP&rdquo; basierend auf &ldquo;Magie&rdquo;).
                       </span>
                     ) : (
-                      costResources.map(res => (
-                        <div key={res.id} className="bg-slate-950/80 border border-slate-800/60 p-2.5 rounded-lg flex items-center justify-between gap-2 shadow-sm">
+                      costResources.map((res, rIdx) => (
+                        <div key={`costres-${res.id || 'r'}-${rIdx}`} className="bg-slate-950/80 border border-slate-800/60 p-2.5 rounded-lg flex items-center justify-between gap-2 shadow-sm">
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-1.5">
                               <span className="text-cyan-400 text-xs font-bold">{res.name}</span>
@@ -1468,9 +1468,9 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
             </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 pb-2">
-              {customResourceMappings.map(mapping => (
+              {customResourceMappings.map((mapping, mIdx) => (
                 <div 
-                  key={mapping.id} 
+                  key={`resmap-${mapping.id || 'm'}-${mIdx}`} 
                   className={`bg-slate-900 border rounded-xl p-3.5 space-y-2.5 relative group hover:border-slate-700 transition-all ${
                     editingMappingId === mapping.id ? 'border-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.15)] bg-slate-900/90' : 'border-slate-800'
                   }`}

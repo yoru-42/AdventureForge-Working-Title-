@@ -172,9 +172,9 @@ export const TilesetCatalogModal: React.FC<TilesetCatalogModalProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {allBuildingBlocks.map((block) => (
+                {allBuildingBlocks.map((block, bIdx) => (
                   <div
-                    key={block.id}
+                    key={`land-block-${block.id || 'b'}-${bIdx}`}
                     draggable={true}
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', JSON.stringify({
@@ -227,11 +227,11 @@ export const TilesetCatalogModal: React.FC<TilesetCatalogModalProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {STENCIL_PRESETS_POINT_9.map((preset) => {
+                  {STENCIL_PRESETS_POINT_9.map((preset, pIdx) => {
                     const isSelected = (config.continentStencil || '') === preset.id;
                     return (
                       <div
-                        key={preset.id}
+                        key={`preset-pt9-${preset.id || 'p'}-${pIdx}`}
                         draggable={true}
                         onDragStart={(e) => {
                           e.dataTransfer.setData('text/plain', JSON.stringify({
@@ -296,11 +296,11 @@ export const TilesetCatalogModal: React.FC<TilesetCatalogModalProps> = ({
                     { id: 'archipelago', name: 'Archipel', desc: 'Weit verstreutes Inselmeer im Ozean.' },
                     { id: 'ring', name: 'Ringkontinent', desc: 'Ringförmiger Landgürtel um ein inneres Meer.' },
                     { id: 'central_sea', name: 'Zentrale See', desc: 'Zentrales Binnenmeer umgeben von Festland.' }
-                  ].map(stencil => {
+                  ].map((stencil, sIdx) => {
                     const isSelected = (config.continentStencil || 'none') === stencil.id;
                     return (
                       <div
-                        key={stencil.id}
+                        key={`stencil-${stencil.id || 's'}-${sIdx}`}
                         draggable={true}
                         onDragStart={(e) => {
                           e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'stencil', id: stencil.id, name: stencil.name }));
@@ -381,11 +381,11 @@ export const TilesetCatalogModal: React.FC<TilesetCatalogModalProps> = ({
                     bg: 'from-slate-950 to-slate-900 border-slate-700',
                     badge: 'bg-slate-700/40 text-slate-300'
                   }
-                ].map((style) => {
+                ].map((style, stIdx) => {
                   const isSelected = (config.mapStyle || 'watercolor') === style.id;
                   return (
                     <div
-                      key={style.id}
+                      key={`mapstyle-${style.id || 'st'}-${stIdx}`}
                       draggable={true}
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'style', id: style.id, name: style.name }));
@@ -435,11 +435,11 @@ export const TilesetCatalogModal: React.FC<TilesetCatalogModalProps> = ({
                   { id: 'beach', name: 'Sandstrand', desc: 'Breite, sanft auslaufende Flachwasserzonen.' },
                   { id: 'cliff', name: 'Klippenküste', desc: 'Steil abfallende Felsküsten mit Brandung.' },
                   { id: 'lagoon', name: 'Lagunen & Riffe', desc: 'Vorgelagerte Riffketten und ruhige Atoll-Lagunen.' }
-                ].map(coast => {
+                ].map((coast, cIdx) => {
                   const isSelected = (config.coastlineStyle || 'rugged') === coast.id;
                   return (
                     <div
-                      key={coast.id}
+                      key={`coastline-${coast.id || 'c'}-${cIdx}`}
                       draggable={true}
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'coastline', id: coast.id, name: coast.name }));
@@ -481,11 +481,11 @@ export const TilesetCatalogModal: React.FC<TilesetCatalogModalProps> = ({
                   { id: 'volcanic', name: 'Vulkanisch', desc: 'Aktive Vulkankegel mit Lavakratern.' },
                   { id: 'jagged', name: 'Gezackte Gipfel', desc: 'Extreme, nadelartige Felsformationen.' },
                   { id: 'chain', name: 'Gebirgskette (Verlauf)', desc: 'Zusammenhängende Gebirgszüge entlang von Bruchkanten.' }
-                ].map(mtn => {
+                ].map((mtn, mIdx) => {
                   const isSelected = (config.mountainStyle || 'young') === mtn.id;
                   return (
                     <div
-                      key={mtn.id}
+                      key={`mtn-${mtn.id || 'm'}-${mIdx}`}
                       draggable={true}
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'terrain', subtype: mtn.name, name: mtn.name, color: '#64748b' }));
@@ -529,11 +529,11 @@ export const TilesetCatalogModal: React.FC<TilesetCatalogModalProps> = ({
                   { id: 'savanna', name: 'Savanne', color: '#9e7a40' },
                   { id: 'tundra', name: 'Tundra', color: '#96917a' },
                   { id: 'snow', name: 'Schnee / Eis', color: '#e8ecef' }
-                ].map(bio => {
+                ].map((bio, bIdx) => {
                   const isSelected = (config.biomeStyle || 'grassland') === bio.id;
                   return (
                     <div
-                      key={bio.id}
+                      key={`biome-${bio.id || 'b'}-${bIdx}`}
                       draggable={true}
                       onDragStart={(e) => {
                         e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'terrain', subtype: bio.name, name: bio.name, color: bio.color }));
@@ -625,9 +625,9 @@ export const TilesetCatalogModal: React.FC<TilesetCatalogModalProps> = ({
                   { id: 'banner', name: 'Karten-Banner', icon: '📜', desc: 'Pergament-Inschrift oben' },
                   { id: 'scale', name: 'Maßstabs-Leiste', icon: '📏', desc: 'Kartenmaßstab in Meilen/KM' },
                   { id: 'border', name: 'Verzierter Rahmen', icon: 'framed', desc: 'Klassischer antik gezeichneter Rand' }
-                ].map((item) => (
+                ].map((item, dIdx) => (
                   <div
-                    key={item.id}
+                    key={`deco-${item.id || 'd'}-${dIdx}`}
                     draggable={true}
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', JSON.stringify({

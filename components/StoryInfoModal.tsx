@@ -380,7 +380,7 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
                 {storyState?.relationships && storyState.relationships.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                     {storyState.relationships.map((rel, idx) => (
-                      <div key={idx} className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800/60 flex items-center justify-between">
+                      <div key={`story-rel-${rel.fromName || ''}-${rel.toName || ''}-${idx}`} className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800/60 flex items-center justify-between">
                         <div>
                           <span className="font-semibold text-slate-200">{rel.fromName}</span>
                           <span className="text-slate-500 mx-1">→</span>

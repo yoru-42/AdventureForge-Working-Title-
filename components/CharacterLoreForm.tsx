@@ -2735,7 +2735,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
                       return (
                         <RelationshipDetailEditor
-                          key={rel.id || `rel-char-${idx}`}
+                          key={`rel-char-${rel.id || 'r'}-${idx}`}
                           rel={rel}
                           idx={idx}
                           sourceCharacterName={editForm.title || 'Charakter'}

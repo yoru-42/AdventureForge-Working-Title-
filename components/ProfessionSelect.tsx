@@ -435,9 +435,9 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
                                 1. Ausbildung & Vorstufe
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                {tier0.map(node => (
+                                {tier0.map((node, nIdx) => (
                                   <TreeNodeCard
-                                    key={node.id}
+                                    key={`tier0-node-${node.id || 'n'}-${nIdx}`}
                                     node={node}
                                     isSelected={isSelectedJob(node.name)}
                                     isInspected={activeInspectedNode?.id === node.id}
@@ -464,9 +464,9 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
                                 2. Grundberuf (Fundament)
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                {tier1.map(node => (
+                                {tier1.map((node, nIdx) => (
                                   <TreeNodeCard
-                                    key={node.id}
+                                    key={`tier1-node-${node.id || 'n'}-${nIdx}`}
                                     node={node}
                                     isSelected={isSelectedJob(node.name)}
                                     isInspected={activeInspectedNode?.id === node.id}
@@ -493,9 +493,9 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
                                 3. Spezialisierungen & Fachrichtungen
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                {tier2.map(node => (
+                                {tier2.map((node, nIdx) => (
                                   <TreeNodeCard
-                                    key={node.id}
+                                    key={`tier2-node-${node.id || 'n'}-${nIdx}`}
                                     node={node}
                                     isSelected={isSelectedJob(node.name)}
                                     isInspected={activeInspectedNode?.id === node.id}
@@ -522,9 +522,9 @@ export const ProfessionSelect: React.FC<ProfessionSelectProps> = ({
                                 4. Fachspitze & Meisterrang
                               </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                {tier3.map(node => (
+                                {tier3.map((node, nIdx) => (
                                   <TreeNodeCard
-                                    key={node.id}
+                                    key={`tier3-node-${node.id || 'n'}-${nIdx}`}
                                     node={node}
                                     isSelected={isSelectedJob(node.name)}
                                     isInspected={activeInspectedNode?.id === node.id}

@@ -378,7 +378,7 @@ export const BodyConditionsManager: React.FC<BodyConditionsManagerProps> = ({
           </div>
         ) : (
           <div className="flex flex-wrap gap-1.5">
-            {activeConditions.map(cond => {
+            {activeConditions.map((cond, cIdx) => {
               const isCurse = cond.type === 'curse';
               const isBlessing = cond.type === 'blessing';
               const isGender = cond.type === 'gender_change';
@@ -386,7 +386,7 @@ export const BodyConditionsManager: React.FC<BodyConditionsManagerProps> = ({
 
               return (
                 <div
-                  key={cond.id}
+                  key={`cond-${cond.id || 'c'}-${cIdx}`}
                   className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm ${
                     isCurse
                       ? 'bg-red-950/35 border-red-500/40 text-red-300 hover:border-red-400'

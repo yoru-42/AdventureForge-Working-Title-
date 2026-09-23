@@ -1507,13 +1507,13 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
               </svg>
 
               {/* Positioned Node Cards on Canvas */}
-              {activeBranches.map(branch =>
-                branch.nodes.map(node => {
+              {activeBranches.map((branch, bIdx) =>
+                branch.nodes.map((node, nIdx) => {
                   const pos = nodePositions.get(node.id);
                   if (!pos) return null;
                   return (
                     <div
-                      key={node.id}
+                      key={`branch-node-${node.id || 'n'}-${bIdx}-${nIdx}`}
                       className="absolute"
                       style={{
                         left: `${pos.x}px`,
@@ -1584,8 +1584,8 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
                             : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
                         }`}
                       >
-                        {tierGroup.nodes.map(node => (
-                          <div key={node.id} className="flex flex-col w-full min-w-0">
+                        {tierGroup.nodes.map((node, nIdx) => (
+                          <div key={`tier-node-${node.id || 'n'}-${nIdx}`} className="flex flex-col w-full min-w-0">
                             {renderNodeCard(node)}
                           </div>
                         ))}
@@ -1661,9 +1661,9 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
                 <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
                   {tree.nodes
                     .filter(n => n.tier === 'beruf' && !isNodeLearned(n))
-                    .map(n => (
+                    .map((n, nIdx) => (
                       <button
-                        key={n.id}
+                        key={`quick-sec-${n.id || 'n'}-${nIdx}`}
                         type="button"
                         onClick={() => setCustomSecondaryName(n.name)}
                         className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition cursor-pointer border border-slate-700"
@@ -1727,9 +1727,9 @@ export const ProfessionSkillTree: React.FC<ProfessionSkillTreeProps> = ({
                 </div>
               ) : (
                 <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto">
-                  {nobleTitles.map(t => (
+                  {nobleTitles.map((t, tIdx) => (
                     <div
-                      key={t.id}
+                      key={`noble-title-${t.id || 't'}-${tIdx}`}
                       className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-slate-950/80 border border-slate-800 text-xs text-slate-200"
                     >
                       <div className="flex items-center gap-2">

@@ -19,7 +19,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 const memoryCache = new Map<string, any>();
 
 import { db, auth } from './firebaseService';
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, disableNetwork } from 'firebase/firestore';
 
 export enum OperationType {
   CREATE = 'create',
@@ -125,92 +125,28 @@ function getDB(): Promise<IDBDatabase> {
 
 let firestoreWriteDisabled = false;
 try {
-  if (typeof window !== 'undefined' && window.sessionStorage?.getItem('firestore_quota_exceeded') === 'true') {
-    firestoreWriteDisabled = true;
+  if (typeof window !== 'undefined') {
+    const today = new Date().toISOString().split('T')[0];
+    const storedQuotaDate = localStorage.getItem('firestore_quota_exceeded_date') || sessionStorage.getItem('firestore_quota_exceeded_date');
+    if (storedQuotaDate === today || sessionStorage.getItem('firestore_quota_exceeded') === 'true') {
+      firestoreWriteDisabled = true;
+      disableNetwork(db).catch(() => {});
+    }
   }
 } catch (_) {}
 
-const syncDebounceTimers = new Map<string, any>();
-const lastSyncedHashes = new Map<string, string>();
-
-async function syncToFirestore<T>(key: string, value: T): Promise<void> {
-  if (firestoreWriteDisabled || !auth.currentUser) return;
-  const uid = auth.currentUser.uid;
-  const cleanValue = sanitizeForFirestore(value);
-
+function markQuotaExceeded() {
+  firestoreWriteDisabled = true;
   try {
-    if (key === 'adventures' && Array.isArray(cleanValue)) {
-      const adventuresArray = cleanValue as any[];
-      for (const adv of adventuresArray) {
-        if (adv && adv.id) {
-          const safeAdvId = String(adv.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
-          const cleanAdv = sanitizeForFirestore(adv);
-          const hashKey = `adv_${uid}_${safeAdvId}`;
-          const currentHash = JSON.stringify(cleanAdv);
-
-          if (lastSyncedHashes.get(hashKey) === currentHash) {
-            // Unchanged since last sync, skip write to conserve quota
-            continue;
-          }
-
-          const advDocRef = doc(db, 'users', uid, 'adventures', safeAdvId);
-          await setDoc(advDocRef, { data: cleanAdv }, { merge: true });
-          lastSyncedHashes.set(hashKey, currentHash);
-        }
-      }
-
-      // Store a lightweight manifest document
-      const rawManifest = adventuresArray.map(a => ({
-        id: a?.id || '',
-        storyTitle: a?.storyTitle || '',
-        authorId: a?.authorId || '',
-        updatedAt: a?.updatedAt || null
-      }));
-      const cleanManifest = sanitizeForFirestore(rawManifest);
-      const manifestHashKey = `manifest_${uid}`;
-      const manifestHash = JSON.stringify(cleanManifest);
-
-      if (lastSyncedHashes.get(manifestHashKey) !== manifestHash) {
-        const manifestRef = doc(db, 'users', uid, 'data', 'adventures_manifest');
-        await setDoc(manifestRef, { data: cleanManifest }, { merge: true });
-        lastSyncedHashes.set(manifestHashKey, manifestHash);
-      }
-    } else {
-      const path = `users/${uid}/data/${key}`;
-      const stringified = JSON.stringify(cleanValue);
-      if (stringified.length < 900000) {
-        const hashKey = `data_${uid}_${key}`;
-        if (lastSyncedHashes.get(hashKey) === stringified) {
-          // Unchanged, skip write
-          return;
-        }
-
-        const userDocRef = doc(db, 'users', uid, 'data', key);
-        await setDoc(userDocRef, { data: cleanValue }, { merge: true });
-        lastSyncedHashes.set(hashKey, stringified);
-      } else {
-        console.warn(`Key "${key}" payload size (${stringified.length} chars) exceeds 900KB safety margin for single Firestore document. Skipping single-doc sync.`);
-      }
+    disableNetwork(db).catch(() => {});
+  } catch (_) {}
+  try {
+    if (typeof window !== 'undefined') {
+      const today = new Date().toISOString().split('T')[0];
+      localStorage.setItem('firestore_quota_exceeded_date', today);
+      sessionStorage.setItem('firestore_quota_exceeded_date', today);
     }
-  } catch (e: any) {
-    const errStr = e instanceof Error ? e.message : String(e);
-    if (errStr.includes('resource-exhausted') || errStr.includes('Quota limit exceeded') || errStr.includes('Quota exceeded')) {
-      firestoreWriteDisabled = true; // Circuit breaker: disable further Firestore writes for this session
-      try {
-        if (typeof window !== 'undefined') {
-          window.sessionStorage?.setItem('firestore_quota_exceeded', 'true');
-        }
-      } catch (_) {}
-      console.warn(
-        `[Firestore Quota Protection] Daily write quota reached for Firestore. ` +
-        `Application remains fully functional offline using local IndexedDB. ` +
-        `Daily quota will reset tomorrow. Manage database upgrade: ` +
-        `https://console.firebase.google.com/project/gen-lang-client-0680936141/firestore/databases/ai-studio-chat-9751ace7-c725-4cb4-9a2b-550876b20f0a/data?openUpgradeDialog=true`
-      );
-      return;
-    }
-    console.error(`Firestore sync failed for key "${key}":`, e);
-  }
+  } catch (_) {}
 }
 
 export class StorageService {
@@ -223,20 +159,9 @@ export class StorageService {
     // 1. Immediate in-memory cache update for zero-latency synchronous reads
     memoryCache.set(key, value);
 
-    // Debounced sync to Firestore to conserve write quota
-    if (auth.currentUser) {
-      if (syncDebounceTimers.has(key)) {
-        clearTimeout(syncDebounceTimers.get(key));
-      }
-      const timer = setTimeout(() => {
-        syncToFirestore(key, value).catch(() => {});
-      }, 3000); // 3-second debounce window
-      syncDebounceTimers.set(key, timer);
-    }
-
     const stringValue = JSON.stringify(value);
 
-    // 2. Primary Store: IndexedDB (High capacity, handles large images, lore & adventures)
+    // 2. Primary Store: IndexedDB (High capacity, persistent across reloads)
     let idbSuccess = false;
     try {
       const db = await getDB();
@@ -252,21 +177,13 @@ export class StorageService {
       console.warn(`IndexedDB setItem warning for key "${key}":`, e);
     }
 
-    // 3. Fallback / Secondary Store: LocalStorage
-    // If IndexedDB succeeded:
-    // - Small items (<= 200KB) are mirrored to localStorage as secondary backup.
-    // - Large items (> 200KB, e.g. adventures) are NOT stored in localStorage to prevent 5MB quota exhaustion.
-    //   Instead, if an old bulky version exists in localStorage from older versions, we safely remove it
-    //   from localStorage to free up the 5MB quota for other settings!
+    // 3. Secondary Store: LocalStorage for lightweight config objects
     if (idbSuccess) {
       if (stringValue.length <= MAX_LOCAL_STORAGE_CHAR_LENGTH) {
         try {
           localStorage.setItem(key, stringValue);
-        } catch (_) {
-          // If localStorage is restricted or full, data is already safely stored in IndexedDB.
-        }
+        } catch (_) {}
       } else {
-        // Large item stored safely in IndexedDB: clean legacy bloated copy from localStorage if present
         try {
           if (localStorage.getItem(key) !== null) {
             localStorage.removeItem(key);
@@ -274,7 +191,6 @@ export class StorageService {
         } catch (_) {}
       }
     } else {
-      // IndexedDB was unavailable or failed: Attempt best-effort localStorage save without deleting other keys
       try {
         localStorage.setItem(key, stringValue);
       } catch (e: any) {
@@ -282,7 +198,7 @@ export class StorageService {
           e instanceof DOMException &&
           (e.code === 22 || e.name === 'QuotaExceededError' || (e as any).number === -2147024882)
         ) {
-          console.warn(`LocalStorage quota exceeded for key "${key}" while IndexedDB is unavailable. Data is kept in memory.`);
+          console.warn(`LocalStorage quota exceeded for key "${key}". Data is kept safe in memory.`);
         } else {
           console.warn(`LocalStorage setItem error for key "${key}":`, e);
         }
@@ -304,7 +220,114 @@ export class StorageService {
   }
 
   /**
-   * Get item asynchronously (Memory cache first, IndexedDB second, localStorage fallback third)
+   * One-time upload of all local adventures and userProfile to Firebase Firestore.
+   * Triggered upon Google login or manual cloud backup.
+   */
+  static async syncAllToFirestore(userId?: string): Promise<{ success: boolean; message: string; timestamp?: string }> {
+    const targetUid = userId || auth.currentUser?.uid;
+    if (!targetUid) {
+      return { success: false, message: 'Nicht angemeldet. Bitte mit Google anmelden.' };
+    }
+
+    if (firestoreWriteDisabled) {
+      return {
+        success: false,
+        message: 'Tägliches Firestore-Quota erreicht. Lokale Spieldaten sind sicher im Browser gespeichert. Cloud-Backup pausiert bis zum täglichen Quota-Reset.'
+      };
+    }
+
+    try {
+      // 1. Get current local adventures
+      const adventures = (await this.getItem<any[]>('adventures')) || [];
+      if (Array.isArray(adventures) && adventures.length > 0) {
+        for (const adv of adventures) {
+          if (adv && adv.id) {
+            const safeAdvId = String(adv.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
+            const cleanAdv = sanitizeForFirestore(adv);
+            const advDocRef = doc(db, 'users', targetUid, 'adventures', safeAdvId);
+            await setDoc(advDocRef, { data: cleanAdv }, { merge: true });
+          }
+        }
+
+        const rawManifest = adventures.map(a => ({
+          id: a?.id || '',
+          storyTitle: a?.storyTitle || a?.world?.title || '',
+          authorId: a?.authorId || targetUid,
+          updatedAt: a?.updatedAt || new Date().toISOString()
+        }));
+        const cleanManifest = sanitizeForFirestore(rawManifest);
+        const manifestRef = doc(db, 'users', targetUid, 'data', 'adventures_manifest');
+        await setDoc(manifestRef, { data: cleanManifest }, { merge: true });
+      }
+
+      // 2. Get userProfile
+      const userProfile = await this.getItem<any>('userProfile');
+      if (userProfile) {
+        const cleanProfile = sanitizeForFirestore(userProfile);
+        const profileRef = doc(db, 'users', targetUid, 'data', 'userProfile');
+        await setDoc(profileRef, { data: cleanProfile }, { merge: true });
+      }
+
+      const now = new Date().toLocaleString('de-DE');
+      try {
+        localStorage.setItem('last_cloud_backup_time', now);
+      } catch (_) {}
+
+      return {
+        success: true,
+        message: `Cloud-Backup erfolgreich synchronisiert (${adventures.length} Abenteuer gesichert).`,
+        timestamp: now
+      };
+    } catch (e: any) {
+      const errStr = e instanceof Error ? e.message : String(e);
+      if (errStr.includes('resource-exhausted') || errStr.includes('Quota limit exceeded') || errStr.includes('Quota exceeded')) {
+        markQuotaExceeded();
+        return {
+          success: false,
+          message: 'Tägliches Firestore-Quota erreicht. Lokale Daten bleiben vollständig und sicher im Browser erhalten.'
+        };
+      }
+      return { success: false, message: `Cloud-Synchronisation fehlgeschlagen: ${errStr}` };
+    }
+  }
+
+  /**
+   * Pulls saved adventures from Firestore if local IndexedDB is empty (e.g. on new device).
+   */
+  static async restoreFromFirestore(targetUid: string): Promise<any[] | null> {
+    if (firestoreWriteDisabled) return null;
+    try {
+      const advColRef = collection(db, 'users', targetUid, 'adventures');
+      const querySnap = await getDocs(advColRef);
+      if (!querySnap.empty) {
+        const adventuresFromFs: any[] = [];
+        querySnap.forEach(docSnap => {
+          const d = docSnap.data();
+          if (d && d.data) {
+            adventuresFromFs.push(d.data);
+          }
+        });
+        if (adventuresFromFs.length > 0) {
+          await this.setItem('adventures', adventuresFromFs);
+          return adventuresFromFs;
+        }
+      }
+    } catch (e: any) {
+      const errStr = e instanceof Error ? e.message : String(e);
+      if (errStr.includes('resource-exhausted') || errStr.includes('Quota limit exceeded') || errStr.includes('Quota exceeded')) {
+        markQuotaExceeded();
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get item asynchronously.
+   * Priority:
+   * 1. In-memory cache (instant)
+   * 2. IndexedDB (primary persistent browser store)
+   * 3. LocalStorage (legacy fallback)
+   * 4. Firestore (ONLY if local is completely empty and user is logged in)
    */
   static async getItem<T>(key: string): Promise<T | null> {
     // 1. Check in-memory cache
@@ -312,114 +335,43 @@ export class StorageService {
       return memoryCache.get(key) as T;
     }
 
-    // 2. Try Firestore if authenticated and remote operations are not circuit-broken by quota
-    if (!firestoreWriteDisabled && auth.currentUser) {
-      const uid = auth.currentUser.uid;
-
-      if (key === 'adventures') {
-        let adventuresFromFs: any[] = [];
-        try {
-          const advColRef = collection(db, 'users', uid, 'adventures');
-          const querySnap = await getDocs(advColRef);
-          if (!querySnap.empty) {
-            querySnap.forEach(docSnap => {
-              const d = docSnap.data();
-              if (d && d.data) {
-                adventuresFromFs.push(d.data);
-              }
-            });
-          }
-        } catch (e: any) {
-          const errStr = e instanceof Error ? e.message : String(e);
-          if (errStr.includes('resource-exhausted') || errStr.includes('Quota limit exceeded') || errStr.includes('Quota exceeded')) {
-            firestoreWriteDisabled = true;
-            try {
-              window.sessionStorage?.setItem('firestore_quota_exceeded', 'true');
-            } catch (_) {}
-            console.warn('[Firestore Quota Protection] Quota limit exceeded on Firestore query. Bypassing Firestore for local IndexedDB.');
-          } else {
-            console.error(`Firestore getItem failed for adventures subcollection:`, e);
-          }
-        }
-
-        // Also retrieve local IDB adventures to merge local offline work with remote
-        let localAdventures: any[] = [];
-        try {
-          const dbInstance = await getDB();
-          const transaction = dbInstance.transaction([STORE_NAME], 'readonly');
-          const store = transaction.objectStore(STORE_NAME);
-          const request = store.get(key);
-          const localResult = await new Promise<any>((resolve) => {
-            request.onsuccess = () => resolve(request.result?.value || null);
-            request.onerror = () => resolve(null);
-          });
-          if (Array.isArray(localResult)) {
-            localAdventures = localResult;
-          }
-        } catch (_) {}
-
-        // Merge Firestore and Local IDB adventures by ID
-        const advMap = new Map<string, any>();
-        for (const adv of localAdventures) {
-          if (adv && adv.id) {
-            advMap.set(String(adv.id), { ...adv, authorId: adv.authorId || uid });
-          }
-        }
-        for (const adv of adventuresFromFs) {
-          if (adv && adv.id) {
-            advMap.set(String(adv.id), { ...adv, authorId: adv.authorId || uid });
-          }
-        }
-
-        const mergedAdventures = Array.from(advMap.values());
-        if (mergedAdventures.length > 0) {
-          memoryCache.set(key, mergedAdventures as any);
-          return mergedAdventures as unknown as T;
-        }
-      }
-
-      const path = `users/${uid}/data/${key}`;
-      try {
-        const userDocRef = doc(db, 'users', uid, 'data', key);
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data().data as T;
-          memoryCache.set(key, data);
-          return data;
-        }
-      } catch (e) {
-        console.error(`Firestore getItem failed for key "${key}":`, e);
-        try {
-          handleFirestoreError(e, OperationType.GET, path);
-        } catch (_) {}
-      }
-    }
-
-    // 3. Try IndexedDB (Primary store)
+    // 2. Try IndexedDB (Primary persistent browser store)
     try {
-      const db = await getDB();
+      const dbInstance = await getDB();
       const resultStr = await new Promise<string | null>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readonly');
+        const tx = dbInstance.transaction(STORE_NAME, 'readonly');
         const store = tx.objectStore(STORE_NAME);
         const req = store.get(key);
-        req.onsuccess = () => resolve((req.result as string) || null);
+        req.onsuccess = () => {
+          const val = req.result;
+          if (typeof val === 'string') {
+            resolve(val);
+          } else if (val !== undefined && val !== null) {
+            resolve(JSON.stringify(val));
+          } else {
+            resolve(null);
+          }
+        };
         req.onerror = () => reject(req.error);
       });
 
       if (resultStr !== null) {
-        const parsed = JSON.parse(resultStr) as T;
-        memoryCache.set(key, parsed);
+        try {
+          const parsed = JSON.parse(resultStr) as T;
+          memoryCache.set(key, parsed);
 
-        // If a huge legacy copy still lingered in localStorage, remove it to reclaim 5MB space
-        if (resultStr.length > MAX_LOCAL_STORAGE_CHAR_LENGTH) {
-          try {
-            if (localStorage.getItem(key) !== null) {
-              localStorage.removeItem(key);
-            }
-          } catch (_) {}
+          if (resultStr.length > MAX_LOCAL_STORAGE_CHAR_LENGTH) {
+            try {
+              if (localStorage.getItem(key) !== null) {
+                localStorage.removeItem(key);
+              }
+            } catch (_) {}
+          }
+
+          return parsed;
+        } catch (parseErr) {
+          console.warn(`JSON parse error for IndexedDB key "${key}":`, parseErr);
         }
-
-        return parsed;
       }
     } catch (e) {
       console.warn(`IndexedDB getItem failed for key "${key}", falling back to localStorage:`, e);
@@ -429,14 +381,43 @@ export class StorageService {
     try {
       const lsValue = localStorage.getItem(key);
       if (lsValue !== null) {
-        const parsed = JSON.parse(lsValue) as T;
-        memoryCache.set(key, parsed);
-        // Migrate to IndexedDB in background
-        this.setItem(key, parsed).catch(() => {});
-        return parsed;
+        try {
+          const parsed = JSON.parse(lsValue) as T;
+          memoryCache.set(key, parsed);
+          this.setItem(key, parsed).catch(() => {});
+          return parsed;
+        } catch (_) {}
       }
     } catch (e) {
       console.warn(`LocalStorage getItem error for key "${key}":`, e);
+    }
+
+    // 4. Fallback: If local storage has NO data for this key AND user is logged in, try cloud restore
+    if (!firestoreWriteDisabled && auth.currentUser) {
+      const uid = auth.currentUser.uid;
+      try {
+        if (key === 'adventures') {
+          const restored = await this.restoreFromFirestore(uid);
+          if (restored && restored.length > 0) {
+            return restored as unknown as T;
+          }
+        } else {
+          const userDocRef = doc(db, 'users', uid, 'data', key);
+          const docSnap = await getDoc(userDocRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data().data as T;
+            if (data !== undefined && data !== null) {
+              await this.setItem(key, data);
+              return data;
+            }
+          }
+        }
+      } catch (e) {
+        const errStr = e instanceof Error ? e.message : String(e);
+        if (errStr.includes('resource-exhausted') || errStr.includes('Quota limit exceeded') || errStr.includes('Quota exceeded')) {
+          markQuotaExceeded();
+        }
+      }
     }
 
     return null;

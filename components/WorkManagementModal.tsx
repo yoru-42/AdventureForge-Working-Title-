@@ -695,8 +695,8 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
                     
                     {resources.length > 0 ? (
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {resources.map(res => (
-                          <div key={res.id} className="bg-slate-900/90 border border-slate-800 px-3 py-2 rounded-xl flex items-center justify-between text-xs">
+                        {resources.map((res, rIdx) => (
+                          <div key={`work-res-${res.id || 'r'}-${rIdx}`} className="bg-slate-900/90 border border-slate-800 px-3 py-2 rounded-xl flex items-center justify-between text-xs">
                             <span className="text-slate-300 font-medium">{res.name}</span>
                             <span className="font-bold text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/20">
                               {res.amount} {res.unit || 'Stk.'}
@@ -870,9 +870,9 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
               {/* Tasks List */}
               <div className="space-y-2.5">
                 {tasks.length > 0 ? (
-                  tasks.map(task => (
+                  tasks.map((task, tIdx) => (
                     <div 
-                      key={task.id}
+                      key={`work-task-${task.id || 't'}-${tIdx}`}
                       className={`p-4 rounded-2xl border transition-all ${
                         task.status === 'completed'
                           ? 'bg-slate-950/40 border-slate-800/60 opacity-60'
@@ -1024,9 +1024,9 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
               {/* Duties List */}
               <div className="space-y-2.5">
                 {duties.length > 0 ? (
-                  duties.map(duty => (
+                  duties.map((duty, dIdx) => (
                     <div 
-                      key={duty.id} 
+                      key={`work-duty-${duty.id || 'd'}-${dIdx}`} 
                       className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-start justify-between gap-3"
                     >
                       <div className="space-y-1">
@@ -1084,8 +1084,8 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
 
               {holdingEmployees.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {holdingEmployees.map(emp => (
-                    <div key={emp.id} className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-center justify-between gap-3">
+                  {holdingEmployees.map((emp, eIdx) => (
+                    <div key={`work-emp-${emp.id || 'e'}-${eIdx}`} className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-center justify-between gap-3">
                       <div className="space-y-1">
                         <div className="font-bold text-slate-200 text-sm">{emp.name}</div>
                         <div className="text-xs text-slate-400">
@@ -1116,8 +1116,8 @@ export const WorkManagementModal: React.FC<WorkManagementModalProps> = ({
 
               {contracts.length > 0 ? (
                 <div className="space-y-2.5">
-                  {contracts.map(contract => (
-                    <div key={contract.id} className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-start justify-between gap-3">
+                  {contracts.map((contract, cIdx) => (
+                    <div key={`work-contract-${contract.id || 'c'}-${cIdx}`} className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-slate-200 text-sm">{contract.contractType}</span>

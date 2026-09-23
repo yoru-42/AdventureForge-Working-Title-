@@ -1704,36 +1704,44 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
         let mergedRelationships = keepExistingPlayerDetails ? (prev.relationships || []) : [];
         if (data.relationships && Array.isArray(data.relationships)) {
-          const incoming = data.relationships.map((r: any, index: number) => ({
-            id: r.id || `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`,
-            targetCharacter: r.targetCharacter || '',
-            type: r.type || '',
-            relationshipStatus: r.relationshipStatus || '',
-            addressFromSelfToTarget: r.addressFromSelfToTarget || '',
-            addressFromTargetToSelf: r.addressFromTargetToSelf || '',
-            behavior: r.behavior || '',
-            aiDirectives: r.aiDirectives || '',
-            perceptionSelfToTarget: r.perceptionSelfToTarget || '',
-            perceptionTargetToSelf: r.perceptionTargetToSelf || '',
-            secretsAndMotives: r.secretsAndMotives || '',
-            boundariesAndTaboos: r.boundariesAndTaboos || '',
-            sharedPast: r.sharedPast || '',
-            keyMemories: r.keyMemories || '',
-            valuesSelfToTarget: r.valuesSelfToTarget || {
-              affection: 0, trust: 50, respect: 50, loyalty: 50, familiarity: 30, fear: 0, bond: 30, hostility: 0
-            },
-            valuesTargetToSelf: r.valuesTargetToSelf || {
-              affection: 0, trust: 50, respect: 50, loyalty: 50, familiarity: 30, fear: 0, bond: 30, hostility: 0
-            },
-            keyEvents: Array.isArray(r.keyEvents) ? r.keyEvents.map((ev: any, evI: number) => ({
-              id: ev.id || `${Date.now()}-${evI}`,
-              title: ev.title || 'Schlüsselereignis',
-              description: ev.description || '',
-              dateOrChapter: ev.dateOrChapter || '',
-              impact: ev.impact || ''
-            })) : [],
-            _isCustom: r._isCustom || false
-          }));
+          const seenRelIds = new Set(mergedRelationships.map(r => r.id).filter(Boolean));
+          const incoming = data.relationships.map((r: any, index: number) => {
+            let uniqueId = r.id;
+            if (!uniqueId || seenRelIds.has(uniqueId)) {
+              uniqueId = `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 6)}`;
+            }
+            seenRelIds.add(uniqueId);
+            return {
+              id: uniqueId,
+              targetCharacter: r.targetCharacter || '',
+              type: r.type || '',
+              relationshipStatus: r.relationshipStatus || '',
+              addressFromSelfToTarget: r.addressFromSelfToTarget || '',
+              addressFromTargetToSelf: r.addressFromTargetToSelf || '',
+              behavior: r.behavior || '',
+              aiDirectives: r.aiDirectives || '',
+              perceptionSelfToTarget: r.perceptionSelfToTarget || '',
+              perceptionTargetToSelf: r.perceptionTargetToSelf || '',
+              secretsAndMotives: r.secretsAndMotives || '',
+              boundariesAndTaboos: r.boundariesAndTaboos || '',
+              sharedPast: r.sharedPast || '',
+              keyMemories: r.keyMemories || '',
+              valuesSelfToTarget: r.valuesSelfToTarget || {
+                affection: 0, trust: 50, respect: 50, loyalty: 50, familiarity: 30, fear: 0, bond: 30, hostility: 0
+              },
+              valuesTargetToSelf: r.valuesTargetToSelf || {
+                affection: 0, trust: 50, respect: 50, loyalty: 50, familiarity: 30, fear: 0, bond: 30, hostility: 0
+              },
+              keyEvents: Array.isArray(r.keyEvents) ? r.keyEvents.map((ev: any, evI: number) => ({
+                id: ev.id || `${Date.now()}-${evI}`,
+                title: ev.title || 'Schlüsselereignis',
+                description: ev.description || '',
+                dateOrChapter: ev.dateOrChapter || '',
+                impact: ev.impact || ''
+              })) : [],
+              _isCustom: r._isCustom || false
+            };
+          });
           if (keepExistingPlayerDetails) {
             const existingTargets = new Set(mergedRelationships.map(r => (r.targetCharacter || '').toLowerCase().trim()));
             const newFiltered = incoming.filter(r => r.targetCharacter && !existingTargets.has(r.targetCharacter.toLowerCase().trim()));
@@ -3660,7 +3668,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                             : ['Mana', 'Ausdauer', 'MP', 'SP'];
 
                           return (
-                            <tr key={rule.id || index} className="hover:bg-slate-900/30 transition-colors group">
+                            <tr key={`adv-rule-${rule.id || 'r'}-${index}`} className="hover:bg-slate-900/30 transition-colors group">
                               {/* Row Number */}
                               <td className="py-1.5 px-2 border-r border-slate-800 text-center font-bold text-slate-600 bg-slate-900/20 w-[30px] select-none">
                                 {index + 1}
@@ -4827,7 +4835,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
                           return (
                             <RelationshipDetailEditor
-                              key={rel.id || `rel-p-${idx}`}
+                              key={`rel-p-${rel.id || 'r'}-${idx}`}
                               rel={rel}
                               idx={idx}
                               sourceCharacterName={getPlayerName() || 'Spieler'}

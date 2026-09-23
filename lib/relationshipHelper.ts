@@ -239,6 +239,17 @@ export function createCounterpartRelationship(
 export function normalizeRelationships(raw: any): CharacterRelationship[] {
   if (!raw) return [];
   
+  const seenIds = new Set<string>();
+
+  const ensureUniqueId = (id: string | undefined, idx: number): string => {
+    let cleanId = id?.trim();
+    if (!cleanId || seenIds.has(cleanId)) {
+      cleanId = `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    }
+    seenIds.add(cleanId);
+    return cleanId;
+  };
+
   if (Array.isArray(raw)) {
     return raw.map((item, idx) => {
       if (typeof item === 'string') {
@@ -246,7 +257,7 @@ export function normalizeRelationships(raw: any): CharacterRelationship[] {
         const target = parts[0]?.trim() || `Charakter ${idx + 1}`;
         const type = parts.slice(1).join(':').trim() || 'Bekannt';
         return {
-          id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          id: ensureUniqueId(undefined, idx),
           targetCharacter: target,
           type: type,
         };
@@ -254,13 +265,13 @@ export function normalizeRelationships(raw: any): CharacterRelationship[] {
       if (item && typeof item === 'object') {
         return {
           ...item,
-          id: item.id || `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          id: ensureUniqueId(item.id, idx),
           targetCharacter: item.targetCharacter || item.target || item.name || item.character || '',
           type: item.type || item.relationship || item.role || 'Bekannt',
         };
       }
       return {
-        id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: ensureUniqueId(undefined, idx),
         targetCharacter: '',
         type: 'Bekannt',
       };
@@ -271,7 +282,7 @@ export function normalizeRelationships(raw: any): CharacterRelationship[] {
     return Object.entries(raw).map(([key, val], idx) => {
       if (typeof val === 'string') {
         return {
-          id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          id: ensureUniqueId(undefined, idx),
           targetCharacter: key,
           type: val,
         };
@@ -280,13 +291,13 @@ export function normalizeRelationships(raw: any): CharacterRelationship[] {
         const item = val as any;
         return {
           ...item,
-          id: item.id || `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          id: ensureUniqueId(item.id, idx),
           targetCharacter: item.targetCharacter || item.target || item.name || key,
           type: item.type || item.relationship || item.role || 'Bekannt',
         };
       }
       return {
-        id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: ensureUniqueId(undefined, idx),
         targetCharacter: key,
         type: 'Bekannt',
       };
@@ -308,7 +319,7 @@ export function normalizeRelationships(raw: any): CharacterRelationship[] {
       const target = parts[0]?.trim() || '';
       const type = parts.slice(1).join(':').trim() || 'Bekannt';
       return {
-        id: `rel-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        id: ensureUniqueId(undefined, idx),
         targetCharacter: target,
         type: type,
       };

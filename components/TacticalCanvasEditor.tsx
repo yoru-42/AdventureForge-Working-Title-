@@ -4305,11 +4305,11 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                     });
                     const subPlaces = extractedLocationTokens.filter(t => t.group === 'places');
 
-                    const renderTokenCard = (token: ExtractedLocationToken) => {
+                    const renderTokenCard = (token: ExtractedLocationToken, tIdx?: number) => {
                       const isSelected = activeToken.name === token.name && activeToken.category === token.category;
                       return (
                         <button
-                          key={token.id}
+                          key={`loc-tok-${token.id || 'tok'}-${tIdx ?? token.name}`}
                           type="button"
                           onClick={() => {
                             setActiveToken({
@@ -4658,11 +4658,11 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
               <div className="space-y-2">
                 <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Standard-Vorlagen</div>
                 <div className="max-h-60 overflow-y-auto pr-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                  {DEFAULT_CHARACTERS.map(entry => {
+                  {DEFAULT_CHARACTERS.map((entry, eIdx) => {
                     const isSelected = activeToken.name === entry.title && !activeToken.loreEntryId;
                     return (
                       <button
-                        key={entry.id}
+                        key={`def-char-${entry.id || 'c'}-${eIdx}`}
                         onClick={() => {
                           setActiveToken({
                             name: entry.title,
@@ -4714,11 +4714,11 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
 
                         {group.members.length > 0 ? (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                            {group.members.map((member) => {
+                            {group.members.map((member, mIdx) => {
                               const isSelected = activeToken.name === member.title && activeToken.faction === group.name && activeToken.loreEntryId === member.id;
                               return (
                                 <button
-                                  key={`fac-mem-${member.id}`}
+                                  key={`fac-mem-${member.id || 'm'}-${mIdx}`}
                                   onClick={() => {
                                     setActiveToken({
                                       name: member.title,
@@ -4769,11 +4769,11 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {group.members.map((member) => {
+                        {group.members.map((member, mIdx) => {
                           const isSelected = activeToken.name === member.title && activeToken.faction === group.name && !activeToken.loreEntryId;
                           return (
                             <button
-                              key={`def-fac-mem-${member.id}`}
+                              key={`def-fac-mem-${member.id || 'm'}-${mIdx}`}
                               onClick={() => {
                                 setActiveToken({
                                   name: member.title,
@@ -5690,11 +5690,11 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                   )}
 
                   {/* Saved Zones Overlay & Anchor Name Label */}
-                  {cell.cellZones && cell.cellZones.map((zone: any) => {
+                  {cell.cellZones && cell.cellZones.map((zone: any, zIdx: number) => {
                     const isAnchor = zone.x === cell.col && zone.y === cell.row;
                     return (
                       <div
-                        key={zone.id}
+                        key={`cellzone-${zone.id || 'z'}-${zIdx}`}
                         className="absolute inset-0 pointer-events-none border border-dashed border-amber-500/40 bg-amber-500/5 z-0 opacity-80 group-hover:opacity-100 transition-opacity flex items-center justify-center overflow-visible"
                       >
                         {isAnchor && (
@@ -5815,7 +5815,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
 
                         return (
                           <div className={`absolute inset-0 grid ${gridLayoutClass} gap-0.5 p-0.5 w-full h-full`}>
-                            {cell.tokens.map((t) => {
+                            {cell.tokens.map((t, tIdx) => {
                               const tCat = (t.category || '').toLowerCase();
                               const isChar = t.isPlayer || 
                                 tCat.includes('gegner') || tCat.includes('monster') || tCat.includes('feind') || 
@@ -5835,7 +5835,7 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                               
                               return (
                                 <motion.div
-                                  key={t.id}
+                                  key={`multi-tok-${t.id || 't'}-${tIdx}`}
                                   initial={{ scale: 0 }}
                                   animate={{ scale: 1 }}
                                   className={itemClassName}
@@ -5896,8 +5896,8 @@ export const TacticalCanvasEditor: React.FC<TacticalCanvasEditorProps> = ({
                   {/* Custom Zone Tooltip on Cell Hover (only if there are no other tokens in the way) */}
                   {cell.cellZones && cell.cellZones.length > 0 && (!cell.tokens || cell.tokens.length === 0) && (
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 rounded-lg text-[9px] font-bold shadow-2xl pointer-events-none whitespace-nowrap border bg-slate-950 border-amber-500/50 text-slate-200 scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100 transition-all z-50 duration-150">
-                      {cell.cellZones.map((zone: any) => (
-                        <div key={zone.id} className="space-y-0.5">
+                      {cell.cellZones.map((zone: any, czIdx: number) => (
+                        <div key={`czone-tip-${zone.id || 'cz'}-${czIdx}`} className="space-y-0.5">
                           <div className="text-amber-300 font-extrabold flex items-center gap-1">
                             <span>🗺️</span> {zone.name}
                           </div>

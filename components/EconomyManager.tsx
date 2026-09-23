@@ -698,13 +698,13 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {economy.holdings.map(holding => {
+                {economy.holdings.map((holding, hIdx) => {
                   const net = (holding.incomePerInterval || 0) - (holding.upkeepPerInterval || 0);
                   const staffCnt = (holding.roles?.length || 0) + (holding.staffGroups || []).reduce((acc, g) => acc + (g.count || 0), 0);
 
                   return (
                     <div
-                      key={holding.id}
+                      key={`holding-grid-${holding.id || 'h'}-${hIdx}`}
                       onClick={() => {
                         setEditingHoldingId(holding.id);
                         setMainTab('holdings');
@@ -849,9 +849,9 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                               </button>
                             </div>
                           ) : (
-                            summary.holdings.map(h => (
+                            summary.holdings.map((h, hIdx) => (
                               <button
-                                key={h.id}
+                                key={`holding-sum-${h.id || 'h'}-${hIdx}`}
                                 type="button"
                                 onClick={() => {
                                   setEditingHoldingId(h.id);
@@ -976,7 +976,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                   Keine Betriebe entsprechen den Kriterien.
                 </div>
               ) : (
-                filteredHoldings.map(holding => {
+                filteredHoldings.map((holding, hIdx) => {
                   const isActive = activeHolding?.id === holding.id;
                   const net = (holding.incomePerInterval || 0) - (holding.upkeepPerInterval || 0);
                   const catLabel = holding.category === 'gebaeude_anwesen' 
@@ -989,7 +989,7 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
 
                   return (
                     <button
-                      key={holding.id}
+                      key={`holding-nav-${holding.id || 'h'}-${hIdx}`}
                       type="button"
                       onClick={() => setEditingHoldingId(holding.id)}
                       className={`text-left p-3 rounded-2xl border transition-all flex items-center justify-between gap-2.5 relative cursor-pointer group ${
@@ -1271,12 +1271,12 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {economy.holdings.map(holding => {
+                {economy.holdings.map((holding, hIdx) => {
                   const resources = holding.resources || [];
                   if (resources.length === 0) return null;
 
                   return (
-                    <div key={holding.id} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
+                    <div key={`holding-res-${holding.id || 'h'}-${hIdx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-900 pb-2">
                         <span className="font-bold text-xs text-slate-200 flex items-center gap-2">
                           <span>{holding.icon || 'Building2'}</span>
@@ -1348,11 +1348,11 @@ export const EconomyManager: React.FC<EconomyManagerProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
-                    {economy.holdings.map(h => {
+                    {economy.holdings.map((h, hIdx) => {
                       const net = (h.incomePerInterval || 0) - (h.upkeepPerInterval || 0);
 
                       return (
-                        <tr key={h.id} className="hover:bg-slate-800/30 transition-colors">
+                        <tr key={`holding-row-${h.id || 'h'}-${hIdx}`} className="hover:bg-slate-800/30 transition-colors">
                           <td className="p-3 font-bold text-slate-100 flex items-center gap-2">
                             <div className="w-10 h-10 flex items-center justify-center bg-slate-950 border border-slate-800 rounded-xl group-hover:scale-110 transition-transform shadow-inner overflow-hidden">
                               <HoldingIcon icon={h.icon || 'Building2'} className="w-5 h-5 text-amber-500" />

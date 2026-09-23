@@ -189,6 +189,15 @@ const App: React.FC = () => {
   const [newItemName, setNewItemName] = useState("");
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [lastBackupTime, setLastBackupTime] = useState<string>(() => {
+    try {
+      return localStorage.getItem('last_cloud_backup_time') || '';
+    } catch {
+      return '';
+    }
+  });
 
   const currentUserId = user?.uid || DEFAULT_LOCAL_USER_ID;
 
@@ -196,17 +205,38 @@ const App: React.FC = () => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
-      StorageService.clearMemoryCache('adventures');
     });
     return () => unsubscribe();
   }, []);
 
   const handleLogin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result.user) {
+        setIsBackingUp(true);
+        const syncRes = await StorageService.syncAllToFirestore(result.user.uid);
+        setIsBackingUp(false);
+        if (syncRes.timestamp) {
+          setLastBackupTime(syncRes.timestamp);
+        }
+        setBackupMessage(syncRes.message);
+        setTimeout(() => setBackupMessage(null), 5000);
+      }
     } catch (e) {
       console.error("Login failed", e);
     }
+  };
+
+  const handleManualBackup = async () => {
+    if (!user) return;
+    setIsBackingUp(true);
+    const syncRes = await StorageService.syncAllToFirestore(user.uid);
+    setIsBackingUp(false);
+    if (syncRes.timestamp) {
+      setLastBackupTime(syncRes.timestamp);
+    }
+    setBackupMessage(syncRes.message);
+    setTimeout(() => setBackupMessage(null), 5000);
   };
 
   // Initiales Laden
@@ -214,33 +244,34 @@ const App: React.FC = () => {
     let isMounted = true;
     const loadInitialData = async () => {
       try {
-        if (user) {
-          StorageService.clearMemoryCache('adventures');
-        }
         const savedAdventures = await StorageService.getItem<Adventure[]>('adventures');
         if (savedAdventures && savedAdventures.length > 0 && isMounted) {
           
           // --- Data Sanitization: Recursive ID deduplicator ---
           // Fixes React duplicate key errors from old bugs generating duplicate IDs
-          const deduplicateIds = (obj: any) => {
-            if (Array.isArray(obj)) {
-              const seenIds = new Set();
-              for (let i = 0; i < obj.length; i++) {
-                if (obj[i] && typeof obj[i] === 'object') {
-                  if (obj[i].id !== undefined) {
-                    if (seenIds.has(obj[i].id)) {
-                      obj[i].id = `${obj[i].id}-${Math.random().toString(36).substr(2, 5)}`;
+          const deduplicateIds = (root: any) => {
+            const seenIds = new Set<string>();
+            const recurse = (obj: any) => {
+              if (Array.isArray(obj)) {
+                for (let i = 0; i < obj.length; i++) {
+                  if (obj[i] && typeof obj[i] === 'object') {
+                    if (obj[i].id !== undefined) {
+                      const idStr = String(obj[i].id);
+                      if (seenIds.has(idStr)) {
+                        obj[i].id = `${idStr}-${Math.random().toString(36).substr(2, 6)}`;
+                      }
+                      seenIds.add(String(obj[i].id));
                     }
-                    seenIds.add(obj[i].id);
+                    recurse(obj[i]);
                   }
-                  deduplicateIds(obj[i]);
+                }
+              } else if (obj !== null && typeof obj === 'object') {
+                for (const key of Object.keys(obj)) {
+                  recurse(obj[key]);
                 }
               }
-            } else if (obj !== null && typeof obj === 'object') {
-              for (const key of Object.keys(obj)) {
-                deduplicateIds(obj[key]);
-              }
-            }
+            };
+            recurse(root);
           };
           deduplicateIds(savedAdventures);
           // --- End Data Sanitization ---
@@ -262,6 +293,23 @@ const App: React.FC = () => {
           });
 
           setAdventures(savedAdventures);
+
+          // Restore active adventure and viewMode across page reloads
+          try {
+            const lastAdvId = localStorage.getItem('active_adventure_id');
+            const lastMode = localStorage.getItem('active_view_mode') as GameViewMode;
+            if (lastAdvId) {
+              const matched = savedAdventures.find(a => a.id === lastAdvId);
+              if (matched) {
+                setCurrentAdventure(matched);
+                if (lastMode && lastMode !== GameViewMode.HOME) {
+                  setViewMode(lastMode);
+                } else {
+                  setViewMode(GameViewMode.PLAY);
+                }
+              }
+            }
+          } catch (_) {}
 
           if (user && needsMigrationSave) {
             StorageService.setItem('adventures', savedAdventures).catch(() => {});
@@ -400,6 +448,10 @@ const App: React.FC = () => {
     setAdventures(newAdventures);
     setCurrentAdventure(adventure);
     setViewMode(GameViewMode.PLAY);
+    try {
+      localStorage.setItem('active_adventure_id', adventure.id);
+      localStorage.setItem('active_view_mode', GameViewMode.PLAY);
+    } catch (_) {}
     setError(null);
   };
 
@@ -418,6 +470,10 @@ const App: React.FC = () => {
     try {
       setAdventures(newAdventures);
       setCurrentAdventure(adventure);
+      try {
+        localStorage.setItem('active_adventure_id', adventure.id);
+        localStorage.setItem('active_view_mode', GameViewMode.EDIT_WORLD);
+      } catch (_) {}
       
       StorageService.setItem('adventures', newAdventures);
     } catch (e) {
@@ -793,6 +849,9 @@ const App: React.FC = () => {
 
     setAdventures(prev => prev.map(a => a.id === finalAdv.id ? finalAdv : a));
     setCurrentAdventure(finalAdv);
+    try {
+      localStorage.setItem('active_adventure_id', finalAdv.id);
+    } catch (_) {}
   };
 
   const deleteAdventure = (id: string, e: React.MouseEvent) => {
@@ -805,7 +864,13 @@ const App: React.FC = () => {
     const filtered = adventures.filter(a => a.id !== adventureToDelete);
     setAdventures(filtered);
     StorageService.setItem('adventures', filtered);
-    if (currentAdventure?.id === adventureToDelete) setCurrentAdventure(null);
+    if (currentAdventure?.id === adventureToDelete) {
+      setCurrentAdventure(null);
+      try {
+        localStorage.removeItem('active_adventure_id');
+        localStorage.setItem('active_view_mode', GameViewMode.HOME);
+      } catch (_) {}
+    }
     setAdventureToDelete(null);
     setError(null);
   };
@@ -814,11 +879,19 @@ const App: React.FC = () => {
     e.stopPropagation();
     setCurrentAdventure(adv);
     setViewMode(GameViewMode.EDIT_WORLD);
+    try {
+      localStorage.setItem('active_adventure_id', adv.id);
+      localStorage.setItem('active_view_mode', GameViewMode.EDIT_WORLD);
+    } catch (_) {}
   };
 
   const handleJoinWithCustomChar = (adv: Adventure) => {
     setCurrentAdventure(adv);
     setViewMode(GameViewMode.JOIN_CUSTOM_CHAR);
+    try {
+      localStorage.setItem('active_adventure_id', adv.id);
+      localStorage.setItem('active_view_mode', GameViewMode.JOIN_CUSTOM_CHAR);
+    } catch (_) {}
   };
 
   // Filter-Logik für die Suche
@@ -832,17 +905,28 @@ const App: React.FC = () => {
     );
   };
 
+  // Alle lokal gespeicherten Abenteuer in diesem Browser sind immer sichtbar
   const myAdventures = adventures.filter(a => {
-    const isMine = a.authorId === currentUserId || a.authorId === DEFAULT_LOCAL_USER_ID || !a.authorId;
-    return isMine && matchesSearch(a);
+    return matchesSearch(a);
   });
   const publicLibrary = adventures.filter(a => {
-    const isMine = a.authorId === currentUserId || a.authorId === DEFAULT_LOCAL_USER_ID || !a.authorId;
-    return a.isPublic && !isMine && matchesSearch(a);
+    return a.isPublic && matchesSearch(a);
   });
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-slate-950 overflow-x-hidden w-full">
+      {/* Cloud Backup Notification Toast */}
+      {backupMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-sm">
+          <div className="bg-slate-900 text-amber-400 px-4 py-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3 border border-amber-500/40 text-xs font-semibold">
+            <span>{backupMessage}</span>
+            <button onClick={() => setBackupMessage(null)} className="text-slate-400 hover:text-white">
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Error Toast */}
       {error && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-xs animate-bounce">
@@ -886,17 +970,34 @@ const App: React.FC = () => {
                 {!user ? (
                   <button 
                     onClick={handleLogin}
-                    className="p-3 rounded-2xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-500 transition-all"
+                    className="p-3 rounded-2xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-500 transition-all text-center"
                   >
                     Google Login
                   </button>
                 ) : (
-                  <button 
-                    onClick={() => signOut(auth)}
-                    className="p-3 rounded-2xl bg-slate-700 text-slate-300 text-xs hover:bg-slate-600 transition-all"
-                  >
-                    Logout
-                  </button>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={handleManualBackup}
+                        disabled={isBackingUp}
+                        className="flex-1 p-2.5 rounded-2xl bg-amber-600/20 text-amber-400 border border-amber-500/30 text-xs font-bold hover:bg-amber-600/30 transition-all text-center"
+                        title="Spieldaten in Firebase sichern"
+                      >
+                        {isBackingUp ? "Sichere..." : "Cloud-Backup"}
+                      </button>
+                      <button 
+                        onClick={() => signOut(auth)}
+                        className="p-2.5 rounded-2xl bg-slate-700 text-slate-300 text-xs hover:bg-slate-600 transition-all text-center"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                    {lastBackupTime && (
+                      <span className="text-[10px] text-slate-500 text-center truncate">
+                        Cloud: {lastBackupTime}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -935,7 +1036,18 @@ const App: React.FC = () => {
                 </p>
               )}
               {myAdventures.map((adv, aIdx) => (
-                <div key={adv.id ? `my-adv-${adv.id}-${aIdx}` : `my-adv-${aIdx}`} onClick={() => { setCurrentAdventure(adv); setViewMode(GameViewMode.PLAY); }} className="group p-4 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-between hover:border-amber-500/50 transition-all cursor-pointer relative overflow-hidden">
+                <div 
+                  key={adv.id ? `my-adv-${adv.id}-${aIdx}` : `my-adv-${aIdx}`} 
+                  onClick={() => { 
+                    setCurrentAdventure(adv); 
+                    setViewMode(GameViewMode.PLAY); 
+                    try {
+                      localStorage.setItem('active_adventure_id', adv.id);
+                      localStorage.setItem('active_view_mode', GameViewMode.PLAY);
+                    } catch (_) {}
+                  }} 
+                  className="group p-4 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-between hover:border-amber-500/50 transition-all cursor-pointer relative overflow-hidden"
+                >
                   <div className="flex items-center gap-4 relative z-10">
                     <div className="w-10 h-10 bg-amber-500/10 rounded-lg flex items-center justify-center text-amber-500 border border-amber-500/20">
                       {adv.player.image ? <img src={adv.player.image} className="w-full h-full object-cover rounded-lg" /> : <i className="fa-solid fa-scroll"></i>}
@@ -989,7 +1101,13 @@ const App: React.FC = () => {
         <UserProfileEditor 
           profile={userProfile} 
           onSave={saveProfile} 
-          onCancel={() => setViewMode(GameViewMode.HOME)} 
+          onCancel={() => {
+            setViewMode(GameViewMode.HOME);
+            try {
+              localStorage.removeItem('active_adventure_id');
+              localStorage.setItem('active_view_mode', GameViewMode.HOME);
+            } catch (_) {}
+          }} 
         />
       )}
 
@@ -997,7 +1115,13 @@ const App: React.FC = () => {
         <AdventureEditor 
           onSave={saveAdventure} 
           onAutoSave={autoSaveAdventure}
-          onCancel={() => setViewMode(GameViewMode.HOME)}
+          onCancel={() => {
+            setViewMode(GameViewMode.HOME);
+            try {
+              localStorage.removeItem('active_adventure_id');
+              localStorage.setItem('active_view_mode', GameViewMode.HOME);
+            } catch (_) {}
+          }}
           initialData={currentAdventure || undefined}
           mode={viewMode}
           userId={currentUserId}
@@ -1008,7 +1132,15 @@ const App: React.FC = () => {
       {viewMode === GameViewMode.PLAY && currentAdventure && (
         <GameView 
           adventure={currentAdventure} 
-          onViewChange={setViewMode} 
+          onViewChange={(mode) => {
+            setViewMode(mode);
+            try {
+              localStorage.setItem('active_view_mode', mode);
+              if (mode === GameViewMode.HOME) {
+                localStorage.removeItem('active_adventure_id');
+              }
+            } catch (_) {}
+          }} 
           onUpdateAdventure={updateAdventure}
           userProfile={userProfile}
         />
@@ -1999,7 +2131,7 @@ const App: React.FC = () => {
 
                             return (
                               <div 
-                                key={tech.id || idx} 
+                                key={`tech-item-${tech.id || 't'}-${idx}`} 
                                 className={`bg-slate-950/40 border rounded-2xl p-4 space-y-3 transition-all ${
                                   isTransActive
                                     ? 'border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.15)] bg-purple-950/10'
@@ -2696,7 +2828,7 @@ const App: React.FC = () => {
                       return (
                         <div className="space-y-3">
                           {rules.map((rule: any, idx: number) => (
-                            <div key={rule.id || `rule-${idx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-850 shadow-inner flex flex-col gap-2 hover:border-amber-500/20 transition-all animate-in slide-in-from-bottom-2 duration-150">
+                            <div key={`world-rule-${rule.id || 'r'}-${idx}`} className="bg-slate-950 p-4 rounded-2xl border border-slate-850 shadow-inner flex flex-col gap-2 hover:border-amber-500/20 transition-all animate-in slide-in-from-bottom-2 duration-150">
                               <div className="flex items-center justify-between gap-2 flex-wrap">
                                 <h4 className="text-xs font-black text-amber-500 uppercase tracking-wide">{rule.title}</h4>
                                 <div className="flex gap-1.5">
@@ -2756,7 +2888,7 @@ const App: React.FC = () => {
                       return (
                         <div className="relative pl-6 border-l-2 border-slate-800 space-y-6 py-2 ml-2">
                           {timelineEntries.map((entry: any, idx: number) => (
-                            <div key={entry.id || `timeline-${idx}`} className="relative group">
+                            <div key={`timeline-item-${entry.id || 'tl'}-${idx}`} className="relative group">
                               {/* Dot pointer on line */}
                               <div className="absolute -left-[31px] top-1.5 w-4 h-4 rounded-full bg-slate-900 border-2 border-rose-500 shadow-sm flex items-center justify-center transition-all group-hover:scale-110">
                                 <div className="w-1.5 h-1.5 rounded-full bg-rose-400"></div>

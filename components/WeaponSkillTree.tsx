@@ -344,7 +344,7 @@ export const WeaponSkillTree: React.FC<WeaponSkillTreeProps> = ({
   }, [weaponEntries]);
 
   // Rendern einer aktiven Waffendetail-Karte (EXAKT WIE IN ALLTAGSKOMPETENZEN)
-  const renderActiveWeaponCard = (entry: TechniqueItem) => {
+  const renderActiveWeaponCard = (entry: TechniqueItem, idx?: number) => {
     const isExpanded = !!expandedMap[entry.id];
     const wDef = getWeaponDefForEntry(entry);
     const currentScore = entry.trainingProgress !== undefined ? entry.trainingProgress : (entry.score !== undefined ? entry.score : 0);
@@ -354,7 +354,7 @@ export const WeaponSkillTree: React.FC<WeaponSkillTreeProps> = ({
 
     return (
       <div
-        key={entry.id}
+        key={`wpn-card-${entry.id || 'w'}-${idx ?? entry.name}`}
         className={`bg-slate-950 border rounded-xl transition duration-150 flex flex-col ${
           isExpanded ? 'border-sky-500/50 shadow-sm' : 'border-slate-800 hover:border-slate-700'
         }`}
@@ -1020,9 +1020,9 @@ export const WeaponSkillTree: React.FC<WeaponSkillTreeProps> = ({
                               </span>
                             )}
                             <div className="flex flex-wrap gap-1.5">
-                              {availableInCat.map(w => (
+                              {availableInCat.map((w, wIdx) => (
                                 <button
-                                  key={w.id}
+                                  key={`avail-wpn-${w.id || 'w'}-${wIdx}`}
                                   type="button"
                                   onClick={() => handleAddWeaponFromCatalog(w)}
                                   className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-950 text-slate-300 border border-slate-800/90 hover:border-sky-500/60 hover:text-white transition flex items-center gap-1.5 cursor-pointer group"
