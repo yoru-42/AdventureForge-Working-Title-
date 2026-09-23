@@ -243,88 +243,41 @@ export class StorageService {
       };
     }
 
-    const getAdventureTimestamp = (adv: any): number => {
-      if (!adv) return 0;
-      const tsStr = adv.updatedAt || adv.lastSaved || adv.createdAt;
-      if (tsStr) {
-        const t = new Date(tsStr).getTime();
-        if (!isNaN(t)) return t;
+    // 1. Load local adventures
+    const localAdventures = (await this.getItem<any[]>('adventures')) || [];
+
+    // 2. Fetch existing cloud adventures with strict error handling
+    const cloudAdventures: any[] = [];
+    try {
+      const advColRef = collection(db, 'users', targetUid, 'adventures');
+      const querySnap = await getDocs(advColRef);
+      if (!querySnap.empty) {
+        querySnap.forEach(docSnap => {
+          const d = docSnap.data();
+          if (d && d.data && d.data.id) {
+            cloudAdventures.push(d.data);
+          }
+        });
       }
-      return 0;
-    };
+    } catch (err: any) {
+      console.warn('Could not read existing cloud adventures:', err);
+      const errStr = err instanceof Error ? err.message : String(err);
+      if (errStr.includes('resource-exhausted') || errStr.includes('Quota limit exceeded') || errStr.includes('Quota exceeded')) {
+        markQuotaExceeded();
+        return {
+          success: false,
+          message: 'Tägliches Firestore-Quota erreicht. Lokale Daten bleiben vollständig und sicher im Browser erhalten.'
+        };
+      }
+      return {
+        success: false,
+        message: 'Cloud-Daten konnten nicht gelesen werden. Lokale Daten wurden nicht verändert.'
+      };
+    }
 
     try {
-      // 1. Load local adventures
-      const localAdventures = (await this.getItem<any[]>('adventures')) || [];
-      const localMap = new Map<string, any>();
-      if (Array.isArray(localAdventures)) {
-        for (const a of localAdventures) {
-          if (a && a.id) {
-            localMap.set(String(a.id), a);
-          }
-        }
-      }
-
-      // 2. Fetch existing cloud adventures
-      const cloudMap = new Map<string, any>();
-      try {
-        const advColRef = collection(db, 'users', targetUid, 'adventures');
-        const querySnap = await getDocs(advColRef);
-        if (!querySnap.empty) {
-          querySnap.forEach(docSnap => {
-            const d = docSnap.data();
-            if (d && d.data && d.data.id) {
-              cloudMap.set(String(d.data.id), d.data);
-            }
-          });
-        }
-      } catch (err) {
-        console.warn('Could not read existing cloud adventures for comparison:', err);
-      }
-
       // 3. Reconcile adventure-by-adventure
-      const allIds = new Set<string>([...localMap.keys(), ...cloudMap.keys()]);
-      const mergedAdventures: any[] = [];
-      const toUploadToCloud: any[] = [];
-
-      for (const id of allIds) {
-        const localAdv = localMap.get(id);
-        const cloudAdv = cloudMap.get(id);
-
-        if (localAdv && !cloudAdv) {
-          // Exists only locally -> Upload to cloud
-          mergedAdventures.push(localAdv);
-          toUploadToCloud.push(localAdv);
-        } else if (!localAdv && cloudAdv) {
-          // Exists only in cloud -> Add to local
-          mergedAdventures.push(cloudAdv);
-        } else if (localAdv && cloudAdv) {
-          // Exists in both -> Timestamp & version comparison!
-          const localTs = getAdventureTimestamp(localAdv);
-          const cloudTs = getAdventureTimestamp(cloudAdv);
-          const localHistoryLen = Array.isArray(localAdv.storyHistory) ? localAdv.storyHistory.length : 0;
-          const cloudHistoryLen = Array.isArray(cloudAdv.storyHistory) ? cloudAdv.storyHistory.length : 0;
-
-          if (cloudTs > localTs) {
-            // Cloud is newer -> Cloud wins, update local
-            mergedAdventures.push(cloudAdv);
-          } else if (localTs > cloudTs) {
-            // Local is newer -> Local wins, upload to cloud
-            mergedAdventures.push(localAdv);
-            toUploadToCloud.push(localAdv);
-          } else {
-            // Timestamps equal: tie break by story history length
-            if (cloudHistoryLen > localHistoryLen) {
-              mergedAdventures.push(cloudAdv);
-            } else {
-              mergedAdventures.push(localAdv);
-              if (localHistoryLen > cloudHistoryLen) {
-                toUploadToCloud.push(localAdv);
-              }
-            }
-          }
-        }
-      }
+      const { mergedAdventures, toUploadToCloud } = this.reconcileAdventures(localAdventures, cloudAdventures);
 
       // 4. Save merged adventures locally
       await this.setItem('adventures', mergedAdventures);
@@ -399,6 +352,87 @@ export class StorageService {
       }
       return { success: false, message: `Cloud-Synchronisation fehlgeschlagen: ${errStr}` };
     }
+  }
+
+  /**
+   * Pure reconciliation algorithm between local and cloud adventures.
+   */
+  static reconcileAdventures(localAdventures: any[], cloudAdventures: any[]): {
+    mergedAdventures: any[];
+    toUploadToCloud: any[];
+  } {
+    const localMap = new Map<string, any>();
+    if (Array.isArray(localAdventures)) {
+      for (const a of localAdventures) {
+        if (a && a.id) {
+          localMap.set(String(a.id), a);
+        }
+      }
+    }
+
+    const cloudMap = new Map<string, any>();
+    if (Array.isArray(cloudAdventures)) {
+      for (const a of cloudAdventures) {
+        if (a && a.id) {
+          cloudMap.set(String(a.id), a);
+        }
+      }
+    }
+
+    const allIds = new Set<string>([...localMap.keys(), ...cloudMap.keys()]);
+    const mergedAdventures: any[] = [];
+    const toUploadToCloud: any[] = [];
+
+    for (const id of allIds) {
+      const localAdv = localMap.get(id);
+      const cloudAdv = cloudMap.get(id);
+
+      if (localAdv && !cloudAdv) {
+        // Exists only locally -> Upload to cloud
+        mergedAdventures.push(localAdv);
+        toUploadToCloud.push(localAdv);
+      } else if (!localAdv && cloudAdv) {
+        // Exists only in cloud -> Add to local
+        mergedAdventures.push(cloudAdv);
+      } else if (localAdv && cloudAdv) {
+        // Exists in both -> Timestamp & version comparison!
+        const localTs = this.getAdventureTimestamp(localAdv);
+        const cloudTs = this.getAdventureTimestamp(cloudAdv);
+        const localHistoryLen = Array.isArray(localAdv.storyHistory) ? localAdv.storyHistory.length : 0;
+        const cloudHistoryLen = Array.isArray(cloudAdv.storyHistory) ? cloudAdv.storyHistory.length : 0;
+
+        if (cloudTs > localTs) {
+          // Cloud is newer -> Cloud wins, update local
+          mergedAdventures.push(cloudAdv);
+        } else if (localTs > cloudTs) {
+          // Local is newer -> Local wins, upload to cloud
+          mergedAdventures.push(localAdv);
+          toUploadToCloud.push(localAdv);
+        } else {
+          // Timestamps equal: tie break by story history length
+          if (cloudHistoryLen > localHistoryLen) {
+            mergedAdventures.push(cloudAdv);
+          } else {
+            mergedAdventures.push(localAdv);
+            if (localHistoryLen > cloudHistoryLen) {
+              toUploadToCloud.push(localAdv);
+            }
+          }
+        }
+      }
+    }
+
+    return { mergedAdventures, toUploadToCloud };
+  }
+
+  static getAdventureTimestamp(adv: any): number {
+    if (!adv) return 0;
+    const tsStr = adv.updatedAt || adv.lastSaved || adv.createdAt;
+    if (tsStr) {
+      const t = new Date(tsStr).getTime();
+      if (!isNaN(t)) return t;
+    }
+    return 0;
   }
 
   /**

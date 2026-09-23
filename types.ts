@@ -2748,6 +2748,7 @@ export interface ItemInstance {
   id: string;
   itemDefinitionId: string; // Referenz auf ItemDefinition
   name?: string;
+  description?: string; // Instanz-Beschreibung / Zustand
   condition?: string; // z. B. 'alt / stark verrostet', 'neuwertig', 'beschädigt', 'hervorragend erhalten'
   quality?: string; // optional, z. B. 'aus besonders hochwertigem Stahl'
   owner?: string; // Besitzer / Charakter / Betrieb

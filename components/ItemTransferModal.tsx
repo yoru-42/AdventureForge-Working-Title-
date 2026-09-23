@@ -23,7 +23,7 @@ export const ItemTransferModal: React.FC<ItemTransferModalProps> = ({
   const targetInstance = (adventure.itemInstances || []).find(i => i.id === proposal.itemInstanceId);
   const itemWeight = targetInstance?.weightKg || InventoryLootService.inferWeightFromText(proposal.itemName, proposal.description);
   const totalWeight = itemWeight * (proposal.quantity || 1);
-  const wouldOverburden = (capacity.currentWeightKg + totalWeight) > capacity.maxCapacityKg;
+  const wouldOverburden = (capacity.currentWeightKg + totalWeight) > capacity.maxWeightKg;
 
   const handleAccept = () => {
     setIsProcessing(true);
@@ -120,14 +120,14 @@ export const ItemTransferModal: React.FC<ItemTransferModalProps> = ({
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400 font-semibold">Traglast-Prüfung:</span>
               <span className={`font-mono font-bold ${wouldOverburden ? 'text-red-400' : 'text-slate-300'}`}>
-                {(capacity.currentWeightKg + totalWeight).toFixed(1)} / {capacity.maxCapacityKg} kg
+                {(capacity.currentWeightKg + totalWeight).toFixed(1)} / {capacity.maxWeightKg} kg
               </span>
             </div>
             <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
               <div
                 className={`h-full rounded-full transition-all ${wouldOverburden ? 'bg-red-500' : 'bg-amber-500'}`}
                 style={{
-                  width: `${Math.min(100, ((capacity.currentWeightKg + totalWeight) / capacity.maxCapacityKg) * 100)}%`
+                  width: `${Math.min(100, ((capacity.currentWeightKg + totalWeight) / capacity.maxWeightKg) * 100)}%`
                 }}
               />
             </div>

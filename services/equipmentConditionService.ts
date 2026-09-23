@@ -1153,9 +1153,10 @@ export class EquipmentConditionService {
       return finalAdv;
     }
 
-    // Legacy fallback: Search for ONE instance owned by fromId with matching name
-    const legacyInst = itemInstances.find(i => i.owner === fromId && i.name?.toLowerCase() === cleanSearchLower);
-    if (legacyInst) {
+    // Legacy fallback: Search for EXACTLY ONE instance owned by fromId with matching name
+    const legacyMatches = itemInstances.filter(i => i.owner === fromId && i.name?.toLowerCase() === cleanSearchLower);
+    if (legacyMatches.length === 1) {
+      const legacyInst = legacyMatches[0];
       return this.transferItem(adventure, fromId, toId, legacyInst.id, { itemInstanceId: legacyInst.id, quantity: options?.quantity });
     }
 
@@ -1190,8 +1191,8 @@ export class EquipmentConditionService {
     transferredItem?: ItemInstance;
     error?: string;
   } {
-    const prop = proposal || adventure.pendingTransfer;
-    if (!prop) {
+    const activeProp = adventure.pendingTransfer;
+    if (!activeProp) {
       return {
         updatedAdventure: adventure,
         success: false,
@@ -1199,10 +1200,45 @@ export class EquipmentConditionService {
       };
     }
 
+    // If caller provided a proposal object, it MUST strictly match the active pending proposal!
+    if (proposal) {
+      if (proposal.id && proposal.id !== activeProp.id) {
+        return {
+          updatedAdventure: adventure,
+          success: false,
+          error: `Proposal-ID (${proposal.id}) stimmt nicht mit dem aktiven Vorschlag (${activeProp.id}) überein.`
+        };
+      }
+      if (proposal.itemInstanceId && proposal.itemInstanceId !== activeProp.itemInstanceId) {
+        return {
+          updatedAdventure: adventure,
+          success: false,
+          error: `ItemInstance-ID (${proposal.itemInstanceId}) stimmt nicht mit dem aktiven Vorschlag (${activeProp.itemInstanceId}) überein.`
+        };
+      }
+      if (proposal.fromOwnerId && this.resolveTargetId(adventure, proposal.fromOwnerId) !== this.resolveTargetId(adventure, activeProp.fromOwnerId)) {
+        return {
+          updatedAdventure: adventure,
+          success: false,
+          error: 'Absender stimmt nicht mit dem aktiven Vorschlag überein.'
+        };
+      }
+      if (proposal.toOwnerId && this.resolveTargetId(adventure, proposal.toOwnerId) !== this.resolveTargetId(adventure, activeProp.toOwnerId)) {
+        return {
+          updatedAdventure: adventure,
+          success: false,
+          error: 'Empfänger stimmt nicht mit dem aktiven Vorschlag überein.'
+        };
+      }
+    }
+
+    // Always use activeProp as the single source of truth for transfer parameters
+    const prop = activeProp;
+
     const toId = this.resolveTargetId(adventure, prop.toOwnerId);
     if (toId !== 'player') {
       return {
-        updatedAdventure: { ...adventure, pendingTransfer: null },
+        updatedAdventure: adventure,
         success: false,
         error: 'Empfänger der Übergabe ist nicht der Spieler.'
       };
@@ -1214,7 +1250,7 @@ export class EquipmentConditionService {
 
     if (!targetInst) {
       return {
-        updatedAdventure: { ...adventure, pendingTransfer: null },
+        updatedAdventure: adventure,
         success: false,
         error: `Gegenstand (${prop.itemName}) existiert nicht mehr.`
       };
@@ -1222,7 +1258,7 @@ export class EquipmentConditionService {
 
     if (targetInst.owner !== fromId) {
       return {
-        updatedAdventure: { ...adventure, pendingTransfer: null },
+        updatedAdventure: adventure,
         success: false,
         error: `Gegenstand gehört nicht mehr ${prop.fromOwnerName || fromId}.`
       };
@@ -1233,7 +1269,7 @@ export class EquipmentConditionService {
 
     if (requestedQty > currentQty) {
       return {
-        updatedAdventure: { ...adventure, pendingTransfer: null },
+        updatedAdventure: adventure,
         success: false,
         error: `Die gewünschte Menge (${requestedQty}) ist beim Geber nicht mehr vorhanden (${currentQty} verfügbar).`
       };
@@ -1431,7 +1467,7 @@ export class EquipmentConditionService {
     });
 
     // Remove any currently equipped items from generalItems to prevent duplicates
-    let cleanGeneral = Array.isArray(structuredInv.generalItems) ? structuredInv.generalItems : [];
+    let cleanGeneral: any[] = Array.isArray(structuredInv.generalItems) ? structuredInv.generalItems : [];
     cleanGeneral = cleanGeneral.filter(g => {
       const gName = (typeof g === 'string' ? g : g?.name || '').trim().toLowerCase();
       return !equippedItemNames.has(gName);
@@ -1513,63 +1549,57 @@ export class EquipmentConditionService {
             // NPC -> Player transfer: REQUIRES EXPLICIT USER CONFIRMATION!
             let inst: ItemInstance | undefined;
             if (inv.itemInstanceId) {
+              // 1. Strict itemInstanceId: ONLY find exact instance owned by fromId
               inst = (currentAdventure.itemInstances || []).find(i => i.id === inv.itemInstanceId && i.owner === fromId);
-            }
-            if (!inst) {
-              inst = (currentAdventure.itemInstances || []).find(i => i.owner === fromId && i.name?.toLowerCase() === cleanItem.toLowerCase());
+              if (!inst) {
+                // ABORT: No name fallback, no duplicate substitution, no inventing item!
+                return;
+              }
+            } else {
+              // 2. Legacy fallback ONLY when no itemInstanceId was provided:
+              // Must find UNAMBIGUOUS single match for fromId
+              const matches = (currentAdventure.itemInstances || []).filter(
+                i => i.owner === fromId && i.name?.toLowerCase() === cleanItem.toLowerCase()
+              );
+              if (matches.length === 1) {
+                inst = matches[0];
+              } else {
+                // Ambiguous (> 1) or not found (0) -> ABORT! NEVER invent new item instance on transfer!
+                return;
+              }
             }
 
-            if (!inst) {
-              const singleWeight = InventoryLootService.inferWeightFromText(cleanItem, inv.description);
-              const instId = inv.itemInstanceId || `item-inst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-              const defId = inv.itemDefinitionId || `item-def-${cleanItem.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
-              inst = {
-                id: instId,
-                itemDefinitionId: defId,
-                name: cleanItem,
-                owner: fromId,
-                quantity: inv.quantity || 1,
-                weightKg: singleWeight,
-                condition: inv.condition || 'gut',
-                category: 'Gegenstände',
-                currentState: 'im Inventar',
-                location: `Im Besitz von ${inv.ownerName || fromId}`
+            if (inst) {
+              const fromCharacter = this.getCharacter(currentAdventure, fromId);
+              const fromName = fromCharacter?.name || inv.ownerName || 'Charakter';
+              const toCharacter = this.getCharacter(currentAdventure, toId);
+              const toName = toCharacter?.name || 'Spieler';
+
+              const proposal: PendingItemTransferProposal = {
+                id: `transfer-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                itemInstanceId: inst.id,
+                fromOwnerId: fromId,
+                fromOwnerName: fromName,
+                toOwnerId: 'player',
+                toOwnerName: toName,
+                quantity: inv.quantity && inv.quantity > 0 ? Math.min(inv.quantity, inst.quantity || 1) : (inst.quantity || 1),
+                itemName: inst.name || cleanItem,
+                description: inst.description || inv.description,
+                createdAt: Date.now()
               };
+
               currentAdventure = {
                 ...currentAdventure,
-                itemInstances: [...(currentAdventure.itemInstances || []), inst]
+                pendingTransfer: proposal
               };
+
+              notifications.push({
+                id: Math.random().toString(),
+                type: 'add',
+                title: `${fromName} bietet dir ${inst.name || cleanItem} an – Bestätigen?`,
+                category: 'Gegenstände'
+              });
             }
-
-            const fromCharacter = this.getCharacter(currentAdventure, fromId);
-            const fromName = fromCharacter?.name || inv.ownerName || 'Charakter';
-            const toCharacter = this.getCharacter(currentAdventure, toId);
-            const toName = toCharacter?.name || 'Spieler';
-
-            const proposal: PendingItemTransferProposal = {
-              id: `transfer-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              itemInstanceId: inst.id,
-              fromOwnerId: fromId,
-              fromOwnerName: fromName,
-              toOwnerId: 'player',
-              toOwnerName: toName,
-              quantity: inv.quantity || inst.quantity || 1,
-              itemName: cleanItem,
-              description: inv.description,
-              createdAt: Date.now()
-            };
-
-            currentAdventure = {
-              ...currentAdventure,
-              pendingTransfer: proposal
-            };
-
-            notifications.push({
-              id: Math.random().toString(),
-              type: 'add',
-              title: `${fromName} bietet dir ${cleanItem} an – Bestätigen?`,
-              category: 'Gegenstände'
-            });
           } else {
             // Player -> NPC or NPC -> NPC: direct transfer
             currentAdventure = this.transferItem(currentAdventure, fromId, toId, inv.itemInstanceId || cleanItem, {
