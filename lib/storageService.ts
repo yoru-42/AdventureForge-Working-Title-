@@ -220,10 +220,17 @@ export class StorageService {
   }
 
   /**
-   * One-time upload of all local adventures and userProfile to Firebase Firestore.
+   * Safe bidirectional synchronization between local IndexedDB and Firestore.
    * Triggered upon Google login or manual cloud backup.
+   * NEVER overwrites newer local data with older cloud data,
+   * and NEVER overwrites newer cloud data with older local data.
    */
-  static async syncAllToFirestore(userId?: string): Promise<{ success: boolean; message: string; timestamp?: string }> {
+  static async syncAllToFirestore(userId?: string): Promise<{
+    success: boolean;
+    message: string;
+    timestamp?: string;
+    mergedAdventures?: any[];
+  }> {
     const targetUid = userId || auth.currentUser?.uid;
     if (!targetUid) {
       return { success: false, message: 'Nicht angemeldet. Bitte mit Google anmelden.' };
@@ -236,36 +243,138 @@ export class StorageService {
       };
     }
 
+    const getAdventureTimestamp = (adv: any): number => {
+      if (!adv) return 0;
+      const tsStr = adv.updatedAt || adv.lastSaved || adv.createdAt;
+      if (tsStr) {
+        const t = new Date(tsStr).getTime();
+        if (!isNaN(t)) return t;
+      }
+      return 0;
+    };
+
     try {
-      // 1. Get current local adventures
-      const adventures = (await this.getItem<any[]>('adventures')) || [];
-      if (Array.isArray(adventures) && adventures.length > 0) {
-        for (const adv of adventures) {
-          if (adv && adv.id) {
-            const safeAdvId = String(adv.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
-            const cleanAdv = sanitizeForFirestore(adv);
-            const advDocRef = doc(db, 'users', targetUid, 'adventures', safeAdvId);
-            await setDoc(advDocRef, { data: cleanAdv }, { merge: true });
+      // 1. Load local adventures
+      const localAdventures = (await this.getItem<any[]>('adventures')) || [];
+      const localMap = new Map<string, any>();
+      if (Array.isArray(localAdventures)) {
+        for (const a of localAdventures) {
+          if (a && a.id) {
+            localMap.set(String(a.id), a);
           }
         }
-
-        const rawManifest = adventures.map(a => ({
-          id: a?.id || '',
-          storyTitle: a?.storyTitle || a?.world?.title || '',
-          authorId: a?.authorId || targetUid,
-          updatedAt: a?.updatedAt || new Date().toISOString()
-        }));
-        const cleanManifest = sanitizeForFirestore(rawManifest);
-        const manifestRef = doc(db, 'users', targetUid, 'data', 'adventures_manifest');
-        await setDoc(manifestRef, { data: cleanManifest }, { merge: true });
       }
 
-      // 2. Get userProfile
-      const userProfile = await this.getItem<any>('userProfile');
-      if (userProfile) {
-        const cleanProfile = sanitizeForFirestore(userProfile);
-        const profileRef = doc(db, 'users', targetUid, 'data', 'userProfile');
-        await setDoc(profileRef, { data: cleanProfile }, { merge: true });
+      // 2. Fetch existing cloud adventures
+      const cloudMap = new Map<string, any>();
+      try {
+        const advColRef = collection(db, 'users', targetUid, 'adventures');
+        const querySnap = await getDocs(advColRef);
+        if (!querySnap.empty) {
+          querySnap.forEach(docSnap => {
+            const d = docSnap.data();
+            if (d && d.data && d.data.id) {
+              cloudMap.set(String(d.data.id), d.data);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Could not read existing cloud adventures for comparison:', err);
+      }
+
+      // 3. Reconcile adventure-by-adventure
+      const allIds = new Set<string>([...localMap.keys(), ...cloudMap.keys()]);
+      const mergedAdventures: any[] = [];
+      const toUploadToCloud: any[] = [];
+
+      for (const id of allIds) {
+        const localAdv = localMap.get(id);
+        const cloudAdv = cloudMap.get(id);
+
+        if (localAdv && !cloudAdv) {
+          // Exists only locally -> Upload to cloud
+          mergedAdventures.push(localAdv);
+          toUploadToCloud.push(localAdv);
+        } else if (!localAdv && cloudAdv) {
+          // Exists only in cloud -> Add to local
+          mergedAdventures.push(cloudAdv);
+        } else if (localAdv && cloudAdv) {
+          // Exists in both -> Timestamp & version comparison!
+          const localTs = getAdventureTimestamp(localAdv);
+          const cloudTs = getAdventureTimestamp(cloudAdv);
+          const localHistoryLen = Array.isArray(localAdv.storyHistory) ? localAdv.storyHistory.length : 0;
+          const cloudHistoryLen = Array.isArray(cloudAdv.storyHistory) ? cloudAdv.storyHistory.length : 0;
+
+          if (cloudTs > localTs) {
+            // Cloud is newer -> Cloud wins, update local
+            mergedAdventures.push(cloudAdv);
+          } else if (localTs > cloudTs) {
+            // Local is newer -> Local wins, upload to cloud
+            mergedAdventures.push(localAdv);
+            toUploadToCloud.push(localAdv);
+          } else {
+            // Timestamps equal: tie break by story history length
+            if (cloudHistoryLen > localHistoryLen) {
+              mergedAdventures.push(cloudAdv);
+            } else {
+              mergedAdventures.push(localAdv);
+              if (localHistoryLen > cloudHistoryLen) {
+                toUploadToCloud.push(localAdv);
+              }
+            }
+          }
+        }
+      }
+
+      // 4. Save merged adventures locally
+      await this.setItem('adventures', mergedAdventures);
+
+      // 5. Upload items needing cloud sync
+      for (const adv of toUploadToCloud) {
+        if (adv && adv.id) {
+          const safeAdvId = String(adv.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
+          const cleanAdv = sanitizeForFirestore(adv);
+          const advDocRef = doc(db, 'users', targetUid, 'adventures', safeAdvId);
+          await setDoc(advDocRef, { data: cleanAdv }, { merge: true });
+        }
+      }
+
+      // 6. Update adventures manifest in cloud
+      const rawManifest = mergedAdventures.map(a => ({
+        id: a?.id || '',
+        storyTitle: a?.storyTitle || a?.world?.title || '',
+        authorId: a?.authorId || targetUid,
+        updatedAt: a?.updatedAt || a?.lastSaved || new Date().toISOString()
+      }));
+      const cleanManifest = sanitizeForFirestore(rawManifest);
+      const manifestRef = doc(db, 'users', targetUid, 'data', 'adventures_manifest');
+      await setDoc(manifestRef, { data: cleanManifest }, { merge: true });
+
+      // 7. Sync userProfile safely
+      const localProfile = await this.getItem<any>('userProfile');
+      if (localProfile) {
+        try {
+          const profileRef = doc(db, 'users', targetUid, 'data', 'userProfile');
+          const cloudProfileSnap = await getDoc(profileRef);
+          let profileToKeep = localProfile;
+          if (cloudProfileSnap.exists()) {
+            const cloudProfData = cloudProfileSnap.data()?.data;
+            if (cloudProfData) {
+              const localProfTs = new Date(localProfile.updatedAt || 0).getTime();
+              const cloudProfTs = new Date(cloudProfData.updatedAt || 0).getTime();
+              if (cloudProfTs > localProfTs) {
+                profileToKeep = cloudProfData;
+                await this.setItem('userProfile', cloudProfData);
+              }
+            }
+          }
+          if (profileToKeep === localProfile) {
+            const cleanProfile = sanitizeForFirestore(localProfile);
+            await setDoc(profileRef, { data: cleanProfile }, { merge: true });
+          }
+        } catch (err) {
+          console.warn('Profile sync fallback:', err);
+        }
       }
 
       const now = new Date().toLocaleString('de-DE');
@@ -275,8 +384,9 @@ export class StorageService {
 
       return {
         success: true,
-        message: `Cloud-Backup erfolgreich synchronisiert (${adventures.length} Abenteuer gesichert).`,
-        timestamp: now
+        message: `Synchronisation erfolgreich (${mergedAdventures.length} Abenteuer abgeglichen).`,
+        timestamp: now,
+        mergedAdventures
       };
     } catch (e: any) {
       const errStr = e instanceof Error ? e.message : String(e);
@@ -308,8 +418,15 @@ export class StorageService {
           }
         });
         if (adventuresFromFs.length > 0) {
-          await this.setItem('adventures', adventuresFromFs);
-          return adventuresFromFs;
+          const localAdvs = (await this.getItem<any[]>('adventures')) || [];
+          if (!Array.isArray(localAdvs) || localAdvs.length === 0) {
+            await this.setItem('adventures', adventuresFromFs);
+            return adventuresFromFs;
+          } else {
+            // Reconcile safely using syncAllToFirestore
+            const syncRes = await this.syncAllToFirestore(targetUid);
+            return syncRes.mergedAdventures || localAdvs;
+          }
         }
       }
     } catch (e: any) {

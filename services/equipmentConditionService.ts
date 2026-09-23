@@ -12,7 +12,8 @@ import {
   StructuredInventory,
   AIInventoryChange,
   AIBodyConditionChange,
-  PendingPickupProposal
+  PendingPickupProposal,
+  PendingItemTransferProposal
 } from '../types';
 import { InventoryLootService } from './inventoryLootService';
 
@@ -96,6 +97,99 @@ export class EquipmentConditionService {
     }
 
     return areas;
+  }
+
+  /**
+   * Normalizes arbitrary slot strings (German, English, synonyms, compound keys)
+   * to canonical slot identifiers:
+   * Armor: 'head', 'chest', 'hands', 'legs', 'feet'
+   * Accessories: 'finger', 'wrist', 'waist', 'back', 'neck'
+   * Weapons: 'weapon'
+   */
+  public static normalizeSlot(slotOrName?: string): string | undefined {
+    if (!slotOrName) return undefined;
+    const s = slotOrName.trim().toLowerCase();
+
+    // Head
+    if (s === 'head' || s === 'kopf' || s === 'helm' || s === 'hut' || s === 'mütze' || s === 'muetze' || s === 'armor.head' || s === 'armor_head') return 'head';
+
+    // Chest / Torso / Body
+    if (s === 'chest' || s === 'brust' || s === 'torso' || s === 'körper' || s === 'koerper' || s === 'oberkörper' || s === 'oberkoerper' || s === 'jacke' || s === 'hemd' || s === 'robe' || s === 'wams' || s === 'rüstung' || s === 'ruestung' || s === 'armor.chest' || s === 'armor_chest') return 'chest';
+
+    // Hands
+    if (s === 'hands' || s === 'hände' || s === 'haende' || s === 'handschuhe' || s === 'armor.hands' || s === 'armor_hands') return 'hands';
+
+    // Legs
+    if (s === 'legs' || s === 'beine' || s === 'hose' || s === 'rock' || s === 'beinschutz' || s === 'armor.legs' || s === 'armor_legs') return 'legs';
+
+    // Feet
+    if (s === 'feet' || s === 'füße' || s === 'fuesse' || s === 'schuhe' || s === 'stiefel' || s === 'armor.feet' || s === 'armor_feet') return 'feet';
+
+    // Accessories: Finger
+    if (s === 'finger' || s === 'ring' || s === 'accessories.finger' || s === 'accessories_finger') return 'finger';
+
+    // Accessories: Neck
+    if (s === 'neck' || s === 'hals' || s === 'halskette' || s === 'amulett' || s === 'kragen' || s === 'accessories.neck' || s === 'accessories_neck') return 'neck';
+
+    // Accessories: Wrist
+    if (s === 'wrist' || s === 'handgelenk' || s === 'armreif' || s === 'armband' || s === 'accessories.wrist' || s === 'accessories_wrist') return 'wrist';
+
+    // Accessories: Waist
+    if (s === 'waist' || s === 'gürtel' || s === 'guertel' || s === 'hüfte' || s === 'huefte' || s === 'accessories.waist' || s === 'accessories_waist') return 'waist';
+
+    // Accessories: Back
+    if (s === 'back' || s === 'rücken' || s === 'ruecken' || s === 'umhang' || s === 'mantel' || s === 'cape' || s === 'accessories.back' || s === 'accessories_back') return 'back';
+
+    // Weapons
+    if (s === 'weapon' || s === 'weapons' || s === 'waffe' || s === 'waffen' || s === 'mainhand' || s === 'offhand') return 'weapon';
+
+    return s;
+  }
+
+  /**
+   * Infers canonical equipment slot from item name, description, body areas, or raw slot.
+   */
+  public static inferSlot(itemName: string, description?: string, bodyAreas?: BodyArea[], rawSlot?: string): string {
+    if (rawSlot) {
+      const norm = this.normalizeSlot(rawSlot);
+      if (norm) return norm;
+    }
+
+    const text = `${itemName} ${description || ''}`.toLowerCase();
+
+    // Check weapon keywords first
+    const weaponKeywords = ['schwert', 'bogen', 'dolch', 'klinge', 'degen', 'gewehr', 'pistole', 'lanze', 'speer', 'axt', 'tsuki no wa', 'säbel', 'katana', 'waffe', 'weapon', 'messer', 'schild', 'drachenschwert', 'streitkolben', 'hammer', 'stab', 'flinte', 'muskete', 'armbrust'];
+    if (weaponKeywords.some(w => text.includes(w))) {
+      return 'weapon';
+    }
+
+    // Check accessories
+    if (text.includes('ring')) return 'finger';
+    if (text.includes('halskette') || text.includes('amulett') || text.includes('halsband') || text.includes('collier') || text.includes('medaillon')) return 'neck';
+    if (text.includes('armband') || text.includes('armreif') || text.includes('pulswärmer')) return 'wrist';
+    if (text.includes('gürtel') || text.includes('guertel') || text.includes('koppel') || text.includes('schärpe')) return 'waist';
+    if (text.includes('umhang') || text.includes('mantel') || text.includes('cape')) return 'back';
+
+    // Check body areas if present
+    if (bodyAreas && bodyAreas.length > 0) {
+      if (bodyAreas.includes('head') || bodyAreas.includes('face')) return 'head';
+      if (bodyAreas.includes('chest') || bodyAreas.includes('breasts') || (bodyAreas as any).includes('torso')) return 'chest';
+      if (bodyAreas.includes('hands') || bodyAreas.includes('wrists')) return 'hands';
+      if (bodyAreas.includes('legs') || bodyAreas.includes('thighs') || bodyAreas.includes('crotch')) return 'legs';
+      if (bodyAreas.includes('feet') || bodyAreas.includes('ankles')) return 'feet';
+      if (bodyAreas.includes('neck')) return 'neck';
+      if (bodyAreas.includes('waist')) return 'waist';
+      if (bodyAreas.includes('back')) return 'back';
+    }
+
+    // Check armor keywords
+    if (text.includes('helm') || text.includes('hut') || text.includes('mütze') || text.includes('stirnband') || text.includes('kapuze') || text.includes('diadem') || text.includes('krone')) return 'head';
+    if (text.includes('handschuh') || text.includes('fäustling') || text.includes('panzerhandschuh')) return 'hands';
+    if (text.includes('hose') || text.includes('rock') || text.includes('beinschutz') || text.includes('gamaschen') || text.includes('harnischhose') || text.includes('jeans') || text.includes('shorts')) return 'legs';
+    if (text.includes('stiefel') || text.includes('schuh') || text.includes('sandalen') || text.includes('pantoffeln') || text.includes('boots')) return 'feet';
+    if (text.includes('jacke') || text.includes('weste') || text.includes('hemd') || text.includes('robe') || text.includes('wams') || text.includes('rüstung') || text.includes('brustpanzer') || text.includes('tunika') || text.includes('harnisch') || text.includes('kleid') || text.includes('t-shirt') || text.includes('pullover')) return 'chest';
+
+    return 'chest';
   }
 
   /**
@@ -578,10 +672,15 @@ export class EquipmentConditionService {
     }
 
     // 3. Equipment State & Slot Conflict Resolution
+    const normalizedSlot = this.normalizeSlot(slot) || this.inferSlot(cleanItemName, options?.description, bodyAreas, slot);
     let adventureEquipment = [...(adventure.equipmentState || [])];
     // Unequip previous item in the same slot if exclusive (excluding restraints)
-    if (slot && slot !== 'weapon' && slot !== 'weapons' && slot !== 'accessory' && slot !== 'restraint') {
-      const replacedEquip = adventureEquipment.find(e => e.ownerId === targetId && e.slot === slot && !e.isRestraint);
+    if (normalizedSlot && normalizedSlot !== 'weapon' && normalizedSlot !== 'weapons' && normalizedSlot !== 'accessory' && normalizedSlot !== 'restraint') {
+      const replacedEquip = adventureEquipment.find(e =>
+        e.ownerId === targetId &&
+        (e.slot === normalizedSlot || this.normalizeSlot(e.slot) === normalizedSlot) &&
+        !e.isRestraint
+      );
       if (replacedEquip) {
         adventureEquipment = adventureEquipment.filter(e => e !== replacedEquip);
         // Update replaced item instance state to 'im Inventar'
@@ -603,7 +702,7 @@ export class EquipmentConditionService {
       ownerId: targetId,
       equipped: true,
       isRestraint: false,
-      slot: slot || 'inventory',
+      slot: normalizedSlot,
       bodyAreas,
       condition: existingInst.condition,
       attachedAt: new Date().toISOString(),
@@ -701,8 +800,14 @@ export class EquipmentConditionService {
         };
       }
     } else {
-      // Check for slot match
-      const matchingSlotEquip = adventureEquipment.find(e => e.ownerId === targetId && e.slot && e.slot.toLowerCase() === cleanSearchLower && !e.isRestraint);
+      // Check for slot match (including canonical slot normalization)
+      const normalizedSlot = this.normalizeSlot(cleanSearchLower);
+      const matchingSlotEquip = adventureEquipment.find(e =>
+        e.ownerId === targetId &&
+        !e.isRestraint &&
+        ((e.slot && e.slot.toLowerCase() === cleanSearchLower) ||
+         (normalizedSlot && (this.normalizeSlot(e.slot) === normalizedSlot || this.inferSlot(e.itemName, e.description, e.bodyAreas, e.slot) === normalizedSlot)))
+      );
       if (matchingSlotEquip) {
         unequippedInstanceIds.add(matchingSlotEquip.itemInstanceId);
         adventureEquipment = adventureEquipment.filter(e => e !== matchingSlotEquip);
@@ -971,6 +1076,7 @@ export class EquipmentConditionService {
     itemInstanceIdOrName: string,
     options?: {
       itemInstanceId?: string;
+      quantity?: number;
     }
   ): Adventure {
     const fromId = this.resolveTargetId(adventure, fromTargetIdentifier);
@@ -996,29 +1102,61 @@ export class EquipmentConditionService {
       let detachedAdv = this.detachRestraint(adventure, fromId, targetInstId, { itemInstanceId: targetInstId }).updatedAdventure;
       let unequippedAdv = this.unequipItem(detachedAdv, fromId, targetInstId, { itemInstanceId: targetInstId }).updatedAdventure;
 
-      // 3. Update ONLY this concrete ItemInstance
-      const updatedInstances = (unequippedAdv.itemInstances || []).map(inst => {
-        if (inst.id === targetInstId) {
-          return {
-            ...inst,
-            owner: toId,
-            location: `Im Besitz von ${toId === 'player' ? (adventure.player?.name || 'Spieler') : toId}`,
-            currentState: 'im Inventar'
-          };
-        }
-        return inst;
-      });
+      const requestedQty = options?.quantity && options.quantity > 0 ? options.quantity : (targetInst.quantity || 1);
+      const currentQty = targetInst.quantity || 1;
 
-      return {
+      let updatedInstances = [...(unequippedAdv.itemInstances || [])];
+
+      if (requestedQty < currentQty) {
+        // Partial quantity transfer: keep remainder on fromId, move requestedQty to toId
+        const remainingQty = currentQty - requestedQty;
+        const restInstId = `${targetInst.id}-rest-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+        const restInst: ItemInstance = {
+          ...targetInst,
+          id: restInstId,
+          quantity: remainingQty,
+          owner: fromId
+        };
+        const transferredInst: ItemInstance = {
+          ...targetInst,
+          quantity: requestedQty,
+          owner: toId,
+          location: `Im Besitz von ${toId === 'player' ? (adventure.player?.name || 'Spieler') : toId}`,
+          currentState: 'im Inventar'
+        };
+        updatedInstances = updatedInstances.map(i => i.id === targetInstId ? transferredInst : i).concat(restInst);
+      } else {
+        // Full quantity transfer
+        updatedInstances = updatedInstances.map(inst => {
+          if (inst.id === targetInstId) {
+            return {
+              ...inst,
+              quantity: requestedQty,
+              owner: toId,
+              location: `Im Besitz von ${toId === 'player' ? (adventure.player?.name || 'Spieler') : toId}`,
+              currentState: 'im Inventar'
+            };
+          }
+          return inst;
+        });
+      }
+
+      let finalAdv: Adventure = {
         ...unequippedAdv,
         itemInstances: updatedInstances
       };
+
+      if (toId === 'player' || fromId === 'player') {
+        finalAdv = this.syncStructuredInventory(finalAdv);
+      }
+
+      return finalAdv;
     }
 
     // Legacy fallback: Search for ONE instance owned by fromId with matching name
     const legacyInst = itemInstances.find(i => i.owner === fromId && i.name?.toLowerCase() === cleanSearchLower);
     if (legacyInst) {
-      return this.transferItem(adventure, fromId, toId, legacyInst.id, { itemInstanceId: legacyInst.id });
+      return this.transferItem(adventure, fromId, toId, legacyInst.id, { itemInstanceId: legacyInst.id, quantity: options?.quantity });
     }
 
     // Fallback for legacy string inventory
@@ -1036,6 +1174,136 @@ export class EquipmentConditionService {
     }
 
     return adventure;
+  }
+
+  /**
+   * Confirm an NPC-to-Player Item Transfer.
+   * Strictly validates that the exact ItemInstance is still owned by the NPC and quantity is available.
+   * Transfers ownership to player, removes proposal, and updates StructuredInventory.
+   */
+  public static confirmItemTransfer(
+    adventure: Adventure,
+    proposal?: PendingItemTransferProposal
+  ): {
+    updatedAdventure: Adventure;
+    success: boolean;
+    transferredItem?: ItemInstance;
+    error?: string;
+  } {
+    const prop = proposal || adventure.pendingTransfer;
+    if (!prop) {
+      return {
+        updatedAdventure: adventure,
+        success: false,
+        error: 'Kein ausstehender Übergabe-Vorschlag vorhanden.'
+      };
+    }
+
+    const toId = this.resolveTargetId(adventure, prop.toOwnerId);
+    if (toId !== 'player') {
+      return {
+        updatedAdventure: { ...adventure, pendingTransfer: null },
+        success: false,
+        error: 'Empfänger der Übergabe ist nicht der Spieler.'
+      };
+    }
+
+    const fromId = this.resolveTargetId(adventure, prop.fromOwnerId);
+    const itemInstances = [...(adventure.itemInstances || [])];
+    const targetInst = itemInstances.find(i => i.id === prop.itemInstanceId);
+
+    if (!targetInst) {
+      return {
+        updatedAdventure: { ...adventure, pendingTransfer: null },
+        success: false,
+        error: `Gegenstand (${prop.itemName}) existiert nicht mehr.`
+      };
+    }
+
+    if (targetInst.owner !== fromId) {
+      return {
+        updatedAdventure: { ...adventure, pendingTransfer: null },
+        success: false,
+        error: `Gegenstand gehört nicht mehr ${prop.fromOwnerName || fromId}.`
+      };
+    }
+
+    const requestedQty = prop.quantity && prop.quantity > 0 ? prop.quantity : 1;
+    const currentQty = targetInst.quantity && targetInst.quantity > 0 ? targetInst.quantity : 1;
+
+    if (requestedQty > currentQty) {
+      return {
+        updatedAdventure: { ...adventure, pendingTransfer: null },
+        success: false,
+        error: `Die gewünschte Menge (${requestedQty}) ist beim Geber nicht mehr vorhanden (${currentQty} verfügbar).`
+      };
+    }
+
+    // Unequip or detach from NPC if currently equipped or restrained
+    let unequippedAdv = this.detachRestraint(adventure, fromId, targetInst.id, { itemInstanceId: targetInst.id }).updatedAdventure;
+    unequippedAdv = this.unequipItem(unequippedAdv, fromId, targetInst.id, { itemInstanceId: targetInst.id }).updatedAdventure;
+
+    let updatedInstances = [...(unequippedAdv.itemInstances || [])];
+    let transferredItem: ItemInstance;
+
+    if (requestedQty < currentQty) {
+      const remainingQty = currentQty - requestedQty;
+      const restInstId = `${targetInst.id}-rest-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+      const restInst: ItemInstance = {
+        ...targetInst,
+        id: restInstId,
+        quantity: remainingQty,
+        owner: fromId
+      };
+      transferredItem = {
+        ...targetInst,
+        quantity: requestedQty,
+        owner: 'player',
+        location: 'Inventar',
+        currentState: 'im Inventar'
+      };
+      updatedInstances = updatedInstances.map(i => i.id === targetInst.id ? transferredItem : i).concat(restInst);
+    } else {
+      transferredItem = {
+        ...targetInst,
+        quantity: requestedQty,
+        owner: 'player',
+        location: 'Inventar',
+        currentState: 'im Inventar'
+      };
+      updatedInstances = updatedInstances.map(i => i.id === targetInst.id ? transferredItem : i);
+    }
+
+    let finalAdv: Adventure = {
+      ...unequippedAdv,
+      itemInstances: updatedInstances,
+      pendingTransfer: null
+    };
+
+    finalAdv = this.syncStructuredInventory(finalAdv);
+
+    return {
+      updatedAdventure: finalAdv,
+      success: true,
+      transferredItem
+    };
+  }
+
+  /**
+   * Reject an NPC-to-Player Item Transfer.
+   * Cancels the proposal without altering ownership, inventories, or equipment.
+   */
+  public static rejectItemTransfer(adventure: Adventure): {
+    updatedAdventure: Adventure;
+    success: boolean;
+  } {
+    return {
+      updatedAdventure: {
+        ...adventure,
+        pendingTransfer: null
+      },
+      success: true
+    };
   }
 
   /**
@@ -1128,30 +1396,51 @@ export class EquipmentConditionService {
     const armorSlots = ['head', 'chest', 'hands', 'legs', 'feet'];
     const accSlots = ['finger', 'wrist', 'waist', 'back', 'neck'];
 
-    const newArmor: Record<string, string> = {};
-    armorSlots.forEach(slot => {
-      const equip = playerEquipment.find(e => !e.isRestraint && e.slot === slot);
-      newArmor[slot] = equip ? equip.itemName : '';
-    });
+    const newArmor: Record<string, string> = {
+      head: '',
+      chest: '',
+      hands: '',
+      legs: '',
+      feet: ''
+    };
 
-    const newAccessories: Record<string, string> = {};
-    accSlots.forEach(slot => {
-      const equip = playerEquipment.find(e => !e.isRestraint && e.slot === slot);
-      newAccessories[slot] = equip ? equip.itemName : '';
-    });
+    const newAccessories: Record<string, string> = {
+      finger: '',
+      wrist: '',
+      waist: '',
+      back: '',
+      neck: ''
+    };
 
     const equippedWeapons: string[] = [];
+    const equippedItemNames = new Set<string>();
+
     playerEquipment.forEach(e => {
-      if (!e.isRestraint && (e.slot === 'weapon' || e.slot === 'weapons' || e.slot === 'waffe' || e.bodyAreas?.includes('hands'))) {
+      if (e.isRestraint) return;
+      equippedItemNames.add(e.itemName.toLowerCase());
+      const normalizedSlot = this.normalizeSlot(e.slot) || this.inferSlot(e.itemName, e.description, e.bodyAreas, e.slot);
+      if (armorSlots.includes(normalizedSlot)) {
+        newArmor[normalizedSlot] = e.itemName;
+      } else if (accSlots.includes(normalizedSlot)) {
+        newAccessories[normalizedSlot] = e.itemName;
+      } else if (normalizedSlot === 'weapon') {
         if (!equippedWeapons.includes(e.itemName)) {
           equippedWeapons.push(e.itemName);
         }
       }
     });
 
+    // Remove any currently equipped items from generalItems to prevent duplicates
+    let cleanGeneral = Array.isArray(structuredInv.generalItems) ? structuredInv.generalItems : [];
+    cleanGeneral = cleanGeneral.filter(g => {
+      const gName = (typeof g === 'string' ? g : g?.name || '').trim().toLowerCase();
+      return !equippedItemNames.has(gName);
+    });
+
     structuredInv.armor = newArmor;
     structuredInv.accessories = newAccessories;
     structuredInv.weapons = equippedWeapons;
+    structuredInv.generalItems = cleanGeneral;
 
     return {
       ...adventure,
@@ -1219,7 +1508,133 @@ export class EquipmentConditionService {
         } else if (inv.action === 'transfer') {
           const fromId = this.resolveTargetId(currentAdventure, inv.ownerId || inv.ownerName || 'player');
           const toId = this.resolveTargetId(currentAdventure, (inv as any).toOwnerId || (inv as any).toOwnerName || (inv as any).targetCharacterId || 'player');
-          currentAdventure = this.transferItem(currentAdventure, fromId, toId, inv.itemInstanceId || cleanItem, { itemInstanceId: inv.itemInstanceId });
+
+          if (fromId !== 'player' && toId === 'player') {
+            // NPC -> Player transfer: REQUIRES EXPLICIT USER CONFIRMATION!
+            let inst: ItemInstance | undefined;
+            if (inv.itemInstanceId) {
+              inst = (currentAdventure.itemInstances || []).find(i => i.id === inv.itemInstanceId && i.owner === fromId);
+            }
+            if (!inst) {
+              inst = (currentAdventure.itemInstances || []).find(i => i.owner === fromId && i.name?.toLowerCase() === cleanItem.toLowerCase());
+            }
+
+            if (!inst) {
+              const singleWeight = InventoryLootService.inferWeightFromText(cleanItem, inv.description);
+              const instId = inv.itemInstanceId || `item-inst-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+              const defId = inv.itemDefinitionId || `item-def-${cleanItem.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+              inst = {
+                id: instId,
+                itemDefinitionId: defId,
+                name: cleanItem,
+                owner: fromId,
+                quantity: inv.quantity || 1,
+                weightKg: singleWeight,
+                condition: inv.condition || 'gut',
+                category: 'Gegenstände',
+                currentState: 'im Inventar',
+                location: `Im Besitz von ${inv.ownerName || fromId}`
+              };
+              currentAdventure = {
+                ...currentAdventure,
+                itemInstances: [...(currentAdventure.itemInstances || []), inst]
+              };
+            }
+
+            const fromCharacter = this.getCharacter(currentAdventure, fromId);
+            const fromName = fromCharacter?.name || inv.ownerName || 'Charakter';
+            const toCharacter = this.getCharacter(currentAdventure, toId);
+            const toName = toCharacter?.name || 'Spieler';
+
+            const proposal: PendingItemTransferProposal = {
+              id: `transfer-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              itemInstanceId: inst.id,
+              fromOwnerId: fromId,
+              fromOwnerName: fromName,
+              toOwnerId: 'player',
+              toOwnerName: toName,
+              quantity: inv.quantity || inst.quantity || 1,
+              itemName: cleanItem,
+              description: inv.description,
+              createdAt: Date.now()
+            };
+
+            currentAdventure = {
+              ...currentAdventure,
+              pendingTransfer: proposal
+            };
+
+            notifications.push({
+              id: Math.random().toString(),
+              type: 'add',
+              title: `${fromName} bietet dir ${cleanItem} an – Bestätigen?`,
+              category: 'Gegenstände'
+            });
+          } else {
+            // Player -> NPC or NPC -> NPC: direct transfer
+            currentAdventure = this.transferItem(currentAdventure, fromId, toId, inv.itemInstanceId || cleanItem, {
+              itemInstanceId: inv.itemInstanceId,
+              quantity: inv.quantity
+            });
+          }
+        } else if (inv.action === 'updated') {
+          const targetInstId = inv.itemInstanceId;
+          let instIdx = -1;
+          let itemInstances = [...(currentAdventure.itemInstances || [])];
+
+          if (targetInstId) {
+            instIdx = itemInstances.findIndex(i => i.id === targetInstId);
+          }
+          if (instIdx < 0) {
+            instIdx = itemInstances.findIndex(i => i.owner === targetId && i.name?.toLowerCase() === cleanItem.toLowerCase());
+          }
+
+          if (instIdx >= 0) {
+            const existing = itemInstances[instIdx];
+            const updatedInst: ItemInstance = {
+              ...existing,
+              condition: inv.condition || existing.condition,
+              quantity: inv.quantity ?? existing.quantity,
+              description: inv.description || existing.description
+            };
+            itemInstances[instIdx] = updatedInst;
+
+            let equipState = [...(currentAdventure.equipmentState || [])];
+            const equipIdx = equipState.findIndex(e => e.itemInstanceId === existing.id || (e.ownerId === targetId && e.itemName.toLowerCase() === cleanItem.toLowerCase()));
+
+            if (equipIdx >= 0) {
+              const existingEquip = equipState[equipIdx];
+              const newSlot = inv.slot ? (this.normalizeSlot(inv.slot) || existingEquip.slot) : existingEquip.slot;
+              equipState[equipIdx] = {
+                ...existingEquip,
+                condition: inv.condition || existingEquip.condition,
+                description: inv.description || existingEquip.description,
+                slot: newSlot,
+                bodyAreas: inv.bodyAreas || existingEquip.bodyAreas
+              };
+            } else if (inv.slot) {
+              const normalizedSlot = this.normalizeSlot(inv.slot);
+              if (normalizedSlot) {
+                const equipRes = this.equipItem(currentAdventure, targetId, cleanItem, normalizedSlot, inv.bodyAreas, {
+                  itemInstanceId: existing.id,
+                  condition: inv.condition,
+                  description: inv.description
+                });
+                currentAdventure = equipRes.updatedAdventure;
+                equipState = currentAdventure.equipmentState || [];
+              }
+            }
+
+            currentAdventure = {
+              ...currentAdventure,
+              itemInstances,
+              equipmentState: equipState
+            };
+
+            if (targetId === 'player') {
+              currentAdventure = this.syncStructuredInventory(currentAdventure);
+            }
+          }
         } else if (inv.action === 'removed') {
           currentAdventure = this.destroyItem(currentAdventure, targetId, inv.itemInstanceId || cleanItem, { itemInstanceId: inv.itemInstanceId });
         } else if (inv.action === 'added') {

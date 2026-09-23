@@ -33,6 +33,7 @@ import { LocationContextService } from '../services/locationContextService';
 import { AIStoryStateProcessor, STRUCTURED_STORY_STATE_DIRECTIVE } from '../services/aiStoryStateProcessor';
 import { CharacterPortrait } from './CharacterPortrait';
 import { ItemPickupModal } from './ItemPickupModal';
+import { ItemTransferModal } from './ItemTransferModal';
 import { CombatInventoryModal } from './CombatInventoryModal';
 import { PostCombatPanel } from './PostCombatPanel';
 import { CollectionTasksModal } from './CollectionTasksModal';
@@ -11713,6 +11714,16 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           proposal={adventure.pendingPickup}
           onUpdateAdventure={onUpdateAdventure}
           onClose={() => onUpdateAdventure({ ...adventure, pendingPickup: null })}
+        />
+      )}
+
+      {/* Item Transfer Confirmation Modal (NPC to Player) */}
+      {adventure.pendingTransfer && (
+        <ItemTransferModal
+          adventure={adventure}
+          proposal={adventure.pendingTransfer}
+          onUpdateAdventure={onUpdateAdventure}
+          onClose={() => onUpdateAdventure({ ...adventure, pendingTransfer: null })}
         />
       )}
 

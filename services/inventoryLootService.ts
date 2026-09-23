@@ -7,6 +7,7 @@ import {
   LootSource,
   LootSourceType,
   PendingPickupProposal,
+  PendingItemTransferProposal,
   InventoryNotification,
   CollectionTask,
   WorldDropItem,
@@ -497,6 +498,34 @@ export class InventoryLootService {
       rejectedItems: [...rejectedItems, ...executionResult.rejectedItems],
       notifications: executionResult.notifications
     };
+  }
+
+  /**
+   * Explicitly rejects pending pickup proposal, leaving items in their original source or world drop.
+   */
+  public static rejectPickup(adventure: Adventure): { updatedAdventure: Adventure; rejectedCount: number } {
+    const count = adventure.pendingPickup?.items?.length || 0;
+    return {
+      updatedAdventure: {
+        ...adventure,
+        pendingPickup: null
+      },
+      rejectedCount: count
+    };
+  }
+
+  /**
+   * Confirms an NPC-to-Player Item Transfer.
+   */
+  public static confirmTransfer(adventure: Adventure, proposal?: PendingItemTransferProposal) {
+    return EquipmentConditionService.confirmItemTransfer(adventure, proposal);
+  }
+
+  /**
+   * Rejects an NPC-to-Player Item Transfer.
+   */
+  public static rejectTransfer(adventure: Adventure) {
+    return EquipmentConditionService.rejectItemTransfer(adventure);
   }
 
   /**

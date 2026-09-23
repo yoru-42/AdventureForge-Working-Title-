@@ -2814,6 +2814,19 @@ export interface PendingPickupProposal {
   timestamp?: string;
 }
 
+export interface PendingItemTransferProposal {
+  id: string;
+  itemInstanceId: string;
+  fromOwnerId: string;
+  fromOwnerName: string;
+  toOwnerId: string;
+  toOwnerName: string;
+  quantity?: number;
+  itemName: string;
+  description?: string;
+  createdAt: number;
+}
+
 export interface InventoryNotification {
   id: string;
   itemName: string;
@@ -3361,12 +3374,15 @@ export interface Adventure {
   characterKnowledge?: CharacterKnowledge;
   lootSources?: LootSource[];
   pendingPickup?: PendingPickupProposal | null;
+  pendingTransfer?: PendingItemTransferProposal | null;
   worldDrops?: WorldDropItem[];
   collectionTasks?: CollectionTask[];
   inventorySettings?: InventorySettings;
   emotionState?: UserEmotionState;
   physicalChangeHistory?: PhysicalChangeHistoryEntry[];
   npcAppearanceMemory?: Record<string, NPCAppearanceObservation>;
+  updatedAt?: string;
+  lastSaved?: string;
   initialPlayer?: Character;
   initialWorld?: WorldSetting;
   initialWorldTime?: WorldTime;

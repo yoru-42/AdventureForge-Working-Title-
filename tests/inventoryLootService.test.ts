@@ -521,6 +521,85 @@ console.log('=== RUNNING INVENTORY & LOOT SERVICE TESTS ===\n');
   assert(InventoryLootService.isAutoPickupAllowed(lightHerb, 'auto_small', 20.0), 'Test K: Auto-Pickup erlaubt kleine normale Gegenstände');
 }
 
+// Test L: AI Transfer Action erzeugt pendingTransfer Proposal und Bestätigung transferiert Gegenstand
+{
+  const adv = createBaseAdventure();
+  const npcItem: ItemInstance = {
+    id: 'npc-item-1',
+    itemDefinitionId: 'def-elixir',
+    name: 'Heilelixier',
+    owner: 'npc-lyra',
+    quantity: 2,
+    weightKg: 0.5
+  };
+  adv.itemInstances = [npcItem];
+
+  // Process AI Inventory Change with action 'transfer' from NPC to Player
+  const updatedAdv = EquipmentConditionService.processAiStateChanges(
+    adv,
+    [
+      {
+        item: 'Heilelixier',
+        action: 'transfer',
+        ownerId: 'npc-lyra',
+        toOwnerId: 'player',
+        quantity: 1,
+        itemInstanceId: 'npc-item-1'
+      }
+    ]
+  );
+
+  assert(Boolean(updatedAdv.pendingTransfer), 'Test L: pendingTransfer Proposal erzeugt bei NPC->Spieler Übergabe');
+  assert(updatedAdv.pendingTransfer?.itemName === 'Heilelixier', 'Test L: Korrekter Itemname im Proposal');
+  assert(updatedAdv.pendingTransfer?.quantity === 1, 'Test L: Korrekte Übergabemenge im Proposal');
+
+  // Confirm transfer
+  const confirmRes = EquipmentConditionService.confirmItemTransfer(updatedAdv, updatedAdv.pendingTransfer!);
+  assert(confirmRes.success, 'Test L: Übergabe erfolgreich bestätigt');
+  assert(!confirmRes.updatedAdventure.pendingTransfer, 'Test L: pendingTransfer nach Bestätigung geleert');
+
+  const playerInst = confirmRes.updatedAdventure.itemInstances?.find(i => i.owner === 'player' && i.name === 'Heilelixier');
+  const npcInst = confirmRes.updatedAdventure.itemInstances?.find(i => i.owner === 'npc-lyra' && i.name === 'Heilelixier');
+  assert(Boolean(playerInst && playerInst.quantity === 1), 'Test L: Spieler besitzt 1 Heilelixier');
+  assert(Boolean(npcInst && npcInst.quantity === 1), 'Test L: NPC behält 1 verbleibendes Heilelixier');
+}
+
+// Test M: AI Transfer Ablehnung
+{
+  const adv = createBaseAdventure();
+  const npcItem: ItemInstance = {
+    id: 'npc-item-2',
+    itemDefinitionId: 'def-amulet',
+    name: 'Schutzamulett',
+    owner: 'npc-lyra',
+    quantity: 1,
+    weightKg: 0.1
+  };
+  adv.itemInstances = [npcItem];
+
+  const updatedAdv = EquipmentConditionService.processAiStateChanges(
+    adv,
+    [
+      {
+        item: 'Schutzamulett',
+        action: 'transfer',
+        ownerId: 'npc-lyra',
+        toOwnerId: 'player',
+        quantity: 1,
+        itemInstanceId: 'npc-item-2'
+      }
+    ]
+  );
+
+  const rejectRes = EquipmentConditionService.rejectItemTransfer(updatedAdv);
+  assert(rejectRes.success, 'Test M: Übergabe erfolgreich abgelehnt');
+  assert(!rejectRes.updatedAdventure.pendingTransfer, 'Test M: pendingTransfer nach Ablehnung geleert');
+  const playerHasItem = rejectRes.updatedAdventure.itemInstances?.some(i => i.owner === 'player' && i.name === 'Schutzamulett');
+  const npcStillHasItem = rejectRes.updatedAdventure.itemInstances?.some(i => i.owner === 'npc-lyra' && i.name === 'Schutzamulett');
+  assert(!playerHasItem, 'Test M: Spieler hat das abgelehnte Item nicht erhalten');
+  assert(npcStillHasItem, 'Test M: NPC behält das abgelehnte Item');
+}
+
 console.log(`\n=== TEST RUN COMPLETE ===`);
 console.log(`Tests ausgeführt: ${testCount}`);
 console.log(`Bestanden: ${passCount}`);
