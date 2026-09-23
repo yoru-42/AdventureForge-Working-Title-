@@ -30,6 +30,7 @@ import { StoryInfoModal } from './StoryInfoModal';
 import { Info } from 'lucide-react';
 import { getAllAdventureCharacters } from '../utils/storyStateExtractor';
 import { LocationContextService } from '../services/locationContextService';
+import { CharacterKnowledgeService } from '../services/characterKnowledgeService';
 import { AIStoryStateProcessor, STRUCTURED_STORY_STATE_DIRECTIVE } from '../services/aiStoryStateProcessor';
 import { CharacterPortrait } from './CharacterPortrait';
 import { ItemPickupModal } from './ItemPickupModal';
@@ -541,6 +542,21 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const entities = adventure.storyState?.storyEntities || [];
     return entities.filter(e => !e.promotedToCodex && e.isNewInStory !== false).length;
   }, [adventure.storyState?.storyEntities]);
+
+  const availableReiseCount = React.useMemo(() => {
+    const loreDatabase = adventure.loreDatabase || [];
+    const locationEntries = loreDatabase.filter(l => l.category === 'Orte');
+    const effectiveKnowledge = CharacterKnowledgeService.getEffectiveKnowledge(adventure);
+    const knownLocationsList = locationEntries.filter(loc => {
+      return CharacterKnowledgeService.isLocationKnown(
+        { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
+        effectiveKnowledge,
+        adventure.player,
+        adventure.world
+      );
+    });
+    return knownLocationsList.length;
+  }, [adventure.loreDatabase, adventure.player, adventure.world]);
 
   const sanitizeCodexDetails = (category: string, details: Record<string, any> = {}) => {
     if (category === 'Gegenstände' || category === 'Waren' || category === 'Ressourcen') {
@@ -1587,16 +1603,15 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     // If the NPC is the active combat target, they are obviously present
     if (isCombatActive && selectedEnemyId === npc.id) return true;
 
-    // Check if the NPC's current location matches the player's current location
-    const playerLoc = (adventure.player?.appearance?.currentLocation || '').trim().toLowerCase();
-    const npcLocation = (npc.appearance?.currentLocation || (npc as any).details?.currentLocation || (npc as any).currentLocation || '').trim().toLowerCase();
+    const locCtx = LocationContextService.resolveCurrentLocation(adventure);
+    const locOptions = {
+      holdings: adventure.world?.economyConfig?.holdings,
+      loreEntries: adventure.loreDatabase,
+      territories: adventure.world?.territories
+    };
 
-    // Strip coordinate suffixes and parentheses details like (TileName) for comparison
-    const cleanPlayerLoc = playerLoc.replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '').split('(')[0].trim();
-    const cleanNpcLocation = npcLocation.replace(/\(x\s*:\s*\d+\s*,\s*y\s*:\s*\d+\)/i, '').split('(')[0].trim();
-
-    if (cleanNpcLocation !== cleanPlayerLoc) {
-      return false; // Not at the player's location!
+    if (!LocationContextService.isCharacterAtLocation(npc, locCtx, locOptions)) {
+      return false; // Not at the player's location context!
     }
 
     const escapeRegExp = (string: string) => {
@@ -9087,7 +9102,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   setIsDialogueMenuExpanded(false);
                   setIsMoreMenuExpanded(false);
                 }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 ${
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
                   isCombatActive
                     ? 'bg-red-600/25 border border-red-500 text-red-200 hover:bg-red-600/35'
                     : isCombatMenuExpanded
@@ -9100,6 +9115,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <span className="hidden sm:inline truncate">
                   {isCombatActive ? 'Kampf aktiv' : 'Kampf'}
                 </span>
+                {combinedDetectedEnemies.length > 0 && (
+                  <span className="absolute -top-1 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[8px] font-black text-white font-mono leading-none shadow-sm border border-slate-950/20 z-10">
+                    {combinedDetectedEnemies.length}
+                  </span>
+                )}
               </button>
 
               {/* DIALOG BUTTON */}
@@ -9117,7 +9137,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     }
                   }
                 }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 ${
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
                   isDialogueActive
                     ? 'bg-amber-500/20 border border-amber-500 text-amber-200 hover:bg-amber-500/30'
                     : isDialogueMenuExpanded
@@ -9130,6 +9150,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <span className="hidden sm:inline truncate">
                   {isDialogueActive ? 'Dialog aktiv' : 'Dialog'}
                 </span>
+                {availableDialogueNpcs.length > 0 && (
+                  <span className="absolute -top-1 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[8px] font-black text-slate-950 font-mono leading-none shadow-sm border border-slate-950/20 z-10">
+                    {availableDialogueNpcs.length}
+                  </span>
+                )}
               </button>
 
               {/* REISE BUTTON */}
@@ -9141,11 +9166,16 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   setIsDialogueMenuExpanded(false);
                   setIsMoreMenuExpanded(false);
                 }}
-                className="flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent transition-all active:scale-95 whitespace-nowrap min-w-0"
+                className="flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent transition-all active:scale-95 whitespace-nowrap min-w-0 relative"
                 title="Navigation & Reiseziel"
               >
                 <i className="fa-solid fa-compass text-sm text-teal-400"></i>
                 <span className="hidden sm:inline truncate">Reise</span>
+                {availableReiseCount > 0 && (
+                  <span className="absolute -top-1 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-teal-500 px-1 text-[8px] font-black text-slate-950 font-mono leading-none shadow-sm border border-slate-950/20 z-10">
+                    {availableReiseCount}
+                  </span>
+                )}
               </button>
 
               {/* STORY BUTTON */}
@@ -9163,7 +9193,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <Info className="w-4 h-4 text-indigo-400 shrink-0" />
                 <span className="hidden sm:inline truncate">Story</span>
                 {pendingStoryEntitiesCount > 0 && (
-                  <span className="ml-1 px-1.5 py-0.5 text-[9px] font-extrabold bg-indigo-500 text-white rounded-full font-mono shrink-0">
+                  <span className="absolute -top-1 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-500 px-1 text-[8px] font-black text-white font-mono leading-none shadow-sm border border-slate-950/20 z-10">
                     {pendingStoryEntitiesCount}
                   </span>
                 )}

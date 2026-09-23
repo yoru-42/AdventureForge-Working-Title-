@@ -663,6 +663,32 @@ export class LocationContextService {
   }
 
   /**
+   * Formats only the most specific part of a location context (e.g. "Schankraum" or "Taverne" or "Falkengrund").
+   */
+  public static formatMostSpecificLocation(location: CurrentLocationContext | null | undefined): string {
+    if (!location) return 'Unbekannt';
+    if (location.roomName && location.roomName.trim()) {
+      return location.roomName.trim();
+    }
+    if (location.buildingName && location.buildingName.trim()) {
+      return location.buildingName.trim();
+    }
+    if (location.locationName && location.locationName.trim()) {
+      return location.locationName.trim();
+    }
+    if (location.territoryName && location.territoryName.trim()) {
+      return location.territoryName.trim();
+    }
+    if (location.regionName && location.regionName.trim()) {
+      return location.regionName.trim();
+    }
+    if (location.worldName && location.worldName.trim()) {
+      return location.worldName.trim();
+    }
+    return 'Startgebiet';
+  }
+
+  /**
    * Helper to normalize location strings and names for clean, exact comparison without loose substring flaws.
    */
   public static normalizeLocationName(s?: string): string {
