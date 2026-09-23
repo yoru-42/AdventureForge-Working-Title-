@@ -18,6 +18,11 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        outDir: 'dist',
+        emptyOutDir: true,
+        sourcemap: false
       }
     };
 });
