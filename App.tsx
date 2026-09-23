@@ -11,7 +11,7 @@ import { GeminiService } from './services/geminiService';
 import { StorageService } from './lib/storageService';
 import { syncCharacterAndHoldingRoles } from './lib/economySync';
 
-const USER_ID = "local-user-123";
+const DEFAULT_LOCAL_USER_ID = "local-user-123";
 
 export function isClothingPlaceholder(title?: string): boolean {
   if (!title) return true;
@@ -190,10 +190,13 @@ const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const currentUserId = user?.uid || DEFAULT_LOCAL_USER_ID;
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+      StorageService.clearMemoryCache('adventures');
     });
     return () => unsubscribe();
   }, []);
@@ -211,6 +214,9 @@ const App: React.FC = () => {
     let isMounted = true;
     const loadInitialData = async () => {
       try {
+        if (user) {
+          StorageService.clearMemoryCache('adventures');
+        }
         const savedAdventures = await StorageService.getItem<Adventure[]>('adventures');
         if (savedAdventures && savedAdventures.length > 0 && isMounted) {
           
@@ -240,16 +246,26 @@ const App: React.FC = () => {
           // --- End Data Sanitization ---
 
           // Migrate conditions mistakenly saved as abilities (e.g. Hormonelle Instabilität / Fremdeinfluss)
+          let needsMigrationSave = false;
           savedAdventures.forEach(adv => {
             if (adv.player) {
               const mig = migrateFremdeinflussConditions(adv.player);
               if (mig.updated) {
                 adv.player = mig.player;
+                needsMigrationSave = true;
               }
+            }
+            if (user && (!adv.authorId || adv.authorId === DEFAULT_LOCAL_USER_ID)) {
+              adv.authorId = user.uid;
+              needsMigrationSave = true;
             }
           });
 
           setAdventures(savedAdventures);
+
+          if (user && needsMigrationSave) {
+            StorageService.setItem('adventures', savedAdventures).catch(() => {});
+          }
 
           // Async background optimization to shrink large images (e.g., length > 120,000)
           setTimeout(async () => {
@@ -352,7 +368,7 @@ const App: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user]);
 
   // Automatisches Speichern bei Änderungen
   useEffect(() => {
@@ -816,8 +832,14 @@ const App: React.FC = () => {
     );
   };
 
-  const myAdventures = adventures.filter(a => a.authorId === USER_ID && matchesSearch(a));
-  const publicLibrary = adventures.filter(a => a.isPublic && a.authorId !== USER_ID && matchesSearch(a));
+  const myAdventures = adventures.filter(a => {
+    const isMine = a.authorId === currentUserId || a.authorId === DEFAULT_LOCAL_USER_ID || !a.authorId;
+    return isMine && matchesSearch(a);
+  });
+  const publicLibrary = adventures.filter(a => {
+    const isMine = a.authorId === currentUserId || a.authorId === DEFAULT_LOCAL_USER_ID || !a.authorId;
+    return a.isPublic && !isMine && matchesSearch(a);
+  });
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-slate-950 overflow-x-hidden w-full">
@@ -978,7 +1000,7 @@ const App: React.FC = () => {
           onCancel={() => setViewMode(GameViewMode.HOME)}
           initialData={currentAdventure || undefined}
           mode={viewMode}
-          userId={USER_ID}
+          userId={currentUserId}
           userProfile={userProfile}
         />
       )}

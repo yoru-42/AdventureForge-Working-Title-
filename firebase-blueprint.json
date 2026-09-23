@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "UserData": {
+      "title": "UserData",
+      "description": "User storage items such as settings, lore, etc.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "Arbitrary synced data payload"
+        }
+      }
+    },
+    "Adventure": {
+      "title": "Adventure",
+      "description": "Individual adventure document",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique adventure identifier"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}/data/{key}": {
+      "schema": "UserData",
+      "description": "User data key-value storage synced by StorageService"
+    },
+    "/users/{userId}/adventures/{advId}": {
+      "schema": "Adventure",
+      "description": "Individual user adventure documents synced by StorageService"
+    }
+  }
+}

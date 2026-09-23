@@ -19,7 +19,77 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 const memoryCache = new Map<string, any>();
 
 import { db, auth } from './firebaseService';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  };
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+/**
+ * Recursively removes `undefined` properties from an object/array
+ * so that Firestore's setDoc/updateDoc doesn't fail with
+ * "Unsupported field value: undefined".
+ */
+export function sanitizeForFirestore<T>(obj: T): T {
+  if (obj === undefined) return null as any;
+  if (obj === null || typeof obj !== 'object') return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeForFirestore(item)) as any;
+  }
+
+  const cleanObj: Record<string, any> = {};
+  for (const key of Object.keys(obj as Record<string, any>)) {
+    const val = (obj as Record<string, any>)[key];
+    if (val !== undefined) {
+      cleanObj[key] = sanitizeForFirestore(val);
+    }
+  }
+  return cleanObj as T;
+}
 
 function getDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
@@ -53,6 +123,96 @@ function getDB(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+let firestoreWriteDisabled = false;
+try {
+  if (typeof window !== 'undefined' && window.sessionStorage?.getItem('firestore_quota_exceeded') === 'true') {
+    firestoreWriteDisabled = true;
+  }
+} catch (_) {}
+
+const syncDebounceTimers = new Map<string, any>();
+const lastSyncedHashes = new Map<string, string>();
+
+async function syncToFirestore<T>(key: string, value: T): Promise<void> {
+  if (firestoreWriteDisabled || !auth.currentUser) return;
+  const uid = auth.currentUser.uid;
+  const cleanValue = sanitizeForFirestore(value);
+
+  try {
+    if (key === 'adventures' && Array.isArray(cleanValue)) {
+      const adventuresArray = cleanValue as any[];
+      for (const adv of adventuresArray) {
+        if (adv && adv.id) {
+          const safeAdvId = String(adv.id).replace(/[^a-zA-Z0-9_\-]/g, '_');
+          const cleanAdv = sanitizeForFirestore(adv);
+          const hashKey = `adv_${uid}_${safeAdvId}`;
+          const currentHash = JSON.stringify(cleanAdv);
+
+          if (lastSyncedHashes.get(hashKey) === currentHash) {
+            // Unchanged since last sync, skip write to conserve quota
+            continue;
+          }
+
+          const advDocRef = doc(db, 'users', uid, 'adventures', safeAdvId);
+          await setDoc(advDocRef, { data: cleanAdv }, { merge: true });
+          lastSyncedHashes.set(hashKey, currentHash);
+        }
+      }
+
+      // Store a lightweight manifest document
+      const rawManifest = adventuresArray.map(a => ({
+        id: a?.id || '',
+        storyTitle: a?.storyTitle || '',
+        authorId: a?.authorId || '',
+        updatedAt: a?.updatedAt || null
+      }));
+      const cleanManifest = sanitizeForFirestore(rawManifest);
+      const manifestHashKey = `manifest_${uid}`;
+      const manifestHash = JSON.stringify(cleanManifest);
+
+      if (lastSyncedHashes.get(manifestHashKey) !== manifestHash) {
+        const manifestRef = doc(db, 'users', uid, 'data', 'adventures_manifest');
+        await setDoc(manifestRef, { data: cleanManifest }, { merge: true });
+        lastSyncedHashes.set(manifestHashKey, manifestHash);
+      }
+    } else {
+      const path = `users/${uid}/data/${key}`;
+      const stringified = JSON.stringify(cleanValue);
+      if (stringified.length < 900000) {
+        const hashKey = `data_${uid}_${key}`;
+        if (lastSyncedHashes.get(hashKey) === stringified) {
+          // Unchanged, skip write
+          return;
+        }
+
+        const userDocRef = doc(db, 'users', uid, 'data', key);
+        await setDoc(userDocRef, { data: cleanValue }, { merge: true });
+        lastSyncedHashes.set(hashKey, stringified);
+      } else {
+        console.warn(`Key "${key}" payload size (${stringified.length} chars) exceeds 900KB safety margin for single Firestore document. Skipping single-doc sync.`);
+      }
+    }
+  } catch (e: any) {
+    const errStr = e instanceof Error ? e.message : String(e);
+    if (errStr.includes('resource-exhausted') || errStr.includes('Quota limit exceeded') || errStr.includes('Quota exceeded')) {
+      firestoreWriteDisabled = true; // Circuit breaker: disable further Firestore writes for this session
+      try {
+        if (typeof window !== 'undefined') {
+          window.sessionStorage?.setItem('firestore_quota_exceeded', 'true');
+        }
+      } catch (_) {}
+      console.warn(
+        `[Firestore Quota Protection] Daily write quota reached for Firestore. ` +
+        `Application remains fully functional offline using local IndexedDB. ` +
+        `Daily quota will reset tomorrow. Manage database upgrade: ` +
+        `https://console.firebase.google.com/project/gen-lang-client-0680936141/firestore/databases/ai-studio-chat-9751ace7-c725-4cb4-9a2b-550876b20f0a/data?openUpgradeDialog=true`
+      );
+      return;
+    }
+    console.error(`Firestore sync failed for key "${key}":`, e);
+  }
+}
+
 export class StorageService {
   /**
    * Save item to IndexedDB asynchronously, keeping an in-memory cache and
@@ -63,14 +223,15 @@ export class StorageService {
     // 1. Immediate in-memory cache update for zero-latency synchronous reads
     memoryCache.set(key, value);
 
-    // Sync to Firestore if authenticated
+    // Debounced sync to Firestore to conserve write quota
     if (auth.currentUser) {
-      try {
-        const userDocRef = doc(db, 'users', auth.currentUser.uid, 'data', key);
-        await setDoc(userDocRef, { data: value }, { merge: true });
-      } catch (e) {
-        console.error(`Firestore sync failed for key "${key}":`, e);
+      if (syncDebounceTimers.has(key)) {
+        clearTimeout(syncDebounceTimers.get(key));
       }
+      const timer = setTimeout(() => {
+        syncToFirestore(key, value).catch(() => {});
+      }, 3000); // 3-second debounce window
+      syncDebounceTimers.set(key, timer);
     }
 
     const stringValue = JSON.stringify(value);
@@ -132,6 +293,17 @@ export class StorageService {
   }
 
   /**
+   * Clears the in-memory cache for a specific key or all keys
+   */
+  static clearMemoryCache(key?: string) {
+    if (key) {
+      memoryCache.delete(key);
+    } else {
+      memoryCache.clear();
+    }
+  }
+
+  /**
    * Get item asynchronously (Memory cache first, IndexedDB second, localStorage fallback third)
    */
   static async getItem<T>(key: string): Promise<T | null> {
@@ -140,10 +312,75 @@ export class StorageService {
       return memoryCache.get(key) as T;
     }
 
-    // 2. Try Firestore if authenticated (Remote store)
-    if (auth.currentUser) {
+    // 2. Try Firestore if authenticated and remote operations are not circuit-broken by quota
+    if (!firestoreWriteDisabled && auth.currentUser) {
+      const uid = auth.currentUser.uid;
+
+      if (key === 'adventures') {
+        let adventuresFromFs: any[] = [];
+        try {
+          const advColRef = collection(db, 'users', uid, 'adventures');
+          const querySnap = await getDocs(advColRef);
+          if (!querySnap.empty) {
+            querySnap.forEach(docSnap => {
+              const d = docSnap.data();
+              if (d && d.data) {
+                adventuresFromFs.push(d.data);
+              }
+            });
+          }
+        } catch (e: any) {
+          const errStr = e instanceof Error ? e.message : String(e);
+          if (errStr.includes('resource-exhausted') || errStr.includes('Quota limit exceeded') || errStr.includes('Quota exceeded')) {
+            firestoreWriteDisabled = true;
+            try {
+              window.sessionStorage?.setItem('firestore_quota_exceeded', 'true');
+            } catch (_) {}
+            console.warn('[Firestore Quota Protection] Quota limit exceeded on Firestore query. Bypassing Firestore for local IndexedDB.');
+          } else {
+            console.error(`Firestore getItem failed for adventures subcollection:`, e);
+          }
+        }
+
+        // Also retrieve local IDB adventures to merge local offline work with remote
+        let localAdventures: any[] = [];
+        try {
+          const dbInstance = await getDB();
+          const transaction = dbInstance.transaction([STORE_NAME], 'readonly');
+          const store = transaction.objectStore(STORE_NAME);
+          const request = store.get(key);
+          const localResult = await new Promise<any>((resolve) => {
+            request.onsuccess = () => resolve(request.result?.value || null);
+            request.onerror = () => resolve(null);
+          });
+          if (Array.isArray(localResult)) {
+            localAdventures = localResult;
+          }
+        } catch (_) {}
+
+        // Merge Firestore and Local IDB adventures by ID
+        const advMap = new Map<string, any>();
+        for (const adv of localAdventures) {
+          if (adv && adv.id) {
+            advMap.set(String(adv.id), { ...adv, authorId: adv.authorId || uid });
+          }
+        }
+        for (const adv of adventuresFromFs) {
+          if (adv && adv.id) {
+            advMap.set(String(adv.id), { ...adv, authorId: adv.authorId || uid });
+          }
+        }
+
+        const mergedAdventures = Array.from(advMap.values());
+        if (mergedAdventures.length > 0) {
+          memoryCache.set(key, mergedAdventures as any);
+          return mergedAdventures as unknown as T;
+        }
+      }
+
+      const path = `users/${uid}/data/${key}`;
       try {
-        const userDocRef = doc(db, 'users', auth.currentUser.uid, 'data', key);
+        const userDocRef = doc(db, 'users', uid, 'data', key);
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
           const data = docSnap.data().data as T;
@@ -152,6 +389,9 @@ export class StorageService {
         }
       } catch (e) {
         console.error(`Firestore getItem failed for key "${key}":`, e);
+        try {
+          handleFirestoreError(e, OperationType.GET, path);
+        } catch (_) {}
       }
     }
 
@@ -230,6 +470,13 @@ export class StorageService {
    */
   static async removeItem(key: string): Promise<boolean> {
     memoryCache.delete(key);
+
+    if (!firestoreWriteDisabled && auth.currentUser) {
+      try {
+        const userDocRef = doc(db, 'users', auth.currentUser.uid, 'data', key);
+        await deleteDoc(userDocRef);
+      } catch (_) {}
+    }
 
     try {
       localStorage.removeItem(key);

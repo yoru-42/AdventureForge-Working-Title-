@@ -138,7 +138,7 @@ export class InventoryLootService {
     const character = EquipmentConditionService.getCharacter(adventure, targetId);
 
     let maxWeightKg = adventure.inventorySettings?.maxCarryCapacityKg;
-    if (!maxWeightKg || maxWeightKg <= 0) {
+    if (typeof maxWeightKg !== 'number' || maxWeightKg < 0) {
       let strengthBonus = 0;
       if (character && Array.isArray((character as any).attributes)) {
         const strAttr = (character as any).attributes.find((a: any) =>
@@ -256,6 +256,7 @@ export class InventoryLootService {
 
   /**
    * Explicit confirmation chain wrapper for PendingPickupProposal or explicit items.
+   * Controlled public route for confirmed pickups.
    */
   public static confirmPickup(
     adventure: Adventure,
@@ -287,12 +288,33 @@ export class InventoryLootService {
       }
     }
 
-    return this.pickupItems(advToProcess, targetIdentifier, itemsToTake, options);
+    return this.executePickup(advToProcess, targetIdentifier, itemsToTake, options);
+  }
+
+  /**
+   * Internal execution method for performing item pickups into character inventory.
+   */
+  public static executePickup(
+    adventure: Adventure,
+    targetIdentifier: string = 'player',
+    itemsToTake: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[],
+    options?: {
+      sourceId?: string;
+      allowPartial?: boolean;
+    }
+  ): {
+    updatedAdventure: Adventure;
+    acceptedItems: ItemInstance[];
+    rejectedItems: { item: ItemInstance; reason: string }[];
+    notifications: InventoryNotification[];
+  } {
+    return this.pickupItems(adventure, targetIdentifier, itemsToTake, options);
   }
 
   /**
    * Execute pickup of items into a character's inventory with weight validation & partial pickup support.
    * Priority: Exact itemInstanceId. Never fall back to name matching if itemInstanceId is provided!
+   * Handles quantity splits cleanly: taken portion keeps original itemInstanceId, rest portion receives a NEW unique itemInstanceId.
    */
   public static pickupItems(
     adventure: Adventure,
@@ -327,16 +349,12 @@ export class InventoryLootService {
 
       // 1. Strict resolution by itemInstanceId if provided
       if (takeReq.itemInstanceId) {
-        inst = itemInstances.find(i => i.id === takeReq.itemInstanceId) || null;
-
-        if (!inst) {
-          for (const ls of lootSources) {
-            const foundInLs = (ls.items || []).find(i => i.id === takeReq.itemInstanceId);
-            if (foundInLs) {
-              inst = { ...foundInLs };
-              foundInLootSourceId = ls.id;
-              break;
-            }
+        for (const ls of lootSources) {
+          const foundInLs = (ls.items || []).find(i => i.id === takeReq.itemInstanceId);
+          if (foundInLs) {
+            inst = { ...foundInLs };
+            foundInLootSourceId = ls.id;
+            break;
           }
         }
 
@@ -346,6 +364,10 @@ export class InventoryLootService {
             inst = { ...wd.itemInstance };
             foundInWorldDropId = wd.id;
           }
+        }
+
+        if (!inst) {
+          inst = itemInstances.find(i => i.id === takeReq.itemInstanceId) || null;
         }
 
         if (!inst && takeReq.item) {
@@ -386,6 +408,11 @@ export class InventoryLootService {
       const takenQty = Math.min(reqQty, maxFittingQty);
       const remainingQty = reqQty - takenQty;
 
+      // When partial quantity is taken, generate a NEW unique ID for the remaining portion
+      const restInstanceId = remainingQty > 0
+        ? `${inst.id}-rest-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`
+        : null;
+
       // Ensure ItemDefinition exists in canonical registry
       let def = itemDefinitions.find(d => d.id === inst!.itemDefinitionId || (inst!.name && d.name.toLowerCase() === inst!.name.toLowerCase()));
       if (!def) {
@@ -399,7 +426,7 @@ export class InventoryLootService {
         itemDefinitions.push(def);
       }
 
-      // Update or add ItemInstance for target owner (preserving concrete itemInstanceId)
+      // Update or add ItemInstance for target owner (preserving concrete original itemInstanceId)
       const existingIdx = itemInstances.findIndex(i => i.id === inst!.id);
       const updatedInstance: ItemInstance = {
         ...inst,
@@ -417,15 +444,15 @@ export class InventoryLootService {
         itemInstances.push(updatedInstance);
       }
 
-      // Update source: remove taken quantity, retain remaining quantity on LootSource or WorldDrop
+      // Update source: remove taken quantity, retain remaining quantity with new restInstanceId
       if (foundInLootSourceId || options?.sourceId) {
         const lsId = foundInLootSourceId || options?.sourceId;
         lootSources = lootSources.map(ls => {
           if (ls.id === lsId) {
             const updatedItems = (ls.items || []).reduce<ItemInstance[]>((acc, item) => {
               if (item.id === inst!.id) {
-                if (remainingQty > 0) {
-                  acc.push({ ...item, quantity: remainingQty });
+                if (remainingQty > 0 && restInstanceId) {
+                  acc.push({ ...item, id: restInstanceId, quantity: remainingQty });
                 }
               } else {
                 acc.push(item);
@@ -439,11 +466,30 @@ export class InventoryLootService {
       }
 
       if (foundInWorldDropId) {
-        if (remainingQty > 0) {
-          worldDrops = worldDrops.map(wd => wd.id === foundInWorldDropId ? { ...wd, itemInstance: { ...wd.itemInstance, quantity: remainingQty } } : wd);
+        if (remainingQty > 0 && restInstanceId) {
+          worldDrops = worldDrops.map(wd => wd.id === foundInWorldDropId ? { ...wd, itemInstance: { ...wd.itemInstance, id: restInstanceId, quantity: remainingQty } } : wd);
         } else {
           worldDrops = worldDrops.filter(wd => wd.id !== foundInWorldDropId);
         }
+      }
+
+      // If pendingPickup proposal exists, update rest item ID for remaining quantity
+      if (updatedAdv.pendingPickup && remainingQty > 0 && restInstanceId) {
+        const pending = updatedAdv.pendingPickup;
+        const updatedPendingItems = (pending.items || []).map(pi => {
+          if (pi.id === inst!.id) {
+            return {
+              ...pi,
+              id: restInstanceId,
+              quantity: remainingQty
+            };
+          }
+          return pi;
+        });
+        updatedAdv.pendingPickup = {
+          ...pending,
+          items: updatedPendingItems
+        };
       }
 
       acceptedItems.push(updatedInstance);
@@ -458,7 +504,7 @@ export class InventoryLootService {
 
       if (remainingQty > 0) {
         rejectedItems.push({
-          item: { ...inst, quantity: remainingQty },
+          item: { ...inst, id: restInstanceId!, quantity: remainingQty },
           reason: `Teilweise aufgenommen (${takenQty} von ${reqQty} Stück mitgenommen, Rest bleibt an Quelle wegen Traglast)`
         });
       }
@@ -475,6 +521,13 @@ export class InventoryLootService {
         worldDrops
       };
     });
+
+    // Ensure strictly unique IDs in itemInstances registry
+    const uniqueItemInstancesMap = new Map<string, ItemInstance>();
+    itemInstances.forEach(i => {
+      uniqueItemInstancesMap.set(i.id, i);
+    });
+    itemInstances = Array.from(uniqueItemInstancesMap.values());
 
     // Clear pending pickup proposal if all items were resolved
     let pendingPickup = updatedAdv.pendingPickup;
