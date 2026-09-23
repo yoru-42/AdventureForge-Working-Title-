@@ -45,6 +45,7 @@ import {
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { createStandardLoreEntries } from '../lib/standardItemsData';
+import { AdventureResetService } from '../services/adventureResetService';
 
 interface Props {
   onSave: (adventure: Adventure) => void;
@@ -3175,7 +3176,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       initialNpcs: finalNpcs ? JSON.parse(JSON.stringify(finalNpcs)) : [],
       initialInventory: initialData?.inventory ? JSON.parse(JSON.stringify(initialData.inventory)) : ['Starterpaket']
     };
-    onSave(finalAdventure);
+    const snapshottedAdventure = AdventureResetService.ensureInitialSnapshots(finalAdventure);
+    onSave(snapshottedAdventure);
   };
 
   const getLandmassPath = (cx: number, cy: number, seedStr: string, size = 12) => {

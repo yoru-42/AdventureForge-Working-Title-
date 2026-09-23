@@ -3392,6 +3392,15 @@ export interface Adventure {
   initialLoreDatabase?: LoreEntry[];
   initialNpcs?: NPC[];
   initialInventory?: string[];
+  initialItemInstances?: ItemInstance[];
+  initialInventoryEntries?: InventoryEntry[];
+  initialEquipmentState?: EquipmentState[];
+  initialStoryState?: StoryInfoState;
+  initialCharacterKnowledge?: CharacterKnowledge;
+  initialCurrentLocation?: CurrentLocationContext;
+  initialLootSources?: LootSource[];
+  initialWorldDrops?: WorldDropItem[];
+  initialCollectionTasks?: CollectionTask[];
 }
 
 export interface ChatMessage {

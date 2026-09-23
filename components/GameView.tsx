@@ -39,6 +39,7 @@ import { PostCombatPanel } from './PostCombatPanel';
 import { CollectionTasksModal } from './CollectionTasksModal';
 import { InventorySettingsModal } from './InventorySettingsModal';
 import { InventoryLootService } from '../services/inventoryLootService';
+import { AdventureResetService } from '../services/adventureResetService';
 import { LootSource, PendingPickupProposal } from '../types';
 
 
@@ -250,15 +251,6 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   // Back-populate initial values for legacy/existing adventures if they are missing
   useEffect(() => {
     if (adventure) {
-      const needsInitialPlayer = !adventure.initialPlayer;
-      const needsInitialWorld = !adventure.initialWorld;
-      const needsInitialWorldTime = !adventure.initialWorldTime;
-      const needsInitialStatusElements = !adventure.initialStatusElements;
-      const needsInitialStructuredInventory = !adventure.initialStructuredInventory && adventure.structuredInventory;
-      const needsInitialLoreDatabase = !adventure.initialLoreDatabase;
-      const needsInitialNpcs = !adventure.initialNpcs;
-      const needsInitialInventory = !adventure.initialInventory;
-
       let playerToUse = adventure.player;
       let playerMigrated = false;
       if (adventure.player) {
@@ -269,19 +261,25 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
         }
       }
 
-      if (needsInitialPlayer || needsInitialWorld || needsInitialWorldTime || needsInitialStatusElements || needsInitialStructuredInventory || needsInitialLoreDatabase || needsInitialNpcs || needsInitialInventory || playerMigrated) {
-        onUpdateAdventureRef.current({
-          ...adventure,
-          player: playerToUse,
-          initialPlayer: adventure.initialPlayer || JSON.parse(JSON.stringify(playerToUse)),
-          initialWorld: adventure.initialWorld || JSON.parse(JSON.stringify(adventure.world)),
-          initialWorldTime: adventure.initialWorldTime || adventure.worldTime || { day: 1, hour: 8, minute: 0 },
-          initialStatusElements: adventure.initialStatusElements || JSON.parse(JSON.stringify(adventure.statusElements || [])),
-          initialStructuredInventory: adventure.initialStructuredInventory || (adventure.structuredInventory ? JSON.parse(JSON.stringify(adventure.structuredInventory)) : undefined),
-          initialLoreDatabase: adventure.initialLoreDatabase || JSON.parse(JSON.stringify(adventure.loreDatabase || [])),
-          initialNpcs: adventure.initialNpcs || JSON.parse(JSON.stringify(adventure.npcs || [])),
-          initialInventory: adventure.initialInventory || JSON.parse(JSON.stringify(adventure.inventory || []))
-        });
+      const snapshottedAdv = AdventureResetService.ensureInitialSnapshots({
+        ...adventure,
+        player: playerToUse
+      });
+
+      const hasChanges = playerMigrated ||
+        !adventure.initialPlayer ||
+        !adventure.initialWorld ||
+        !adventure.initialWorldTime ||
+        !adventure.initialStatusElements ||
+        (!adventure.initialStructuredInventory && !!adventure.structuredInventory) ||
+        !adventure.initialLoreDatabase ||
+        !adventure.initialNpcs ||
+        !adventure.initialInventory ||
+        (!adventure.initialItemInstances && !!adventure.itemInstances) ||
+        (!adventure.initialEquipmentState && !!adventure.equipmentState);
+
+      if (hasChanges) {
+        onUpdateAdventureRef.current(snapshottedAdv);
       }
     }
   }, [adventure.id]);
@@ -6761,62 +6759,21 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       return;
     }
 
-    const resetMsgs: ChatMessage[] = [
-      {
-        id: 'prologue-msg',
-        role: 'model',
-        text: adventure.prologue || 'Die Reise beginnt...'
-      }
-    ];
-    if (adventure.firstMessage) {
-      resetMsgs.push({
-        id: 'first-msg',
-        role: 'model',
-        text: adventure.firstMessage
-      });
-    }
+    const resetAdventure = AdventureResetService.resetAdventureToInitialState(adventureRef.current);
     
     // Reset messages locally
-    setMessages(resetMsgs);
-    
-    // Restore player character state back to starting values
-    const resetPlayer = adventure.initialPlayer 
-      ? JSON.parse(JSON.stringify(adventure.initialPlayer)) 
-      : { ...adventure.player };
+    setMessages(resetAdventure.chatHistory);
 
-    // If we don't have initialPlayer (e.g. legacy/pre-created adventure), let's restore campaignPowerLevels values to original settings (min) or defaults
-    if (!adventure.initialPlayer && resetPlayer.campaignPowerLevels) {
-      const updatedLevels = { ...resetPlayer.campaignPowerLevels };
-      Object.keys(updatedLevels).forEach(key => {
-        const setting = adventure.world.campaignPowerSettings?.[key];
-        if (setting) {
-          const minVal = typeof setting === 'number' ? setting : (setting.min ?? 10);
-          updatedLevels[key] = {
-            ...updatedLevels[key],
-            value: minVal,
-            xp: 0
-          };
-        } else {
-          updatedLevels[key] = {
-            ...updatedLevels[key],
-            value: 10,
-            xp: 0
-          };
-        }
-      });
-      resetPlayer.campaignPowerLevels = updatedLevels;
-    }
-
-    // Now calculate maxHp and maxMp on basis of resetPlayer
-    const isHero = adventure.world.isHeroic !== false;
-    const healthPowerNames = adventure.world.healthPowerNames || [];
-    const healthPowerName = adventure.world.healthPowerName;
+    // Calculate maxHp and maxMp on basis of reset player & world
+    const isHero = resetAdventure.world.isHeroic !== false;
+    const healthPowerNames = resetAdventure.world.healthPowerNames || [];
+    const healthPowerName = resetAdventure.world.healthPowerName;
     let maxHp = isHero ? 150 : 100;
 
     if (healthPowerNames.length > 0) {
       let sumVal = 0;
       healthPowerNames.forEach(name => {
-        const hLevel = resetPlayer.campaignPowerLevels?.[name];
+        const hLevel = resetAdventure.player.campaignPowerLevels?.[name];
         if (hLevel) {
           sumVal += hLevel.value !== undefined ? hLevel.value : (hLevel.potentialMax !== undefined ? hLevel.potentialMax : 100);
         }
@@ -6824,20 +6781,20 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       if (sumVal > 0) {
         maxHp = sumVal;
       }
-    } else if (healthPowerName && resetPlayer.campaignPowerLevels?.[healthPowerName]) {
-      const hLevel = resetPlayer.campaignPowerLevels[healthPowerName];
+    } else if (healthPowerName && resetAdventure.player.campaignPowerLevels?.[healthPowerName]) {
+      const hLevel = resetAdventure.player.campaignPowerLevels[healthPowerName];
       maxHp = hLevel.value !== undefined ? hLevel.value : (hLevel.potentialMax !== undefined ? hLevel.potentialMax : maxHp);
     }
 
-    const costResources = adventure.world.costResources || [];
-    const costPowerNames = adventure.world.costPowerNames || [];
-    const costPowerName = adventure.world.costPowerName;
+    const costResources = resetAdventure.world.costResources || [];
+    const costPowerNames = resetAdventure.world.costPowerNames || [];
+    const costPowerName = resetAdventure.world.costPowerName;
     let maxMp = isHero ? 120 : 80;
 
     if (costResources.length > 0) {
       const primaryRes = costResources[0];
-      if (primaryRes.radarPowerName && resetPlayer.campaignPowerLevels?.[primaryRes.radarPowerName]) {
-        const cLevel = resetPlayer.campaignPowerLevels[primaryRes.radarPowerName];
+      if (primaryRes.radarPowerName && resetAdventure.player.campaignPowerLevels?.[primaryRes.radarPowerName]) {
+        const cLevel = resetAdventure.player.campaignPowerLevels[primaryRes.radarPowerName];
         maxMp = cLevel.value !== undefined ? cLevel.value : (cLevel.potentialMax !== undefined ? cLevel.potentialMax : (primaryRes.baseMax ?? 100));
       } else {
         maxMp = primaryRes.baseMax ?? 100;
@@ -6845,7 +6802,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
     } else if (costPowerNames.length > 0) {
       let sumVal = 0;
       costPowerNames.forEach(name => {
-        const cLevel = resetPlayer.campaignPowerLevels?.[name];
+        const cLevel = resetAdventure.player.campaignPowerLevels?.[name];
         if (cLevel) {
           sumVal += cLevel.value !== undefined ? cLevel.value : (cLevel.potentialMax !== undefined ? cLevel.potentialMax : 100);
         }
@@ -6853,8 +6810,8 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       if (sumVal > 0) {
         maxMp = sumVal;
       }
-    } else if (costPowerName && resetPlayer.campaignPowerLevels?.[costPowerName]) {
-      const cLevel = resetPlayer.campaignPowerLevels[costPowerName];
+    } else if (costPowerName && resetAdventure.player.campaignPowerLevels?.[costPowerName]) {
+      const cLevel = resetAdventure.player.campaignPowerLevels[costPowerName];
       maxMp = cLevel.value !== undefined ? cLevel.value : (cLevel.potentialMax !== undefined ? cLevel.potentialMax : maxMp);
     }
 
@@ -6882,87 +6839,10 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
     setSelectedPrepEnemyIds([]);
     setSkillSummonCounts({});
     setSelectedHudDetailField(null);
-    
-    // Restore status elements back to starting values
-    const resetStatus = adventure.initialStatusElements 
-      ? JSON.parse(JSON.stringify(adventure.initialStatusElements)) 
-      : (adventure.statusElements || []).map(el => {
-          if (el.label === 'Zeit') return { ...el, value: '08:00' };
-          if (el.label === 'Ausdauer') return { ...el, value: '100%' };
-          return el;
-        });
 
-    // Restore structured inventory back to starting values
-    const resetStructuredInventory = adventure.initialStructuredInventory 
-      ? JSON.parse(JSON.stringify(adventure.initialStructuredInventory)) 
-      : undefined;
-
-    // Restore general inventory list back to starting values
-    const resetInventory = adventure.initialInventory 
-      ? JSON.parse(JSON.stringify(adventure.initialInventory)) 
-      : (adventure.inventory || []);
-
-    // Restore world back to starting values (clearing dynamic visited locations and world changes)
-    const resetWorld = adventure.initialWorld
-      ? JSON.parse(JSON.stringify(adventure.initialWorld))
-      : {
-          ...adventure.world,
-          dynamicWorldState: undefined,
-          encounterForces: undefined,
-          currentLocationId: adventure.world.startLocationId,
-          currentTerritoryId: undefined
-        };
-
-    // Restore lore database (Codex) back to starting values and reset event steps to pending
-    let resetLoreDatabase: any[] = [];
-    if (adventure.initialLoreDatabase) {
-      resetLoreDatabase = JSON.parse(JSON.stringify(adventure.initialLoreDatabase));
-    } else {
-      resetLoreDatabase = (adventure.loreDatabase || [])
-        .filter((e: any) => !e.id?.startsWith('dyn-'))
-        .map((e: any) => {
-          const clone = JSON.parse(JSON.stringify(e));
-          if (clone.details?.eventSteps) {
-            clone.details.eventSteps = clone.details.eventSteps.map((s: any) => ({
-              ...s,
-              status: 'pending'
-            }));
-          }
-          return clone;
-        });
-    }
-
-    // Restore npcs back to starting values (removing dynamic npcs, reverting changes)
-    const resetNpcs = adventure.initialNpcs 
-      ? JSON.parse(JSON.stringify(adventure.initialNpcs)) 
-      : (adventure.npcs || []).filter((n: any) => !n.id?.startsWith('dyn-'));
-
-    // Clear dynamic body changes and emotion states on player
-    resetPlayer.physicalChangeHistory = undefined;
-    resetPlayer.emotionState = undefined;
-    resetPlayer.temporaryConditions = [];
-
-    onUpdateAdventure({ 
-      ...adventureRef.current, 
-      chatHistory: resetMsgs,
-      player: resetPlayer,
-      world: resetWorld,
-      npcs: resetNpcs,
-      loreDatabase: resetLoreDatabase,
-      inventory: resetInventory,
-      statusElements: resetStatus,
-      structuredInventory: resetStructuredInventory,
-      combatState: undefined,
-      summaryLog: "",
-      encounterForces: [],
-      dynamicWorldState: undefined,
-      emotionState: undefined,
-      physicalChangeHistory: [],
-      npcAppearanceMemory: {},
-      worldTime: adventure.initialWorldTime 
-        ? JSON.parse(JSON.stringify(adventure.initialWorldTime)) 
-        : { day: 1, hour: 8, minute: 0 }
-    });
+    // Sync adventureRef and propagate to parent storage
+    adventureRef.current = resetAdventure;
+    onUpdateAdventure(resetAdventure);
     
     setShowResetConfirm(false);
   };
