@@ -90,7 +90,12 @@ export class GameTurnService {
         });
 
     const activeWorld = simResult.updatedWorld;
-    const currentAdventure = simResult.updatedAdventure || { ...adventure, world: activeWorld };
+    const currentAdventure = simResult.updatedAdventure || {
+      ...adventure,
+      world: activeWorld,
+      worldTime: activeWorld.worldTime,
+      activeTimeEvents: activeWorld.activeTimeEvents || adventure.activeTimeEvents || []
+    };
 
     // Step 3: Construct messages and AI prompt
     const userMsg: ChatMessage = {
@@ -116,6 +121,8 @@ export class GameTurnService {
     let rawAiResponse = '';
 
     const ateContext = ActiveTimeEventService.getATEContextForAI(currentAdventure);
+    const timeBlock = WorldSimulationService.formatWorldTimeBlockForAI(activeWorld.worldTime);
+    const appointmentsBlock = WorldSimulationService.formatUpcomingEventsBlockForAI(activeWorld);
 
     if (generateAiResponse) {
       rawAiResponse = await generateAiResponse({
@@ -141,6 +148,9 @@ WELT: ${activeWorld.description || currentAdventure.world.description} (Ton: ${a
 ${campaignPowerInstruction}
 
 ${locationBlock}
+
+${timeBlock}
+${appointmentsBlock}
 
 SPIELER-CHARAKTER:
 ${currentAdventure.player.name} (${currentAdventure.player.role}). 
@@ -179,6 +189,9 @@ ${campaignPowerInstruction}
 
 ${locationBlock}
 
+${timeBlock}
+${appointmentsBlock}
+
 SPIELER-CHARAKTER:
 ${currentAdventure.player.name} (${currentAdventure.player.role}). 
 - Bio: ${currentAdventure.player.bio}
@@ -216,16 +229,16 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
     };
 
     if (parserFn) {
-      parsedResult = parserFn(rawAiResponse, adventure, playerHp, playerMp, activeWorld);
+      parsedResult = parserFn(rawAiResponse, currentAdventure, playerHp, playerMp, activeWorld);
     } else {
       // Basic fallback merge if no parser function provided
       parsedResult = {
         cleanedText: rawAiResponse.trim(),
-        updatedLore: adventure.loreDatabase || [],
-        updatedPlayer: adventure.player,
-        updatedNpcs: adventure.npcs || [],
+        updatedLore: currentAdventure.loreDatabase || [],
+        updatedPlayer: currentAdventure.player,
+        updatedNpcs: currentAdventure.npcs || [],
         notifications: [],
-        updatedStructuredInventory: adventure.structuredInventory,
+        updatedStructuredInventory: currentAdventure.structuredInventory,
         updatedWorld: activeWorld
       };
     }
@@ -254,7 +267,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
     const finalChatHistory = [...updatedMessagesForAi, modelMsg];
 
     let updatedAdventure: Adventure = {
-      ...adventure,
+      ...currentAdventure,
       world: parsedResult.updatedWorld,
       player: parsedResult.updatedPlayer,
       npcs: parsedResult.updatedNpcs,
@@ -262,6 +275,8 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       structuredInventory: parsedResult.updatedStructuredInventory,
       chatHistory: finalChatHistory
     };
+    updatedAdventure.worldTime = updatedAdventure.world.worldTime;
+
 
     // Step 5b: Parse Character Knowledge tags from AI response
     updatedAdventure = CharacterKnowledgeService.parseKnowledgeTagsFromAI(rawAiResponse, updatedAdventure);

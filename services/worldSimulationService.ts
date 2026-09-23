@@ -604,4 +604,85 @@ export class WorldSimulationService {
       playerVisibleSummary
     };
   }
+
+  /**
+   * Formats a clear, authoritative time block for the AI prompt context.
+   */
+  static formatWorldTimeBlockForAI(worldTime?: WorldTime): string {
+    const wt = worldTime || { day: 1, hour: 8, minute: 0, totalMinutes: 480 };
+    const day = wt.day || 1;
+    const hourStr = String(wt.hour || 0).padStart(2, '0');
+    const minStr = String(wt.minute || 0).padStart(2, '0');
+    const totalMins = this.toTotalMinutes(wt);
+
+    return `
+=== AKTUELLE SPIELZEIT ===
+
+Tag: ${day}
+Uhrzeit: ${hourStr}:${minStr}
+Gesamtzeit: ${totalMins} Minuten
+
+Diese Spielzeit ist autoritativ.
+
+Alle zeitlichen Aussagen, Termine und verbleibenden Zeitangaben müssen sich auf diese aktuelle Spielzeit beziehen.
+
+Die Zeit darf nicht aus dem Chatverlauf geschätzt werden.
+`;
+  }
+
+  /**
+   * Formats a player-visible upcoming events/appointments block for the AI prompt context.
+   */
+  static formatUpcomingEventsBlockForAI(world: WorldSetting): string {
+    const activeWorldTime = world.worldTime || { day: 1, hour: 8, minute: 0, totalMinutes: 480 };
+    const rawScheduledEvents = [
+      ...(world.scheduledEvents || []),
+      ...(world.dynamicWorldState?.scheduledEvents || [])
+    ];
+
+    // Deduplicate and filter player-visible events scheduled in the future
+    const eventMap = new Map<string, WorldEvent>();
+    for (const evt of rawScheduledEvents) {
+      if (evt && evt.id && !eventMap.has(evt.id)) {
+        eventMap.set(evt.id, evt);
+      }
+    }
+
+    const upcomingEvents = Array.from(eventMap.values())
+      .filter(e => e.status === 'scheduled' && e.isPlayerVisible && this.compareWorldTime(e.scheduledForWorldTime, activeWorldTime) > 0);
+
+    upcomingEvents.sort((a, b) => this.compareWorldTime(a.scheduledForWorldTime, b.scheduledForWorldTime));
+
+    if (upcomingEvents.length === 0) {
+      return '';
+    }
+
+    let appointmentsBlock = `\n=== RELEVANTE ANSTEHENDE TERMINE ===\n\n`;
+    for (const evt of upcomingEvents) {
+      const minDiff = this.toTotalMinutes(evt.scheduledForWorldTime) - this.toTotalMinutes(activeWorldTime);
+      const hourStr = String(evt.scheduledForWorldTime?.hour || 0).padStart(2, '0');
+      const minStr = String(evt.scheduledForWorldTime?.minute || 0).padStart(2, '0');
+      const dayStr = evt.scheduledForWorldTime?.day ? `Tag ${evt.scheduledForWorldTime.day}, ` : '';
+      
+      let timeDiffStr = '';
+      if (minDiff > 0) {
+        const diffHrs = Math.floor(minDiff / 60);
+        const diffMins = minDiff % 60;
+        if (diffHrs > 0) {
+          timeDiffStr = `(in ${diffHrs} Std. ${diffMins} Min.)`;
+        } else {
+          timeDiffStr = `(in ${minDiff} Min.)`;
+        }
+      } else if (minDiff === 0) {
+        timeDiffStr = `(jetzt fällig)`;
+      } else {
+        timeDiffStr = `(überfällig um ${Math.abs(minDiff)} Min.)`;
+      }
+
+      appointmentsBlock += `- ${dayStr}${hourStr}:${minStr} Uhr: ${evt.title || 'Unbenanntes Ereignis'}\n  Beschreibung: ${evt.description || 'Keine Beschreibung vorhanden'}\n  Verbleibende Zeit: ${timeDiffStr}\n\n`;
+    }
+
+    return appointmentsBlock;
+  }
 }
+

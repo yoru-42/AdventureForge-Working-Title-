@@ -504,7 +504,12 @@ export class TravelService {
     });
 
     const activeWorld = simResult.updatedWorld;
-    const currentAdventure = simResult.updatedAdventure || { ...adventure, world: activeWorld };
+    const currentAdventure = simResult.updatedAdventure || {
+      ...adventure,
+      world: activeWorld,
+      worldTime: activeWorld.worldTime,
+      activeTimeEvents: activeWorld.activeTimeEvents || adventure.activeTimeEvents || []
+    };
 
     // Step 4: Check Interruption (BattleInstance spawned during travel)
     const hasCombatInterruption = simResult.spawnedBattleInstances.length > 0;
@@ -594,6 +599,9 @@ export class TravelService {
         activeWorld
       });
     } else {
+      const timeBlock = WorldSimulationService.formatWorldTimeBlockForAI(activeWorld.worldTime);
+      const appointmentsBlock = WorldSimulationService.formatUpcomingEventsBlockForAI(activeWorld);
+
       // Gemini prompt with activeWorld context
       let simulationInstruction = '';
       if (simResult.playerVisibleSummary) {
@@ -624,6 +632,9 @@ ${simulationInstruction}
 WELT: ${activeWorld.description || currentAdventure.world.description} (Ton: ${activeWorld.tone || currentAdventure.world.tone})
 ${travelContextInstruction}
 
+${timeBlock}
+${appointmentsBlock}
+
 SPIELER-CHARAKTER:
 ${updatedPlayer.name} (${updatedPlayer.role}). 
 - Bio: ${updatedPlayer.bio}
@@ -648,15 +659,15 @@ AKTUELLE WERTE: ${currentStatsStr}`;
     // Step 5: Parser execution
     let parsedResult: any;
     if (parserFn) {
-      parsedResult = parserFn(rawAiResponse, { ...adventure, player: updatedPlayer }, undefined, undefined, activeWorld);
+      parsedResult = parserFn(rawAiResponse, { ...currentAdventure, player: updatedPlayer }, undefined, undefined, activeWorld);
     } else {
       parsedResult = {
         cleanedText: rawAiResponse.trim(),
-        updatedLore: adventure.loreDatabase || [],
+        updatedLore: currentAdventure.loreDatabase || [],
         updatedPlayer: updatedPlayer,
-        updatedNpcs: adventure.npcs || [],
+        updatedNpcs: currentAdventure.npcs || [],
         notifications: [],
-        updatedStructuredInventory: adventure.structuredInventory,
+        updatedStructuredInventory: currentAdventure.structuredInventory,
         updatedWorld: activeWorld
       };
     }
@@ -711,7 +722,7 @@ AKTUELLE WERTE: ${currentStatsStr}`;
     const finalChatHistory = [...updatedMessagesForAi, modelMsg];
 
     let finalAdventure: Adventure = {
-      ...adventure,
+      ...currentAdventure,
       world: parsedResult.updatedWorld,
       player: parsedResult.updatedPlayer,
       npcs: parsedResult.updatedNpcs,
@@ -719,6 +730,8 @@ AKTUELLE WERTE: ${currentStatsStr}`;
       structuredInventory: parsedResult.updatedStructuredInventory,
       chatHistory: finalChatHistory
     };
+    finalAdventure.worldTime = parsedResult.updatedWorld.worldTime;
+
 
     if (finalLocation) {
       finalAdventure = LocationContextService.updateCurrentLocation(finalAdventure, {
