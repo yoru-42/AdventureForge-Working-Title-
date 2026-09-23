@@ -11552,6 +11552,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               summaryLog: notes
             });
           }}
+          onUpdateAdventure={(updated) => onUpdateAdventure(updated)}
         />
       )}
 

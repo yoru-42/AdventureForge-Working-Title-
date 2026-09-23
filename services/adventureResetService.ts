@@ -100,6 +100,9 @@ export class AdventureResetService {
       } else if (!cloned.initialWorldTime) {
         cloned.initialWorldTime = { day: 1, hour: 8, minute: 0 };
       }
+      if (!cloned.initialActiveTimeEvents && (cloned.activeTimeEvents || cloned.world?.activeTimeEvents)) {
+        cloned.initialActiveTimeEvents = deepClone(cloned.activeTimeEvents || cloned.world?.activeTimeEvents || []);
+      }
     }
 
     return cloned;
@@ -284,6 +287,13 @@ export class AdventureResetService {
       ? deepClone(adventure.initialWorldTime)
       : { day: 1, hour: 8, minute: 0 };
 
+    const resetActiveTimeEvents = adventure.initialActiveTimeEvents
+      ? deepClone(adventure.initialActiveTimeEvents)
+      : [];
+    if (resetWorld) {
+      resetWorld.activeTimeEvents = resetActiveTimeEvents;
+    }
+
     // 11. Reset Chat History to Baseline Messages
     const resetMsgs: ChatMessage[] = [
       {
@@ -319,6 +329,7 @@ export class AdventureResetService {
       lootSources: resetLootSources,
       worldDrops: resetWorldDrops,
       collectionTasks: resetCollectionTasks,
+      activeTimeEvents: resetActiveTimeEvents,
       statusElements: resetStatusElements,
       worldTime: resetWorldTime,
 

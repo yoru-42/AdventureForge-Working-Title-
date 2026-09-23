@@ -12,6 +12,7 @@ import {
   EconomyHolding
 } from '../types';
 import { WorldIntegrationService } from './worldIntegrationService';
+import { ActiveTimeEventService } from './activeTimeEventService';
 
 export const MAX_EVENT_PROCESSING_DEPTH = 10;
 
@@ -527,6 +528,18 @@ export class WorldSimulationService {
     // Update active vs history event lists in WorldSetting
     const finalScheduledEvents = Array.from(eventMap.values()).filter(e => e.status === 'scheduled');
     const finalHistoryEvents = Array.from(eventMap.values()).filter(e => e.status === 'resolved' || e.status === 'cancelled');
+
+    // Evaluate Active Time Events (ATE) if activeTimeEvents exist on world
+    if (currentWorld.activeTimeEvents && currentWorld.activeTimeEvents.length > 0) {
+      const dummyAdventure: any = { world: currentWorld, worldTime: timeEnd, activeTimeEvents: currentWorld.activeTimeEvents };
+      const ateRes = ActiveTimeEventService.evaluateAndAdvanceATEs({
+        adventure: dummyAdventure,
+        elapsedMinutes: actualMinsToAdd
+      });
+      if (ateRes.updatedAdventure.world?.activeTimeEvents) {
+        currentWorld.activeTimeEvents = ateRes.updatedAdventure.world.activeTimeEvents;
+      }
+    }
 
     const updatedWorld: WorldSetting = {
       ...currentWorld,

@@ -23,6 +23,7 @@ import { jsonrepair } from 'jsonrepair';
 import { LocationContextService } from './locationContextService';
 import { CharacterKnowledgeService } from './characterKnowledgeService';
 import { EquipmentConditionService } from './equipmentConditionService';
+import { ActiveTimeEventService } from './activeTimeEventService';
 
 export interface EnsureStoryEntityOptions {
   id?: string;
@@ -532,6 +533,20 @@ export class AIStoryStateProcessor {
     // 8. Process World Changes
     if (Array.isArray(changes.worldChanges) && changes.worldChanges.length > 0) {
       state = this.processWorldChanges(state, changes.worldChanges);
+    }
+
+    // 9. Process Active Time Event (ATE) Changes
+    if (Array.isArray(changes.ateChanges) && changes.ateChanges.length > 0) {
+      changes.ateChanges.forEach(ac => {
+        if (!ac || !ac.ateId) return;
+        state = ActiveTimeEventService.recordPlayerImpact({
+          adventure: state,
+          ateId: ac.ateId,
+          actionDescription: 'Aktion durch Geschichte verarbeitet',
+          effectOnThread: ac.playerImpact || 'Ablauf durch Story-Ereignis beeinflusst',
+          accelerateStage: ac.newStageIndex !== undefined
+        });
+      });
     }
 
     return state;

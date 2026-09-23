@@ -31,6 +31,7 @@ import {
 import { Adventure, StoryEntityItem, StoryInfoState, LoreEntry, CharacterKnowledgeEntry } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { CharacterKnowledgeService } from '../services/characterKnowledgeService';
+import { ActiveTimeEventsManager } from './ActiveTimeEventsManager';
 
 interface StoryInfoModalProps {
   isOpen: boolean;
@@ -43,6 +44,7 @@ interface StoryInfoModalProps {
   onKeepMultipleTemporary?: (entities: StoryEntityItem[]) => void;
   onDismissMultiple?: (entities: StoryEntityItem[]) => void;
   onUpdateNotes?: (notes: string) => void;
+  onUpdateAdventure?: (adventure: Adventure) => void;
 }
 
 export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
@@ -55,12 +57,13 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
   onKeepTemporary,
   onKeepMultipleTemporary,
   onDismissMultiple,
-  onUpdateNotes
+  onUpdateNotes,
+  onUpdateAdventure
 }) => {
   const [expandedEntityIds, setExpandedEntityIds] = useState<Record<string, boolean>>({});
   const [selectedEntityIds, setSelectedEntityIds] = useState<Record<string, boolean>>({});
   const [showPromotedHistory, setShowPromotedHistory] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'temporary' | 'promoted' | 'knowledge'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'temporary' | 'promoted' | 'knowledge' | 'ate'>('overview');
   const [knowledgeSearch, setKnowledgeSearch] = useState<string>('');
   const [knowledgeCategoryFilter, setKnowledgeCategoryFilter] = useState<string>('all');
   const [storyNotes, setStoryNotes] = useState<string>(
@@ -271,6 +274,23 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
             {allKnowledgeEntries.length > 0 && (
               <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                 {allKnowledgeEntries.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('ate')}
+            className={`px-4 py-3 text-xs font-medium border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'ate'
+                ? 'border-amber-500 text-amber-300 bg-amber-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
+            }`}
+          >
+            <Zap className="w-4 h-4" />
+            Parallele Handlungsstränge (ATE)
+            {(adventure.activeTimeEvents?.length || adventure.world?.activeTimeEvents?.length || 0) > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                {adventure.activeTimeEvents?.length || adventure.world?.activeTimeEvents?.length || 0}
               </span>
             )}
           </button>
@@ -760,6 +780,20 @@ export const StoryInfoModal: React.FC<StoryInfoModalProps> = ({
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 5: ACTIVE TIME EVENTS (ATE) */}
+          {activeTab === 'ate' && (
+            <div className="h-[550px]">
+              <ActiveTimeEventsManager
+                adventure={adventure}
+                onUpdateAdventure={(updated) => {
+                  if (onUpdateAdventure) {
+                    onUpdateAdventure(updated);
+                  }
+                }}
+              />
             </div>
           )}
 

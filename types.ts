@@ -1845,6 +1845,68 @@ export interface WorldEvent {
   data?: Record<string, any>;
 }
 
+export type ATEStatus = 'draft' | 'active' | 'paused' | 'converged' | 'resolved' | 'cancelled';
+export type ATECategory = 'political' | 'investigation' | 'personal' | 'conflict' | 'travel' | 'faction' | 'resource' | 'custom';
+export type ATERevealLevel = 'hidden' | 'foreshadowed' | 'partially_revealed' | 'fully_revealed';
+
+export interface ATEParticipant {
+  id: string;
+  characterId?: string;
+  characterName: string;
+  factionId?: string;
+  factionName?: string;
+  goal: string;
+  motivation: string;
+  knowledgeState?: string;
+  attitudeToPlayer?: 'friendly' | 'neutral' | 'skeptical' | 'hostile' | 'unaware' | string;
+  currentLocationName?: string;
+  nextStep?: string;
+}
+
+export interface ATEStage {
+  stageIndex: number;
+  title: string;
+  description: string;
+  internalTruth: string;
+  triggerConditionText?: string;
+  triggerTimeMinutes?: number;
+  triggerLocations?: string[];
+  triggerFacts?: string[];
+  foreshadowingClues?: string[];
+  revealedToPlayer?: boolean;
+  executedAtWorldTime?: { day: number; hour: number; minute: number };
+}
+
+export interface ATEPlayerImpactLog {
+  timestamp: string;
+  actionDescription: string;
+  effectOnThread: string;
+}
+
+export interface ActiveTimeEvent {
+  id: string;
+  title: string;
+  summary: string;
+  category?: ATECategory;
+  status: ATEStatus;
+  revealLevel: ATERevealLevel;
+  currentStageIndex: number;
+  stages: ATEStage[];
+  participants: ATEParticipant[];
+  originLocationId?: string;
+  originLocationName?: string;
+  backgroundContext?: string;
+  associatedNpcIds?: string[];
+  associatedFactionIds?: string[];
+  associatedLoreIds?: string[];
+  convergenceCondition?: string;
+  convergenceConsequence?: string;
+  isConverged?: boolean;
+  playerImpactLogs?: ATEPlayerImpactLog[];
+  createdAtWorldTime?: { day: number; hour: number; minute: number };
+  lastUpdatedWorldTime?: { day: number; hour: number; minute: number };
+}
+
 export interface EncounterForce {
   id: string;
   name: string;
@@ -2046,6 +2108,7 @@ export interface WorldSetting {
   changeLog?: WorldFactChangeLogEntry[];
   encounterForces?: EncounterForce[];
   scheduledEvents?: WorldEvent[];
+  activeTimeEvents?: ActiveTimeEvent[];
   dynamicWorldState?: DynamicWorldState;
   connections?: { id?: string; fromId?: string; toId?: string; fromPlace?: string; toPlace?: string; label?: string; travelTime?: string; distance?: string; duration?: string; type?: 'land' | 'sea' | 'air' | string; isUnlocked?: boolean; isBlocked?: boolean; blockReason?: string }[];
   startLocationId?: string;
@@ -3381,6 +3444,7 @@ export interface Adventure {
   pendingTransfer?: PendingItemTransferProposal | null;
   worldDrops?: WorldDropItem[];
   collectionTasks?: CollectionTask[];
+  activeTimeEvents?: ActiveTimeEvent[];
   inventorySettings?: InventorySettings;
   emotionState?: UserEmotionState;
   physicalChangeHistory?: PhysicalChangeHistoryEntry[];
@@ -3404,6 +3468,7 @@ export interface Adventure {
   initialLootSources?: LootSource[];
   initialWorldDrops?: WorldDropItem[];
   initialCollectionTasks?: CollectionTask[];
+  initialActiveTimeEvents?: ActiveTimeEvent[];
 }
 
 export interface ChatMessage {
@@ -3527,6 +3592,7 @@ export interface AIStoryStateChanges {
   bodyConditionChanges?: AIBodyConditionChange[];
   relationshipChanges?: AIRelationshipChange[];
   worldChanges?: AIWorldChange[];
+  ateChanges?: { ateId: string; newStageIndex?: number; newStatus?: ATEStatus; newClues?: string[]; playerImpact?: string }[];
 }
 
 export interface AIServiceResponse {
