@@ -255,8 +255,42 @@ export class InventoryLootService {
   }
 
   /**
+   * Helper to sync harvestOptions (isCrystalsHarvested / isBodyHarvested) on a LootSource
+   * when all generated crystal or butcher items have been removed from the source.
+   */
+  public static syncLootSourceHarvestState(adventure: Adventure, lootSourceId: string): Adventure {
+    const ls = (adventure.lootSources || []).find(s => s.id === lootSourceId);
+    if (!ls || !ls.harvestOptions) return adventure;
+
+    const remainingItems = ls.items || [];
+    const hasRemainingCrystals = remainingItems.some(i =>
+      (i.name || '').toLowerCase().includes('kristall') || (i.category || '').toLowerCase().includes('kristall')
+    );
+    const hasRemainingButcher = remainingItems.some(i =>
+      !(i.name || '').toLowerCase().includes('kristall')
+    );
+
+    const updatedHarvestOptions = { ...ls.harvestOptions };
+
+    if (!hasRemainingCrystals && ls.items && ls.items.length >= 0) {
+      updatedHarvestOptions.isCrystalsHarvested = true;
+    }
+    if (!hasRemainingButcher && ls.items && ls.items.length >= 0) {
+      updatedHarvestOptions.isBodyHarvested = true;
+    }
+
+    return {
+      ...adventure,
+      lootSources: (adventure.lootSources || []).map(s =>
+        s.id === lootSourceId ? { ...s, harvestOptions: updatedHarvestOptions } : s
+      )
+    };
+  }
+
+  /**
    * Explicit confirmation chain wrapper for PendingPickupProposal or explicit items.
    * Controlled public route for confirmed pickups.
+   * Validates exact itemInstanceId, proposal presence, and quantity limits before executing pickup.
    */
   public static confirmPickup(
     adventure: Adventure,
@@ -272,23 +306,122 @@ export class InventoryLootService {
     rejectedItems: { item: ItemInstance; reason: string }[];
     notifications: InventoryNotification[];
   } {
-    let itemsToTake: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[] = [];
-    let advToProcess = { ...adventure };
+    const targetId = EquipmentConditionService.resolveTargetId(adventure, targetIdentifier);
+    let itemsToValidate: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[] = [];
+    let pending = adventure.pendingPickup;
 
     if (Array.isArray(proposalOrItems)) {
-      itemsToTake = proposalOrItems;
+      itemsToValidate = proposalOrItems;
     } else if (proposalOrItems && Array.isArray(proposalOrItems.items)) {
-      itemsToTake = proposalOrItems.items.map(i => ({
+      itemsToValidate = proposalOrItems.items.map(i => ({
         itemInstanceId: i.id,
         item: i,
         quantity: i.quantity || 1
       }));
-      if (!advToProcess.pendingPickup) {
-        advToProcess.pendingPickup = proposalOrItems;
+      if (!pending) {
+        pending = proposalOrItems;
       }
     }
 
-    return this.executePickup(advToProcess, targetIdentifier, itemsToTake, options);
+    const validatedItemsToTake: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[] = [];
+    const rejectedItems: { item: ItemInstance; reason: string }[] = [];
+    let detectedSourceId: string | null = options?.sourceId || null;
+
+    itemsToValidate.forEach(req => {
+      const targetInstId = req.itemInstanceId || req.item?.id;
+
+      // Strict resolution by itemInstanceId if supplied - NEVER fall back to name matching!
+      let candidateInPending: ItemInstance | null = null;
+      if (pending && Array.isArray(pending.items)) {
+        if (targetInstId) {
+          candidateInPending = pending.items.find(i => i.id === targetInstId) || null;
+        }
+      }
+
+      let candidateInSource: ItemInstance | null = null;
+
+      if (targetInstId) {
+        for (const ls of (adventure.lootSources || [])) {
+          if (options?.sourceId && ls.id !== options.sourceId) continue;
+          const found = (ls.items || []).find(i => i.id === targetInstId);
+          if (found) {
+            candidateInSource = found;
+            detectedSourceId = ls.id;
+            break;
+          }
+        }
+        if (!candidateInSource) {
+          const wd = (adventure.worldDrops || []).find(w => w.itemInstance.id === targetInstId);
+          if (wd) {
+            candidateInSource = wd.itemInstance;
+          }
+        }
+      }
+
+      const sourceInst = candidateInPending || candidateInSource || (targetInstId ? null : req.item || null);
+
+      if (!sourceInst) {
+        rejectedItems.push({
+          item: req.item || { id: targetInstId || 'unknown', itemDefinitionId: 'def', name: 'Unbekannter Gegenstand' },
+          reason: 'Bestätigung ungültig: Gegenstand nicht im Vorschlag oder der Quelle gefunden.'
+        });
+        return;
+      }
+
+      const proposedQty = sourceInst.quantity || 1;
+      const requestedQty = req.quantity || proposedQty;
+
+      if (requestedQty > proposedQty) {
+        const validQty = Math.min(requestedQty, proposedQty);
+        if (validQty <= 0) {
+          rejectedItems.push({
+            item: sourceInst,
+            reason: 'Bestätigung ungültig: Die angeforderte Menge ist nicht mehr im Vorschlag vorhanden.'
+          });
+          return;
+        }
+        validatedItemsToTake.push({
+          itemInstanceId: sourceInst.id,
+          item: sourceInst,
+          quantity: validQty
+        });
+      } else {
+        validatedItemsToTake.push({
+          itemInstanceId: sourceInst.id,
+          item: sourceInst,
+          quantity: requestedQty
+        });
+      }
+    });
+
+    if (validatedItemsToTake.length === 0) {
+      return {
+        updatedAdventure: adventure,
+        acceptedItems: [],
+        rejectedItems,
+        notifications: []
+      };
+    }
+
+    const executionResult = this.executePickup(
+      adventure,
+      targetId,
+      validatedItemsToTake,
+      { ...options, confirmed: true }
+    );
+
+    let updatedAdv = executionResult.updatedAdventure;
+
+    if (options?.sourceId || detectedSourceId) {
+      updatedAdv = this.syncLootSourceHarvestState(updatedAdv, (options?.sourceId || detectedSourceId)!);
+    }
+
+    return {
+      updatedAdventure: updatedAdv,
+      acceptedItems: executionResult.acceptedItems,
+      rejectedItems: [...rejectedItems, ...executionResult.rejectedItems],
+      notifications: executionResult.notifications
+    };
   }
 
   /**
@@ -301,6 +434,7 @@ export class InventoryLootService {
     options?: {
       sourceId?: string;
       allowPartial?: boolean;
+      confirmed?: boolean;
     }
   ): {
     updatedAdventure: Adventure;
@@ -308,13 +442,12 @@ export class InventoryLootService {
     rejectedItems: { item: ItemInstance; reason: string }[];
     notifications: InventoryNotification[];
   } {
-    return this.pickupItems(adventure, targetIdentifier, itemsToTake, options);
+    return this.performPickupExecution(adventure, targetIdentifier, itemsToTake, { ...options, confirmed: true });
   }
 
   /**
-   * Execute pickup of items into a character's inventory with weight validation & partial pickup support.
-   * Priority: Exact itemInstanceId. Never fall back to name matching if itemInstanceId is provided!
-   * Handles quantity splits cleanly: taken portion keeps original itemInstanceId, rest portion receives a NEW unique itemInstanceId.
+   * Public entry point for item pickup attempts.
+   * Under always_confirm, direct unconfirmed calls create a PendingPickupProposal without mutating inventory.
    */
   public static pickupItems(
     adventure: Adventure,
@@ -323,6 +456,107 @@ export class InventoryLootService {
     options?: {
       sourceId?: string;
       allowPartial?: boolean;
+      confirmed?: boolean;
+    }
+  ): {
+    updatedAdventure: Adventure;
+    acceptedItems: ItemInstance[];
+    rejectedItems: { item: ItemInstance; reason: string }[];
+    notifications: InventoryNotification[];
+  } {
+    const targetId = EquipmentConditionService.resolveTargetId(adventure, targetIdentifier);
+
+    if (options?.confirmed || targetId !== 'player') {
+      return this.performPickupExecution(adventure, targetIdentifier, itemsToTake, options);
+    }
+
+    const mode = adventure.inventorySettings?.pickupConfirmationMode || 'always_confirm';
+    const capacity = this.getCarryCapacity(adventure, targetId);
+
+    const autoItems: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[] = [];
+    const pendingItems: ItemInstance[] = [];
+    const rejectedItems: { item: ItemInstance; reason: string }[] = [];
+
+    itemsToTake.forEach(req => {
+      let inst: ItemInstance | null = req.item || null;
+      if (req.itemInstanceId) {
+        for (const ls of (adventure.lootSources || [])) {
+          const f = (ls.items || []).find(i => i.id === req.itemInstanceId);
+          if (f) { inst = f; break; }
+        }
+        if (!inst) {
+          const wd = (adventure.worldDrops || []).find(w => w.itemInstance.id === req.itemInstanceId);
+          if (wd) inst = wd.itemInstance;
+        }
+        if (!inst) {
+          inst = (adventure.itemInstances || []).find(i => i.id === req.itemInstanceId) || null;
+        }
+      }
+
+      if (!inst) {
+        rejectedItems.push({
+          item: { id: req.itemInstanceId || 'unknown', itemDefinitionId: 'def', name: 'Gegenstand' },
+          reason: 'Spezifische Gegenstands-ID im Zustand nicht gefunden.'
+        });
+        return;
+      }
+
+      if (this.isAutoPickupAllowed(inst, mode, capacity.remainingCapacityKg)) {
+        autoItems.push(req);
+      } else {
+        pendingItems.push(inst);
+        rejectedItems.push({
+          item: inst,
+          reason: 'Aufnahmebestätigung erforderlich (always_confirm).'
+        });
+      }
+    });
+
+    let updatedAdv = { ...adventure };
+    let acceptedItems: ItemInstance[] = [];
+    let notifications: InventoryNotification[] = [];
+
+    if (autoItems.length > 0) {
+      const autoRes = this.performPickupExecution(updatedAdv, targetIdentifier, autoItems, { ...options, confirmed: true });
+      updatedAdv = autoRes.updatedAdventure;
+      acceptedItems = autoRes.acceptedItems;
+      notifications = autoRes.notifications;
+      rejectedItems.push(...autoRes.rejectedItems);
+    }
+
+    if (pendingItems.length > 0) {
+      const proposal: PendingPickupProposal = {
+        id: `pickup-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        sourceTitle: options?.sourceId ? ((adventure.lootSources || []).find(s => s.id === options.sourceId)?.title || 'Fundstück') : 'Fundstück',
+        sourceType: options?.sourceId ? 'defeated_enemy' : 'world_item',
+        items: pendingItems,
+        timestamp: new Date().toISOString()
+      };
+      updatedAdv = {
+        ...updatedAdv,
+        pendingPickup: proposal
+      };
+    }
+
+    return {
+      updatedAdventure: updatedAdv,
+      acceptedItems,
+      rejectedItems,
+      notifications
+    };
+  }
+
+  /**
+   * Internal performPickupExecution performing concrete inventory mutations.
+   */
+  public static performPickupExecution(
+    adventure: Adventure,
+    targetIdentifier: string = 'player',
+    itemsToTake: { itemInstanceId?: string; item?: ItemInstance; quantity?: number }[],
+    options?: {
+      sourceId?: string;
+      allowPartial?: boolean;
+      confirmed?: boolean;
     }
   ): {
     updatedAdventure: Adventure;
@@ -898,7 +1132,9 @@ export class InventoryLootService {
         ? (isFullyHarvested
             ? `Monsterkristalle geborgen (${perfSummary}).`
             : `Teil der Monsterkristalle geborgen (${perfSummary}). Verbleibende Kristalle liegen an der Quelle.`)
-        : `Kristalle erzeugt, konnten aber wegen voller Traglast nicht aufgenommen werden (${perfSummary}). Sie liegen weiterhin am Kadaver.`;
+        : updatedAdv.pendingPickup
+            ? `Monsterkristalle freigelegt (${perfSummary}). Aufnahmebestätigung erforderlich.`
+            : `Kristalle erzeugt, konnten aber wegen voller Traglast nicht aufgenommen werden (${perfSummary}). Sie liegen weiterhin am Kadaver.`;
 
       return {
         updatedAdventure: updatedAdv,
@@ -980,7 +1216,9 @@ export class InventoryLootService {
         ? (isFullyHarvested
             ? `Kadaver zerlegt und Ressourcen gewonnen (${perfSummary}).`
             : `Teil der zerlegten Ressourcen aufgenommen (${perfSummary}). Der Rest liegt weiterhin an der Quelle.`)
-        : `Zerlegte Teile liegen an der Quelle, konnten aber wegen Traglast nicht aufgenommen werden (${perfSummary}).`;
+        : updatedAdv.pendingPickup
+            ? `Kadaver zerlegt und Ressourcen freigelegt (${perfSummary}). Aufnahmebestätigung erforderlich.`
+            : `Zerlegte Teile liegen an der Quelle, konnten aber wegen Traglast nicht aufgenommen werden (${perfSummary}).`;
 
       return {
         updatedAdventure: updatedAdv,
