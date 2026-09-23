@@ -543,21 +543,6 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     return entities.filter(e => !e.promotedToCodex && e.isNewInStory !== false).length;
   }, [adventure.storyState?.storyEntities]);
 
-  const availableReiseCount = React.useMemo(() => {
-    const loreDatabase = adventure.loreDatabase || [];
-    const locationEntries = loreDatabase.filter(l => l.category === 'Orte');
-    const effectiveKnowledge = CharacterKnowledgeService.getEffectiveKnowledge(adventure);
-    const knownLocationsList = locationEntries.filter(loc => {
-      return CharacterKnowledgeService.isLocationKnown(
-        { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
-        effectiveKnowledge,
-        adventure.player,
-        adventure.world
-      );
-    });
-    return knownLocationsList.length;
-  }, [adventure.loreDatabase, adventure.player, adventure.world]);
-
   const sanitizeCodexDetails = (category: string, details: Record<string, any> = {}) => {
     if (category === 'Gegenstände' || category === 'Waren' || category === 'Ressourcen') {
       const {
@@ -1609,36 +1594,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       loreEntries: adventure.loreDatabase,
       territories: adventure.world?.territories
     };
-
-    if (!LocationContextService.isCharacterAtLocation(npc, locCtx, locOptions)) {
-      return false; // Not at the player's location context!
-    }
-
-    const escapeRegExp = (string: string) => {
-      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    };
-
-    const aliases = [npc.name, npc.nickname, npc.rufName, (npc as any).details?.nickname, (npc as any).details?.rufName]
-      .filter(Boolean)
-      .map(n => escapeRegExp(n!));
-    
-    if (aliases.length === 0) return false;
-    const regex = new RegExp(`\\b(?:${aliases.join('|')})\\b`, 'i');
-
-    // Check if the NPC is mentioned in the recent chat history
-    if (!messages || messages.length === 0) {
-      // Look in prologue only if no messages exist yet
-      const p = adventure.prologue || '';
-      return regex.test(p);
-    }
-
-    // Combine the text of the last 4 messages (which represents the active scene/encounter)
-    // We only scan actual messages, ignoring background lore/prologue once the game has messages,
-    // to prevent far-away character mentions in prologue from polluting the active scene
-    const recentMsgs = messages.slice(-4);
-    const combinedText = recentMsgs.map(m => m.text || '').join(' ');
-
-    return regex.test(combinedText);
+    return LocationContextService.isCharacterAtLocation(npc, locCtx, locOptions);
   };
 
   const parseGroupCountFromText = (groupName: string, rawText: any): number | undefined => {
@@ -5521,6 +5477,48 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
     return nonPlayerPresent;
   }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player, adventure.world?.economyConfig?.holdings, adventure.world?.territories]);
 
+  // Combined available hostile characters (strictly filtered by current location presence)
+  const availableCombatOpponents = React.useMemo(() => {
+    const allChars = getAllAdventureCharacters(adventure);
+    const locCtx = LocationContextService.resolveCurrentLocation(adventure);
+    const locOptions = {
+      holdings: adventure.world?.economyConfig?.holdings,
+      loreEntries: adventure.loreDatabase,
+      territories: adventure.world?.territories
+    };
+    const presentChars = LocationContextService.filterPresentCharacters(allChars, locCtx, locOptions);
+    const hostilesPresent = presentChars.filter(char => {
+      if (char.id === 'player') return false;
+      if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, char.name || (char as any).title)) return false;
+      
+      const isHostileField = char.isHostile || (char as any).details?.isHostile || (char as any).category === 'Gegner' || (char as any).role?.toLowerCase().includes('gegner') || (char as any).role?.toLowerCase().includes('feind');
+      return !!isHostileField;
+    });
+    return hostilesPresent;
+  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player, adventure.world?.economyConfig?.holdings, adventure.world?.territories]);
+
+  // Available travel targets count from Navigation system (using known locations)
+  const availableTravelTargetsCount = React.useMemo(() => {
+    const loreDatabase = adventure.loreDatabase || [];
+    const locationEntries = loreDatabase.filter(l => l.category === 'Orte');
+    const effectiveKnowledge = CharacterKnowledgeService.getEffectiveKnowledge(adventure);
+    const knownLocationsList = locationEntries.filter(loc => {
+      return CharacterKnowledgeService.isLocationKnown(
+        { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
+        effectiveKnowledge,
+        adventure.player,
+        adventure.world
+      );
+    });
+    return knownLocationsList.length;
+  }, [adventure.loreDatabase, adventure.player, adventure.world]);
+
+  // Most specific location name of the player for the chat-steering bar header
+  const mostSpecificLocationName = React.useMemo(() => {
+    const loc = LocationContextService.resolveCurrentLocation(adventure);
+    return LocationContextService.formatMostSpecificLocation(loc, adventure.world?.economyConfig?.holdings, adventure.loreDatabase, adventure.world?.territories);
+  }, [adventure.currentLocation, adventure.storyState?.currentLocationContext, adventure.world?.economyConfig?.holdings, adventure.loreDatabase, adventure.world?.territories]);
+
   // Set default speaker IDs when npcs change or on mount
   useEffect(() => {
     if (availableDialogueNpcs && availableDialogueNpcs.length > 0) {
@@ -9087,6 +9085,14 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               </div>
             )}
 
+            {/* Spezifische Standort-Anzeige */}
+            <div className="px-3 mb-1.5 flex items-center justify-between text-[10.5px] text-slate-400 font-medium font-sans">
+              <span className="flex items-center gap-1.5">
+                <i className="fa-solid fa-location-dot text-amber-500 text-xs shrink-0"></i>
+                <span className="font-semibold text-slate-350">{mostSpecificLocationName}</span>
+              </span>
+            </div>
+
             {/* Zentrale Chat-Steuerleiste */}
             <div className="flex items-center justify-between gap-1 bg-slate-900 border border-slate-800/80 rounded-2xl p-1.5 mb-2.5 mx-1 shadow-lg backdrop-blur-md z-25 font-sans">
               
@@ -9115,9 +9121,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <span className="hidden sm:inline truncate">
                   {isCombatActive ? 'Kampf aktiv' : 'Kampf'}
                 </span>
-                {combinedDetectedEnemies.length > 0 && (
-                  <span className="absolute -top-1 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[8px] font-black text-white font-mono leading-none shadow-sm border border-slate-950/20 z-10">
-                    {combinedDetectedEnemies.length}
+                {availableCombatOpponents.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-red-600 text-white">
+                    {availableCombatOpponents.length}
                   </span>
                 )}
               </button>
@@ -9151,7 +9157,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   {isDialogueActive ? 'Dialog aktiv' : 'Dialog'}
                 </span>
                 {availableDialogueNpcs.length > 0 && (
-                  <span className="absolute -top-1 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[8px] font-black text-slate-950 font-mono leading-none shadow-sm border border-slate-950/20 z-10">
+                  <span className="absolute -top-1.5 -right-1.5 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-amber-500 text-slate-955 font-extrabold">
                     {availableDialogueNpcs.length}
                   </span>
                 )}
@@ -9171,9 +9177,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               >
                 <i className="fa-solid fa-compass text-sm text-teal-400"></i>
                 <span className="hidden sm:inline truncate">Reise</span>
-                {availableReiseCount > 0 && (
-                  <span className="absolute -top-1 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-teal-500 px-1 text-[8px] font-black text-slate-950 font-mono leading-none shadow-sm border border-slate-950/20 z-10">
-                    {availableReiseCount}
+                {availableTravelTargetsCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-teal-500 text-slate-955 font-extrabold">
+                    {availableTravelTargetsCount}
                   </span>
                 )}
               </button>
@@ -9193,7 +9199,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <Info className="w-4 h-4 text-indigo-400 shrink-0" />
                 <span className="hidden sm:inline truncate">Story</span>
                 {pendingStoryEntitiesCount > 0 && (
-                  <span className="absolute -top-1 -right-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-500 px-1 text-[8px] font-black text-white font-mono leading-none shadow-sm border border-slate-950/20 z-10">
+                  <span className="absolute -top-1.5 -right-1.5 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-indigo-500 text-white font-extrabold">
                     {pendingStoryEntitiesCount}
                   </span>
                 )}

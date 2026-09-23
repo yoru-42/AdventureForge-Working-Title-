@@ -663,32 +663,6 @@ export class LocationContextService {
   }
 
   /**
-   * Formats only the most specific part of a location context (e.g. "Schankraum" or "Taverne" or "Falkengrund").
-   */
-  public static formatMostSpecificLocation(location: CurrentLocationContext | null | undefined): string {
-    if (!location) return 'Unbekannt';
-    if (location.roomName && location.roomName.trim()) {
-      return location.roomName.trim();
-    }
-    if (location.buildingName && location.buildingName.trim()) {
-      return location.buildingName.trim();
-    }
-    if (location.locationName && location.locationName.trim()) {
-      return location.locationName.trim();
-    }
-    if (location.territoryName && location.territoryName.trim()) {
-      return location.territoryName.trim();
-    }
-    if (location.regionName && location.regionName.trim()) {
-      return location.regionName.trim();
-    }
-    if (location.worldName && location.worldName.trim()) {
-      return location.worldName.trim();
-    }
-    return 'Startgebiet';
-  }
-
-  /**
    * Helper to normalize location strings and names for clean, exact comparison without loose substring flaws.
    */
   public static normalizeLocationName(s?: string): string {
@@ -1078,5 +1052,28 @@ export class LocationContextService {
     }
 
     return undefined;
+  }
+
+  /**
+   * Formats the location to return ONLY the most specific known location name.
+   * If a full hierarchy string is passed or a context object, it extracts and returns the single most specific level.
+   */
+  public static formatMostSpecificLocation(
+    input: any,
+    holdings: any[] = [],
+    loreEntries: any[] = [],
+    territories: any[] = []
+  ): string {
+    if (!input) return 'Startgebiet';
+
+    let ctx: CurrentLocationContext;
+    if (typeof input === 'string') {
+      ctx = this.parseLocationString(input, holdings, loreEntries, territories);
+    } else {
+      ctx = input as CurrentLocationContext;
+    }
+
+    const specific = ctx.roomName || ctx.buildingName || ctx.locationName || ctx.territoryName || ctx.regionName || ctx.worldName;
+    return specific || 'Startgebiet';
   }
 }
