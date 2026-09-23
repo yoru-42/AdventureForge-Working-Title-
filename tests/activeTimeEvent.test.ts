@@ -273,7 +273,7 @@ export function runATETests(): { passed: number; failed: number; errors: string[
   }
 
   // -------------------------------------------------------------
-  // Test 8: Observable Foreshadowing Clues
+  // Test 8: Clue erzeugt kein automatisches Wissen (Test A)
   // -------------------------------------------------------------
   try {
     let adv = createTestAdventure();
@@ -282,11 +282,40 @@ export function runATETests(): { passed: number; failed: number; errors: string[
     adv = res.updatedAdventure;
 
     const knowledgeEntries = adv.characterKnowledge?.discoveredInformation || [];
-    const clueAdded = knowledgeEntries.some(k => k.summary?.includes('Gerücht: Ein Bote verlässt den Kontor mit Siegelwachs.') || k.sourceEvent?.description?.includes('Ein Bote verlässt den Kontor mit Siegelwachs.'));
-    assert(clueAdded, 'Test 8: Foreshadowing clue is correctly logged as rumor in character knowledge');
+    const clueAddedAutomatically = knowledgeEntries.some(k => k.summary?.includes('Ein Bote verlässt den Kontor') || k.entityName?.includes('Ein Bote verlässt den Kontor'));
+    assert(!clueAddedAutomatically, 'Test 8a: Foreshadowing clue is NOT automatically added to character knowledge');
+    assert(res.newCluesGenerated.includes('Ein Bote verlässt den Kontor mit Siegelwachs.'), 'Test 8b: Clue was successfully generated as a world development element');
   } catch (err: any) {
     failed++;
     errors.push(`Test 8 Exception: ${err.message}`);
+  }
+
+  // -------------------------------------------------------------
+  // Test 8_B: Zugänglicher Clue kann Wissen erzeugen (Test B)
+  // -------------------------------------------------------------
+  try {
+    let adv = createTestAdventure();
+    adv.worldTime = { day: 1, hour: 11, minute: 0 }; // 180m -> stage 1
+    const res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 180 });
+    adv = res.updatedAdventure;
+
+    // Standard knowledge mechanic adds the clue explicitly when the player learns of it
+    adv = CharacterKnowledgeService.addKnowledgeEntry(adv, {
+      category: 'lore',
+      entityId: 'knowledge_ate_clue_1',
+      entityName: 'Ein Bote verlässt den Kontor',
+      summary: 'Ein Bote verlässt den Kontor mit Siegelwachs.',
+      description: 'Der Spieler hört Händler über einen Boten tuscheln.',
+      sourceType: 'conversation',
+      sourceCharacterName: 'Händler-Getratsch'
+    });
+
+    const knowledgeEntries = adv.characterKnowledge?.discoveredInformation || [];
+    const clueAddedManually = knowledgeEntries.some(k => k.summary?.includes('Ein Bote verlässt den Kontor mit Siegelwachs.'));
+    assert(clueAddedManually, 'Test 8_B: Clue successfully added using the standard knowledge mechanic');
+  } catch (err: any) {
+    failed++;
+    errors.push(`Test 8_B Exception: ${err.message}`);
   }
 
   // -------------------------------------------------------------
@@ -390,7 +419,8 @@ export function runATETests(): { passed: number; failed: number; errors: string[
 
     const updatedAdv = simRes.updatedAdventure!;
     const knowledgeEntries = updatedAdv.characterKnowledge?.discoveredInformation || [];
-    assert(knowledgeEntries.length > 0, 'Test 13: WorldSimulationStep generates knowledge entries from ATE foreshadowing clues');
+    assert(knowledgeEntries.length === 0, 'Test 13a: WorldSimulationStep does NOT automatically generate knowledge entries for player');
+    assert(simRes.newCluesGenerated && simRes.newCluesGenerated.length > 0, 'Test 13b: WorldSimulationStep collects newly generated world clues');
   } catch (err: any) {
     failed++;
     errors.push(`Test 13 Exception: ${err.message}`);
@@ -453,6 +483,154 @@ export function runATETests(): { passed: number; failed: number; errors: string[
   } catch (err: any) {
     failed++;
     errors.push(`Test 16 Exception: ${err.message}`);
+  }
+
+  // -------------------------------------------------------------
+  // Test 17: Character Presence Verification (requiredCharacterIds)
+  // -------------------------------------------------------------
+  try {
+    const charAte = ActiveTimeEventService.createATE({
+      id: 'ate_char_req',
+      title: 'Geheimes Treffen der Garde',
+      summary: 'Ein Gardist muss anwesend sein.',
+      stages: [
+        { stageIndex: 0, title: 'Warten', triggerTimeMinutes: 0 }
+      ],
+      structuredConvergenceCondition: {
+        requiredStageIndex: 0,
+        requiredCharacterIds: ['guard_npc_01']
+      },
+      convergenceConsequence: 'Der Gardist spricht mit dem Spieler.'
+    });
+
+    let adv = createTestAdventure();
+    adv.activeTimeEvents = [charAte];
+
+    // Case 1: NPC is not in npcs array at all
+    let res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    assert(ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure)[0].status === 'active', 'Test 17a: Does not converge when required NPC is completely missing');
+
+    // Case 2: NPC is in npcs array, but absent
+    adv.npcs = [{
+      id: 'guard_npc_01',
+      name: 'Hauptmann Alistair',
+      role: 'Garde-Hauptmann',
+      bio: 'Ein erfahrener Soldat.',
+      personality: 'Pflichtbewusst',
+      relationship: 'Neutral',
+      conduct: 'Neutral',
+      currentSituation: 'Abwesend',
+      presenceState: { state: 'absent', updatedAt: new Date().toISOString() },
+      currentLocationContext: {},
+      appearance: { hairColor: 'Grau', eyeColor: 'Blau', age: '45', build: 'Kräftig', gender: 'männlich' },
+      campaignPowerLevels: {},
+      attributes: [],
+      isHostile: false
+    }];
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    assert(ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure)[0].status === 'active', 'Test 17b: Does not converge when required NPC is presentState = "absent"');
+
+    // Case 3: NPC is present
+    adv.npcs[0].presenceState = { state: 'present', updatedAt: new Date().toISOString() };
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    assert(ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure)[0].status === 'converged', 'Test 17c: Converges successfully when required NPC is presentState = "present"');
+  } catch (err: any) {
+    failed++;
+    errors.push(`Test 17 Exception: ${err.message}`);
+  }
+
+  // -------------------------------------------------------------
+  // Test 18: Faction Presence Verification (requiredFactionIds)
+  // -------------------------------------------------------------
+  try {
+    const factionAte = ActiveTimeEventService.createATE({
+      id: 'ate_faction_req',
+      title: 'Besatzung der Gilde',
+      summary: 'Die Gilde muss die Stadt kontrollieren.',
+      stages: [
+        { stageIndex: 0, title: 'Warten', triggerTimeMinutes: 0 }
+      ],
+      structuredConvergenceCondition: {
+        requiredStageIndex: 0,
+        requiredFactionIds: ['gilde_faction_01']
+      },
+      convergenceConsequence: 'Die Gilde zieht Zölle ein.'
+    });
+
+    let adv = createTestAdventure();
+    adv.activeTimeEvents = [factionAte];
+
+    // Case 1: Faction is not active/present in world
+    let res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    assert(ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure)[0].status === 'active', 'Test 18a: Does not converge when faction has no world presence');
+
+    // Case 2: Faction controls a territory
+    adv.world.territories = [{
+      id: 't1',
+      name: 'Marktgebiet',
+      controlledByFactionId: 'gilde_faction_01',
+      placeMarkers: [],
+      connectedTerritoryIds: [],
+      connectionMetrics: {}
+    } as any];
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10 });
+    assert(ActiveTimeEventService.getActiveTimeEvents(res.updatedAdventure)[0].status === 'converged', 'Test 18b: Converges successfully when faction controls a territory');
+  } catch (err: any) {
+    failed++;
+    errors.push(`Test 18 Exception: ${err.message}`);
+  }
+
+  // -------------------------------------------------------------
+  // Test 19: Multi-condition Structured Convergence Logic (AND check)
+  // -------------------------------------------------------------
+  try {
+    const multiAte = ActiveTimeEventService.createATE({
+      id: 'ate_multi_req',
+      title: 'Die große Verschwörung',
+      summary: 'Erfordert Stufe 1, bestimmten Ort und ein gefundenes Beweisstück.',
+      stages: [
+        { stageIndex: 0, title: 'Start', triggerTimeMinutes: 0 },
+        { stageIndex: 1, title: 'Beweise gesammelt', triggerTimeMinutes: 120 }
+      ],
+      structuredConvergenceCondition: {
+        requiredStageIndex: 1,
+        requiredLocationName: 'Rathaus',
+        requiredWorldFacts: ['Verschwörungs-Dokument']
+      },
+      convergenceConsequence: 'Die Verschwörung wird aufgedeckt.'
+    });
+
+    let adv = createTestAdventure();
+    adv.activeTimeEvents = [multiAte];
+
+    // Case 1: Only stage 1 is reached (time advanced to 120m), but wrong location and no facts
+    adv.worldTime = { day: 1, hour: 10, minute: 0 };
+    let res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 120, currentLocationName: 'Marktplatz' });
+    adv = res.updatedAdventure;
+    assert(ActiveTimeEventService.getActiveTimeEvents(adv)[0].currentStageIndex === 1, 'Pre-test 19: ATE advanced to stage 1');
+    assert(ActiveTimeEventService.getActiveTimeEvents(adv)[0].status === 'active', 'Test 19a: Does not converge with only stage met');
+
+    // Case 2: Stage 1 and correct location, but missing world facts
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10, currentLocationName: 'Rathaus' });
+    adv = res.updatedAdventure;
+    assert(ActiveTimeEventService.getActiveTimeEvents(adv)[0].status === 'active', 'Test 19b: Does not converge with stage and location met but missing fact');
+
+    // Case 3: All conditions met (stage 1, location Rathaus, fact added to world facts)
+    adv.world.facts = [{
+      id: 'f1',
+      subjectId: 'verschwörung',
+      predicate: 'Verschwörungs-Dokument',
+      sourceType: 'established_story',
+      status: 'known',
+      knowledgeType: 'fact',
+      note: 'Ein belastendes Schriftstück.'
+    }];
+    res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 10, currentLocationName: 'Rathaus' });
+    adv = res.updatedAdventure;
+    assert(ActiveTimeEventService.getActiveTimeEvents(adv)[0].status === 'converged', 'Test 19c: Converges successfully when ALL conditions (stage, location, and fact) are met simultaneously');
+  } catch (err: any) {
+    failed++;
+    errors.push(`Test 19 Exception: ${err.message}`);
   }
 
   console.log(`\nATE V2 TEST RESULTS: ${passed} Passed, ${failed} Failed.`);

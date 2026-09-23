@@ -158,11 +158,12 @@ export class ActiveTimeEventService {
 
       // 2. Location Requirement
       if (sCond.requiredLocationName || sCond.requiredLocationId) {
-        const playerLocName = currentLocationName || adventure.currentLocation?.locationName || '';
+        const playerLocName = currentLocationName || adventure.currentLocation?.locationName || adventure.player?.appearance?.currentLocation || '';
         const playerLocId = adventure.currentLocation?.locationId || '';
 
         const nameMatch = sCond.requiredLocationName
-          ? playerLocName.toLowerCase().includes(sCond.requiredLocationName.toLowerCase())
+          ? playerLocName.toLowerCase().includes(sCond.requiredLocationName.toLowerCase()) ||
+            sCond.requiredLocationName.toLowerCase().includes(playerLocName.toLowerCase())
           : true;
         const idMatch = sCond.requiredLocationId
           ? playerLocId === sCond.requiredLocationId
@@ -180,7 +181,7 @@ export class ActiveTimeEventService {
 
         const allMet = sCond.requiredWorldFacts.every(rf => {
           const inFacts = worldFacts.some((f: any) => f.predicate === rf || f.factText?.includes(rf) || f.note?.includes(rf));
-          const inKnowledge = knowledgeEntries.some((k: any) => k.summary?.includes(rf) || k.description?.includes(rf));
+          const inKnowledge = knowledgeEntries.some((k: any) => k.summary?.includes(rf) || k.sourceEvent?.description?.includes(rf));
           return inFacts || inKnowledge;
         });
 
@@ -189,7 +190,43 @@ export class ActiveTimeEventService {
         }
       }
 
-      // 4. Minimum Elapsed World Time
+      // 4. Required Character IDs
+      if (sCond.requiredCharacterIds && sCond.requiredCharacterIds.length > 0) {
+        const activeNpcs = (adventure.npcs || []).filter(n => {
+          return n.presenceState?.state === 'present' || n.presenceState?.state === 'scene_participant';
+        });
+        const activeNpcIds = new Set(activeNpcs.map(n => n.id));
+        const allCharsMet = sCond.requiredCharacterIds.every(cid => activeNpcIds.has(cid));
+        if (!allCharsMet) {
+          return { satisfied: false, reason: 'Required character(s) not present or active in world context.' };
+        }
+      }
+
+      // 5. Required Faction IDs
+      if (sCond.requiredFactionIds && sCond.requiredFactionIds.length > 0) {
+        const territories = adventure.world?.territories || [];
+        const holdings = adventure.world?.economyConfig?.holdings || [];
+        const activeNpcs = (adventure.npcs || []).filter(n => {
+          return n.presenceState?.state === 'present' || n.presenceState?.state === 'scene_participant';
+        });
+
+        const allFactionsMet = sCond.requiredFactionIds.every(fid => {
+          // Check if controls any territory
+          const controlsTerritory = territories.some(t => t.controlledByFactionId === fid);
+          // Check if owns/controls any holding
+          const controlsHolding = holdings.some(h => h.controlledByFactionId === fid || h.ownerFactionId === fid);
+          // Check if an active NPC is in this faction
+          const activeNpcMember = activeNpcs.some(n => (n as any).factionId === fid || (n as any).associatedFactionIds?.includes(fid));
+
+          return controlsTerritory || controlsHolding || activeNpcMember;
+        });
+
+        if (!allFactionsMet) {
+          return { satisfied: false, reason: 'Required faction(s) not present or active in world context.' };
+        }
+      }
+
+      // 6. Minimum Elapsed World Time
       if (sCond.minWorldTimeMinutes !== undefined) {
         const currentWorldTime = adventure.worldTime || { day: 1, hour: 8, minute: 0 };
         const createdWorldTime = ate.createdAtWorldTime || { day: 1, hour: 8, minute: 0 };
@@ -200,29 +237,52 @@ export class ActiveTimeEventService {
         }
       }
 
+      // 7. Custom Predicate evaluation (safe parser without eval)
+      if (sCond.customPredicate && sCond.customPredicate.trim()) {
+        const predStr = sCond.customPredicate.trim();
+
+        if (predStr === 'player_impact' || predStr === 'player_impact:true') {
+          if (!ate.playerImpactLogs || ate.playerImpactLogs.length === 0) {
+            return { satisfied: false, reason: 'Custom predicate requires player impact log.' };
+          }
+        } else if (predStr.startsWith('stage>=')) {
+          const reqStage = parseInt(predStr.split('>=')[1], 10);
+          if (!isNaN(reqStage) && ate.currentStageIndex < reqStage) {
+            return { satisfied: false, reason: `Custom predicate requires stage >= ${reqStage}.` };
+          }
+        } else if (predStr.startsWith('time>=')) {
+          const reqTime = parseInt(predStr.split('>=')[1], 10);
+          const currentWorldTime = adventure.worldTime || { day: 1, hour: 8, minute: 0 };
+          const createdWorldTime = ate.createdAtWorldTime || { day: 1, hour: 8, minute: 0 };
+          const totalElapsed = WorldSimulationService.toTotalMinutes(currentWorldTime) - WorldSimulationService.toTotalMinutes(createdWorldTime);
+          if (!isNaN(reqTime) && totalElapsed < reqTime) {
+            return { satisfied: false, reason: `Custom predicate requires time >= ${reqTime}.` };
+          }
+        }
+      }
+
       return { satisfied: true };
     }
 
     // Textual condition evaluation:
-    // Requires that the final stage (or stage >= 1) is reached AND player location matches or explicit player impact/trigger recorded
-    const isAtFinalStage = ate.currentStageIndex >= ate.stages.length - 1;
-    const playerLoc = currentLocationName || adventure.currentLocation?.locationName || '';
-    const isAtTargetLocation = ate.originLocationName && playerLoc
-      ? playerLoc.toLowerCase().includes(ate.originLocationName.toLowerCase()) || ate.originLocationName.toLowerCase().includes(playerLoc.toLowerCase())
-      : false;
-    const hasPlayerImpact = ate.playerImpactLogs && ate.playerImpactLogs.length > 0;
+    // CRITICAL: Final stage alone or final stage + same location ALONE does NOT trigger convergence!
+    // A textual condition requires explicit matching or player impact / explicit convergence trigger.
+    if (ate.convergenceCondition && ate.convergenceCondition.trim()) {
+      const condText = ate.convergenceCondition.toLowerCase();
+      const hasPlayerImpact = ate.playerImpactLogs && ate.playerImpactLogs.length > 0;
 
-    // Convergence requires: at final stage AND (player at target location OR player interacted with thread)
-    if (isAtFinalStage && (isAtTargetLocation || hasPlayerImpact)) {
-      return { satisfied: true };
+      // If condition explicitly mentions player action/impact and player has interacted
+      if (condText.includes('spieler') && condText.includes('einfluss') && hasPlayerImpact) {
+        return { satisfied: true };
+      }
     }
 
-    return { satisfied: false, reason: 'Textual convergence criteria not yet met.' };
+    return { satisfied: false, reason: 'No explicit convergence condition satisfied.' };
   }
 
   /**
    * Evaluates all active ATEs against cumulative elapsed world time, current player location, and world facts.
-   * Advances stages using cumulative time, generates foreshadowing clues into CharacterKnowledge, and handles convergence via structured conditions.
+   * Advances stages using cumulative time, generates foreshadowing clues into CharacterKnowledge (only if player is present/perceives it), and handles convergence via structured conditions.
    */
   public static evaluateAndAdvanceATEs(params: {
     adventure: Adventure;
@@ -314,18 +374,10 @@ export class ActiveTimeEventService {
               updatedAte.revealLevel = 'foreshadowed';
             }
 
+            // Foreshadowing clues stay part of ATE/world development.
+            // They do NOT automatically enter the player's Character Knowledge.
             nextStage.foreshadowingClues.forEach(clue => {
               newCluesGenerated.push(clue);
-              currentAdventure = CharacterKnowledgeService.addKnowledgeEntry(currentAdventure, {
-                category: 'lore',
-                entityId: updatedAte.id,
-                entityName: updatedAte.title,
-                summary: `Gerücht: ${clue}`,
-                sourceType: 'conversation',
-                sourceCharacterName: 'Beobachtung / Gerücht',
-                reliability: 'rumor',
-                description: clue
-              });
             });
           }
           // Continue loop to see if the next stage is ALSO due in this time window!
