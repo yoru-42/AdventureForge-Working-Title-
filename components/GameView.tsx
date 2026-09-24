@@ -535,8 +535,6 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [showInventorySettingsModal, setShowInventorySettingsModal] = useState(false);
   const [showCombatInventoryModal, setShowCombatInventoryModal] = useState(false);
   const [showPostCombatPanel, setShowPostCombatPanel] = useState(false);
-  const [isMoreMenuExpanded, setIsMoreMenuExpanded] = useState(false);
-  const [moreSubView, setMoreSubView] = useState<'main' | 'emotions' | 'tones' | 'favorites'>('main');
 
   const pendingStoryEntitiesCount = React.useMemo(() => {
     const entities = adventure.storyState?.storyEntities || [];
@@ -5519,6 +5517,90 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
     return LocationContextService.formatMostSpecificLocation(loc, adventure.world?.economyConfig?.holdings, adventure.loreDatabase, adventure.world?.territories);
   }, [adventure.currentLocation, adventure.storyState?.currentLocationContext, adventure.world?.economyConfig?.holdings, adventure.loreDatabase, adventure.world?.territories]);
 
+  // Unified Chat Control Tabs & State
+  type ControlTab = 'combat' | 'dialogue' | 'expression' | 'techniques' | 'travel' | 'story' | 'inventory' | 'management';
+  const [activeControlTab, setActiveControlTab] = useState<ControlTab | null>(null);
+  const [expressionSubTab, setExpressionSubTab] = useState<'emotion' | 'tone'>('emotion');
+
+  const currentActiveEmotion = adventure.player?.emotionState?.emotion || adventure.emotionState?.emotion || '';
+  const currentActiveTone = adventure.player?.emotionState?.tone || adventure.emotionState?.tone || '';
+
+  const handleClearExpression = () => {
+    const newEmotionState = {
+      ...(adventure.player?.emotionState || {}),
+      emotion: '',
+      tone: '',
+      lastUpdated: new Date().toISOString()
+    };
+    let updatedStatus = [...(adventure.statusElements || [])];
+    const emIdx = updatedStatus.findIndex(s => s.label.toLowerCase().includes('emotion'));
+    if (emIdx > -1) {
+      updatedStatus[emIdx] = { ...updatedStatus[emIdx], value: '' };
+    }
+    const toneIdx = updatedStatus.findIndex(s => s.label.toLowerCase().includes('tonart') || s.label.toLowerCase().includes('stimme'));
+    if (toneIdx > -1) {
+      updatedStatus[toneIdx] = { ...updatedStatus[toneIdx], value: '' };
+    }
+    onUpdateAdventure({
+      ...adventure,
+      emotionState: newEmotionState,
+      player: {
+        ...adventure.player,
+        emotionState: newEmotionState
+      },
+      statusElements: updatedStatus
+    });
+  };
+
+  const isCombatOpen = activeControlTab === 'combat' || isCombatMenuExpanded;
+  const isDialogueOpen = activeControlTab === 'dialogue' || isDialogueMenuExpanded;
+  const isExpressionOpen = activeControlTab === 'expression' || showEmotionMenu || showToneMenu;
+  const isTechniquesOpen = activeControlTab === 'techniques' || showFavoritesMenu;
+  const isTravelOpen = activeControlTab === 'travel';
+  const isStoryOpen = activeControlTab === 'story';
+  const isInventoryOpen = activeControlTab === 'inventory';
+  const isManagementOpen = activeControlTab === 'management';
+
+  const toggleControlTab = (tab: ControlTab) => {
+    if (activeControlTab === tab) {
+      setActiveControlTab(null);
+      setIsCombatMenuExpanded(false);
+      setIsDialogueMenuExpanded(false);
+      setShowEmotionMenu(false);
+      setShowToneMenu(false);
+      setShowFavoritesMenu(false);
+    } else {
+      setActiveControlTab(tab);
+      setIsCombatMenuExpanded(tab === 'combat');
+      setIsDialogueMenuExpanded(tab === 'dialogue');
+      setShowEmotionMenu(tab === 'expression');
+      setShowToneMenu(tab === 'expression');
+      setShowFavoritesMenu(tab === 'techniques');
+      if (tab === 'combat') {
+        setCombatSubMenu(isCombatActive ? 'main' : 'start');
+      }
+      if (tab === 'dialogue') {
+        if (availableDialogueNpcs && availableDialogueNpcs.length > 0) {
+          if (!dialogueSpeakerId || !availableDialogueNpcs.some(n => n.id === dialogueSpeakerId)) {
+            setDialogueSpeakerId(availableDialogueNpcs[0].id);
+          }
+          if (availableDialogueNpcs.length > 1 && (!dialogueTargetId || !availableDialogueNpcs.some(n => n.id === dialogueTargetId))) {
+            setDialogueTargetId(availableDialogueNpcs[1].id);
+          }
+        }
+      }
+    }
+  };
+
+  const closeAllControlTabs = () => {
+    setActiveControlTab(null);
+    setIsCombatMenuExpanded(false);
+    setIsDialogueMenuExpanded(false);
+    setShowEmotionMenu(false);
+    setShowToneMenu(false);
+    setShowFavoritesMenu(false);
+  };
+
   // Set default speaker IDs when npcs change or on mount
   useEffect(() => {
     if (availableDialogueNpcs && availableDialogueNpcs.length > 0) {
@@ -8333,7 +8415,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
           <div className="absolute bottom-0 left-0 right-0 p-3 pb-6 bg-gradient-to-t from-slate-950 to-transparent z-20">
           {/* Aufklappbares Dialog-Steuerpanel */}
-          {isDialogueMenuExpanded && (
+          {isDialogueOpen && (
             <div id="dialogue-control-menu" className="bg-slate-900/95 border-2 border-amber-500/40 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
               {/* Header */}
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -8344,10 +8426,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   </span>
                 </div>
                 <button 
-                  onClick={() => setIsDialogueMenuExpanded(false)}
+                  onClick={closeAllControlTabs}
                   className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1"
+                  title="Schließen"
                 >
-                  
+                  <i className="fa-solid fa-xmark"></i>
                 </button>
               </div>
 
@@ -8520,7 +8603,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           )}
 
           {/* Aufklappbares JRPG Kampf-Steuerpanel */}
-          {isCombatMenuExpanded && (
+          {isCombatOpen && (
             <div id="jrpg-combat-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1 left-4 animate-in slide-in-from-bottom duration-200 z-30">
               {/* Kopfzeile */}
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
@@ -8531,10 +8614,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   </span>
                 </div>
                 <button 
-                  onClick={() => setIsCombatMenuExpanded(false)}
+                  onClick={closeAllControlTabs}
                   className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1"
+                  title="Schließen"
                 >
-                  
+                  <i className="fa-solid fa-xmark"></i>
                 </button>
               </div>
 
@@ -8707,6 +8791,17 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       <i className="fa-solid fa-crosshairs"></i> {combinedDetectedEnemies.length > 0 && !customEnemyName.trim() ? `Alle ${combinedDetectedEnemies.length} Streitkräfte bekämpfen` : 'Kampf beginnen'}
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCombatInventoryModal(true);
+                      closeAllControlTabs();
+                    }}
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl text-xs font-bold transition-all border border-slate-700 flex items-center justify-center gap-1.5"
+                  >
+                    <i className="fa-solid fa-flask text-red-400"></i> Kampfinventar & Utensilien
+                  </button>
                 </div>
               </div>
             </div>
@@ -8740,244 +8835,137 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               </div>
             )}
             
-            {/* Aufklappbares Mehr-Steuerpanel */}
-            {isMoreMenuExpanded && (
-              <div id="more-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
-                
-                {/* HEADER WITH CONTEXTUAL BACK BUTTON */}
+            {/* Unified Popovers für die Funktionsbereiche */}
+
+            {/* AUSDRUCK TAB PANEL (Emotion + Stimme/Ton) */}
+            {isExpressionOpen && (
+              <div id="expression-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-md w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+                {/* Header */}
                 <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                   <div className="flex items-center gap-2">
-                    {moreSubView !== 'main' ? (
-                      <button 
-                        onClick={() => setMoreSubView('main')}
-                        className="text-amber-500 hover:text-amber-400 transition-colors text-xs flex items-center gap-1 font-semibold"
-                      >
-                        <i className="fa-solid fa-arrow-left"></i>
-                        <span>Zurück</span>
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <i className="fa-solid fa-ellipsis text-amber-500"></i>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
-                          Zusätzliche Aktionen
-                        </span>
-                      </div>
-                    )}
+                    <i className="fa-regular fa-face-smile text-amber-500 text-sm"></i>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">
+                      Ausdruck & Stimme
+                    </span>
                   </div>
                   <button 
-                    onClick={() => setIsMoreMenuExpanded(false)}
+                    type="button"
+                    onClick={closeAllControlTabs}
                     className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1"
+                    title="Schließen"
                   >
                     <i className="fa-solid fa-xmark"></i>
                   </button>
                 </div>
 
-                {/* VIEW: MAIN GRID */}
-                {moreSubView === 'main' && (
-                  <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
-                    
-                    {/* Kurze Rast */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleRestAction('short');
-                        setIsMoreMenuExpanded(false);
-                      }}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/30 transition-all text-left flex items-center gap-2.5"
-                    >
-                      <i className="fa-solid fa-mug-hot text-emerald-400 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate">Kurze Rast</div>
-                        <div className="text-[9px] text-slate-500 truncate">+30% HP & MP</div>
-                      </div>
-                    </button>
-
-                    {/* Lange Rast */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleRestAction('long');
-                        setIsMoreMenuExpanded(false);
-                      }}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-indigo-500/30 transition-all text-left flex items-center gap-2.5"
-                    >
-                      <i className="fa-solid fa-bed text-indigo-400 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate">Schlafen</div>
-                        <div className="text-[9px] text-slate-500 truncate">Lange Rast</div>
-                      </div>
-                    </button>
-
-                    {/* Handel & Verträge */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowTradeModal(true);
-                        setIsMoreMenuExpanded(false);
-                      }}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-emerald-500/30 transition-all text-left flex items-center gap-2.5"
-                    >
-                      <i className="fa-solid fa-handshake text-emerald-400 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate">Handel</div>
-                        <div className="text-[9px] text-slate-500 truncate">Tauschen & Verträge</div>
-                      </div>
-                    </button>
-
-                    {/* Sammelaufträge */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowCollectionTasksModal(true);
-                        setIsMoreMenuExpanded(false);
-                      }}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-sky-500/30 transition-all text-left flex items-center gap-2.5 relative"
-                    >
-                      <i className="fa-solid fa-clipboard-list text-sky-400 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate flex items-center gap-1.5">
-                          <span>Aufträge</span>
-                          {(adventure.collectionTasks || []).filter(t => t.status === 'active').length > 0 && (
-                            <span className="bg-sky-500 text-slate-950 font-bold text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-mono shrink-0">
-                              {(adventure.collectionTasks || []).filter(t => t.status === 'active').length}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[9px] text-slate-500 truncate">Sammeln & Bergung</div>
-                      </div>
-                    </button>
-
-                    {/* Aufgaben & Betriebsführung */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowWorkMenu(true);
-                        setIsMoreMenuExpanded(false);
-                      }}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/30 transition-all text-left flex items-center gap-2.5 relative"
-                    >
-                      <i className="fa-solid fa-list-check text-amber-400 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate flex items-center gap-1.5">
-                          <span>Betrieb</span>
-                          {pendingWorkTasksCount > 0 && (
-                            <span className="bg-amber-500 text-slate-950 font-bold text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-mono shrink-0">
-                              {pendingWorkTasksCount}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[9px] text-slate-500 truncate">Betriebsführung</div>
-                      </div>
-                    </button>
-
-                    {/* Aufnahme-Einstellungen */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowInventorySettingsModal(true);
-                        setIsMoreMenuExpanded(false);
-                      }}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-500/30 transition-all text-left flex items-center gap-2.5"
-                    >
-                      <i className="fa-solid fa-sliders text-slate-400 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate">Einstellung</div>
-                        <div className="text-[9px] text-slate-500 truncate">Aufnahme-Optionen</div>
-                      </div>
-                    </button>
-
-                    {/* Handlung beschreiben */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        insertFormatting('*', '*');
-                        setIsMoreMenuExpanded(false);
-                      }}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-slate-500/30 transition-all text-left flex items-center gap-2.5"
-                    >
-                      <i className="fa-solid fa-person-running text-slate-300 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate">Handlung</div>
-                        <div className="text-[9px] text-slate-500 truncate">Formatieren (*...*)</div>
-                      </div>
-                    </button>
-
-                    {/* Emotionen */}
-                    <button
-                      type="button"
-                      onClick={() => setMoreSubView('emotions')}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/30 transition-all text-left flex items-center gap-2.5"
-                    >
-                      <i className="fa-regular fa-face-smile text-amber-400 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate">Emotionen</div>
-                        <div className="text-[9px] text-slate-500 truncate">Gesichtsausdruck</div>
-                      </div>
-                    </button>
-
-                    {/* Stimme/Tonart */}
-                    <button
-                      type="button"
-                      onClick={() => setMoreSubView('tones')}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-sky-500/30 transition-all text-left flex items-center gap-2.5"
-                    >
-                      <i className="fa-solid fa-microphone-lines text-sky-400 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate">Stimmen-Ton</div>
-                        <div className="text-[9px] text-slate-500 truncate">Tonart wählen</div>
-                      </div>
-                    </button>
-
-                    {/* Favoriten */}
-                    <button
-                      type="button"
-                      onClick={() => setMoreSubView('favorites')}
-                      className="p-2.5 rounded-xl bg-slate-950/40 hover:bg-slate-800/80 border border-slate-800 hover:border-amber-500/30 transition-all text-left flex items-center gap-2.5"
-                    >
-                      <i className="fa-solid fa-star text-amber-500 text-sm shrink-0"></i>
-                      <div className="min-w-0">
-                        <div className="text-xs font-semibold text-slate-200 truncate">Favoriten</div>
-                        <div className="text-[9px] text-slate-500 truncate">Lieblingstechniken</div>
-                      </div>
-                    </button>
-
+                {/* Aktuelle Auswahl Strip */}
+                <div className="flex items-center justify-between bg-slate-950/60 p-2.5 rounded-xl border border-slate-850 text-xs">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="truncate">
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500 block font-bold">Emotion</span>
+                      <span className={`font-semibold ${currentActiveEmotion ? 'text-amber-400' : 'text-slate-400 italic'}`}>
+                        {currentActiveEmotion ? `${currentActiveEmotion} ✓` : 'Keine'}
+                      </span>
+                    </div>
+                    <div className="w-px h-6 bg-slate-800 shrink-0"></div>
+                    <div className="truncate">
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500 block font-bold">Stimme / Ton</span>
+                      <span className={`font-semibold ${currentActiveTone ? 'text-sky-400' : 'text-slate-400 italic'}`}>
+                        {currentActiveTone ? `${currentActiveTone} ✓` : 'Keine'}
+                      </span>
+                    </div>
                   </div>
-                )}
+                  {(currentActiveEmotion || currentActiveTone) && (
+                    <button
+                      type="button"
+                      onClick={handleClearExpression}
+                      className="text-[10px] font-bold text-slate-400 hover:text-red-400 bg-slate-900 hover:bg-slate-850 px-2 py-1 rounded-lg border border-slate-800 transition-colors shrink-0"
+                    >
+                      Zurücksetzen
+                    </button>
+                  )}
+                </div>
 
-                {/* VIEW: EMOTIONS */}
-                {moreSubView === 'emotions' && (
-                  <div className="space-y-2.5">
+                {/* Sub-Tabs: Emotion / Stimme */}
+                <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-850">
+                  <button
+                    type="button"
+                    onClick={() => setExpressionSubTab('emotion')}
+                    className={`py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 ${
+                      expressionSubTab === 'emotion'
+                        ? 'bg-amber-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <i className="fa-regular fa-face-smile text-xs"></i>
+                    <span>Emotion</span>
+                    {currentActiveEmotion && <span className="text-[9px]">✓</span>}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpressionSubTab('tone')}
+                    className={`py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 ${
+                      expressionSubTab === 'tone'
+                        ? 'bg-sky-600 text-white shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <i className="fa-solid fa-microphone-lines text-xs"></i>
+                    <span>Stimme / Ton</span>
+                    {currentActiveTone && <span className="text-[9px]">✓</span>}
+                  </button>
+                </div>
+
+                {/* Content: Emotion */}
+                {expressionSubTab === 'emotion' && (
+                  <div className="space-y-2">
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-1.5 flex items-center gap-2">
                       <i className="fa-solid fa-magnifying-glass text-slate-500 text-xs ml-1.5 shrink-0"></i>
                       <input
                         type="text"
                         value={emotionSearch}
                         onChange={(e) => setEmotionSearch(e.target.value)}
-                        placeholder="Emotion suchen..."
+                        placeholder="Emotion filtern..."
                         className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-600"
                         autoFocus
                       />
+                      {emotionSearch && (
+                        <button type="button" onClick={() => setEmotionSearch('')} className="text-slate-500 hover:text-slate-300 pr-1 text-xs">
+                          <i className="fa-solid fa-xmark"></i>
+                        </button>
+                      )}
                     </div>
                     <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar bg-slate-950/30 rounded-xl p-1 border border-slate-850">
                       {sortedEmotions
                         .filter(e => e.toLowerCase().includes(emotionSearch.toLowerCase().trim()))
                         .map(e => {
+                          const isSelected = currentActiveEmotion.toLowerCase() === e.toLowerCase();
                           const count = emotionUsage[e] || 0;
                           return (
                             <button
                               key={e}
+                              type="button"
                               onClick={() => {
-                                insertFormatting(`[schaut ${e}] `, '');
-                                handleSelectEmotion(e);
-                                setIsMoreMenuExpanded(false);
-                                setEmotionSearch('');
+                                if (isSelected) {
+                                  handleSelectEmotion('');
+                                } else {
+                                  insertFormatting(`[schaut ${e}] `, '');
+                                  handleSelectEmotion(e);
+                                }
                               }}
-                              className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center justify-between"
+                              className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                                isSelected
+                                  ? 'bg-amber-600/25 border border-amber-500/50 text-amber-200 font-bold'
+                                  : 'text-slate-300 hover:bg-slate-800 hover:text-white border border-transparent'
+                              }`}
                             >
-                              <span>{e}</span>
+                              <span className="flex items-center gap-1.5">
+                                {isSelected && <span className="text-amber-400 text-xs">✓</span>}
+                                <span>{e}</span>
+                              </span>
                               {count > 0 && (
                                 <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold">
-                                  {count}x genutzt
+                                  {count}x
                                 </span>
                               )}
                             </button>
@@ -8990,40 +8978,56 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   </div>
                 )}
 
-                {/* VIEW: TONES */}
-                {moreSubView === 'tones' && (
-                  <div className="space-y-2.5">
+                {/* Content: Stimme / Ton */}
+                {expressionSubTab === 'tone' && (
+                  <div className="space-y-2">
                     <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-1.5 flex items-center gap-2">
                       <i className="fa-solid fa-magnifying-glass text-slate-500 text-xs ml-1.5 shrink-0"></i>
                       <input
                         type="text"
                         value={toneSearch}
                         onChange={(e) => setToneSearch(e.target.value)}
-                        placeholder="Tonart suchen..."
+                        placeholder="Tonart filtern..."
                         className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-600"
                         autoFocus
                       />
+                      {toneSearch && (
+                        <button type="button" onClick={() => setToneSearch('')} className="text-slate-500 hover:text-slate-300 pr-1 text-xs">
+                          <i className="fa-solid fa-xmark"></i>
+                        </button>
+                      )}
                     </div>
                     <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar bg-slate-950/30 rounded-xl p-1 border border-slate-850">
                       {sortedTones
                         .filter(t => t.toLowerCase().includes(toneSearch.toLowerCase().trim()))
                         .map(t => {
+                          const isSelected = currentActiveTone.toLowerCase() === t.toLowerCase();
                           const count = toneUsage[t] || 0;
                           return (
                             <button
                               key={t}
+                              type="button"
                               onClick={() => {
-                                insertFormatting(`[spricht ${t}] `, '');
-                                handleSelectTone(t);
-                                setIsMoreMenuExpanded(false);
-                                setToneSearch('');
+                                if (isSelected) {
+                                  handleSelectTone('');
+                                } else {
+                                  insertFormatting(`[spricht ${t}] `, '');
+                                  handleSelectTone(t);
+                                }
                               }}
-                              className="w-full text-left px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center justify-between"
+                              className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                                isSelected
+                                  ? 'bg-sky-600/25 border border-sky-500/50 text-sky-200 font-bold'
+                                  : 'text-slate-300 hover:bg-slate-800 hover:text-white border border-transparent'
+                              }`}
                             >
-                              <span>{t}</span>
+                              <span className="flex items-center gap-1.5">
+                                {isSelected && <span className="text-sky-400 text-xs">✓</span>}
+                                <span>{t}</span>
+                              </span>
                               {count > 0 && (
-                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold">
-                                  {count}x genutzt
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 font-bold">
+                                  {count}x
                                 </span>
                               )}
                             </button>
@@ -9035,53 +9039,387 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     </div>
                   </div>
                 )}
+              </div>
+            )}
 
-                {/* VIEW: FAVORITES */}
-                {moreSubView === 'favorites' && (
-                  <div className="space-y-2">
-                    <div className="max-h-56 overflow-y-auto pr-1 space-y-1 bg-slate-950/40 p-1.5 rounded-xl border border-slate-850">
-                      {getFavoriteTechniques().length === 0 ? (
-                        <div className="p-4 text-center text-xs text-slate-500 italic leading-relaxed">
-                          Keine Favoriten markiert.<br />
-                          Markiere Techniken im Logbuch mit dem Stern-Symbol.
-                        </div>
-                      ) : (
-                        getFavoriteTechniques().map((tech, i) => (
-                          <button
-                            key={tech.id ? `fav-tech-more-${tech.id}-${i}` : `fav-tech-more-${i}`}
-                            type="button"
-                            onClick={() => {
-                              const actionText = tech.category === 'Transformationen' || tech.isTransformation
-                                ? `*aktiviert ${tech.name}*`
-                                : `*setzt ${tech.name} ein*`;
-                              insertFormatting(actionText, '');
-                              setIsMoreMenuExpanded(false);
-                            }}
-                            className="w-full text-left p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-850/60 hover:border-amber-500/30 transition-all flex flex-col gap-1"
-                          >
-                            <div className="flex justify-between items-center w-full gap-1.5">
-                              <span className="font-bold text-xs text-slate-200 truncate">{tech.name}</span>
-                              <div className="flex items-center gap-1 shrink-0">
-                                {tech.category === 'Transformationen' || tech.isTransformation ? (
-                                  <span className="text-[8px] px-1.5 py-0.2 rounded bg-purple-950/70 border border-purple-500/40 text-purple-300 font-extrabold uppercase">Form</span>
-                                ) : tech.category === 'Ultimative Techniken' || tech.isUltimate ? (
-                                  <span className="text-[8px] px-1.5 py-0.2 rounded bg-amber-950/70 border border-amber-500/40 text-amber-300 font-extrabold uppercase">Ultimativ</span>
-                                ) : (
-                                  <span className="text-[8px] px-1.5 py-0.2 rounded bg-indigo-950/70 border border-indigo-500/40 text-indigo-300 font-extrabold uppercase">Technik</span>
-                                )}
-                                <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 font-bold">Lv. {tech.level || 1}</span>
-                              </div>
-                            </div>
-                            {tech.description && (
-                              <p className="text-[10px] text-slate-400 leading-tight line-clamp-2 italic">{tech.description}</p>
-                            )}
-                          </button>
-                        ))
-                      )}
-                    </div>
+            {/* TECHNIKEN TAB PANEL */}
+            {isTechniquesOpen && (
+              <div id="techniques-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-md w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-star text-amber-500"></i>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Techniken & Fähigkeiten</span>
                   </div>
-                )}
+                  <button type="button" onClick={closeAllControlTabs} className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1" title="Schließen">
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
 
+                {/* Quick format action for free roleplay action */}
+                <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-xl border border-slate-850">
+                  <span className="text-xs text-slate-400">Freie Handlung beschreiben:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      insertFormatting('*', '*');
+                      closeAllControlTabs();
+                    }}
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all flex items-center gap-1.5 border border-slate-700"
+                    title="Fügt Sternchen *...* für Handlungen ein"
+                  >
+                    <i className="fa-solid fa-person-running text-xs text-amber-400"></i>
+                    <span>*Handlung*</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Favorisierte Fähigkeiten:</span>
+                  <div className="max-h-56 overflow-y-auto pr-1 space-y-1 bg-slate-950/40 p-1.5 rounded-xl border border-slate-850 font-sans">
+                    {getFavoriteTechniques().length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-500 italic leading-relaxed">
+                        Keine Favoriten markiert.<br />
+                        Markiere Techniken im Codex mit dem Stern-Symbol für den Schnellzugriff.
+                      </div>
+                    ) : (
+                      getFavoriteTechniques().map((tech, i) => (
+                        <button
+                          key={tech.id ? `fav-tech-direct-${tech.id}-${i}` : `fav-tech-direct-${i}`}
+                          type="button"
+                          onClick={() => {
+                            const actionText = tech.category === 'Transformationen' || tech.isTransformation
+                              ? `*aktiviert ${tech.name}*`
+                              : `*setzt ${tech.name} ein*`;
+                            insertFormatting(actionText, '');
+                            closeAllControlTabs();
+                          }}
+                          className="w-full text-left p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-850/60 hover:border-amber-500/30 transition-all flex flex-col gap-1"
+                        >
+                          <div className="flex justify-between items-center w-full gap-1.5">
+                            <span className="font-bold text-xs text-slate-200 truncate">{tech.name}</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {tech.category === 'Transformationen' || tech.isTransformation ? (
+                                <span className="text-[8px] px-1.5 py-0.2 rounded bg-purple-950/70 border border-purple-500/40 text-purple-300 font-extrabold uppercase">Form</span>
+                              ) : tech.category === 'Ultimative Techniken' || tech.isUltimate ? (
+                                <span className="text-[8px] px-1.5 py-0.2 rounded bg-amber-950/70 border border-amber-500/40 text-amber-300 font-extrabold uppercase">Ultimativ</span>
+                              ) : (
+                                <span className="text-[8px] px-1.5 py-0.2 rounded bg-indigo-950/70 border border-indigo-500/40 text-indigo-300 font-extrabold uppercase">Technik</span>
+                              )}
+                              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 font-bold">Lv. {tech.level || 1}</span>
+                            </div>
+                          </div>
+                          {tech.description && (
+                            <p className="text-[10px] text-slate-400 leading-tight line-clamp-2 italic leading-relaxed">{tech.description}</p>
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* REISE TAB PANEL */}
+            {isTravelOpen && (
+              <div id="travel-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-compass text-teal-400"></i>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Reise & Standort</span>
+                  </div>
+                  <button type="button" onClick={closeAllControlTabs} className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1" title="Schließen">
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center gap-2.5">
+                  <i className="fa-solid fa-location-dot text-amber-500 text-sm shrink-0"></i>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-bold">Aktueller Standort</span>
+                    <span className="text-xs font-bold text-slate-200 truncate block">{mostSpecificLocationName}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNavigationModal(true);
+                      closeAllControlTabs();
+                    }}
+                    className="w-full p-2.5 bg-teal-600/20 hover:bg-teal-600/30 border border-teal-500/40 rounded-xl text-xs font-bold text-teal-200 flex items-center justify-between transition-all"
+                  >
+                    <span className="flex items-center gap-2">
+                      <i className="fa-solid fa-map-location-dot text-teal-400"></i>
+                      <span>Navigation & Reiseziel</span>
+                    </span>
+                    {availableTravelTargetsCount > 0 && (
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-teal-500 text-slate-950 font-extrabold">
+                        {availableTravelTargetsCount} Ziele
+                      </span>
+                    )}
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/60">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRestAction('short');
+                        closeAllControlTabs();
+                      }}
+                      className="p-2 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 rounded-xl text-left transition-all"
+                      title="Kurze Rast einlegen (+30% HP & MP)"
+                    >
+                      <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs mb-0.5">
+                        <i className="fa-solid fa-mug-hot"></i>
+                        <span>Kurze Rast</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block">+30% HP & MP</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRestAction('long');
+                        closeAllControlTabs();
+                      }}
+                      className="p-2 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 rounded-xl text-left transition-all"
+                      title="Lange Rast (Schlafen, 100% Heilung)"
+                    >
+                      <div className="flex items-center gap-1.5 text-indigo-400 font-bold text-xs mb-0.5">
+                        <i className="fa-solid fa-bed"></i>
+                        <span>Schlafen</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block">100% Heilung</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* STORY TAB PANEL */}
+            {isStoryOpen && (
+              <div id="story-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Story & Weltgeschehen</span>
+                  </div>
+                  <button type="button" onClick={closeAllControlTabs} className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1" title="Schließen">
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-indigo-300">Temporäre Entitäten</span>
+                    {pendingStoryEntitiesCount > 0 ? (
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-indigo-500 text-white font-extrabold">
+                        {pendingStoryEntitiesCount} neu
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-500">Aktuell keine</span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-normal">
+                    Erfasste Personen, Gegenstände und Schauplätze aus dem Geschehen prüfen oder in den Codex übernehmen.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStoryInfoModal(true);
+                    closeAllControlTabs();
+                  }}
+                  className="w-full py-2.5 px-3 bg-indigo-600/25 hover:bg-indigo-600/35 border border-indigo-500/40 rounded-xl text-xs font-bold text-indigo-200 flex items-center justify-center gap-2 transition-all shadow-md"
+                >
+                  <Info className="w-4 h-4 text-indigo-400" />
+                  <span>Story-Info & Notizen öffnen</span>
+                </button>
+              </div>
+            )}
+
+            {/* INVENTAR TAB PANEL */}
+            {isInventoryOpen && (
+              <div id="inventory-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-box-archive text-amber-500"></i>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Inventar & Gegenstände</span>
+                  </div>
+                  <button type="button" onClick={closeAllControlTabs} className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1" title="Schließen">
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onViewChange(GameViewMode.STATUS);
+                      closeAllControlTabs();
+                    }}
+                    className="w-full p-2.5 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/40 rounded-xl text-left transition-all flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <i className="fa-solid fa-book-open text-amber-400 text-sm shrink-0"></i>
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">Logbuch & Inventar öffnen</span>
+                        <span className="text-[10px] text-slate-400 block">Ausrüstung, Beutel, Status & Lager</span>
+                      </div>
+                    </div>
+                    <i className="fa-solid fa-chevron-right text-xs text-slate-600"></i>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCollectionTasksModal(true);
+                      closeAllControlTabs();
+                    }}
+                    className="w-full p-2.5 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-sky-500/40 rounded-xl text-left transition-all flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <i className="fa-solid fa-clipboard-list text-sky-400 text-sm shrink-0"></i>
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">Sammel- & Bergungsaufträge</span>
+                        <span className="text-[10px] text-slate-400 block">Beutebergung, Ressourcen & Suchmissionen</span>
+                      </div>
+                    </div>
+                    {((adventure.collectionTasks || []).filter(t => t.status === 'active').length > 0) && (
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-sky-500 text-slate-955 font-extrabold shrink-0">
+                        {(adventure.collectionTasks || []).filter(t => t.status === 'active').length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCombatInventoryModal(true);
+                      closeAllControlTabs();
+                    }}
+                    className="w-full p-2.5 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-red-500/40 rounded-xl text-left transition-all flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <i className="fa-solid fa-flask text-red-400 text-sm shrink-0"></i>
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">Kampfinventar & Schnellzugriff</span>
+                        <span className="text-[10px] text-slate-400 block">Tränke & Kampfutensilien</span>
+                      </div>
+                    </div>
+                    <i className="fa-solid fa-chevron-right text-xs text-slate-600"></i>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInventorySettingsModal(true);
+                      closeAllControlTabs();
+                    }}
+                    className="w-full p-2.5 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl text-left transition-all flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <i className="fa-solid fa-sliders text-slate-400 text-sm shrink-0"></i>
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">Inventar-Optionen</span>
+                        <span className="text-[10px] text-slate-400 block">Automatische Aufnahme & Filter</span>
+                      </div>
+                    </div>
+                    <i className="fa-solid fa-chevron-right text-xs text-slate-600"></i>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* MANAGEMENT TAB PANEL */}
+            {isManagementOpen && (
+              <div id="management-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-sm w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-briefcase text-slate-300"></i>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Management & Wirtschaft</span>
+                  </div>
+                  <button type="button" onClick={closeAllControlTabs} className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1" title="Schließen">
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowWorkMenu(true);
+                      closeAllControlTabs();
+                    }}
+                    className="w-full p-2.5 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/40 rounded-xl text-left transition-all flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <i className="fa-solid fa-list-check text-amber-400 text-sm shrink-0"></i>
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">Betriebsführung & Aufgaben</span>
+                        <span className="text-[10px] text-slate-400 block">Betriebe, Delegationen & Arbeiter</span>
+                      </div>
+                    </div>
+                    {pendingWorkTasksCount > 0 && (
+                      <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-amber-500 text-slate-955 font-extrabold shrink-0">
+                        {pendingWorkTasksCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTradeModal(true);
+                      closeAllControlTabs();
+                    }}
+                    className="w-full p-2.5 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/40 rounded-xl text-left transition-all flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <i className="fa-solid fa-handshake text-emerald-400 text-sm shrink-0"></i>
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block">Handel & Verträge</span>
+                        <span className="text-[10px] text-slate-400 block">Warenkauf, Verkauf & Vereinbarungen</span>
+                      </div>
+                    </div>
+                    <i className="fa-solid fa-chevron-right text-xs text-slate-600"></i>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/60">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRestAction('short');
+                        closeAllControlTabs();
+                      }}
+                      className="p-2 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 rounded-xl text-left transition-all"
+                      title="Kurze Rast einlegen (+30% HP & MP)"
+                    >
+                      <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-xs mb-0.5">
+                        <i className="fa-solid fa-mug-hot"></i>
+                        <span>Kurze Rast</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block">+30% HP & MP</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleRestAction('long');
+                        closeAllControlTabs();
+                      }}
+                      className="p-2 bg-slate-950/70 hover:bg-slate-800 border border-slate-800 rounded-xl text-left transition-all"
+                      title="Lange Rast (Schlafen, 100% Heilung)"
+                    >
+                      <div className="flex items-center gap-1.5 text-indigo-400 font-bold text-xs mb-0.5">
+                        <i className="fa-solid fa-bed"></i>
+                        <span>Schlafen</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 block">100% Heilung</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -9093,138 +9431,185 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               </span>
             </div>
 
-            {/* Zentrale Chat-Steuerleiste */}
-            <div className="flex items-center justify-between gap-1 bg-slate-900 border border-slate-800/80 rounded-2xl p-1.5 mb-2.5 mx-1 shadow-lg backdrop-blur-md z-25 font-sans">
+            {/* Zentrale Chat-Steuerleiste (Strukturierte Tabs mit Status-Badges) */}
+            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 rounded-2xl p-1.5 mb-2.5 mx-1 shadow-lg backdrop-blur-md z-25 overflow-x-auto scrollbar-none flex-nowrap font-sans">
               
-              {/* KAMPF BUTTON */}
+              {/* KAMPF TAB */}
               <button
                 type="button"
                 id="combat-toggle-btn"
-                onClick={() => {
-                  setIsCombatMenuExpanded(!isCombatMenuExpanded);
-                  if (!isCombatMenuExpanded) {
-                    setCombatSubMenu(isCombatActive ? 'main' : 'start');
-                  }
-                  setIsDialogueMenuExpanded(false);
-                  setIsMoreMenuExpanded(false);
-                }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
+                onClick={() => toggleControlTab('combat')}
+                className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
                   isCombatActive
                     ? 'bg-red-600/25 border border-red-500 text-red-200 hover:bg-red-600/35'
-                    : isCombatMenuExpanded
+                    : isCombatOpen
                     ? 'bg-slate-800 border border-slate-700 text-white'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
                 }`}
-                title={isCombatActive ? "JRPG-Kampfsteuerung" : "Kampf vorbereiten"}
+                title={isCombatActive ? "JRPG-Kampfsteuerung aktiv" : "Kampf vorbereiten"}
               >
                 <i className={`fa-solid fa-hand-fist text-sm ${isCombatActive ? 'text-red-500 animate-pulse' : ''}`}></i>
-                <span className="hidden sm:inline truncate">
+                <span className="truncate">
                   {isCombatActive ? 'Kampf aktiv' : 'Kampf'}
                 </span>
                 {availableCombatOpponents.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-red-600 text-white">
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-red-600 text-white">
                     {availableCombatOpponents.length}
                   </span>
                 )}
               </button>
 
-              {/* DIALOG BUTTON */}
+              {/* DIALOG TAB */}
               <button
                 type="button"
                 id="dialogue-toggle-btn"
-                onClick={() => {
-                  setIsDialogueMenuExpanded(!isDialogueMenuExpanded);
-                  if (!isDialogueMenuExpanded) {
-                    setIsCombatMenuExpanded(false);
-                    setIsMoreMenuExpanded(false);
-                    if (availableDialogueNpcs && availableDialogueNpcs.length > 0) {
-                      if (!dialogueSpeakerId || !availableDialogueNpcs.some(n => n.id === dialogueSpeakerId)) setDialogueSpeakerId(availableDialogueNpcs[0].id);
-                      if (availableDialogueNpcs.length > 1 && (!dialogueTargetId || !availableDialogueNpcs.some(n => n.id === dialogueTargetId))) setDialogueTargetId(availableDialogueNpcs[1].id);
-                    }
-                  }
-                }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
+                onClick={() => toggleControlTab('dialogue')}
+                className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
                   isDialogueActive
                     ? 'bg-amber-500/20 border border-amber-500 text-amber-200 hover:bg-amber-500/30'
-                    : isDialogueMenuExpanded
+                    : isDialogueOpen
                     ? 'bg-slate-800 border border-slate-700 text-white'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
                 }`}
-                title="Reinen Dialog-Modus starten"
+                title="Reiner Dialog-Modus (Spieler, NPC, Gruppe)"
               >
                 <i className={`fa-solid fa-comments text-sm ${isDialogueActive ? 'text-amber-500' : ''}`}></i>
-                <span className="hidden sm:inline truncate">
+                <span className="truncate">
                   {isDialogueActive ? 'Dialog aktiv' : 'Dialog'}
                 </span>
                 {availableDialogueNpcs.length > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-amber-500 text-slate-955 font-extrabold">
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-amber-500 text-slate-955 font-extrabold">
                     {availableDialogueNpcs.length}
                   </span>
                 )}
               </button>
 
-              {/* REISE BUTTON */}
+              {/* AUSDRUCK TAB (EMOTION + STIMME/TON) */}
               <button
                 type="button"
-                onClick={() => {
-                  setShowNavigationModal(true);
-                  setIsCombatMenuExpanded(false);
-                  setIsDialogueMenuExpanded(false);
-                  setIsMoreMenuExpanded(false);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent transition-all active:scale-95 whitespace-nowrap min-w-0 relative"
-                title="Navigation & Reiseziel"
+                id="expression-toggle-btn"
+                onClick={() => toggleControlTab('expression')}
+                className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
+                  isExpressionOpen
+                    ? 'bg-slate-800 border border-slate-700 text-white'
+                    : (currentActiveEmotion || currentActiveTone)
+                    ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Ausdruck & Stimme wählen"
+              >
+                <i className="fa-regular fa-face-smile text-sm text-amber-400"></i>
+                <span className="truncate">Ausdruck</span>
+                {((currentActiveEmotion ? 1 : 0) + (currentActiveTone ? 1 : 0)) > 0 && (
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-amber-500 text-slate-955 font-extrabold">
+                    {(currentActiveEmotion ? 1 : 0) + (currentActiveTone ? 1 : 0)}
+                  </span>
+                )}
+              </button>
+
+              {/* TECHNIKEN TAB */}
+              <button
+                type="button"
+                id="techniques-toggle-btn"
+                onClick={() => toggleControlTab('techniques')}
+                className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
+                  isTechniquesOpen
+                    ? 'bg-slate-800 border border-slate-700 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Techniken, Fähigkeiten & Handlung"
+              >
+                <i className="fa-solid fa-star text-sm text-amber-500"></i>
+                <span className="truncate">Techniken</span>
+                {getFavoriteTechniques().length > 0 && (
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-amber-500 text-slate-955 font-extrabold">
+                    {getFavoriteTechniques().length}
+                  </span>
+                )}
+              </button>
+
+              {/* REISE TAB */}
+              <button
+                type="button"
+                id="travel-toggle-btn"
+                onClick={() => toggleControlTab('travel')}
+                className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
+                  isTravelOpen
+                    ? 'bg-slate-800 border border-slate-700 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Reise & Navigation"
               >
                 <i className="fa-solid fa-compass text-sm text-teal-400"></i>
-                <span className="hidden sm:inline truncate">Reise</span>
+                <span className="truncate">Reise</span>
                 {availableTravelTargetsCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-teal-500 text-slate-955 font-extrabold">
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-teal-500 text-slate-955 font-extrabold">
                     {availableTravelTargetsCount}
                   </span>
                 )}
               </button>
 
-              {/* STORY BUTTON */}
+              {/* STORY TAB */}
               <button
                 type="button"
-                onClick={() => {
-                  setShowStoryInfoModal(true);
-                  setIsCombatMenuExpanded(false);
-                  setIsDialogueMenuExpanded(false);
-                  setIsMoreMenuExpanded(false);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent transition-all active:scale-95 whitespace-nowrap min-w-0 relative"
-                title="Story-Info & temporäre Story-Daten"
+                id="story-toggle-btn"
+                onClick={() => toggleControlTab('story')}
+                className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
+                  isStoryOpen
+                    ? 'bg-slate-800 border border-slate-700 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Story-Info & Notizen"
               >
                 <Info className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span className="hidden sm:inline truncate">Story</span>
+                <span className="truncate">Story</span>
                 {pendingStoryEntitiesCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-indigo-500 text-white font-extrabold">
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-indigo-500 text-white font-extrabold">
                     {pendingStoryEntitiesCount}
                   </span>
                 )}
               </button>
 
-              {/* MEHR BUTTON */}
+              {/* INVENTAR TAB */}
               <button
                 type="button"
-                onClick={() => {
-                  setIsMoreMenuExpanded(!isMoreMenuExpanded);
-                  setIsCombatMenuExpanded(false);
-                  setIsDialogueMenuExpanded(false);
-                  if (!isMoreMenuExpanded) {
-                    setMoreSubView('main');
-                  }
-                }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-1 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 ${
-                  isMoreMenuExpanded
+                id="inventory-toggle-btn"
+                onClick={() => toggleControlTab('inventory')}
+                className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
+                  isInventoryOpen
                     ? 'bg-slate-800 border border-slate-700 text-white'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
                 }`}
-                title="Zusätzliche Aktionen & Einstellungen"
+                title="Inventar, Gegenstände & Sammelaufträge"
               >
-                <i className="fa-solid fa-ellipsis text-sm text-amber-500"></i>
-                <span className="hidden sm:inline truncate">Mehr</span>
+                <i className="fa-solid fa-box-archive text-sm text-amber-500"></i>
+                <span className="truncate">Inventar</span>
+                {((adventure.collectionTasks || []).filter(t => t.status === 'active').length > 0) && (
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-sky-500 text-slate-955 font-extrabold">
+                    {(adventure.collectionTasks || []).filter(t => t.status === 'active').length}
+                  </span>
+                )}
+              </button>
+
+              {/* MANAGEMENT TAB */}
+              <button
+                type="button"
+                id="management-toggle-btn"
+                onClick={() => toggleControlTab('management')}
+                className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 whitespace-nowrap min-w-0 relative ${
+                  isManagementOpen
+                    ? 'bg-slate-800 border border-slate-700 text-white'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                }`}
+                title="Management, Betriebsführung & Handel"
+              >
+                <i className="fa-solid fa-briefcase text-sm text-slate-300"></i>
+                <span className="truncate">Management</span>
+                {pendingWorkTasksCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-amber-500 text-slate-955 font-extrabold">
+                    {pendingWorkTasksCount}
+                  </span>
+                )}
               </button>
 
             </div>

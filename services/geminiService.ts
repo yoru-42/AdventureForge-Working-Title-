@@ -459,6 +459,57 @@ export class GeminiService {
     }
   }
 
+  private static async generateContentWithFallback(ai: any, params: {
+    model?: string;
+    contents: any;
+    config?: any;
+    fallbackInstruction?: string;
+  }) {
+    try {
+      return await ai.models.generateContent({
+        model: params.model || 'gemini-3.8-flash',
+        contents: params.contents,
+        config: params.config
+      });
+    } catch (err: any) {
+      const errMsg = err?.message || String(err || '');
+      const isConstraintError = errMsg.includes('Constraint is too tall') ||
+                                errMsg.includes('Constraint size') ||
+                                errMsg.includes('constraint-is-too-big') ||
+                                (errMsg.includes('INVALID_ARGUMENT') && errMsg.includes('constraint'));
+      if (isConstraintError && params.config?.responseSchema) {
+        console.warn('[GeminiService] Constraint size limit reached on responseSchema. Falling back to pure JSON mode...', errMsg);
+        const fallbackConfig = { ...params.config };
+        delete fallbackConfig.responseSchema;
+        fallbackConfig.responseMimeType = "application/json";
+
+        let modifiedContents = params.contents;
+        const note = params.fallbackInstruction || "\nWICHTIG: Antworte zwingend ausschließlich als gültiges JSON-Objekt im passenden Schema.";
+        if (typeof modifiedContents === 'string') {
+          modifiedContents = modifiedContents + note;
+        } else if (Array.isArray(modifiedContents) && modifiedContents.length > 0) {
+          const last = modifiedContents[modifiedContents.length - 1];
+          if (typeof last === 'string') {
+            modifiedContents = [...modifiedContents.slice(0, -1), last + note];
+          } else if (last?.parts && Array.isArray(last.parts) && last.parts.length > 0) {
+            const lastPart = last.parts[last.parts.length - 1];
+            if (lastPart?.text) {
+              const updatedParts = [...last.parts.slice(0, -1), { ...lastPart, text: lastPart.text + note }];
+              modifiedContents = [...modifiedContents.slice(0, -1), { ...last, parts: updatedParts }];
+            }
+          }
+        }
+
+        return await ai.models.generateContent({
+          model: params.model || 'gemini-3.8-flash',
+          contents: modifiedContents,
+          config: fallbackConfig
+        });
+      }
+      throw err;
+    }
+  }
+
   static async chat(history: ChatMessage[], systemInstruction: string, isNsfw?: boolean, summaryLog?: string) {
     return this.callWithRetry(async () => {
       const ai = this.getAI();
@@ -949,6 +1000,24 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
     };
   }
 
+  private static getCharacterRelationshipItemSchema() {
+    return {
+      type: Type.OBJECT,
+      properties: {
+        targetCharacter: { type: Type.STRING, description: "Name des anderen Charakters oder NPCs." },
+        type: { type: Type.STRING, description: "Art der Beziehung (z.B. Freund, Rivale, Geschwister, Mentor, Feind)." },
+        relationshipStatus: { type: Type.STRING, description: "Aktueller Beziehungsstatus oder Phase." },
+        currentStance: { type: Type.STRING, description: "Innere Haltung gegenüber dem Ziel." },
+        addressFromSelfToTarget: { type: Type.STRING, description: "Wie er den Zielcharakter nennt." },
+        addressFromTargetToSelf: { type: Type.STRING, description: "Wie der Zielcharakter ihn nennt." },
+        behavior: { type: Type.STRING, description: "Verhalten und Dynamik gegenüber diesem Charakter." },
+        sharedPast: { type: Type.STRING, description: "Gemeinsame Vorgeschichte." },
+        aiDirectives: { type: Type.STRING, description: "KI-Regieanweisungen für diese Beziehung." }
+      },
+      required: ["targetCharacter", "type"]
+    };
+  }
+
   private static getMotivationCoreSchema() {
     return {
       type: Type.OBJECT,
@@ -978,44 +1047,18 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
         type: Type.OBJECT,
         properties: {
           id: { type: Type.STRING, description: "Eindeutige ID des Ziels (z.B. goal-1)" },
-          title: { type: Type.STRING, description: "Klar formulierter Titel des Ziels (WAS will der Charakter erreichen?)" },
+          title: { type: Type.STRING, description: "Klar formulierter Titel des Ziels" },
           description: { type: Type.STRING, description: "Kontext und nähere Beschreibung des Ziels" },
-          timeframe: { 
-            type: Type.STRING, 
-            description: "Zeithorizont: 'langfristig', 'mittelfristig' oder 'kurzfristig'"
-          },
-          targetType: {
-            type: Type.STRING,
-            description: "Art des Zielobjekts: 'self' (persönlich), 'character' (Zielperson), 'faction' (Fraktion), 'world' (Welt)"
-          },
-          targetName: { type: Type.STRING, description: "Name des Zielobjekts (Person, Fraktion oder 'Selbst')" },
-          priority: { 
-            type: Type.STRING, 
-            description: "Priorität des Ziels ('kritisch', 'hoch', 'normal', 'niedrig')"
-          },
-          status: { 
-            type: Type.STRING, 
-            description: "Status des Ziels ('aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben')"
-          },
-          motivation: { type: Type.STRING, description: "Warum verfolgt der Charakter dieses Ziel? (Verbindung zum Motivationskern)" },
-          activePlan: { type: Type.STRING, description: "Aktiver Plan (WIE will der Charakter das Ziel erreichen? Nummerierte Schrittfolge)" },
-          shortTermPlan: { type: Type.STRING, description: "Etappe 1: Kurzfristiger Schritt / Sofortmaßnahme / Erste Schritte zur Erreichung des Ziels" },
-          mediumTermPlan: { type: Type.STRING, description: "Etappe 2: Mittelfristiger Meilenstein / Zwischenetappe zur Erreichung des Ziels" },
-          longTermPlan: { type: Type.STRING, description: "Etappe 3: Langfristige Vollendung / finale Meisterung / dauerhafte Sicherung des Ziels" },
-          alternativePlans: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Alternativpläne (Plan B, Plan C...)"
-          },
-          obstacles: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Hindernisse, Risiken und Konflikte"
-          },
-          progress: { type: Type.INTEGER, description: "Fortschritt von 0 bis 100" },
-          parentGoalId: { type: Type.STRING, description: "ID des übergeordneten Hauptziels" },
-          mainGoalTitle: { type: Type.STRING, description: "Titel des Hauptziels, zu dem dieses Etappenziel gehört" },
-          isMainGoal: { type: Type.BOOLEAN, description: "Gibt an, ob dies das Hauptziel selbst ist" }
+          timeframe: { type: Type.STRING, description: "Zeithorizont: 'langfristig', 'mittelfristig' oder 'kurzfristig'" },
+          targetType: { type: Type.STRING, description: "Art des Zielobjekts: 'self', 'character', 'faction', 'world'" },
+          targetName: { type: Type.STRING, description: "Name des Zielobjekts" },
+          priority: { type: Type.STRING, description: "Priorität des Ziels ('kritisch', 'hoch', 'normal', 'niedrig')" },
+          status: { type: Type.STRING, description: "Status des Ziels ('aktiv', 'pausiert', 'erreicht', 'gescheitert', 'aufgegeben')" },
+          motivation: { type: Type.STRING, description: "Warum verfolgt der Charakter dieses Ziel?" },
+          activePlan: { type: Type.STRING, description: "Aktiver Plan zur Zielerreichung" },
+          shortTermPlan: { type: Type.STRING, description: "Kurzfristiger Schritt zur Erreichung" },
+          mediumTermPlan: { type: Type.STRING, description: "Mittelfristiger Meilenstein" },
+          longTermPlan: { type: Type.STRING, description: "Langfristige Vollendung" }
         },
         required: ["id", "title"]
       }
@@ -1029,28 +1072,13 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
       properties: {
         freundlichkeit: { type: Type.INTEGER, description: "0 (unfreundlich) bis 100 (herzlich)" },
         geselligkeit: { type: Type.INTEGER, description: "0 (einzelgängerisch) bis 100 (gesellig)" },
-        schuechternheit: { type: Type.INTEGER, description: "0 (selbstsicher) bis 100 (schüchtern)" },
-        selbstvertrauen: { type: Type.INTEGER, description: "0 (unsicher) bis 100 (selbstsicher)" },
         geduld: { type: Type.INTEGER, description: "0 (ungeduldig) bis 100 (geduldig)" },
         temperament: { type: Type.INTEGER, description: "0 (ruhig) bis 100 (hitzköpfig)" },
         mut: { type: Type.INTEGER, description: "0 (ängstlich) bis 100 (mutig)" },
-        risikobereitschaft: { type: Type.INTEGER, description: "0 (vorsichtig) bis 100 (risikofreudig)" },
         empathie: { type: Type.INTEGER, description: "0 (gefühllos) bis 100 (einfühlsam)" },
-        ehrlichkeit: { type: Type.INTEGER, description: "0 (unehrlich) bis 100 (ehrlich)" },
         loyalitaet: { type: Type.INTEGER, description: "0 (wechselhaft) bis 100 (loyal)" },
-        misstrauen: { type: Type.INTEGER, description: "0 (vertrauensvoll) bis 100 (misstrauisch)" },
-        dominanz: { type: Type.INTEGER, description: "0 (unterwürfig) bis 100 (dominant)" },
-        durchsetzungsvermoegen: { type: Type.INTEGER, description: "0 (nachgiebig) bis 100 (durchsetzungsstark)" },
         disziplin: { type: Type.INTEGER, description: "0 (undiszipliniert) bis 100 (diszipliniert)" },
-        neugier: { type: Type.INTEGER, description: "0 (desinteressiert) bis 100 (neugierig)" },
-        kreativitaet: { type: Type.INTEGER, description: "0 (pragmatisch) bis 100 (kreativ)" },
-        intelligenzorientierung: { type: Type.INTEGER, description: "0 (intuitiv) bis 100 (analytisch)" },
-        emotionalitaet: { type: Type.INTEGER, description: "0 (rational) bis 100 (emotional)" },
-        impulsivitaet: { type: Type.INTEGER, description: "0 (bedacht) bis 100 (impulsiv)" },
-        humor: { type: Type.INTEGER, description: "0 (ernst) bis 100 (verspielt)" },
-        eitelkeit: { type: Type.INTEGER, description: "0 (bescheiden) bis 100 (eitel)" },
-        materialismus: { type: Type.INTEGER, description: "0 (genügsam) bis 100 (materialistisch)" },
-        ordnungsliebe: { type: Type.INTEGER, description: "0 (chaotisch) bis 100 (ordentlich)" }
+        neugier: { type: Type.INTEGER, description: "0 (desinteressiert) bis 100 (neugierig)" }
       }
     };
   }
@@ -1059,213 +1087,190 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
     const schema: any = {
       type: Type.OBJECT,
       properties: {
-        name: { type: Type.STRING, description: "Der echte bürgerliche Name des Charakters (z.B. 'Sakazuki' statt 'Akainu', 'Kuzan' statt 'Aokiji', 'Borsalino' statt 'Kizaru', 'Monkey D. Ruffy' statt 'Strohhut')." },
-        rufName: { type: Type.STRING, description: "Der kurze Name für Kampf- und Statusanzeigen (z.B. 'Akainu' bei Sakazuki, 'Ruffy' bei Monkey D. Ruffy, 'Garp' bei Monkey D. Garp, 'Mihawk' bei Dracule Mihawk)." },
-        nickname: { type: Type.STRING, description: "Spitzname, Alias, Titel, Epitheton oder Codename des Charakters (z.B. 'Akainu' bei Sakazuki, 'Aokiji' bei Kuzan, 'Falkenauge' bei Mihawk, 'Helden-Marine' bei Garp)." },
+        name: { type: Type.STRING, description: "Der echte bürgerliche Name des Charakters." },
+        rufName: { type: Type.STRING, description: "Der kurze Name für Kampf- und Statusanzeigen." },
+        nickname: { type: Type.STRING, description: "Spitzname, Alias, Titel oder Codename des Charakters." },
         role: { type: Type.STRING },
         personality: { type: Type.STRING },
-        personalityArchetype: { type: Type.STRING, description: "Der passende Persönlichkeits-Archetyp oder Typus aus der AdventureForge Archetypen-Liste (z.B. Tsundere, Kuudere, Dandere, Deredere, Yandere, Kamidere, Himedere, Bakadere, Mayadere, Western:Oujidere, Western:Smugdere, Western:Teasedere, Western:Thugdere, Western:Kanedere, Western:Kekkondere, Western:Nemuidere, Western:Nipadere, Western:Oujodere, Western:Bocchandere, Western:Byoukidere, Amadere, Biridere, Bokodere, Butsudere, Chindere, Darudere, Deretsun, Dorodere, Erodere, Gandere, Gesudere, Gou-dere, Gundere, Gurodere, Hajidere, Hamedere, Hinedere, Kamidere (Bite), Kichidere, Kiredere, Kiridere, Kundere, Kurodere, Kuzudere, M Dere, Megadere, Nyandere, Ojoudere, Onidere, Osadere, Rindere, Roshidere, S Dere, Sashidere, Shindere, Shittodere, Shundere, Sunao Cool, Sunao Heat, Sunao Surreal, Teredere, Tomedere, Tsuyodere, Undere, Usodere, Utsudere, Uzadere, Yandere (Yankii), Yoidere, Zondere) oder '-' falls neutral." },
+        personalityArchetype: { type: Type.STRING, description: "Der passende Persönlichkeits-Archetyp aus AdventureForge (z.B. Tsundere, Kuudere, Dandere, etc.)." },
         personalityTraits: this.getPersonalityTraitsSchema(),
         bio: { 
           type: Type.STRING, 
-          description: "Detaillierte Vergangenheit / Biografie des Charakters. Die KI MUSS zwingend die folgenden 8 Kernfragen in chronologischem Fließtext beantworten, mit jeweils EXAKT 2 BIS 3 SÄTZEN pro Frage (insgesamt 16-24 Sätze): 1. Wo und in welchen Verhältnissen aufgewachsen? (2-3 Sätze) 2. Kindheit beschreiben? (2-3 Sätze) 3. Wichtige Menschen in Kindheit & Jugend? (2-3 Sätze) 4. Wichtiges Lebens-Veränderungsereignis? (2-3 Sätze) 5. Weg zum heutigen Leben/Beruf/Rolle? (2-3 Sätze) 6. Prägende Erlebnisse & Erfahrungen (1-3 Punkte)? (2-3 Sätze) 7. Bereuen, Verlieren oder Ändern? (2-3 Sätze) 8. Verschwiegenes Geheimnis? (2-3 Sätze). Alles MUSS in der VERGANGENHEIT liegen." 
+          description: "Detaillierte Biografie des Charakters nach den 8 Leitfragen (Herkunft, Kindheit, wichtige Personen, Schlüsselereignis, Weg zur Rolle, prägende Erlebnisse, Reue/Änderung, Geheimnis)." 
         },
-        currentSituation: { type: Type.STRING, description: "Was macht die Person gerade, bevor sie dem Spieler begegnet? Dies MUSS sich rein auf ihre eigene Vergangenheit oder ihren eigenen aktuellen Alltag beziehen, VÖLLIG UNABHÄNGIG vom Spieler. Sie darf nichts über die aktuelle Lage des Spielers wissen oder darauf Bezug nehmen!" },
+        currentSituation: { type: Type.STRING, description: "Was macht die Person aktuell in ihrem eigenen Alltag, unabhängig vom Spieler." },
         goal: { type: Type.STRING, description: "Was will die Person erreichen?" },
         motivationCore: this.getMotivationCoreSchema(),
         goals: this.getCharacterGoalsSchema(),
-        powerSource: { type: Type.STRING, description: "Herkunft der Kraft, z.B. Teufelsfrucht, Mana, Chakra, Technologie." },
-        powerCost: { type: Type.STRING, description: "Kosten oder Limitierungen der Kraft, z.B. Ausdauer, MP, Lebensenergie, Nebenwirkungen." },
+        powerSource: { type: Type.STRING, description: "Herkunft der Kraft (z.B. Teufelsfrucht, Mana, Chakra, Magie, Körperkraft)." },
+        powerCost: { type: Type.STRING, description: "Kosten oder Limitierungen der Kraft (z.B. Ausdauer, MP, Lebensenergie)." },
         skills: { type: Type.STRING, description: "Die eigentliche Spezialfähigkeit oder Kraft detailliert beschrieben." },
         profession: { type: Type.STRING, description: "Hauptberuf oder Spezialisierung des Charakters." },
-        professionField: { type: Type.STRING, description: "WICHTIG: Der exakte Bezeichner für den Berufszweig aus den 16 AdventureForge Kernbereichen (z.B. 'lebensmittel_ernaehrung', 'bau_handwerk', 'militaer_sicherheit', 'seefahrt', 'natur_landwirtschaft', 'magie_arkana', 'religion_klerus', 'verwaltung_recht', 'abenteuer_sondergewerbe', 'wissenschaft_forschung', 'luxus_spezial', 'metall_waffen', 'materialverarbeitung', 'staatsdienst_diplomatie', 'kriminalitaet_unterwelt'). Muss zwingend gesetzt werden, wenn ein Beruf vergeben wird." },
-        professionSpecialization: { type: Type.STRING, description: "Spezialisierung oder Fachpfad innerhalb des Berufs (z.B. bei Kräuterfrau -> Tränke oder Arznei)." },
-        professionLevel: { type: Type.STRING, description: "Berufslevel oder Rang (z.B. Lehrling, Geselle, Experte, Meister, Großmeister, Autodidakt)." },
+        professionField: { type: Type.STRING, description: "Der Bezeichner für das Berufsfeld (z.B. 'militaer_sicherheit', 'magie_arkana', 'bau_handwerk', etc.)." },
+        professionSpecialization: { type: Type.STRING, description: "Spezialisierung oder Fachpfad innerhalb des Berufs." },
+        professionLevel: { type: Type.STRING, description: "Berufslevel oder Rang (z.B. Lehrling, Geselle, Meister, Experte)." },
         secondaryProfessions: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
               profession: { type: Type.STRING, description: "Nebenberuf oder Zweitausbildung." },
-              professionLevel: { type: Type.STRING, description: "Rang im Nebenberuf (z.B. Geselle, Autodidakt, Anfänger)." },
-              jobTitle: { type: Type.STRING, description: "Position, Titel oder Rang im Nebenberuf." },
+              professionLevel: { type: Type.STRING, description: "Rang im Nebenberuf." },
+              jobTitle: { type: Type.STRING, description: "Position oder Titel im Nebenberuf." },
               description: { type: Type.STRING, description: "Aufgaben und Fähigkeiten im Nebenberuf." }
             }
           },
-          description: "Liste weiterer Nebenberufe und Nebenqualifikationen des Charakters."
+          description: "Liste weiterer Nebenberufe des Charakters."
         },
-        jobTitle: { type: Type.STRING, description: "Gilde, Organisation, Position, Titel oder Rang des Charakters." },
-        professionDescription: { type: Type.STRING, description: "Beschreibung der beruflichen Pflichten, Tätigkeiten und Arbeitsalltag." },
-        craftingSkills: { type: Type.STRING, description: "Handwerk, Fertigung & Nebenberufe (z.B. Schmieden, Trankbrauen, Kochen)." },
-        talents: { type: Type.STRING, description: "Spezielle Talente und Fachwissen (z.B. Schlösser knacken, Feilschen, Kartografie)." },
-        everydaySkills: { type: Type.STRING, description: "Alltagskompetenzen und praktische Fertigkeiten mit Beherrschungsgrad (z.B. 'Reiten (Fortgeschritten - 50%)', 'Kräutersammeln (Anfänger - 0%)' oder 'Schwimmen (Anfänger - 20%)'). Der Beherrschungsgrad kann individuell von 0% bis 100% angegeben werden." },
+        jobTitle: { type: Type.STRING, description: "Position, Titel oder Rang des Charakters." },
+        professionDescription: { type: Type.STRING, description: "Beschreibung der beruflichen Pflichten und Tätigkeiten." },
+        craftingSkills: { type: Type.STRING, description: "Handwerk, Fertigung & Nebenberufe." },
+        talents: { type: Type.STRING, description: "Spezielle Talente und Fachwissen." },
+        everydaySkills: { type: Type.STRING, description: "Alltagskompetenzen mit Beherrschungsgrad (z.B. 'Reiten (Fortgeschritten - 50%)')." },
         toolsAndEquipment: { type: Type.STRING, description: "Berufswerkzeuge, Lizenzen und Ausrüstung." },
-        techniques: { type: Type.STRING, description: "Konkrete Techniken, Attacken oder Jutsus as kommagetrennte Liste." },
+        techniques: { type: Type.STRING, description: "Konkrete Techniken oder Attacken als kommagetrennte Liste." },
         techniqueList: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
               name: { type: Type.STRING, description: "Name der Technik." },
-              type: { type: Type.STRING, description: "Fähigkeits-Typ: 'Angriff' für direkte Attacken, 'Transformation' für Gestaltwandel/Boosts, 'Verteidigung' für Schilde/Schutz, 'Support' für Heilung/Buffs." },
-              description: { type: Type.STRING, description: "Detaillierte Erläuterung, was genau die Technik bewirkt." },
-              subtype: { type: Type.STRING, description: "Untertyp, z.B. Einzelschuss, Flächenangriff, Absorber/Schild, Evasion/Ausweichen, Parade/Konter, Vollständig, Teilweise, Formwechsel/Stellung, Heilung/Regen." },
+              type: { type: Type.STRING, description: "Fähigkeits-Typ: 'Angriff', 'Transformation', 'Verteidigung', 'Support'." },
+              description: { type: Type.STRING, description: "Detaillierte Erläuterung der Wirkung." },
+              subtype: { type: Type.STRING, description: "Untertyp (z.B. Einzelschuss, Flächenangriff, Barriere, Heilung)." },
               tier: { type: Type.STRING, description: "Die Stufe der Technik ('Tier 1', 'Tier 2', 'Tier 3', 'Tier 4')." },
-              baseValue: { type: Type.INTEGER, description: "Der numerische Basiswert (z.B. 15 für Schaden, 20 für Heilung, 10 für Barriere)." },
-              costFormula: { type: Type.STRING, description: "Ob der Ressourcen-Abzug absolut ('absolut') oder prozentual ('proz.') erfolgt." },
-              costValue: { type: Type.INTEGER, description: "Die Menge an verbrauchter Ressource für diese Technik." },
-              costResourceName: { type: Type.STRING, description: "Name der verbrauchten Ressource (z.B. Mana, Chakra, Ausdauer, Wut)." }
+              costValue: { type: Type.INTEGER, description: "Menge an verbrauchter Ressource." },
+              costResourceName: { type: Type.STRING, description: "Name der verbrauchten Ressource (z.B. Mana, Ausdauer)." }
             },
             required: ["name", "type", "description"]
           },
-          description: "Eine Liste von konkreten Techniken mit Name, Typ, Untertyp, Tier, Basiswert, Kosten-Formel, Kostenwert und Energiequelle, basierend auf der Fähigkeit."
+          description: "Konkrete Techniken des Charakters."
         },
         campaignPowerLevelsList: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
-              parameterName: { type: Type.STRING, description: "Name des Parameters (z.B. Ninjutsu, Magie, Stärke, Willenskraft, der exakt in der campaignParametersList vorkommt)." },
+              parameterName: { type: Type.STRING, description: "Name des Kampagnen-Parameters." },
               value: { type: Type.INTEGER, description: "Aktueller Startwert des Charakters." },
               potentialMax: { type: Type.INTEGER, description: "Das maximale Potenzial des Charakters." }
             },
             required: ["parameterName", "value"]
           },
-          description: "Die Machtstufen des Charakters für jeden der generierten Kampagnen-Parameter."
+          description: "Machtstufen des Charakters für die Kampagnen-Parameter."
         },
-         appearance: {
+        appearance: {
           type: Type.OBJECT,
           properties: {
             hairColor: { type: Type.STRING },
             eyeColor: { type: Type.STRING },
             age: { type: Type.STRING },
             build: { type: Type.STRING },
-            gender: { type: Type.STRING, description: "Geschlecht des Charakters (z.B. 'Weiblich', 'Männlich', 'Divers', 'Futanari', 'Unbekannt')." },
+            gender: { type: Type.STRING, description: "Geschlecht des Charakters ('Weiblich', 'Männlich', etc.)." },
             outfit: { type: Type.STRING, description: "Detaillierte Beschreibung der Kleidung." },
-            looks: { type: Type.STRING, description: "Aussehen des Charakters (Gesichtszüge, Haarlänge/Haarstil, Sommersprossen, Narben, Tätowierungen, etc.). Dies bezieht sich auf den untransformierten Basis-Zustand." },
-            cupSize: { type: Type.STRING, description: "Nur für weibliche Charaktere: Körbchengröße (z.B. 'C', 'D', 'DD', 'J'), bei männlichen '-'. WICHTIG: Falls es sich um einen bekannten Franchise-Charakter handelt (z.B. Nami, Robin, etc.), verwende zwingend ihre offizielle kanonische Körbchengröße (z.B. 'J', 'I' etc.)!" },
-            height: { type: Type.STRING, description: "Größe des Charakters (z.B. '175 cm'). WICHTIG: Falls es sich um einen bekannten Franchise-Charakter handelt (z.B. Monkey D. Garp, Son Goku, etc.), MUSST du zwingend seine offizielle/kanonische Original-Größe eintragen (z.B. Monkey D. Garp ist '287 cm', Son Goku ist '175 cm', Charlotte Katakuri ist '509 cm', Whitebeard ist '666 cm', Kaido ist '710 cm', Big Mom ist '880 cm', Nico Robin ist '188 cm'). Verwende NIEMALS standardisierte oder geschätzte Werte, sondern immer die echten kanonischen Werte!" },
-            measurements: { type: Type.STRING, description: "Körpermaße, z.B. 90-60-90. Bei männlichen '-'. WICHTIG: Falls es sich um einen bekannten Franchise-Charakter handelt (z.B. Nami, Robin, etc.), verwende zwingend die offiziellen kanonischen Körpermaße (z.B. Nami hat '98-58-88', Nico Robin hat '100-60-90')!" },
-            weight: { type: Type.STRING, description: "Körpergewicht des Charakters (z.B. '72 kg', '110 kg')." },
-            bodyFat: { type: Type.STRING, description: "Körperfettanteil / KFA (z.B. '12%', '18%')." },
-            muscleMass: { type: Type.STRING, description: "Muskelmasse / Muskeltonus (z.B. 'Normal', 'Athletisch', 'Sehr muskulös', 'Definiert')." },
+            looks: { type: Type.STRING, description: "Aussehen des Charakters (Gesichtszüge, Haarlänge, Narben, etc.)." },
+            cupSize: { type: Type.STRING, description: "Körbchengröße bei Frauen, sonst '-'." },
+            height: { type: Type.STRING, description: "Größe des Charakters (z.B. '175 cm')." },
+            measurements: { type: Type.STRING, description: "Körpermaße (z.B. 90-60-90), sonst '-'." },
+            weight: { type: Type.STRING, description: "Körpergewicht des Charakters (z.B. '72 kg')." },
+            bodyFat: { type: Type.STRING, description: "Körperfettanteil (z.B. '14%')." },
+            muscleMass: { type: Type.STRING, description: "Muskelmasse (z.B. 'Athletisch', 'Normal')." },
             origin: { type: Type.STRING, description: "Herkunftsort oder Land" },
             family: { type: Type.STRING, description: "Familie oder Clan" },
             faction: { type: Type.STRING, description: "Zugehörige Fraktion oder Gilde" },
-            currentLocation: { type: Type.STRING, description: "Aktueller Standort oder Aufenthaltsort des Charakters (z.B. Hafenstadt, Taverne, Schloss)." },
-            race: { type: Type.STRING, description: "Rasse des Charakters, z.B. Mensch, Elf, Vampir" },
-            raceFeatures: { type: Type.STRING, description: "Rassemerkmale wie Katzenohren, Schweif, Krallen, geschlitzte Augen, Fell (Farbe, Muster, Verteilung am Körper), ein Katzenkopf oder andere nicht-menschliche, tierische oder fantastische körperliche Abweichungen von der menschlichen Norm. Falls der Charakter ein gewöhnlicher Mensch ist, trage 'keine' ein." }
+            currentLocation: { type: Type.STRING, description: "Aktueller Standort des Charakters." },
+            race: { type: Type.STRING, description: "Rasse des Charakters (z.B. Mensch, Elf, Vampir)." },
+            raceFeatures: { type: Type.STRING, description: "Rassemerkmale wie Tierohren, Hörner, Flügel, oder 'keine'." }
           },
           required: ["looks"]
         },
-        relationship: { type: Type.STRING, description: "Beziehungen des Charakters zu anderen Charakteren oder Gruppierungen. WICHTIG: Er darf den Hauptcharakter/Spieler noch nicht getroffen haben (es sei denn, sie haben eine gemeinsame Vergangenheit wie Familie). Er darf absolut KEINERLEI Wissen über die aktuelle, gegenwärtige Situation des Spielers haben!" },
-        conduct: { type: Type.STRING, description: "Das Verhalten des Charakters, wie er sich anderen gegenüber verhält." },
+        relationship: { type: Type.STRING, description: "Beziehungen des Charakters im Überblick." },
+        conduct: { type: Type.STRING, description: "Das Verhalten des Charakters gegenüber anderen." },
         relationships: {
           type: Type.ARRAY,
-          items: this.getRelationshipItemSchema(),
-          description: "Vollständig strukturierte Beziehungen zu anderen Charakteren der Welt (Codex-Einträge oder NPCs) inklusive Anreden, Wahrnehmung, Tabus, Vergangenheit, direktionale Werte und Ereignisse."
+          items: this.getCharacterRelationshipItemSchema(),
+          description: "Strukturierte Beziehungen zu anderen Charakteren der Welt."
         },
         abilities: {
           type: Type.ARRAY,
           items: {
             type: Type.OBJECT,
             properties: {
-              name: { type: Type.STRING, description: "Name der Fähigkeit, Technik oder Transformation (z.B. 'Elementarmanipulation', 'Schutzbarrieren', 'Dimensionsrisse', 'Reine Esper-Form')." },
+              name: { type: Type.STRING, description: "Name der Fähigkeit oder Transformation." },
               category: { 
                 type: Type.STRING, 
-                description: "Die genaue Kategorie der Fähigkeit: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen' oder 'Talente'." 
+                description: "Kategorie: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen' oder 'Talente'." 
               },
-              source: { type: Type.STRING, description: "Die Kraftquelle für diese Fähigkeit (z.B. Willenskraft, Mana, Ausdauer)." },
-              cost: { type: Type.STRING, description: "Die Ressourcenkosten für die Nutzung (z.B. MP, Ausdauer, Wut)." },
-              description: { type: Type.STRING, description: "Eine detaillierte Beschreibung der Kräfte oder der transformierten Gestalt." },
-              techniques: { type: Type.STRING, description: "Die Namen der Techniken/Attacken, die zu dieser Fähigkeit gehören, als kommagetrennte Liste." },
-              activationCondition: { type: Type.STRING, description: "Bedingung oder Trigger zum Aktivieren/Verwandeln (z.B. 'Unter 30% HP', 'Bei Vollmond', 'Konzentration von 3 Sekunden')." },
-              transformName: { type: Type.STRING, description: "Der Name des Charakters im transformierten Zustand (falls abweichend, z.B. 'Bestien-Ruffy' oder 'Super-Saiyajin Goku')." },
-              transformRole: { type: Type.STRING, description: "Die RPG-Rolle im transformierten Zustand (z.B. 'Entfesselter Gott' oder 'Rasende Bestie')." },
-              transformGender: { type: Type.STRING, description: "Geschlecht im transformierten Zustand (z.B. 'Männlich', 'Weiblich', 'Divers', 'Futanari')." },
-              transformCupSize: { type: Type.STRING, description: "Körbchengröße im transformierten Zustand (falls verändert)." },
-              transformHairColor: { type: Type.STRING, description: "Haarfarbe im transformierten Zustand (falls verändert)." },
-              transformEyeColor: { type: Type.STRING, description: "Augenfarbe im transformierten Zustand (falls verändert)." },
-              transformBuild: { type: Type.STRING, description: "Körperstatur im transformierten Zustand (z.B. 'Kolossal', 'Muskulös', 'Zierlich')." },
-              transformAge: { type: Type.STRING, description: "Alter im transformierten Zustand (falls verändert, z.B. 'Unbekannt' oder 'Gealtert')." },
-              transformRace: { type: Type.STRING, description: "Rasse im transformierten Zustand (z.B. 'Werwolf', 'Dämon', 'Phönix')." },
-              transformRaceFeatures: { type: Type.STRING, description: "Körperliche Abweichungen/Merkmale im transformierten Zustand (z.B. Flügel, goldene Aura, Hörner, Fell, Krallen)." },
-              transformHeight: { type: Type.STRING, description: "Größe im transformierten Zustand (z.B. '350 cm' oder '125 cm')." },
-              transformWeight: { type: Type.STRING, description: "Gewicht im transformierten Zustand (z.B. '450 kg' oder '28 kg')." },
-              transformBodyFat: { type: Type.STRING, description: "Körperfettanteil (KFA) im transformierten Zustand (z.B. '15%')." },
-              transformMuscleMass: { type: Type.STRING, description: "Muskelmasse im transformierten Zustand (z.B. '45%')." },
-              transformMeasurements: { type: Type.STRING, description: "Körpermaße im transformierten Zustand (z.B. '150-100-110')." },
-              transformOrigin: { type: Type.STRING, description: "Herkunftsort im transformierten Zustand (meist gleich)." },
-              transformFamily: { type: Type.STRING, description: "Zugehöriger Clan im transformierten Zustand." },
-              transformFaction: { type: Type.STRING, description: "Zugehörige Fraktion im transformierten Zustand." },
-              transformOutfit: { type: Type.STRING, description: "Die Kleidung/Rüstung im transformierten Zustand (z.B. 'Zerrissener Umhang', 'Goldene Plattenrüstung')." },
-              transformLooks: { type: Type.STRING, description: "Das Gesichtsaussehen, Haarfarbe, Augenfarbe und Gesichtszüge während der Transformation (z.B. 'Lange, goldene, wild abstehende Haare, leuchtend smaragdgrüne Augen, entschlossene Miene')." },
-              transformWings: { type: Type.BOOLEAN, description: "Ob der Charakter im transformierten Zustand Flügel besitzt." },
-              transformHorns: { type: Type.BOOLEAN, description: "Ob der Charakter im transformierten Zustand Hörner besitzt." },
-              techniqueList: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING, description: "Name der Technik." },
-                    type: { type: Type.STRING, description: "Typ der Technik ('Angriff', 'Transformation', 'Verteidigung', 'Support')." },
-                    description: { type: Type.STRING, description: "Beschreibung der Technik." },
-                    subtype: { type: Type.STRING, description: "Untertyp." },
-                    tier: { type: Type.STRING, description: "Stufe der Technik ('Tier 1', 'Tier 2', 'Tier 3', 'Tier 4')." },
-                    baseValue: { type: Type.INTEGER },
-                    costFormula: { type: Type.STRING, description: "Kosten-Formel ('absolut' oder 'proz.')." },
-                    costValue: { type: Type.INTEGER },
-                    costResourceName: { type: Type.STRING }
-                  },
-                  required: ["name", "type", "description"]
-                }
-              }
+              source: { type: Type.STRING, description: "Kraftquelle für diese Fähigkeit." },
+              cost: { type: Type.STRING, description: "Ressourcenkosten für die Nutzung." },
+              description: { type: Type.STRING, description: "Detaillierte Beschreibung der Fähigkeit oder Gestalt." },
+              techniques: { type: Type.STRING, description: "Zugehörige Techniken als kommagetrennte Liste." },
+              activationCondition: { type: Type.STRING, description: "Bedingung oder Trigger zum Aktivieren." },
+              transformName: { type: Type.STRING, description: "Name im transformierten Zustand." },
+              transformRole: { type: Type.STRING, description: "RPG-Rolle im transformierten Zustand." },
+              transformGender: { type: Type.STRING, description: "Geschlecht im transformierten Zustand." },
+              transformCupSize: { type: Type.STRING, description: "Körbchengröße im transformierten Zustand." },
+              transformHairColor: { type: Type.STRING, description: "Haarfarbe im transformierten Zustand." },
+              transformEyeColor: { type: Type.STRING, description: "Augenfarbe im transformierten Zustand." },
+              transformBuild: { type: Type.STRING, description: "Körperstatur im transformierten Zustand." },
+              transformAge: { type: Type.STRING, description: "Alter im transformierten Zustand." },
+              transformRace: { type: Type.STRING, description: "Rasse im transformierten Zustand." },
+              transformRaceFeatures: { type: Type.STRING, description: "Merkmale im transformierten Zustand." },
+              transformHeight: { type: Type.STRING, description: "Größe im transformierten Zustand." },
+              transformWeight: { type: Type.STRING, description: "Gewicht im transformierten Zustand." },
+              transformBodyFat: { type: Type.STRING, description: "KFA im transformierten Zustand." },
+              transformMuscleMass: { type: Type.STRING, description: "Muskelmasse im transformierten Zustand." },
+              transformMeasurements: { type: Type.STRING, description: "Körpermaße im transformierten Zustand." },
+              transformOutfit: { type: Type.STRING, description: "Kleidung im transformierten Zustand." },
+              transformLooks: { type: Type.STRING, description: "Aussehen und Gesichtszüge in der Transformation." },
+              transformWings: { type: Type.BOOLEAN, description: "Ob der Charakter Flügel besitzt." },
+              transformHorns: { type: Type.BOOLEAN, description: "Ob der Charakter Hörner besitzt." }
             },
             required: ["name", "category", "description"]
           },
-          description: "Eine Liste aller Fähigkeiten des Charakters. Standard-Fähigkeiten sowie spezielle Transformations-Fähigkeiten (Gestaltwechsel / Formänderungen / Power-ups) gehören hierhin."
+          description: "Liste aller Fähigkeiten und Transformationen des Charakters."
         },
-        secretsStage1: { type: Type.STRING, description: "Stufe 1 (Öffentliches Wissen): Allgemeine Gerüchte, Legenden oder oberflächliches Wissen aus der HISTORISCHEN VERGANGENHEIT. Muss zur Gesinnung und Rolle passen (z.B. verzerrte Wahrnehmungen von Außenstehenden). Es darf sich auf KEINEN Fall auf aktuelle Vorkommnisse oder das Geheimnis des Spielers beziehen." },
-        secretsStage2: { type: Type.STRING, description: "Stufe 2 (Indizien & Verdacht): Begründete Gerüchte, versteckte Vorbereitungen oder Indizien aus der VORGESCHICHTE. Darf NIEMALS ohne Anlass böse Klischees (wie Gehirnwäscher/Opferkulte) erfinden, wenn die Person beschützende oder edle Ziele hat!" },
-        secretsStage3: { type: Type.STRING, description: "Stufe 3 (Absolutes Geheimnis - Blackbox): Das tiefe, wahre Geheimnis aus der VORGESCHICHTE. MUSS zwingend im Einklang mit dem Hauptziel (goal) und der Gesinnung stehen (z.B. bei Beschützern ein geheimer Schutzbund/Zufluchtsort; bei Schurken finstere Pläne). Zu Spielbeginn niemandem bekannt." },
-        knowledge: { type: Type.STRING, description: "Verhüllung & Geteiltes Wissen: Wer weiß was über wen? Beschreibe, welche Techniken, Aussehen oder Vergangenheitsaspekte andere Charaktere (oder der Spieler) aktuell voneinander wissen. WICHTIG: Zu Beginn der Kampagne wissen Charaktere meistens nur das Offensichtliche voneinander." },
+        secretsStage1: { type: Type.STRING, description: "Stufe 1 (Öffentliches Wissen): Allgemeine Gerüchte oder oberflächliches Wissen." },
+        secretsStage2: { type: Type.STRING, description: "Stufe 2 (Indizien & Verdacht): Begründete Gerüchte oder Indizien aus der Vorgeschichte." },
+        secretsStage3: { type: Type.STRING, description: "Stufe 3 (Absolutes Geheimnis): Das tiefe, wahre Geheimnis aus der Vorgeschichte." },
+        knowledge: { type: Type.STRING, description: "Geteiltes Wissen und Informationsstand." },
         structuredInventory: {
           type: Type.OBJECT,
-          description: "Strukturiertes Inventar und Besitz des Charakters (Waffen, Kleidung & Rüstung, Accessoires & Schmuck, Startgeld, Währung und sonstige Gegenstände).",
+          description: "Strukturiertes Inventar und Besitz des Charakters.",
           properties: {
-            money: { type: Type.INTEGER, description: "Startgeld des Charakters (z.B. 100)" },
-            currencyLabel: { type: Type.STRING, description: "Währungsbezeichnung passend zum Setting (z.B. 'Goldstücke', 'Berry', 'Credits')" },
+            money: { type: Type.INTEGER, description: "Startgeld des Charakters." },
+            currencyLabel: { type: Type.STRING, description: "Währungsbezeichnung passend zum Setting." },
             weapons: {
               type: Type.ARRAY,
               items: { type: Type.STRING },
-              description: "Liste aller Waffen oder Kampfwerkzeuge (z.B. ['Stahlschwert', 'Kurzbogen'])"
+              description: "Liste aller Waffen."
             },
             armor: {
               type: Type.OBJECT,
-              description: "Getragene Kleidung & Rüstungsteile",
+              description: "Getragene Kleidung & Rüstungsteile.",
               properties: {
-                head: { type: Type.STRING, description: "Kopfbedeckung (z.B. Hut, Bandana, Helm)" },
-                chest: { type: Type.STRING, description: "Oberbekleidung / Rüstung (z.B. Rotes Hemd, Lederrüstung, Robe)" },
-                hands: { type: Type.STRING, description: "Handschuhe oder Armbandagen" },
-                legs: { type: Type.STRING, description: "Beinkleidung / Hose" },
-                feet: { type: Type.STRING, description: "Schuhwerk / Stiefel" }
+                head: { type: Type.STRING },
+                chest: { type: Type.STRING },
+                hands: { type: Type.STRING },
+                legs: { type: Type.STRING },
+                feet: { type: Type.STRING }
               }
             },
             accessories: {
               type: Type.OBJECT,
-              description: "Schmuck & getragene Accessoires",
+              description: "Schmuck & getragene Accessoires.",
               properties: {
-                finger: { type: Type.STRING, description: "Ringe" },
-                wrist: { type: Type.STRING, description: "Armbänder oder Armreife" },
-                waist: { type: Type.STRING, description: "Gürtel oder Schärpe" },
-                back: { type: Type.STRING, description: "Umhang oder Rucksack" },
-                neck: { type: Type.STRING, description: "Halskette, Amulett oder Halstuch" }
+                finger: { type: Type.STRING },
+                wrist: { type: Type.STRING },
+                waist: { type: Type.STRING },
+                back: { type: Type.STRING },
+                neck: { type: Type.STRING }
               }
             },
             generalItems: {
               type: Type.ARRAY,
               items: { type: Type.STRING },
-              description: "Sonstige nützliche Gebrauchsgegenstände, Werkzeuge, Tränke oder Vorräte im Rucksack"
+              description: "Sonstige Gegenstände im Rucksack."
             }
           }
         }
@@ -1275,29 +1280,283 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
       ]
     };
     
-    if (powerSettings && Object.keys(powerSettings).length > 0) {
-      const powerProps: any = {};
-      Object.keys(powerSettings).forEach(key => {
-        const p = powerSettings[key];
-        const minVal = p?.scaleMin ?? 0;
-        const maxVal = p?.scaleMax ?? 100;
-        powerProps[key] = {
+    return schema;
+  }
+
+  private static getSectionCharacterSchema(section: string, powerSettings?: any) {
+    switch (section) {
+      case 'appearance':
+        return {
           type: Type.OBJECT,
           properties: {
-            value: { type: Type.INTEGER, description: `Aktueller Wert (min ${minVal}, max ${maxVal})` },
-            potentialMax: { type: Type.INTEGER, description: `Potenzielles Maximum (min ${minVal}, max ${maxVal})` }
+            name: { type: Type.STRING },
+            role: { type: Type.STRING },
+            appearance: {
+              type: Type.OBJECT,
+              properties: {
+                hairColor: { type: Type.STRING },
+                eyeColor: { type: Type.STRING },
+                age: { type: Type.STRING },
+                build: { type: Type.STRING },
+                gender: { type: Type.STRING },
+                outfit: { type: Type.STRING },
+                looks: { type: Type.STRING },
+                cupSize: { type: Type.STRING },
+                height: { type: Type.STRING },
+                measurements: { type: Type.STRING },
+                weight: { type: Type.STRING },
+                bodyFat: { type: Type.STRING },
+                muscleMass: { type: Type.STRING },
+                origin: { type: Type.STRING },
+                family: { type: Type.STRING },
+                faction: { type: Type.STRING },
+                currentLocation: { type: Type.STRING },
+                race: { type: Type.STRING },
+                raceFeatures: { type: Type.STRING }
+              },
+              required: ["looks"]
+            },
+            abilities: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  transformName: { type: Type.STRING },
+                  transformRole: { type: Type.STRING },
+                  transformGender: { type: Type.STRING },
+                  transformCupSize: { type: Type.STRING },
+                  transformHairColor: { type: Type.STRING },
+                  transformEyeColor: { type: Type.STRING },
+                  transformBuild: { type: Type.STRING },
+                  transformAge: { type: Type.STRING },
+                  transformRace: { type: Type.STRING },
+                  transformRaceFeatures: { type: Type.STRING },
+                  transformHeight: { type: Type.STRING },
+                  transformWeight: { type: Type.STRING },
+                  transformBodyFat: { type: Type.STRING },
+                  transformMuscleMass: { type: Type.STRING },
+                  transformMeasurements: { type: Type.STRING },
+                  transformOutfit: { type: Type.STRING },
+                  transformLooks: { type: Type.STRING },
+                  transformWings: { type: Type.BOOLEAN },
+                  transformHorns: { type: Type.BOOLEAN }
+                },
+                required: ["name", "category", "description"]
+              }
+            }
           },
-          required: ["value", "potentialMax"]
+          required: ["appearance"]
         };
-      });
-      schema.properties.campaignPowerLevels = {
-        type: Type.OBJECT,
-        properties: powerProps,
-        required: Object.keys(powerSettings)
-      };
-      schema.required.push("campaignPowerLevels");
+      case 'personality':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            personality: { type: Type.STRING },
+            personalityArchetype: { type: Type.STRING },
+            personalityTraits: this.getPersonalityTraitsSchema()
+          },
+          required: ["personality"]
+        };
+      case 'bio':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            bio: { type: Type.STRING, description: "Biografie nach den 8 Kernfragen." },
+            appearance: {
+              type: Type.OBJECT,
+              properties: {
+                origin: { type: Type.STRING },
+                family: { type: Type.STRING }
+              }
+            }
+          },
+          required: ["bio"]
+        };
+      case 'situation':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            currentSituation: { type: Type.STRING },
+            appearance: {
+              type: Type.OBJECT,
+              properties: {
+                currentLocation: { type: Type.STRING }
+              }
+            }
+          },
+          required: ["currentSituation"]
+        };
+      case 'motivation':
+      case 'goals':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            goal: { type: Type.STRING },
+            motivationCore: this.getMotivationCoreSchema(),
+            goals: this.getCharacterGoalsSchema()
+          },
+          required: ["goal"]
+        };
+      case 'secrets':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            secretsStage1: { type: Type.STRING },
+            secretsStage2: { type: Type.STRING },
+            secretsStage3: { type: Type.STRING },
+            knowledge: { type: Type.STRING }
+          },
+          required: ["secretsStage1", "secretsStage2", "secretsStage3"]
+        };
+      case 'relationships':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            relationship: { type: Type.STRING },
+            conduct: { type: Type.STRING },
+            relationships: {
+              type: Type.ARRAY,
+              items: this.getCharacterRelationshipItemSchema()
+            }
+          },
+          required: ["relationship", "relationships"]
+        };
+      case 'combat':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            powerSource: { type: Type.STRING },
+            powerCost: { type: Type.STRING },
+            skills: { type: Type.STRING },
+            techniques: { type: Type.STRING },
+            techniqueList: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  type: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  subtype: { type: Type.STRING },
+                  tier: { type: Type.STRING },
+                  costValue: { type: Type.INTEGER },
+                  costResourceName: { type: Type.STRING }
+                },
+                required: ["name", "type", "description"]
+              }
+            },
+            abilities: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                  source: { type: Type.STRING },
+                  cost: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  techniques: { type: Type.STRING },
+                  activationCondition: { type: Type.STRING }
+                },
+                required: ["name", "category", "description"]
+              }
+            },
+            campaignPowerLevelsList: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  parameterName: { type: Type.STRING },
+                  value: { type: Type.INTEGER },
+                  potentialMax: { type: Type.INTEGER }
+                },
+                required: ["parameterName", "value"]
+              }
+            }
+          },
+          required: ["powerSource", "skills"]
+        };
+      case 'professions':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            role: { type: Type.STRING },
+            profession: { type: Type.STRING },
+            professionField: { type: Type.STRING },
+            professionSpecialization: { type: Type.STRING },
+            professionLevel: { type: Type.STRING },
+            secondaryProfessions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  profession: { type: Type.STRING },
+                  professionLevel: { type: Type.STRING },
+                  jobTitle: { type: Type.STRING },
+                  description: { type: Type.STRING }
+                }
+              }
+            },
+            jobTitle: { type: Type.STRING },
+            professionDescription: { type: Type.STRING },
+            craftingSkills: { type: Type.STRING },
+            talents: { type: Type.STRING },
+            everydaySkills: { type: Type.STRING },
+            toolsAndEquipment: { type: Type.STRING }
+          },
+          required: ["profession", "professionField"]
+        };
+      case 'inventory':
+        return {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            structuredInventory: {
+              type: Type.OBJECT,
+              properties: {
+                money: { type: Type.INTEGER },
+                currencyLabel: { type: Type.STRING },
+                weapons: { type: Type.ARRAY, items: { type: Type.STRING } },
+                armor: {
+                  type: Type.OBJECT,
+                  properties: {
+                    head: { type: Type.STRING },
+                    chest: { type: Type.STRING },
+                    hands: { type: Type.STRING },
+                    legs: { type: Type.STRING },
+                    feet: { type: Type.STRING }
+                  }
+                },
+                accessories: {
+                  type: Type.OBJECT,
+                  properties: {
+                    finger: { type: Type.STRING },
+                    wrist: { type: Type.STRING },
+                    waist: { type: Type.STRING },
+                    back: { type: Type.STRING },
+                    neck: { type: Type.STRING }
+                  }
+                },
+                generalItems: { type: Type.ARRAY, items: { type: Type.STRING } }
+              }
+            }
+          },
+          required: ["structuredInventory"]
+        };
+      default:
+        return this.getCharacterSchema(powerSettings);
     }
-    return schema;
   }
 
   static sanitizeAndRepairTransformations(char: any): any {
@@ -1533,9 +1792,9 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
          - In den Beziehungs-Feldern ('relationship', 'conduct') MUSS explizit herausgestellt werden, welche Beziehungen er VOR der Transformation mit wem hatte (Familie, alte Gefährten, Verlobte, Rivalen) UND wie sich diese Beziehungen durch die körperliche Veränderung entwickelt haben (z. B. ob alte Freunde ihn in der neuen Gestalt nicht mehr erkennen, ihn für tot halten, seine neue Form als Monster fürchten/jagen oder ihm helfen wollen).
       3. DIE NEUE TRANSFORMATION ALS ABILITY & IM ZUSTAND:
          - Erstelle zwingend einen Eintrag in 'abilities' mit 'category: "Transformationen"' und allen 'transform...'-Feldern ('transformLooks', 'transformOutfit', 'transformRace', 'transformRaceFeatures' wie Flügel, Hörner, Schuppen, Klauen, etc.) SOWIE Aktivierungs- und Zurückverwandlungs-Techniken unter 'techniqueList'.
-         - Beschreibe in 'currentSituation', wie der Charakter heute mit dieser Verwandlung lebt und wie sie sein aktuelles Leben bestimmt.`;
+          - Beschreibe in 'currentSituation', wie der Charakter heute mit dieser Verwandlung lebt und wie sie sein aktuelles Leben bestimmt.`;
 
-      const response = await ai.models.generateContent({
+      const response = await this.generateContentWithFallback(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
@@ -1632,7 +1891,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
       - Überschreibe diese Felder NIEMALS mit den Attributen oder der Kleidung des transformierten Zustands. Alle körperlichen, visuellen und kleidungstechnischen Abweichungen der Transformation gehören ausschließlich in die Beschreibung der jeweiligen Technik in 'techniqueList'!`;
 
       const charSchema = this.getCharacterSchema(world.campaignPowerSettings);
-      const response = await ai.models.generateContent({
+      const response = await this.generateContentWithFallback(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
@@ -1705,7 +1964,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
       - Überschreibe diese Felder NIEMALS mit den Attributen oder der Kleidung des transformierten Zustands. Alle körperlichen, visuellen und kleidungstechnischen Abweichungen der Transformation gehören ausschließlich in die Beschreibung der jeweiligen Technik in 'techniqueList'!`;
 
       const charSchema = this.getCharacterSchema(world.campaignPowerSettings);
-      const response = await ai.models.generateContent({
+      const response = await this.generateContentWithFallback(ai, {
         model: 'gemini-3.8-flash',
         contents: prompt,
         config: {
@@ -4505,34 +4764,37 @@ WICHTIG: Achte zwingend darauf, für das Feld 'faction' (unter 'appearance') ein
       contextPrompt += factionInstruction;
 
       if (existingCharacter) {
-        contextPrompt += `\n\n### BESTEHENDE DATEN (Ergänzungs-Modus aktiv):
-Es existieren bereits Charakter-Daten. Integriere/behalte diese Werte weitestgehend bei und ergänze/erweitere sie um die neuen Informationen aus dem Text. Überschreibe KEINE bestehenden, ausgefüllten und sinnvollen Werte (z.B. Bio, Rolle, Name, Aussehen, Kräfte), außer der neue Freitext verlangt dies explizit. Führe bestehende und neue Informationen (wie neue Techniken oder neue Details in der Bio) elegant auf Deutsch zusammen!
+        const compactAbilities = Array.isArray(existingCharacter.abilities)
+          ? existingCharacter.abilities.slice(0, 6).map((a: any) => ({
+              name: a?.name || '',
+              category: a?.category || '',
+              description: (a?.description || '').slice(0, 150)
+            }))
+          : [];
 
-WICHTIGSTE ZUSAMMENFÜHRUNGS-REGELN (GEGEN DUPLIKATE & AN DIE WELT ANGEPASST):
-1. ABSOLUTES VERBOT VON DOPPELTEN ABSÄTZEN IN DER BIO: Lies die bestehende "Bio" (Biografie) sorgfältig durch. Füge auf KEINEN Fall denselben Text, dieselbe Formulierung oder bereits genannte Sätze (auch nicht leicht abgewandelt als "[Zusatz]: ...") noch einmal hinzu! Wenn die Information bereits vorhanden ist, darf sie NICHT erneut angehängt werden. Ergänze NUR wirklich neue, zusätzliche Details und verschmilz sie elegant zu einem einzigen, flüssigen Text ohne Redundanzen.
-2. KEINE DUPLIZIERTEN FÄHIGKEITEN/KRÄFTE: Erstelle keine doppelten oder redundant benannten Fähigkeiten wie "Kraft / Fähigkeit #1", "Kraft / Fähigkeit #2", "Kraft / Fähigkeit #3" mit identischem oder ähnlichem Inhalt. Wenn bereits eine Fähigkeit oder Technik existiert, erweitere/ergänze sie lieber direkt in ihrem bestehenden Eintrag, anstatt eine weitere identische Fähigkeit hinzuzufügen, es sei denn, sie besitzt eine völlig andere Kraftquelle (powerSource). Es reicht vollkommen, eine Fähigkeit nur einmal aufzuführen und sie auszubauen.
-3. STRENGE BALANCIERUNG VON MACHT & WERTEN: Leite die Macht-Werte (campaignPowerLevels) und Stärken absolut streng passend zur Welten-Beschreibung, zum Ton/Genre und zum genauen Zeitpunkt/Ära her! Gib keine willkürlichen Höchstwerte an, sondern passe sie exakt an das Niveau des Charakters zu diesem Zeitpunkt an.
+        contextPrompt += `\n\n### BESTEHENDE DATEN (Ergänzungs-Modus aktiv):
+Es existieren bereits Charakter-Daten. Integriere/behalte diese Werte weitestgehend bei und ergänze/erweitere sie um die neuen Informationen aus dem Text. Überschreibe KEINE bestehenden, ausgefüllten und sinnvollen Werte (z.B. Bio, Rolle, Name, Aussehen, Kräfte), außer der neue Freitext verlangt dies explizit. Führe bestehende und neue Informationen elegant auf Deutsch zusammen!
 
 Aktuelle Werte:
 - Name: "${existingCharacter.name || ''}"
 - Rolle: "${existingCharacter.role || ''}"
-- Persönlichkeit: "${existingCharacter.personality || ''}"
-- Bio: "${existingCharacter.bio || ''}"
-- Aktuelle Situation: "${existingCharacter.currentSituation || ''}"
-- Ziel: "${existingCharacter.goal || ''}"
+- Persönlichkeit: "${(existingCharacter.personality || '').slice(0, 300)}"
+- Bio: "${(existingCharacter.bio || '').slice(0, 600)}"
+- Aktuelle Situation: "${(existingCharacter.currentSituation || '').slice(0, 300)}"
+- Ziel: "${(existingCharacter.goal || '').slice(0, 200)}"
 - Kraftquelle: "${existingCharacter.powerSource || ''}"
 - Kraftkosten: "${existingCharacter.powerCost || ''}"
-- Spezialfähigkeit (skills): "${existingCharacter.skills || ''}"
-- Techniken: "${existingCharacter.techniques || ''}"
-- Beziehung: "${existingCharacter.relationship || ''}"
-- Verhalten: "${existingCharacter.conduct || ''}"
-- Aussehen: Rasse "${existingCharacter.appearance?.race || ''}", Alter "${existingCharacter.appearance?.age || ''}", Gender "${existingCharacter.appearance?.gender || ''}", Statur "${existingCharacter.appearance?.build || ''}", Haare "${existingCharacter.appearance?.hairColor || ''}", Augen "${existingCharacter.appearance?.eyeColor || ''}", Kleidung "${existingCharacter.appearance?.outfit || ''}", Gesichtsaussehen/Haarstil "${existingCharacter.appearance?.looks || ''}"
-- Bestehende Fähigkeiten/Transformationen: ${JSON.stringify(existingCharacter.abilities || [])}`;
+- Spezialfähigkeit (skills): "${(existingCharacter.skills || '').slice(0, 300)}"
+- Techniken: "${(existingCharacter.techniques || '').slice(0, 200)}"
+- Beziehung: "${(existingCharacter.relationship || '').slice(0, 200)}"
+- Verhalten: "${(existingCharacter.conduct || '').slice(0, 200)}"
+- Aussehen: Rasse "${existingCharacter.appearance?.race || ''}", Alter "${existingCharacter.appearance?.age || ''}", Gender "${existingCharacter.appearance?.gender || ''}", Statur "${existingCharacter.appearance?.build || ''}", Haare "${existingCharacter.appearance?.hairColor || ''}", Augen "${existingCharacter.appearance?.eyeColor || ''}", Kleidung "${(existingCharacter.appearance?.outfit || '').slice(0, 200)}", Gesichtsaussehen/Haarstil "${(existingCharacter.appearance?.looks || '').slice(0, 200)}"
+- Bestehende Fähigkeiten (Auszug): ${JSON.stringify(compactAbilities)}`;
       }
 
       if (powerSettings && Object.keys(powerSettings).length > 0) {
         contextPrompt += `\n\nBefülle ebenfalls ALLE folgenden Macht-Attribute (campaignPowerLevels) mit passenden, realistischen Werten (value und potentialMax) für diesen Charakter:`;
-        Object.entries(powerSettings).forEach(([key, val]: [string, any]) => {
+        Object.entries(powerSettings).slice(0, 15).forEach(([key, val]: [string, any]) => {
           const minVal = val?.scaleMin ?? 0;
           const maxVal = val?.scaleMax ?? 100;
           contextPrompt += `\n- Attribut "${key}": Wert zwischen ${minVal} und ${maxVal}, und maximales Potenzial ebenfalls zwischen ${minVal} und ${maxVal}.`;
@@ -4543,7 +4805,7 @@ Aktuelle Werte:
         const worldLocations = this.extractWorldLocations(worldContext, (worldContext.loreDatabase || []));
         if (worldLocations.length > 0) {
           contextPrompt += `\n\n### BEKANNTE SCHAUPLÄTZE & ORTE DER WELT (FÜR ORTSKONSISTENZ):
-${worldLocations.slice(0, 15).map(loc => `- ${loc}`).join('\n')}
+${worldLocations.slice(0, 10).map(loc => `- ${loc}`).join('\n')}
 WICHTIG: Richte alle Ortsangaben, Treffpunkte und Herkunftsorte an diesen Schauplätzen aus!`;
         }
       }
@@ -4552,28 +4814,12 @@ WICHTIG: Richte alle Ortsangaben, Treffpunkte und Herkunftsorte an diesen Schaup
         contextPrompt += `\n\n### BEREITS EXISTIERENDE CHARAKTERE IM CODEX / NPCs (WICHTIG FÜR BEZIEHUNGEN & VERGANGENHEIT):
 Es gibt bereits registrierte Charaktere/NPCs in dieser Welt. Analysiere diese sorgfältig!
 
-### ZWINGENDE ALTERS- & ZEITLINIEN-LOGIK FÜR BEZIEHUNGEN (STRENGSTE DIRECTIVE):
-- Beachte das Alter der beteiligten Charaktere!
-- GROSSER ALTERSUNTERSCHIED (z. B. 17 Jahre vs. 35 Jahre = 18 Jahre Differenz):
-  * Eine "Gemeinsame Kindheit" (z. B. "Gemeinsame Kindheit in der Wüste", "zusammen als Kinder aufgewachsen", "Sandkastenfreunde") ist bei großem Altersunterschied BIOLOGISCH UNMÖGLICH und STRENGSTENS VERBOTEN!
-  * Als der jüngere Charakter ein Kind (z. B. 5 Jahre) war, war der ältere bereits erwachsen (z. B. 23 Jahre).
-  * Solche Beziehungen dürfen NUR als Mentor/Schüler, älterer Beschützer, Lehrmeister, Aufpasser oder als spätere Begegnung im Leben formuliert werden — NIEMALS als Kindheitsfreunde!
-  * Nur bei annähernd gleichem Alter (Differenz 0 bis max. 4 Jahre) ist eine echte gemeinsame Kindheit oder Jugend plausibel.
-
-### ZWINGENDE ORTS- & SCHAUPLATZ-KONSISTENZ:
-- Achte peinlichst genau auf etablierte Treffpunkte und Herkunftsorte!
-- Wenn im Kontext oder im Freitext bereits ein Treffpunkt oder Ort etabliert ist (z. B. erstes Treffen in einer Taverne, Herkunft aus einer bestimmten Hafenstadt), muss das erste Kennenlernen in 'relationships', 'sharedPast' und 'bio' genau an DIESEM Ort stattfinden.
-- Erfinde NIEMALS unpassende, widersprüchliche Orte (wie "in den Sanddünen der Wüste"), wenn dieser Ort nicht zur etablierten Biografie oder Weltgeografie passt!
-
-Hier sind die bestehenden Charaktere:
-${existingCodexCharacters.map(c => `- Name: "${c.name}"
+Hier sind die bestehenden Charaktere (Auszug):
+${existingCodexCharacters.slice(0, 8).map(c => `- Name: "${c.name}" (${c.role || 'Unbekannt'})
   * Alter / Geschlecht: "${c.age || 'Unbekannt'}" / "${c.gender || 'Unbekannt'}"
   * Herkunft / Standort: "${c.origin || c.location || 'Unbekannt'}"
-  * RPG-Rolle: "${c.role || 'Unbekannt'}"
-  * Rasse & Merkmale: "${c.race || 'Mensch'}" (${c.raceFeatures || 'keine'})
-  * Aussehen (Haare/Augen/Statur): "${c.hairColor || 'Unbekannt'}" / "${c.eyeColor || 'Unbekannt'}" / "${c.build || 'Normal'}" (${c.looks || ''})
-  * Familie/Zugehörigkeit: "${c.family || 'Keine'}"
-  * Beziehung/Verhalten/Details: "${c.relation || c.description || 'Keine Angabe'}"`).join('\n')}`;
+  * Rasse: "${c.race || 'Mensch'}"
+  * Beziehung/Details: "${(c.relation || c.description || 'Keine Angabe').slice(0, 150)}"`).join('\n')}`;
       }
 
       if (targetSection && targetSection !== 'all') {
@@ -4598,12 +4844,16 @@ Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend 
 
       contextPrompt += `\n\nText: "${text}"\n`;
 
-      const response = await ai.models.generateContent({
+      const responseSchema = targetSection && targetSection !== 'all' 
+        ? this.getSectionCharacterSchema(targetSection, powerSettings) 
+        : this.getCharacterSchema(powerSettings);
+
+      const response = await this.generateContentWithFallback(ai, {
         model: 'gemini-3.8-flash',
         contents: [{ role: 'user', parts: [{ text: contextPrompt }] }],
         config: {
           responseMimeType: "application/json",
-          responseSchema: this.getCharacterSchema(powerSettings)
+          responseSchema: responseSchema
         }
       });
 
