@@ -5520,7 +5520,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
   // Unified Chat Control Tabs & State
   type ControlTab = 'combat' | 'dialogue' | 'expression' | 'techniques' | 'travel' | 'story' | 'inventory' | 'management';
   const [activeControlTab, setActiveControlTab] = useState<ControlTab | null>(null);
-  const [expressionSubTab, setExpressionSubTab] = useState<'emotion' | 'tone'>('emotion');
 
   const currentActiveEmotion = adventure.player?.emotionState?.emotion || adventure.emotionState?.emotion || '';
   const currentActiveTone = adventure.player?.emotionState?.tone || adventure.emotionState?.tone || '';
@@ -8837,9 +8836,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             
             {/* Unified Popovers für die Funktionsbereiche */}
 
-            {/* AUSDRUCK TAB PANEL (Emotion + Stimme/Ton) */}
+            {/* AUSDRUCK TAB PANEL (Emotion + Stimme/Ton gleichzeitig) */}
             {isExpressionOpen && (
-              <div id="expression-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-md w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+              <div id="expression-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3 max-w-2xl w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
                 {/* Header */}
                 <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                   <div className="flex items-center gap-2">
@@ -8879,63 +8878,46 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     <button
                       type="button"
                       onClick={handleClearExpression}
-                      className="text-[10px] font-bold text-slate-400 hover:text-red-400 bg-slate-900 hover:bg-slate-850 px-2 py-1 rounded-lg border border-slate-800 transition-colors shrink-0"
+                      className="text-[10px] font-bold text-slate-400 hover:text-red-400 bg-slate-900 hover:bg-slate-850 px-2.5 py-1 rounded-lg border border-slate-800 transition-colors shrink-0"
                     >
                       Zurücksetzen
                     </button>
                   )}
                 </div>
 
-                {/* Sub-Tabs: Emotion / Stimme */}
-                <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-850">
-                  <button
-                    type="button"
-                    onClick={() => setExpressionSubTab('emotion')}
-                    className={`py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 ${
-                      expressionSubTab === 'emotion'
-                        ? 'bg-amber-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <i className="fa-regular fa-face-smile text-xs"></i>
-                    <span>Emotion</span>
-                    {currentActiveEmotion && <span className="text-[9px]">✓</span>}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExpressionSubTab('tone')}
-                    className={`py-1.5 text-[10px] font-bold rounded-lg transition-all uppercase tracking-wider flex items-center justify-center gap-1.5 ${
-                      expressionSubTab === 'tone'
-                        ? 'bg-sky-600 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <i className="fa-solid fa-microphone-lines text-xs"></i>
-                    <span>Stimme / Ton</span>
-                    {currentActiveTone && <span className="text-[9px]">✓</span>}
-                  </button>
-                </div>
+                {/* Zwei Spalten nebeneinander: Emotion und Stimme / Ton gleichzeitig sichtbar */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-0.5">
+                  {/* Spalte: Emotion */}
+                  <div className="space-y-2 bg-slate-950/40 p-2.5 rounded-xl border border-slate-850 flex flex-col">
+                    <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
+                      <div className="flex items-center gap-1.5">
+                        <i className="fa-regular fa-face-smile text-amber-500 text-xs"></i>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Emotion</span>
+                      </div>
+                      {currentActiveEmotion && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 font-bold border border-amber-500/25">
+                          {currentActiveEmotion} ✓
+                        </span>
+                      )}
+                    </div>
 
-                {/* Content: Emotion */}
-                {expressionSubTab === 'emotion' && (
-                  <div className="space-y-2">
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-1.5 flex items-center gap-2">
+                    <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-1.5 flex items-center gap-2">
                       <i className="fa-solid fa-magnifying-glass text-slate-500 text-xs ml-1.5 shrink-0"></i>
                       <input
                         type="text"
                         value={emotionSearch}
                         onChange={(e) => setEmotionSearch(e.target.value)}
-                        placeholder="Emotion filtern..."
+                        placeholder="Emotion suchen..."
                         className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-600"
-                        autoFocus
                       />
                       {emotionSearch && (
-                        <button type="button" onClick={() => setEmotionSearch('')} className="text-slate-500 hover:text-slate-300 pr-1 text-xs">
+                        <button type="button" onClick={() => setEmotionSearch('')} className="text-slate-500 hover:text-slate-300 pr-1 text-xs" title="Zurücksetzen">
                           <i className="fa-solid fa-xmark"></i>
                         </button>
                       )}
                     </div>
-                    <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar bg-slate-950/30 rounded-xl p-1 border border-slate-850">
+
+                    <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar bg-slate-950/40 rounded-xl p-1 border border-slate-850/60 flex-1">
                       {sortedEmotions
                         .filter(e => e.toLowerCase().includes(emotionSearch.toLowerCase().trim()))
                         .map(e => {
@@ -8953,18 +8935,18 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                   handleSelectEmotion(e);
                                 }
                               }}
-                              className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
                                 isSelected
                                   ? 'bg-amber-600/25 border border-amber-500/50 text-amber-200 font-bold'
                                   : 'text-slate-300 hover:bg-slate-800 hover:text-white border border-transparent'
                               }`}
                             >
-                              <span className="flex items-center gap-1.5">
-                                {isSelected && <span className="text-amber-400 text-xs">✓</span>}
-                                <span>{e}</span>
+                              <span className="flex items-center gap-1.5 truncate">
+                                {isSelected && <span className="text-amber-400 text-xs shrink-0">✓</span>}
+                                <span className="truncate">{e}</span>
                               </span>
                               {count > 0 && (
-                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold">
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-bold shrink-0 ml-1">
                                   {count}x
                                 </span>
                               )}
@@ -8976,28 +8958,38 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       )}
                     </div>
                   </div>
-                )}
 
-                {/* Content: Stimme / Ton */}
-                {expressionSubTab === 'tone' && (
-                  <div className="space-y-2">
-                    <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-1.5 flex items-center gap-2">
+                  {/* Spalte: Stimme / Ton */}
+                  <div className="space-y-2 bg-slate-950/40 p-2.5 rounded-xl border border-slate-850 flex flex-col">
+                    <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
+                      <div className="flex items-center gap-1.5">
+                        <i className="fa-solid fa-microphone-lines text-sky-400 text-xs"></i>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Stimme / Ton</span>
+                      </div>
+                      {currentActiveTone && (
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 font-bold border border-sky-500/25">
+                          {currentActiveTone} ✓
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-1.5 flex items-center gap-2">
                       <i className="fa-solid fa-magnifying-glass text-slate-500 text-xs ml-1.5 shrink-0"></i>
                       <input
                         type="text"
                         value={toneSearch}
                         onChange={(e) => setToneSearch(e.target.value)}
-                        placeholder="Tonart filtern..."
+                        placeholder="Tonart suchen..."
                         className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-600"
-                        autoFocus
                       />
                       {toneSearch && (
-                        <button type="button" onClick={() => setToneSearch('')} className="text-slate-500 hover:text-slate-300 pr-1 text-xs">
+                        <button type="button" onClick={() => setToneSearch('')} className="text-slate-500 hover:text-slate-300 pr-1 text-xs" title="Zurücksetzen">
                           <i className="fa-solid fa-xmark"></i>
                         </button>
                       )}
                     </div>
-                    <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar bg-slate-950/30 rounded-xl p-1 border border-slate-850">
+
+                    <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 custom-scrollbar bg-slate-950/40 rounded-xl p-1 border border-slate-850/60 flex-1">
                       {sortedTones
                         .filter(t => t.toLowerCase().includes(toneSearch.toLowerCase().trim()))
                         .map(t => {
@@ -9015,18 +9007,18 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                                   handleSelectTone(t);
                                 }
                               }}
-                              className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
                                 isSelected
                                   ? 'bg-sky-600/25 border border-sky-500/50 text-sky-200 font-bold'
                                   : 'text-slate-300 hover:bg-slate-800 hover:text-white border border-transparent'
                               }`}
                             >
-                              <span className="flex items-center gap-1.5">
-                                {isSelected && <span className="text-sky-400 text-xs">✓</span>}
-                                <span>{t}</span>
+                              <span className="flex items-center gap-1.5 truncate">
+                                {isSelected && <span className="text-sky-400 text-xs shrink-0">✓</span>}
+                                <span className="truncate">{t}</span>
                               </span>
                               {count > 0 && (
-                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 font-bold">
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/20 text-sky-400 font-bold shrink-0 ml-1">
                                   {count}x
                                 </span>
                               )}
@@ -9038,7 +9030,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       )}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -9422,14 +9414,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 </div>
               </div>
             )}
-
-            {/* Spezifische Standort-Anzeige */}
-            <div className="px-3 mb-1.5 flex items-center justify-between text-[10.5px] text-slate-400 font-medium font-sans">
-              <span className="flex items-center gap-1.5">
-                <i className="fa-solid fa-location-dot text-amber-500 text-xs shrink-0"></i>
-                <span className="font-semibold text-slate-350">{mostSpecificLocationName}</span>
-              </span>
-            </div>
 
             {/* Zentrale Chat-Steuerleiste (Strukturierte Tabs mit Status-Badges) */}
             <div className="flex items-center gap-1 bg-slate-900 border border-slate-800/80 rounded-2xl p-1.5 mb-2.5 mx-1 shadow-lg backdrop-blur-md z-25 overflow-x-auto scrollbar-none flex-nowrap font-sans">
