@@ -172,26 +172,328 @@ const progressionRatesConfig: Record<string, Array<{ id: string; label: string; 
   ],
 };
 
+const computeInitialStatusElements = (initialData?: Adventure): StatusElement[] => {
+  const rawStatus = initialData?.statusElements ?? HUD_PRESETS["Klassisch"].map(p => ({ ...p, id: Math.random().toString(36).substr(2, 9) }));
+  const playerLoc = initialData?.player?.appearance?.currentLocation;
+  if (playerLoc) {
+    const locIdx = rawStatus.findIndex(s => (s.label || '').toLowerCase().includes('standort') || (s.label || '').toLowerCase().includes('ort'));
+    if (locIdx !== -1) {
+      if (!rawStatus[locIdx].value) {
+        rawStatus[locIdx] = { ...rawStatus[locIdx], value: playerLoc };
+      }
+    } else {
+      rawStatus.push({
+        id: Math.random().toString(36).substr(2, 9),
+        label: 'Standort',
+        value: playerLoc
+      });
+    }
+  }
+  return rawStatus;
+};
+
+const computeInitialLoreDatabase = (initialData?: Adventure): LoreEntry[] => {
+  let initialLore = [...(initialData?.loreDatabase || [])].filter(l => l.category !== 'Orte');
+  const initialNpcs = initialData?.npcs || [];
+  
+  // Migrate NPCs to LoreDatabase if they aren't there
+  initialNpcs.forEach(npc => {
+    const exists = initialLore.find(l => l.id === npc.id || l.title === npc.name);
+    if (!exists) {
+      initialLore.push({
+        id: npc.id || Math.random().toString(36).substr(2, 9),
+        category: 'Charaktere',
+        title: npc.name,
+        description: npc.bio,
+        isUnlocked: true,
+        image: npc.image,
+        details: {
+          role: npc.role,
+          gender: npc.appearance?.gender,
+          age: npc.appearance?.age,
+          build: npc.appearance?.build,
+          hairColor: npc.appearance?.hairColor,
+          eyeColor: npc.appearance?.eyeColor,
+          cupSize: npc.appearance?.cupSize,
+          height: npc.appearance?.height,
+          measurements: npc.appearance?.measurements,
+          origin: npc.appearance?.origin,
+          family: npc.appearance?.family,
+          faction: npc.appearance?.faction,
+          race: npc.appearance?.race,
+          raceFeatures: npc.appearance?.raceFeatures,
+          outfit: npc.appearance?.outfit,
+          goal: npc.goal,
+          skills: npc.skills,
+          isHostile: npc.isHostile,
+          personality: (npc as any).personality || '',
+          currentSituation: (npc as any).currentSituation || ''
+        }
+      });
+    }
+  });
+
+  // Migrate abilities for all lore entries as well (from 'Passive Fähigkeiten' or empty to 'Techniken')
+  const migrated = initialLore.map(entry => {
+    if (entry.details?.abilities && Array.isArray(entry.details.abilities)) {
+      return {
+        ...entry,
+        details: {
+          ...entry.details,
+          abilities: entry.details.abilities.map((a: any) => {
+            if (!a.category || a.category === 'Passive Fähigkeiten') {
+              return { ...a, category: 'Techniken' };
+            }
+            return a;
+          })
+        }
+      };
+    }
+    return entry;
+  });
+
+  // Seed standard items if no items are currently present in lore database
+  const hasItems = migrated.some(l => l.category === 'Gegenstände');
+  let finalEntries = migrated;
+  if (!hasItems) {
+    const standardItems = createStandardLoreEntries();
+    finalEntries = [...migrated, ...standardItems];
+  }
+
+  const seenIds = new Set<string>();
+  return finalEntries.map((entry, idx) => {
+    let entryId = entry.id;
+    if (!entryId || seenIds.has(entryId)) {
+      entryId = `${entry.id || 'entry'}-${idx}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+    }
+    seenIds.add(entryId);
+    if (entryId !== entry.id) {
+      return { ...entry, id: entryId };
+    }
+    return entry;
+  });
+};
+
+const computeInitialWorld = (initialData?: Adventure): WorldSetting => {
+  const epDefaults = createEpDefaultWorldSettings();
+  const w: WorldSetting = initialData?.world ?? {
+    title: '',
+    description: '',
+    era: '',
+    tone: 'Düster & Ernst',
+    isHeroic: true,
+    dramaLevel: 'Mittel',
+    regionMarkers: [],
+    civilizationMarkers: [],
+    placeMarkers: [],
+    terrains: [],
+    borders: [],
+    techniqueProgressionLogic: 'ep',
+    techniqueProgressionRate: 'normal',
+    techniqueRulesList: [],
+    campaignPowerSettings: epDefaults.campaignPowerSettings,
+    customStatAllocations: epDefaults.customStatAllocations,
+    costResources: epDefaults.costResources,
+    customResourceMappings: epDefaults.customResourceMappings,
+    healthPowerNames: epDefaults.healthPowerNames,
+    costPowerNames: epDefaults.costPowerNames,
+    healthLabel: epDefaults.healthLabel,
+    costLabel: epDefaults.costLabel,
+    mapConfig: {
+      continentStencil: 'none',
+      coastlineStyle: 'rugged',
+      mountainStyle: 'young',
+      riverStyle: 'branched',
+      biomeStyle: 'grassland',
+      mapStyle: 'minimalist',
+      decorations: [],
+      mapWidth: 100,
+      mapHeight: 100
+    }
+  };
+  if (!w.techniqueRulesList) {
+    w.techniqueRulesList = [];
+  }
+  if (!w.customResourceMappings || w.customResourceMappings.length === 0) {
+    w.customResourceMappings = JSON.parse(JSON.stringify(epDefaults.customResourceMappings));
+  }
+  let resultWorld = w;
+  if (initialData?.world) {
+    resultWorld = normalizeOnePieceWorldGeometry(w);
+  }
+  return normalizeWorldGeometry(resultWorld);
+};
+
+const computeInitialPlayer = (initialData?: Adventure, userProfile?: UserProfile): Character => {
+  let p: Character;
+  if (initialData?.player) {
+    p = { ...initialData.player };
+    // Synchronize role and profession so they always match
+    const synchronizedRole = p.role || p.profession || '';
+    p.role = synchronizedRole;
+    p.profession = synchronizedRole;
+  } else if (userProfile) {
+    const prefRole = userProfile.preferredRole || '';
+    p = {
+      name: userProfile.name,
+      role: prefRole,
+      profession: prefRole,
+      personality: '',
+      bio: userProfile.bio,
+      currentSituation: '',
+      goal: '',
+      appearance: {
+        hairColor: userProfile.appearance.hairColor,
+        eyeColor: userProfile.appearance.eyeColor,
+        age: userProfile.appearance.age,
+        build: userProfile.appearance.build,
+        gender: userProfile.appearance.gender,
+        cupSize: userProfile.appearance.cupSize,
+        raceFeatures: userProfile.appearance.raceFeatures || '',
+        outfit: '',
+        looks: ''
+      },
+      attributes: [
+        { name: 'Gesundheit', value: 100, max: 100 },
+        { name: 'Mana', value: 50, max: 50 }
+      ]
+    };
+  } else {
+    p = {
+      name: '',
+      role: '',
+      personality: '',
+      bio: '',
+      currentSituation: '',
+      goal: '',
+      appearance: {
+        hairColor: '',
+        eyeColor: '',
+        age: '',
+        build: 'Schlank',
+        gender: 'Weiblich',
+        cupSize: '',
+        raceFeatures: '',
+        outfit: '',
+        looks: ''
+      },
+      attributes: [
+        { name: 'Gesundheit', value: 100, max: 100 },
+        { name: 'Mana', value: 50, max: 50 }
+      ]
+    };
+  }
+
+  if (p.abilities && p.abilities.length > 0) {
+    p.abilities = p.abilities.map(a => {
+      if (!a.category || a.category === 'Passive Fähigkeiten') {
+        return { ...a, category: 'Techniken' };
+      }
+      return a;
+    });
+  }
+
+  // Synchronize player currentLocation with statusElements or active location if missing/empty
+  if (!p.appearance.currentLocation) {
+    const initialStatus = initialData?.statusElements ?? HUD_PRESETS["Klassisch"];
+    const locElem = initialStatus.find(s => (s.label || '').toLowerCase().includes('standort') || (s.label || '').toLowerCase().includes('ort'));
+    if (locElem && locElem.value) {
+      p.appearance.currentLocation = locElem.value;
+    } else {
+      const activeOrt = initialData?.loreDatabase?.find(l => l.category === 'Orte' && l.details?.isActiveTarget)
+        || initialData?.loreDatabase?.find(l => l.category === 'Orte');
+      if (activeOrt?.title) {
+        p.appearance.currentLocation = activeOrt.title;
+      }
+    }
+  }
+
+  return migrateLegacyProfessionData(p);
+};
+
+const computeInitialNpcs = (initialData?: Adventure): NPC[] => {
+  const rawNpcs = initialData?.npcs ?? [];
+  return rawNpcs.map(npc => {
+    if (npc.abilities && npc.abilities.length > 0) {
+      return {
+        ...npc,
+        abilities: npc.abilities.map(a => {
+          if (!a.category || a.category === 'Passive Fähigkeiten') {
+            return { ...a, category: 'Techniken' };
+          }
+          return a;
+        })
+      };
+    }
+    return npc;
+  });
+};
+
 const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initialData, mode, userId, userProfile }) => {
   const adventureIdRef = useRef<string>(mode === GameViewMode.JOIN_CUSTOM_CHAR ? `adv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}` : (initialData?.id || `adv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`));
+  const isNewAdventure = mode === GameViewMode.CREATE || mode === GameViewMode.JOIN_CUSTOM_CHAR || !initialData || AdventureResetService.isFreshAdventure(initialData);
+
+  // Compute pristine start state once for initial snapshots and React state
+  const startPlayer = useRef(computeInitialPlayer(initialData, userProfile)).current;
+  const startWorld = useRef(computeInitialWorld(initialData)).current;
+  const startStatusElements = useRef(computeInitialStatusElements(initialData)).current;
+  const startLoreDatabase = useRef(computeInitialLoreDatabase(initialData)).current;
+  const startNpcs = useRef(computeInitialNpcs(initialData)).current;
+  const startStructuredInventory = initialData?.structuredInventory;
+
+  const initialSnapshotsInitializedRef = useRef<boolean>(true);
   const initialSnapshotsRef = useRef({
-    initialPlayer: initialData?.initialPlayer ? JSON.parse(JSON.stringify(initialData.initialPlayer)) : undefined,
-    initialWorld: initialData?.initialWorld ? JSON.parse(JSON.stringify(initialData.initialWorld)) : undefined,
-    initialWorldTime: initialData?.initialWorldTime ? JSON.parse(JSON.stringify(initialData.initialWorldTime)) : undefined,
-    initialStatusElements: initialData?.initialStatusElements ? JSON.parse(JSON.stringify(initialData.initialStatusElements)) : undefined,
-    initialStructuredInventory: initialData?.initialStructuredInventory ? JSON.parse(JSON.stringify(initialData.initialStructuredInventory)) : undefined,
-    initialLoreDatabase: initialData?.initialLoreDatabase ? JSON.parse(JSON.stringify(initialData.initialLoreDatabase)) : undefined,
-    initialNpcs: initialData?.initialNpcs ? JSON.parse(JSON.stringify(initialData.initialNpcs)) : undefined,
-    initialInventory: initialData?.initialInventory ? JSON.parse(JSON.stringify(initialData.initialInventory)) : undefined,
-    initialItemInstances: initialData?.initialItemInstances ? JSON.parse(JSON.stringify(initialData.initialItemInstances)) : undefined,
-    initialInventoryEntries: initialData?.initialInventoryEntries ? JSON.parse(JSON.stringify(initialData.initialInventoryEntries)) : undefined,
-    initialEquipmentState: initialData?.initialEquipmentState ? JSON.parse(JSON.stringify(initialData.initialEquipmentState)) : undefined,
-    initialStoryState: initialData?.initialStoryState ? JSON.parse(JSON.stringify(initialData.initialStoryState)) : undefined,
-    initialCharacterKnowledge: initialData?.initialCharacterKnowledge ? JSON.parse(JSON.stringify(initialData.initialCharacterKnowledge)) : undefined,
-    initialCurrentLocation: initialData?.initialCurrentLocation ? JSON.parse(JSON.stringify(initialData.initialCurrentLocation)) : undefined,
-    initialLootSources: initialData?.initialLootSources ? JSON.parse(JSON.stringify(initialData.initialLootSources)) : undefined,
-    initialWorldDrops: initialData?.initialWorldDrops ? JSON.parse(JSON.stringify(initialData.initialWorldDrops)) : undefined,
-    initialActiveTimeEvents: initialData?.initialActiveTimeEvents ? JSON.parse(JSON.stringify(initialData.initialActiveTimeEvents)) : undefined,
+    initialPlayer: initialData?.initialPlayer 
+      ? JSON.parse(JSON.stringify(initialData.initialPlayer)) 
+      : (isNewAdventure ? JSON.parse(JSON.stringify(startPlayer)) : (initialData?.player ? JSON.parse(JSON.stringify(initialData.player)) : undefined)),
+    initialWorld: initialData?.initialWorld 
+      ? JSON.parse(JSON.stringify(initialData.initialWorld)) 
+      : (isNewAdventure ? JSON.parse(JSON.stringify(startWorld)) : (initialData?.world ? JSON.parse(JSON.stringify(initialData.world)) : undefined)),
+    initialWorldTime: initialData?.initialWorldTime 
+      ? JSON.parse(JSON.stringify(initialData.initialWorldTime)) 
+      : (initialData?.worldTime ? JSON.parse(JSON.stringify(initialData.worldTime)) : { day: 1, hour: 8, minute: 0 }),
+    initialStatusElements: initialData?.initialStatusElements 
+      ? JSON.parse(JSON.stringify(initialData.initialStatusElements)) 
+      : (isNewAdventure ? JSON.parse(JSON.stringify(startStatusElements)) : (initialData?.statusElements ? JSON.parse(JSON.stringify(initialData.statusElements)) : undefined)),
+    initialStructuredInventory: initialData?.initialStructuredInventory 
+      ? JSON.parse(JSON.stringify(initialData.initialStructuredInventory)) 
+      : (isNewAdventure && startStructuredInventory ? JSON.parse(JSON.stringify(startStructuredInventory)) : (initialData?.structuredInventory ? JSON.parse(JSON.stringify(initialData.structuredInventory)) : undefined)),
+    initialLoreDatabase: initialData?.initialLoreDatabase 
+      ? JSON.parse(JSON.stringify(initialData.initialLoreDatabase)) 
+      : (isNewAdventure ? JSON.parse(JSON.stringify(startLoreDatabase)) : (initialData?.loreDatabase ? JSON.parse(JSON.stringify(initialData.loreDatabase)) : undefined)),
+    initialNpcs: initialData?.initialNpcs 
+      ? JSON.parse(JSON.stringify(initialData.initialNpcs)) 
+      : (isNewAdventure ? JSON.parse(JSON.stringify(startNpcs)) : (initialData?.npcs ? JSON.parse(JSON.stringify(initialData.npcs)) : undefined)),
+    initialInventory: initialData?.initialInventory 
+      ? JSON.parse(JSON.stringify(initialData.initialInventory)) 
+      : (isNewAdventure ? (initialData?.inventory ? JSON.parse(JSON.stringify(initialData.inventory)) : ['Starterpaket']) : (initialData?.inventory ? JSON.parse(JSON.stringify(initialData.inventory)) : undefined)),
+    initialItemInstances: initialData?.initialItemInstances 
+      ? JSON.parse(JSON.stringify(initialData.initialItemInstances)) 
+      : (isNewAdventure && initialData?.itemInstances ? JSON.parse(JSON.stringify(initialData.itemInstances)) : undefined),
+    initialInventoryEntries: initialData?.initialInventoryEntries 
+      ? JSON.parse(JSON.stringify(initialData.initialInventoryEntries)) 
+      : (isNewAdventure && initialData?.inventoryEntries ? JSON.parse(JSON.stringify(initialData.inventoryEntries)) : undefined),
+    initialEquipmentState: initialData?.initialEquipmentState 
+      ? JSON.parse(JSON.stringify(initialData.initialEquipmentState)) 
+      : (isNewAdventure && initialData?.equipmentState ? JSON.parse(JSON.stringify(initialData.equipmentState)) : undefined),
+    initialStoryState: initialData?.initialStoryState 
+      ? JSON.parse(JSON.stringify(initialData.initialStoryState)) 
+      : (isNewAdventure && initialData?.storyState ? JSON.parse(JSON.stringify(initialData.storyState)) : undefined),
+    initialCharacterKnowledge: initialData?.initialCharacterKnowledge 
+      ? JSON.parse(JSON.stringify(initialData.initialCharacterKnowledge)) 
+      : (isNewAdventure && initialData?.characterKnowledge ? JSON.parse(JSON.stringify(initialData.characterKnowledge)) : undefined),
+    initialCurrentLocation: initialData?.initialCurrentLocation 
+      ? JSON.parse(JSON.stringify(initialData.initialCurrentLocation)) 
+      : (isNewAdventure ? (initialData?.currentLocation || startPlayer?.appearance?.currentLocation || undefined) : undefined),
+    initialLootSources: initialData?.initialLootSources 
+      ? JSON.parse(JSON.stringify(initialData.initialLootSources)) 
+      : (isNewAdventure && initialData?.lootSources ? JSON.parse(JSON.stringify(initialData.lootSources)) : undefined),
+    initialWorldDrops: initialData?.initialWorldDrops 
+      ? JSON.parse(JSON.stringify(initialData.initialWorldDrops)) 
+      : (isNewAdventure && initialData?.worldDrops ? JSON.parse(JSON.stringify(initialData.worldDrops)) : undefined),
+    initialActiveTimeEvents: initialData?.initialActiveTimeEvents 
+      ? JSON.parse(JSON.stringify(initialData.initialActiveTimeEvents)) 
+      : (isNewAdventure ? (initialData?.activeTimeEvents || initialData?.world?.activeTimeEvents ? JSON.parse(JSON.stringify(initialData.activeTimeEvents || initialData.world?.activeTimeEvents)) : undefined) : undefined),
   });
   const [step, setStep] = useState(mode === GameViewMode.JOIN_CUSTOM_CHAR ? 6 : 1);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -378,252 +680,13 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   const [isGeneratingPrologue, setIsGeneratingPrologue] = useState(false);
   const [expandedNpcId, setExpandedNpcId] = useState<string | null>(null);
   const [bgImage, setBgImage] = useState<string | undefined>(initialData?.backgroundImage);
-  const [statusElements, setStatusElements] = useState<StatusElement[]>(() => {
-    const rawStatus = initialData?.statusElements ?? HUD_PRESETS["Klassisch"].map(p => ({ ...p, id: Math.random().toString(36).substr(2, 9) }));
-    const playerLoc = initialData?.player?.appearance?.currentLocation;
-    if (playerLoc) {
-      const locIdx = rawStatus.findIndex(s => (s.label || '').toLowerCase().includes('standort') || (s.label || '').toLowerCase().includes('ort'));
-      if (locIdx !== -1) {
-        if (!rawStatus[locIdx].value) {
-          rawStatus[locIdx] = { ...rawStatus[locIdx], value: playerLoc };
-        }
-      } else {
-        rawStatus.push({
-          id: Math.random().toString(36).substr(2, 9),
-          label: 'Standort',
-          value: playerLoc
-        });
-      }
-    }
-    return rawStatus;
-  });
-
-  const [structuredInventory, setStructuredInventory] = useState<StructuredInventory | undefined>(initialData?.structuredInventory);
+  const [statusElements, setStatusElements] = useState<StatusElement[]>(startStatusElements);
+  const [structuredInventory, setStructuredInventory] = useState<StructuredInventory | undefined>(startStructuredInventory);
   const [isExtractingInventory, setIsExtractingInventory] = useState(false);
-  
-  const [loreDatabase, setLoreDatabase] = useState<LoreEntry[]>(() => {
-    let initialLore = [...(initialData?.loreDatabase || [])].filter(l => l.category !== 'Orte');
-    const initialNpcs = initialData?.npcs || [];
-    
-    // Migrate NPCs to LoreDatabase if they aren't there
-    initialNpcs.forEach(npc => {
-      const exists = initialLore.find(l => l.id === npc.id || l.title === npc.name);
-      if (!exists) {
-        initialLore.push({
-          id: npc.id || Math.random().toString(36).substr(2, 9),
-          category: 'Charaktere',
-          title: npc.name,
-          description: npc.bio,
-          isUnlocked: true,
-          image: npc.image,
-          details: {
-            role: npc.role,
-            gender: npc.appearance?.gender,
-            age: npc.appearance?.age,
-            build: npc.appearance?.build,
-            hairColor: npc.appearance?.hairColor,
-            eyeColor: npc.appearance?.eyeColor,
-            cupSize: npc.appearance?.cupSize,
-            height: npc.appearance?.height,
-            measurements: npc.appearance?.measurements,
-            origin: npc.appearance?.origin,
-            family: npc.appearance?.family,
-            faction: npc.appearance?.faction,
-            race: npc.appearance?.race,
-            raceFeatures: npc.appearance?.raceFeatures,
-            outfit: npc.appearance?.outfit,
-            goal: npc.goal,
-            skills: npc.skills,
-            isHostile: npc.isHostile,
-            personality: (npc as any).personality || '',
-            currentSituation: (npc as any).currentSituation || ''
-          }
-        });
-      }
-    });
-
-    // Migrate abilities for all lore entries as well (from 'Passive Fähigkeiten' or empty to 'Techniken')
-    const migrated = initialLore.map(entry => {
-      if (entry.details?.abilities && Array.isArray(entry.details.abilities)) {
-        return {
-          ...entry,
-          details: {
-            ...entry.details,
-            abilities: entry.details.abilities.map((a: any) => {
-              if (!a.category || a.category === 'Passive Fähigkeiten') {
-                return { ...a, category: 'Techniken' };
-              }
-              return a;
-            })
-          }
-        };
-      }
-      return entry;
-    });
-
-    // Seed standard items if no items are currently present in lore database
-    const hasItems = migrated.some(l => l.category === 'Gegenstände');
-    let finalEntries = migrated;
-    if (!hasItems) {
-      const standardItems = createStandardLoreEntries();
-      finalEntries = [...migrated, ...standardItems];
-    }
-
-    const seenIds = new Set<string>();
-    return finalEntries.map((entry, idx) => {
-      let entryId = entry.id;
-      if (!entryId || seenIds.has(entryId)) {
-        entryId = `${entry.id || 'entry'}-${idx}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-      }
-      seenIds.add(entryId);
-      if (entryId !== entry.id) {
-        return { ...entry, id: entryId };
-      }
-      return entry;
-    });
-  });
-
-  const [world, setWorld] = useState<WorldSetting>(() => {
-    const epDefaults = createEpDefaultWorldSettings();
-    const w: WorldSetting = initialData?.world ?? {
-      title: '',
-      description: '',
-      era: '',
-      tone: 'Düster & Ernst',
-      isHeroic: true,
-      dramaLevel: 'Mittel',
-      regionMarkers: [],
-      civilizationMarkers: [],
-      placeMarkers: [],
-      terrains: [],
-      borders: [],
-      techniqueProgressionLogic: 'ep',
-      techniqueProgressionRate: 'normal',
-      techniqueRulesList: [],
-      campaignPowerSettings: epDefaults.campaignPowerSettings,
-      customStatAllocations: epDefaults.customStatAllocations,
-      costResources: epDefaults.costResources,
-      customResourceMappings: epDefaults.customResourceMappings,
-      healthPowerNames: epDefaults.healthPowerNames,
-      costPowerNames: epDefaults.costPowerNames,
-      healthLabel: epDefaults.healthLabel,
-      costLabel: epDefaults.costLabel,
-      mapConfig: {
-        continentStencil: 'none',
-        coastlineStyle: 'rugged',
-        mountainStyle: 'young',
-        riverStyle: 'branched',
-        biomeStyle: 'grassland',
-        mapStyle: 'minimalist',
-        decorations: [],
-        mapWidth: 100,
-        mapHeight: 100
-      }
-    };
-    if (!w.techniqueRulesList) {
-      w.techniqueRulesList = [];
-    }
-    if (!w.customResourceMappings || w.customResourceMappings.length === 0) {
-      w.customResourceMappings = JSON.parse(JSON.stringify(epDefaults.customResourceMappings));
-    }
-    let resultWorld = w;
-    if (initialData?.world) {
-      resultWorld = normalizeOnePieceWorldGeometry(w);
-    }
-    return normalizeWorldGeometry(resultWorld);
-  });
-
+  const [loreDatabase, setLoreDatabase] = useState<LoreEntry[]>(startLoreDatabase);
+  const [world, setWorld] = useState<WorldSetting>(startWorld);
   const [mapViewerMode, setMapViewerMode] = useState<'editor' | 'viewer'>('editor');
-
-  // Automatisches Vorladen der Profildaten für neue Abenteuer
-  const getDefaultPlayerState = (): Character => {
-    let p: Character;
-    if (initialData?.player) {
-      p = { ...initialData.player };
-      // Synchronize role and profession so they always match
-      const synchronizedRole = p.role || p.profession || '';
-      p.role = synchronizedRole;
-      p.profession = synchronizedRole;
-    } else if (userProfile) {
-      const prefRole = userProfile.preferredRole || '';
-      p = {
-        name: userProfile.name,
-        role: prefRole,
-        profession: prefRole,
-        personality: '',
-        bio: userProfile.bio,
-        currentSituation: '',
-        goal: '',
-        appearance: {
-          hairColor: userProfile.appearance.hairColor,
-          eyeColor: userProfile.appearance.eyeColor,
-          age: userProfile.appearance.age,
-          build: userProfile.appearance.build,
-          gender: userProfile.appearance.gender,
-          cupSize: userProfile.appearance.cupSize,
-          raceFeatures: userProfile.appearance.raceFeatures || '',
-          outfit: '',
-          looks: ''
-        },
-        attributes: [
-          { name: 'Gesundheit', value: 100, max: 100 },
-          { name: 'Mana', value: 50, max: 50 }
-        ]
-      };
-    } else {
-      p = {
-        name: '',
-        role: '',
-        personality: '',
-        bio: '',
-        currentSituation: '',
-        goal: '',
-        appearance: {
-          hairColor: '',
-          eyeColor: '',
-          age: '',
-          build: 'Schlank',
-          gender: 'Weiblich',
-          cupSize: '',
-          raceFeatures: '',
-          outfit: '',
-          looks: ''
-        },
-        attributes: [
-          { name: 'Gesundheit', value: 100, max: 100 },
-          { name: 'Mana', value: 50, max: 50 }
-        ]
-      };
-    }
-
-    if (p.abilities && p.abilities.length > 0) {
-      p.abilities = p.abilities.map(a => {
-        if (!a.category || a.category === 'Passive Fähigkeiten') {
-          return { ...a, category: 'Techniken' };
-        }
-        return a;
-      });
-    }
-
-    // Synchronize player currentLocation with statusElements or active location if missing/empty
-    if (!p.appearance.currentLocation) {
-      const initialStatus = initialData?.statusElements ?? HUD_PRESETS["Klassisch"];
-      const locElem = initialStatus.find(s => (s.label || '').toLowerCase().includes('standort') || (s.label || '').toLowerCase().includes('ort'));
-      if (locElem && locElem.value) {
-        p.appearance.currentLocation = locElem.value;
-      } else {
-        const activeOrt = initialData?.loreDatabase?.find(l => l.category === 'Orte' && l.details?.isActiveTarget)
-          || initialData?.loreDatabase?.find(l => l.category === 'Orte');
-        if (activeOrt?.title) {
-          p.appearance.currentLocation = activeOrt.title;
-        }
-      }
-    }
-
-    return migrateLegacyProfessionData(p);
-  };
-
-  const [player, setPlayer] = useState<Character>(getDefaultPlayerState());
+  const [player, setPlayer] = useState<Character>(startPlayer);
   const [playerCharTab, setPlayerCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('profil');
 
   const [step4SubTab, setStep4SubTab] = useState<'interactive' | 'worldmap' | 'tactical'>('interactive');
@@ -668,23 +731,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   const [isFactionDropdownOpen, setIsFactionDropdownOpen] = useState(false);
   const [customFactionInput, setCustomFactionInput] = useState('');
 
-  const [npcs, setNpcs] = useState<NPC[]>(() => {
-    const rawNpcs = initialData?.npcs ?? [];
-    return rawNpcs.map(npc => {
-      if (npc.abilities && npc.abilities.length > 0) {
-        return {
-          ...npc,
-          abilities: npc.abilities.map(a => {
-            if (!a.category || a.category === 'Passive Fähigkeiten') {
-              return { ...a, category: 'Techniken' };
-            }
-            return a;
-          })
-        };
-      }
-      return npc;
-    });
-  });
+  const [npcs, setNpcs] = useState<NPC[]>(startNpcs);
 
 
   // Auto-save debounced
@@ -3217,30 +3264,14 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       backgroundImage: bgImage,
       statusElements,
       combatState: customCombatState,
-      initialPlayer: initialSnapshotsRef.current.initialPlayer 
-        ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialPlayer)) 
-        : (isNewAdventure ? JSON.parse(JSON.stringify(finalPlayer)) : undefined),
-      initialWorld: initialSnapshotsRef.current.initialWorld 
-        ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorld)) 
-        : (isNewAdventure ? JSON.parse(JSON.stringify(finalWorld)) : undefined),
-      initialWorldTime: initialSnapshotsRef.current.initialWorldTime 
-        ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldTime)) 
-        : { day: 1, hour: 8, minute: 0 },
-      initialStatusElements: initialSnapshotsRef.current.initialStatusElements 
-        ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialStatusElements)) 
-        : (isNewAdventure && statusElements ? JSON.parse(JSON.stringify(statusElements)) : undefined),
-      initialStructuredInventory: initialSnapshotsRef.current.initialStructuredInventory 
-        ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialStructuredInventory)) 
-        : (isNewAdventure && structuredInventory ? JSON.parse(JSON.stringify(structuredInventory)) : undefined),
-      initialLoreDatabase: initialSnapshotsRef.current.initialLoreDatabase 
-        ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialLoreDatabase)) 
-        : (isNewAdventure ? JSON.parse(JSON.stringify(finalLoreDatabase)) : undefined),
-      initialNpcs: initialSnapshotsRef.current.initialNpcs 
-        ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialNpcs)) 
-        : (isNewAdventure && finalNpcs ? JSON.parse(JSON.stringify(finalNpcs)) : undefined),
-      initialInventory: initialSnapshotsRef.current.initialInventory 
-        ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialInventory)) 
-        : (isNewAdventure ? (initialData?.inventory ? JSON.parse(JSON.stringify(initialData.inventory)) : ['Starterpaket']) : undefined),
+      initialPlayer: initialSnapshotsRef.current.initialPlayer ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialPlayer)) : undefined,
+      initialWorld: initialSnapshotsRef.current.initialWorld ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorld)) : undefined,
+      initialWorldTime: initialSnapshotsRef.current.initialWorldTime ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldTime)) : { day: 1, hour: 8, minute: 0 },
+      initialStatusElements: initialSnapshotsRef.current.initialStatusElements ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialStatusElements)) : undefined,
+      initialStructuredInventory: initialSnapshotsRef.current.initialStructuredInventory ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialStructuredInventory)) : undefined,
+      initialLoreDatabase: initialSnapshotsRef.current.initialLoreDatabase ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialLoreDatabase)) : undefined,
+      initialNpcs: initialSnapshotsRef.current.initialNpcs ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialNpcs)) : undefined,
+      initialInventory: initialSnapshotsRef.current.initialInventory ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialInventory)) : (initialData?.inventory ?? ['Starterpaket']),
       initialItemInstances: initialSnapshotsRef.current.initialItemInstances ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialItemInstances)) : undefined,
       initialInventoryEntries: initialSnapshotsRef.current.initialInventoryEntries ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialInventoryEntries)) : undefined,
       initialEquipmentState: initialSnapshotsRef.current.initialEquipmentState ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialEquipmentState)) : undefined,

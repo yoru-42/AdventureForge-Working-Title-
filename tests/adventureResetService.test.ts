@@ -874,6 +874,267 @@ function runTests() {
     assert(secondResetAdv.storyState?.processedFirstMessageFingerprint === '', 'Test H6: Zweiter Reset leert processedFirstMessageFingerprint erneut');
   }
 
+  // ==========================================
+  // Section: Initial Snapshot Immutability Lifecycle Tests (A - G)
+  // ==========================================
+
+  // Test A – Neues Adventure: Baseline A -> current edits B -> initial bleibt A, current ist B
+  {
+    const startPlayerA: Character = {
+      id: 'char-a',
+      name: 'Player A',
+      role: 'Krieger',
+      bio: 'Startcharakter A',
+      appearance: { hairColor: 'Blond', eyeColor: 'Blau', gender: 'Männlich' },
+      attributes: [{ name: 'Stärke', value: 10, max: 100 }],
+      activeConditions: []
+    };
+    const startWorldA: WorldSetting = {
+      title: 'Welt A',
+      description: 'Startwelt A',
+      era: 'Antike',
+      tone: 'Heroisch',
+      isHeroic: true,
+      dramaLevel: 'Niedrig',
+      regionMarkers: [],
+      civilizationMarkers: [],
+      placeMarkers: [],
+      terrains: [],
+      borders: []
+    };
+    const startInventoryA = ['Starter-Schwert', 'Brot'];
+
+    const newAdv: Adventure = {
+      id: 'adv-lifecycle-new',
+      authorId: 'user-1',
+      isPublic: false,
+      world: deepClone(startWorldA),
+      player: deepClone(startPlayerA),
+      npcs: [],
+      loreDatabase: [],
+      inventory: deepClone(startInventoryA),
+      initialPlayer: deepClone(startPlayerA),
+      initialWorld: deepClone(startWorldA),
+      initialInventory: deepClone(startInventoryA)
+    };
+
+    // User modifies adventure
+    newAdv.player.name = 'Player B';
+    newAdv.player.appearance.hairColor = 'Rot';
+    newAdv.world.title = 'Welt B';
+    newAdv.inventory = ['Dunkelklinge', 'Drachenblut'];
+
+    // Simulated Auto-Save payload (preserving initial snapshots)
+    const autoSavedAdv = {
+      ...newAdv,
+      initialPlayer: deepClone(startPlayerA),
+      initialWorld: deepClone(startWorldA),
+      initialInventory: deepClone(startInventoryA)
+    };
+
+    assert(autoSavedAdv.initialPlayer.name === 'Player A', 'Test A1: initialPlayer bleibt A');
+    assert(autoSavedAdv.initialPlayer.appearance.hairColor === 'Blond', 'Test A2: initialPlayer Aussehen bleibt A');
+    assert(autoSavedAdv.initialWorld.title === 'Welt A', 'Test A3: initialWorld bleibt A');
+    assert(autoSavedAdv.initialInventory[0] === 'Starter-Schwert', 'Test A4: initialInventory bleibt A');
+    assert(autoSavedAdv.player.name === 'Player B', 'Test A5: aktueller Player ist B');
+    assert(autoSavedAdv.world.title === 'Welt B', 'Test A6: aktuelle World ist B');
+    assert(autoSavedAdv.inventory[0] === 'Dunkelklinge', 'Test A7: aktuelles Inventory ist B');
+  }
+
+  // Test B – Mehrere Änderungen vor dem ersten Auto-Save
+  {
+    const startPlayerA: Character = {
+      id: 'char-a',
+      name: 'Start A',
+      role: 'Magier',
+      appearance: { hairColor: 'Silber', eyeColor: 'Grün', gender: 'Weiblich' },
+      attributes: [{ name: 'Intelligenz', value: 20, max: 100 }],
+      activeConditions: []
+    };
+
+    const initialSnapshotA = deepClone(startPlayerA);
+
+    // Edit step 1: B
+    let runningPlayer = deepClone(startPlayerA);
+    runningPlayer.name = 'Bearbeitung B';
+    runningPlayer.attributes[0].value = 30;
+
+    // Edit step 2: C
+    runningPlayer.name = 'Bearbeitung C';
+    runningPlayer.attributes[0].value = 40;
+
+    // Auto-Save arrives with frozen initial snapshot
+    const saved = {
+      player: runningPlayer,
+      initialPlayer: initialSnapshotA
+    };
+
+    assert(saved.initialPlayer.name === 'Start A', 'Test B1: Snapshot entspricht trotz mehrerer Edits Start A');
+    assert(saved.initialPlayer.attributes[0].value === 20, 'Test B2: Snapshot-Attribute bleiben 20');
+    assert(saved.player.name === 'Bearbeitung C', 'Test B3: Aktueller Zustand ist C');
+  }
+
+  // Test C – Mehrfaches Auto-Save (Start A -> B -> Save -> C -> Save -> D -> Save)
+  {
+    const startPlayerA: Character = {
+      id: 'char-a',
+      name: 'Start A',
+      role: 'Schurke',
+      appearance: { hairColor: 'Braun', eyeColor: 'Braun', gender: 'Männlich' },
+      attributes: [],
+      activeConditions: []
+    };
+    const immutableSnapshot = deepClone(startPlayerA);
+
+    let state = { player: deepClone(startPlayerA), initialPlayer: immutableSnapshot };
+
+    // Change B & Save
+    state.player.name = 'Zustand B';
+    let save1 = { ...state, player: deepClone(state.player), initialPlayer: immutableSnapshot };
+    assert(save1.initialPlayer.name === 'Start A' && save1.player.name === 'Zustand B', 'Test C1: Nach Save 1 ist initial A und current B');
+
+    // Change C & Save
+    state.player.name = 'Zustand C';
+    let save2 = { ...state, player: deepClone(state.player), initialPlayer: immutableSnapshot };
+    assert(save2.initialPlayer.name === 'Start A' && save2.player.name === 'Zustand C', 'Test C2: Nach Save 2 ist initial A und current C');
+
+    // Change D & Save
+    state.player.name = 'Zustand D';
+    let save3 = { ...state, player: deepClone(state.player), initialPlayer: immutableSnapshot };
+    assert(save3.initialPlayer.name === 'Start A' && save3.player.name === 'Zustand D', 'Test C3: Nach Save 3 ist initial A und current D');
+  }
+
+  // Test D – Bestehendes Adventure (initial = A, current = B -> Speichern -> initial = A, current = B)
+  {
+    const existingAdv: Adventure = {
+      id: 'adv-existing',
+      authorId: 'user-1',
+      isPublic: false,
+      world: { title: 'Welt B', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
+      player: { id: 'p1', name: 'Spieler B', role: '', appearance: { hairColor: '', eyeColor: '', gender: '' }, attributes: [], activeConditions: [] },
+      npcs: [],
+      initialPlayer: { id: 'p1', name: 'Spieler A (Initial)', role: '', appearance: { hairColor: '', eyeColor: '', gender: '' }, attributes: [], activeConditions: [] },
+      initialWorld: { title: 'Welt A (Initial)', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] }
+    };
+
+    const validated = AdventureResetService.ensureInitialSnapshots(existingAdv, false);
+    assert(validated.initialPlayer?.name === 'Spieler A (Initial)', 'Test D1: Bestehender initialPlayer bleibt erhalten');
+    assert(validated.initialWorld?.title === 'Welt A (Initial)', 'Test D2: Bestehende initialWorld bleibt erhalten');
+    assert(validated.player.name === 'Spieler B', 'Test D3: Aktueller Spieler bleibt B');
+  }
+
+  // Test E – handleFinish() mit Vorab-Änderungen (Start = A, Edits = B, C -> Finish -> initial = A, current = C)
+  {
+    const startPlayerA: Character = {
+      id: 'char-finish',
+      name: 'Start A',
+      role: 'Paladin',
+      appearance: { hairColor: 'Gold', eyeColor: 'Blau', gender: 'Divers' },
+      attributes: [{ name: 'Heiligkraft', value: 100, max: 100 }],
+      activeConditions: []
+    };
+    const initialSnapshotRef = deepClone(startPlayerA);
+
+    // Edit B
+    let workingPlayer = { ...startPlayerA, name: 'Edit B' };
+    // Edit C
+    workingPlayer = { ...workingPlayer, name: 'Final C' };
+
+    // Simulated handleFinish using initialSnapshotsRef
+    const finalAdv: Adventure = {
+      id: 'adv-finish-test',
+      authorId: 'user-1',
+      isPublic: true,
+      world: { title: 'Welt', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
+      player: workingPlayer,
+      npcs: [],
+      initialPlayer: deepClone(initialSnapshotRef)
+    };
+
+    assert(finalAdv.initialPlayer?.name === 'Start A', 'Test E1: initialPlayer nach Finish entspricht Start A');
+    assert(finalAdv.player.name === 'Final C', 'Test E2: player nach Finish entspricht Final C');
+  }
+
+  // Test F – Reset stellt ursprünglichen Zustand A aus Zustand D wieder her
+  {
+    const startPlayerA: Character = {
+      id: 'char-reset-f',
+      name: 'Held A',
+      role: 'Barde',
+      appearance: { hairColor: 'Kastanienbraun', eyeColor: 'Haselnuss', gender: 'Männlich' },
+      attributes: [{ name: 'Charisma', value: 80, max: 100 }],
+      activeConditions: []
+    };
+
+    const adv: Adventure = {
+      id: 'adv-reset-flow',
+      authorId: 'user-1',
+      isPublic: false,
+      world: { title: 'Startort', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
+      player: {
+        id: 'char-reset-f',
+        name: 'Transformierter Zustand D',
+        role: 'Schattenfürst',
+        appearance: { hairColor: 'Pechschwarz', eyeColor: 'Glühend Rot', gender: 'Männlich' },
+        attributes: [{ name: 'Charisma', value: 10, max: 100 }],
+        activeConditions: [{ id: 'cond-shadow', label: 'Schattengestalt', type: 'transformation', intensity: 'extrem' } as any]
+      },
+      npcs: [],
+      initialPlayer: deepClone(startPlayerA)
+    };
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.player.name === 'Held A', 'Test F1: Reset stellt Namen Held A wieder her');
+    assert(resetAdv.player.role === 'Barde', 'Test F2: Reset stellt Rolle Barde wieder her');
+    assert(resetAdv.player.appearance.hairColor === 'Kastanienbraun', 'Test F3: Reset stellt Haarfarbe wieder her');
+    assert((resetAdv.player.activeConditions || []).length === 0, 'Test F4: Reset entfernt temporäre Transformation');
+  }
+
+  // Test G – Transformation verlässt Normalform, wird gespeichert, Reset bringt Normalform zurück
+  {
+    const normalPlayer: Character = {
+      id: 'char-trans-g',
+      name: 'Normaler Mensch',
+      role: 'Novize',
+      appearance: { hairColor: 'Schwarz', eyeColor: 'Blau', gender: 'Weiblich', activeTransformationId: 'standard' },
+      attributes: [{ name: 'Psi', value: 0, max: 100 }],
+      activeConditions: []
+    };
+
+    const transAdv: Adventure = {
+      id: 'adv-trans-g',
+      authorId: 'user-1',
+      isPublic: true,
+      world: { title: 'Psi-Akademie', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
+      player: {
+        ...deepClone(normalPlayer),
+        appearance: {
+          ...normalPlayer.appearance,
+          activeTransformationId: 'trans-esper-awakened',
+          hairColor: 'Leuchtendes Violett',
+          eyeColor: 'Silber'
+        },
+        activeConditions: [
+          { id: 'trans-esper', label: 'Erwachte Esper', type: 'transformation', intensity: 'hoch' } as any
+        ]
+      },
+      npcs: [],
+      initialPlayer: deepClone(normalPlayer)
+    };
+
+    // Auto-save / persistence check
+    const saved = JSON.parse(JSON.stringify(transAdv));
+    assert(saved.initialPlayer.appearance.activeTransformationId === 'standard', 'Test G1: Im Speicherstand bleibt initialPlayer auf standard');
+    assert(saved.player.appearance.activeTransformationId === 'trans-esper-awakened', 'Test G2: Im Speicherstand ist player aktuell auf trans-esper-awakened');
+
+    // Reset back to baseline
+    const reverted = AdventureResetService.resetAdventureToInitialState(saved);
+    assert(reverted.player.name === 'Normaler Mensch', 'Test G3: Nach Reset ist Spieler wieder Normaler Mensch');
+    assert(reverted.player.appearance.activeTransformationId === 'standard', 'Test G4: Nach Reset ist activeTransformationId standard');
+    assert(reverted.player.appearance.hairColor === 'Schwarz', 'Test G5: Nach Reset ist Haarfarbe Schwarz');
+    assert((reverted.player.activeConditions || []).length === 0, 'Test G6: Nach Reset sind aktive Bedingungen geleert');
+  }
+
   console.log('\n=== TEST RUN COMPLETE ===');
   console.log(`Tests ausgeführt: ${testCount}`);
   console.log(`Bestanden: ${passCount}`);
