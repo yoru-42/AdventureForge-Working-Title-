@@ -1885,6 +1885,9 @@ const App: React.FC = () => {
                           id: t.id || `tech-${ability.id || abIdx}-${tIdx}`,
                           name: nameClean,
                           abilityId: ability.id || `ab-${abIdx}`,
+                          abilityIndex: abIdx,
+                          techniqueIndex: tIdx,
+                          abilityName: ability.name,
                           abilitySource: ability.source || currentAdventure.player.powerSource || '',
                           category: assignedCat,
                           isFavorite: !!(t.isFavorite || t.favorite),
@@ -1911,6 +1914,9 @@ const App: React.FC = () => {
                             name: mainName,
                             description: ability.description || (isTrans ? 'Verwandlungsform mit modifizierten Attributen und Kräften.' : 'Fähigkeit des Charakters.'),
                             abilityId: ability.id || `ab-${abIdx}`,
+                            abilityIndex: abIdx,
+                            techniqueIndex: -1,
+                            abilityName: mainName,
                             abilitySource: ability.source || currentAdventure.player.powerSource || '',
                             category: assignedCat,
                             cost: ability.cost,
@@ -1932,6 +1938,33 @@ const App: React.FC = () => {
                     }
                   });
 
+                  // Zusätzliche Techniken aus player.techniqueList ergänzen (falls noch nicht in der Liste)
+                  if (Array.isArray(currentAdventure.player.techniqueList)) {
+                    currentAdventure.player.techniqueList.forEach((t: any, tIdx: number) => {
+                      if (!t || !t.name || !t.name.trim()) return;
+                      const nameClean = t.name.trim();
+                      const key = `player-tech-${t.id || tIdx}-${nameClean.toLowerCase()}`;
+                      if (seenKeys.has(key) || rawList.some(r => r.name.toLowerCase() === nameClean.toLowerCase())) return;
+                      seenKeys.add(key);
+
+                      const assignedCat = determineCategory(t, t.category || 'Techniken');
+                      rawList.push({
+                        ...t,
+                        id: t.id || `ptech-${tIdx}`,
+                        name: nameClean,
+                        abilityId: t.powerSourceId || `ptech-${tIdx}`,
+                        abilityIndex: -1,
+                        techniqueIndex: tIdx,
+                        abilityName: t.powerSourceName || '',
+                        abilitySource: t.powerSourceName || currentAdventure.player.powerSource || '',
+                        category: assignedCat,
+                        isFavorite: !!(t.isFavorite || t.favorite),
+                        isStandaloneAbility: false,
+                        fromPlayerTechniqueList: true
+                      });
+                    });
+                  }
+
                   if (rawList.length === 0) {
                     const legacySkills = currentAdventure.player.techniques || currentAdventure.player.skills || '';
                     if (typeof legacySkills === 'string' && legacySkills.trim()) {
@@ -1944,6 +1977,9 @@ const App: React.FC = () => {
                             name: tName,
                             description: 'Fertigkeit aus Charakterprofil.',
                             abilityId: `legacy-${idx}`,
+                            abilityIndex: idx,
+                            techniqueIndex: -1,
+                            abilityName: tName,
                             abilitySource: currentAdventure.player.powerSource || '',
                             category: 'Techniken',
                             level: 1,
@@ -1976,27 +2012,126 @@ const App: React.FC = () => {
                   });
 
                   const updateItemInAdventure = (item: any, updater: (target: any) => any) => {
-                    const updatedAbilities = (currentAdventure.player.abilities || []).map((a: any) => {
-                      if (a.id === item.abilityId) {
-                        if (item.isStandaloneAbility || !a.techniqueList || a.techniqueList.length === 0) {
+                    let playerAbilities = currentAdventure.player.abilities;
+                    let playerTechniqueList = currentAdventure.player.techniqueList;
+                    let playerBaseAbilities = currentAdventure.player.baseAbilities;
+
+                    if (!Array.isArray(playerAbilities) || playerAbilities.length === 0) {
+                      if (rawList.length > 0) {
+                        playerAbilities = rawList.map((r, idx) => ({
+                          id: r.id || `ab-${idx}`,
+                          name: r.name,
+                          description: r.description || '',
+                          techniques: r.techniques || '',
+                          category: r.category || 'Techniken',
+                          source: r.abilitySource || currentAdventure.player.powerSource || 'Fähigkeit',
+                          cost: r.cost || '',
+                          level: r.level || 1,
+                          maxLevel: r.maxLevel || 10,
+                          xp: r.xp || 0,
+                          xpNeeded: r.xpNeeded || 100,
+                          xpGainPerUse: r.xpGainPerUse || 25,
+                          trainingProgress: r.trainingProgress || 0,
+                          trainingRequired: r.trainingRequired || 3,
+                          milestoneRequirement: r.milestoneRequirement,
+                          staticCost: r.staticCost,
+                          progressionLogic: r.progressionLogic,
+                          isFavorite: r.isFavorite,
+                          favorite: r.isFavorite
+                        }));
+                      } else {
+                        playerAbilities = [];
+                      }
+                    }
+
+                    const itemNameLower = (item.name || '').trim().toLowerCase();
+
+                    const updatedAbilities = playerAbilities.map((a: any, aIdx: number) => {
+                      const aNameLower = (a.name || '').trim().toLowerCase();
+                      const aTransLower = (a.transformName || '').trim().toLowerCase();
+                      const isAbilityMatch =
+                        (item.abilityId && a.id && a.id === item.abilityId) ||
+                        (item.abilityIndex !== undefined && item.abilityIndex >= 0 && item.abilityIndex === aIdx) ||
+                        (aNameLower && (aNameLower === itemNameLower || (item.abilityName && aNameLower === item.abilityName.trim().toLowerCase()))) ||
+                        (aTransLower && (aTransLower === itemNameLower || (item.abilityName && aTransLower === item.abilityName.trim().toLowerCase())));
+
+                      if (isAbilityMatch) {
+                        if (item.isStandaloneAbility || !Array.isArray(a.techniqueList) || a.techniqueList.length === 0) {
                           const updated = updater(a);
                           return {
                             ...a,
                             ...updated,
-                            techniqueList: a.techniqueList?.map((t: any) => t.id === item.id ? updater(t) : t)
+                            techniqueList: Array.isArray(a.techniqueList)
+                              ? a.techniqueList.map((t: any, tIdx: number) => {
+                                  const tNameLower = (t.name || '').trim().toLowerCase();
+                                  const isTechMatch = (item.id && t.id && t.id === item.id) ||
+                                                      (item.techniqueIndex !== undefined && item.techniqueIndex === tIdx) ||
+                                                      (tNameLower && tNameLower === itemNameLower);
+                                  return isTechMatch ? updater(t) : t;
+                                })
+                              : a.techniqueList
                           };
                         } else {
                           return {
                             ...a,
-                            techniqueList: a.techniqueList.map((t: any) => t.id === item.id ? updater(t) : t)
+                            techniqueList: a.techniqueList.map((t: any, tIdx: number) => {
+                              const tNameLower = (t.name || '').trim().toLowerCase();
+                              const isTechMatch = (item.id && t.id && t.id === item.id) ||
+                                                  (item.techniqueIndex !== undefined && item.techniqueIndex === tIdx) ||
+                                                  (tNameLower && tNameLower === itemNameLower);
+                              return isTechMatch ? updater(t) : t;
+                            })
+                          };
+                        }
+                      } else if (Array.isArray(a.techniqueList)) {
+                        const hasMatchingTech = a.techniqueList.some((t: any, tIdx: number) => {
+                          const tNameLower = (t.name || '').trim().toLowerCase();
+                          return (item.id && t.id && t.id === item.id) ||
+                                 (tNameLower && tNameLower === itemNameLower);
+                        });
+                        if (hasMatchingTech) {
+                          return {
+                            ...a,
+                            techniqueList: a.techniqueList.map((t: any, tIdx: number) => {
+                              const tNameLower = (t.name || '').trim().toLowerCase();
+                              const isTechMatch = (item.id && t.id && t.id === item.id) ||
+                                                  (tNameLower && tNameLower === itemNameLower);
+                              return isTechMatch ? updater(t) : t;
+                            })
                           };
                         }
                       }
                       return a;
                     });
+
+                    let updatedTechniqueList = playerTechniqueList;
+                    if (Array.isArray(playerTechniqueList) && playerTechniqueList.length > 0) {
+                      updatedTechniqueList = playerTechniqueList.map((t: any) => {
+                        const tNameLower = (t.name || '').trim().toLowerCase();
+                        const isMatch = (item.id && t.id && t.id === item.id) ||
+                                        (tNameLower && tNameLower === itemNameLower);
+                        return isMatch ? updater(t) : t;
+                      });
+                    }
+
+                    let updatedBaseAbilities = playerBaseAbilities;
+                    if (Array.isArray(playerBaseAbilities) && playerBaseAbilities.length > 0) {
+                      updatedBaseAbilities = playerBaseAbilities.map((b: any) => {
+                        const bNameLower = (b.name || b.displayName || '').trim().toLowerCase();
+                        const isMatch = (item.abilityId && b.id && b.id === item.abilityId) ||
+                                        (bNameLower && bNameLower === itemNameLower);
+                        return isMatch ? updater(b) : b;
+                      });
+                    }
+
                     updateAdventure({
                       ...currentAdventure,
-                      player: { ...currentAdventure.player, abilities: updatedAbilities }
+                      player: {
+                        ...currentAdventure.player,
+                        abilities: updatedAbilities,
+                        techniqueList: updatedTechniqueList,
+                        baseAbilities: updatedBaseAbilities
+                      }
                     });
                   };
 

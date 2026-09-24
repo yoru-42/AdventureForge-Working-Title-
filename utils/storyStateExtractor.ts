@@ -1,41 +1,147 @@
 import { Adventure, Character, ChatMessage, LoreEntry, NPC, StoryEntityItem, StoryInfoState } from '../types';
 
+export function normalizeCharacterName(name?: string): string {
+  if (!name) return '';
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)/g, '')
+    .replace(/^(sir|mr\.|mr|ms\.|ms|captain|kapitän|admiral|vizeadmiral|meister|lord|lady|prinz|könig|doktor|dr\.|herr|frau)\s+/i, '')
+    .replace(/[^a-z0-9äöüß]/g, '');
+}
+
+export function isGenericOrPlaceholderName(name?: string): boolean {
+  if (!name) return true;
+  const norm = name.trim().toLowerCase();
+  if (norm.length < 2) return true;
+  const genericList = [
+    'charakter', 'gesprächspartner', 'gegner', 'unbekannt', 'spieler', 'player',
+    'nsc', 'npc', 'gruppe', 'widersacher', 'feind', 'unbekannter charakter',
+    'neuer eintrag', 'codex-charakter', 'wesen', 'person'
+  ];
+  return genericList.includes(norm);
+}
+
+export function isSameCharacter(
+  a: { id?: string; name?: string; nickname?: string; rufName?: string },
+  b: { id?: string; name?: string; nickname?: string; rufName?: string }
+): boolean {
+  if (!a || !b) return false;
+  if (a.id && b.id && a.id === b.id) return true;
+
+  const namesA = [a.name, a.nickname, (a as any).rufName].map(normalizeCharacterName).filter(Boolean);
+  const namesB = [b.name, b.nickname, (b as any).rufName].map(normalizeCharacterName).filter(Boolean);
+
+  for (const na of namesA) {
+    for (const nb of namesB) {
+      if (na === nb) return true;
+      if (na.length > 3 && nb.length > 3 && (na.includes(nb) || nb.includes(na))) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Returns all accessible characters/NPCs in the adventure by merging:
  * 1. adventure.npcs
- * 2. adventure.loreDatabase (category === 'Charaktere' | 'Gegner')
- * 3. adventure.storyState.storyEntities (category === 'Charaktere' | 'Gegner')
+ * 2. adventure.world.npcs (if present)
+ * 3. adventure.loreDatabase & adventure.world.loreDatabase (character categories)
+ * 4. adventure.storyState.storyEntities (character categories)
+ * 5. adventure.storyState.relationships
+ * 6. Active dialogue participants and speakers from chat messages / prologue / firstMessage
  */
-export function getAllAdventureCharacters(adventure: Adventure): NPC[] {
+export function getAllAdventureCharacters(adventure: Adventure, messages?: ChatMessage[]): NPC[] {
   const result: NPC[] = [];
   const seenIds = new Set<string>();
-  const seenNames = new Set<string>();
 
   const isPlayer = (name?: string) => {
     if (!name) return false;
     const clean = name.trim().toLowerCase();
-    const pName = (adventure.player?.name || '').trim().toLowerCase();
-    const pNick = (adventure.player?.nickname || '').trim().toLowerCase();
-    return clean === 'spieler' || clean === 'player' || clean === pName || (pNick && clean === pNick);
+    const pName = (adventure?.player?.name || '').trim().toLowerCase();
+    const pNick = (adventure?.player?.nickname || '').trim().toLowerCase();
+    return clean === 'spieler' || clean === 'player' || (pName && clean === pName) || (pNick && clean === pNick);
+  };
+
+  const isCharacterCategory = (cat?: string, details?: Record<string, any>): boolean => {
+    if (!cat && !details) return false;
+    const cleanCat = (cat || '').trim().toLowerCase();
+    if (
+      cleanCat === 'charaktere' ||
+      cleanCat === 'gegner' ||
+      cleanCat === 'personen' ||
+      cleanCat === 'person' ||
+      cleanCat === 'gefährten' ||
+      cleanCat === 'gefährte' ||
+      cleanCat === 'begleiter' ||
+      cleanCat === 'nsc' ||
+      cleanCat === 'npc' ||
+      cleanCat === 'wesen' ||
+      cleanCat === 'kreaturen' ||
+      cleanCat === 'kreatur' ||
+      cleanCat === 'mitmenschen' ||
+      cleanCat === 'überlebende' ||
+      cleanCat === 'bewohner' ||
+      cleanCat === 'einwohner' ||
+      cleanCat === 'wachen' ||
+      cleanCat === 'krieger' ||
+      cleanCat === 'händler' ||
+      cleanCat === 'bürger'
+    ) {
+      return true;
+    }
+    if (details?.isCharacter === true || details?.isNpc === true || details?.isCompanion === true || details?.isHostile === true) {
+      return true;
+    }
+    return false;
   };
 
   const addNpc = (npc: NPC) => {
     if (!npc || !npc.name) return;
-    if (isPlayer(npc.name) || isPlayer(npc.nickname)) return;
-    
-    const cleanName = (npc.nickname || npc.name).trim().toLowerCase();
-    if (!cleanName || seenNames.has(cleanName)) return;
-    seenNames.add(cleanName);
+    if (isGenericOrPlaceholderName(npc.name) && !npc.nickname && !(npc as any).rufName) return;
+    if (isPlayer(npc.name) || isPlayer(npc.nickname) || isPlayer((npc as any).rufName)) return;
+
+    if (npc.id && seenIds.has(npc.id)) return;
+
+    // Check if an existing character in result is the same person
+    const existingIndex = result.findIndex(existing => isSameCharacter(existing, npc));
+    if (existingIndex > -1) {
+      const existing = result[existingIndex];
+      const preferredName = (npc.name && !isGenericOrPlaceholderName(npc.name) && npc.name[0] === npc.name[0].toUpperCase() && existing.name[0] !== existing.name[0].toUpperCase())
+        ? npc.name
+        : existing.name;
+
+      result[existingIndex] = {
+        ...existing,
+        ...npc,
+        name: preferredName,
+        nickname: existing.nickname || npc.nickname,
+        role: (existing.role && existing.role !== 'Gesprächspartner' && existing.role !== 'Charakter') ? existing.role : (npc.role || existing.role),
+        bio: (existing.bio && !existing.bio.includes('Aktiver Dialogteilnehmer')) ? existing.bio : (npc.bio || existing.bio),
+        personality: (existing.personality && existing.personality !== 'Unbekannt') ? existing.personality : (npc.personality || existing.personality),
+        relationship: (existing.relationship && existing.relationship !== 'Dialogteilnehmer') ? existing.relationship : (npc.relationship || existing.relationship),
+      };
+      if (npc.id) seenIds.add(npc.id);
+      return;
+    }
+
     if (npc.id) seenIds.add(npc.id);
     result.push(npc);
   };
 
-  // 1. Existing NPCs
-  (adventure.npcs || []).forEach(n => addNpc(n));
+  // 1. Existing Adventure NPCs
+  (adventure?.npcs || []).forEach(n => addNpc(n));
 
-  // 2. Lore Database (Charaktere & Gegner)
-  (adventure.loreDatabase || []).forEach(lore => {
-    if (lore.category === 'Charaktere' || lore.category === 'Gegner') {
+  // 2. World NPCs if configured
+  ((adventure?.world as any)?.npcs || []).forEach((n: NPC) => addNpc(n));
+
+  // 3. Lore Database (Charaktere, Gegner, Personen, Gefährten, etc.)
+  const combinedLore = [
+    ...(adventure?.loreDatabase || []),
+    ...(adventure?.world?.loreDatabase || [])
+  ];
+
+  combinedLore.forEach(lore => {
+    if (isCharacterCategory(lore.category, lore.details)) {
       const charName = lore.title;
       if (isPlayer(charName)) return;
 
@@ -53,7 +159,17 @@ export function getAllAdventureCharacters(adventure: Adventure): NPC[] {
         relationship: details.relationship || details.beziehungZumSpieler || 'Bekanntschaft',
         conduct: details.conduct || 'Neutral',
         currentSituation: details.currentSituation || 'In der Spielwelt',
-        appearance: details.appearance || {},
+        appearance: {
+          hairColor: details.hairColor || '',
+          eyeColor: details.eyeColor || '',
+          age: details.age || '',
+          build: details.build || '',
+          gender: details.gender || '',
+          currentLocation: details.currentLocation || details.locationName || details.parentPlaceName || '',
+          faction: details.faction || '',
+          ...(details.appearance || {})
+        },
+        currentLocationContext: details.locationContext,
         campaignPowerLevels: details.campaignPowerLevels || {},
         attributes: details.attributes || [],
         isHostile: lore.category === 'Gegner' || !!details.isHostile
@@ -61,9 +177,9 @@ export function getAllAdventureCharacters(adventure: Adventure): NPC[] {
     }
   });
 
-  // 3. Story Entities (Temporary story characters)
-  (adventure.storyState?.storyEntities || []).forEach(entity => {
-    if (entity.category === 'Charaktere' || entity.category === 'Gegner') {
+  // 4. Story Entities (Temporary story characters)
+  (adventure?.storyState?.storyEntities || []).forEach(entity => {
+    if (isCharacterCategory(entity.category, entity.details)) {
       const charName = entity.title;
       if (isPlayer(charName)) return;
 
@@ -73,7 +189,7 @@ export function getAllAdventureCharacters(adventure: Adventure): NPC[] {
       addNpc({
         id: generatedId,
         name: charName,
-        nickname: details.nickname,
+        nickname: details.nickname || details.rufName,
         role: details.role || (entity.category === 'Gegner' ? 'Gegner' : 'Charakter'),
         bio: entity.description || 'In der aktuellen Szene anwesend',
         personality: details.personality || 'Unbekannt',
@@ -81,10 +197,78 @@ export function getAllAdventureCharacters(adventure: Adventure): NPC[] {
         relationship: details.relationship || 'Begegnung in der Szene',
         conduct: details.conduct || 'Neutral',
         currentSituation: details.currentSituation || 'In der aktuellen Szene anwesend',
-        appearance: details.appearance || {},
+        appearance: {
+          hairColor: details.hairColor || '',
+          eyeColor: details.eyeColor || '',
+          age: details.age || '',
+          build: details.build || '',
+          gender: details.gender || '',
+          currentLocation: details.currentLocation || details.locationName || '',
+          faction: details.faction || '',
+          ...(details.appearance || {})
+        },
+        currentLocationContext: details.locationContext,
         campaignPowerLevels: details.campaignPowerLevels || {},
         attributes: details.attributes || [],
         isHostile: entity.category === 'Gegner' || !!details.isHostile
+      });
+    }
+  });
+
+  // 5. Story State Relationships (Characters linked in relationships)
+  (adventure?.storyState?.relationships || []).forEach(rel => {
+    [rel.fromName, rel.toName].forEach(name => {
+      if (!name || isPlayer(name)) return;
+      const cleanName = name.trim();
+      addNpc({
+        id: 'rel-char-' + cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        name: cleanName,
+        role: 'Charakter',
+        bio: rel.description || 'In Beziehung zum Spieler oder zur Story stehend.',
+        personality: 'Unbekannt',
+        relationship: rel.relationType || 'Bekanntschaft',
+        conduct: 'Neutral',
+        currentSituation: 'In der Szene anwesend',
+        appearance: { hairColor: '', eyeColor: '', age: '', build: '', gender: '' },
+        attributes: [],
+        isHostile: false
+      });
+    });
+  });
+
+  // 6. Active Dialogue Participants & Speakers from Chat History & Messages
+  const msgList = (messages && messages.length > 0) ? messages : (adventure?.chatHistory || []);
+  msgList.forEach(m => {
+    if (m.dialogueSpeakerName && !isPlayer(m.dialogueSpeakerName)) {
+      const cleanName = m.dialogueSpeakerName.trim();
+      addNpc({
+        id: m.dialogueSpeakerId || 'dlg-spk-' + cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        name: cleanName,
+        role: 'Gesprächspartner',
+        bio: 'Aktiver Dialogteilnehmer im Chat.',
+        personality: 'Unbekannt',
+        relationship: 'Dialogteilnehmer',
+        conduct: 'Aktiv',
+        currentSituation: 'In der aktuellen Szene anwesend',
+        appearance: { hairColor: '', eyeColor: '', age: '', build: '', gender: '' },
+        attributes: [],
+        isHostile: false
+      });
+    }
+    if (m.dialogueTargetName && !isPlayer(m.dialogueTargetName)) {
+      const cleanName = m.dialogueTargetName.trim();
+      addNpc({
+        id: m.dialogueTargetId || 'dlg-tgt-' + cleanName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        name: cleanName,
+        role: 'Gesprächspartner',
+        bio: 'Aktiver Dialogteilnehmer im Chat.',
+        personality: 'Unbekannt',
+        relationship: 'Dialogteilnehmer',
+        conduct: 'Aktiv',
+        currentSituation: 'In der aktuellen Szene anwesend',
+        appearance: { hairColor: '', eyeColor: '', age: '', build: '', gender: '' },
+        attributes: [],
+        isHostile: false
       });
     }
   });

@@ -28,7 +28,7 @@ import { applyProfessionCompetencyActivity } from '../services/professionCompete
 import { ProfessionCompetencyActivity, StoryEntityItem, StoryInfoState } from '../types';
 import { StoryInfoModal } from './StoryInfoModal';
 import { Info } from 'lucide-react';
-import { getAllAdventureCharacters } from '../utils/storyStateExtractor';
+import { getAllAdventureCharacters, isGenericOrPlaceholderName } from '../utils/storyStateExtractor';
 import { LocationContextService } from '../services/locationContextService';
 import { CharacterKnowledgeService } from '../services/characterKnowledgeService';
 import { AIStoryStateProcessor, STRUCTURED_STORY_STATE_DIRECTIVE } from '../services/aiStoryStateProcessor';
@@ -408,10 +408,32 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const effectiveMoveset = adventure?.player ? resolveEffectiveMoveset(adventure.player, activeTransId) : [];
 
     effectiveMoveset.forEach(effTech => {
+      const effNameLower = (effTech.name || '').trim().toLowerCase();
+      const origNameLower = (effTech.originalTechniqueName || '').trim().toLowerCase();
+
       // Prüfen, ob diese Technik oder ihre ursprüngliche Basistechnik als Favorit markiert ist
       const isFav = !!(effTech.isFavorite || (effTech as any).favorite) ||
         (Array.isArray(adventure?.player?.techniqueList) && adventure.player.techniqueList.some(
-          t => (t.id === effTech.originalTechniqueId || t.name === effTech.originalTechniqueName) && (t.isFavorite || (t as any).favorite)
+          t => ((t.id && (t.id === effTech.originalTechniqueId || t.id === effTech.id)) ||
+                (t.name && (t.name.trim().toLowerCase() === effNameLower || t.name.trim().toLowerCase() === origNameLower))) &&
+               (t.isFavorite || (t as any).favorite)
+        )) ||
+        (Array.isArray(adventure?.player?.abilities) && adventure.player.abilities.some(
+          (a: any) => ((a.isFavorite || a.favorite) &&
+                       ((a.id && (a.id === effTech.id || a.id === effTech.originalTechniqueId)) ||
+                        (a.name && (a.name.trim().toLowerCase() === effNameLower || a.name.trim().toLowerCase() === origNameLower)) ||
+                        (a.transformName && (a.transformName.trim().toLowerCase() === effNameLower || a.transformName.trim().toLowerCase() === origNameLower)))) ||
+                      (Array.isArray(a.techniqueList) && a.techniqueList.some(
+                        (t: any) => (t.isFavorite || t.favorite) &&
+                                    ((t.id && (t.id === effTech.id || t.id === effTech.originalTechniqueId)) ||
+                                     (t.name && (t.name.trim().toLowerCase() === effNameLower || t.name.trim().toLowerCase() === origNameLower)))
+                      ))
+        )) ||
+        (Array.isArray(adventure?.player?.baseAbilities) && adventure.player.baseAbilities.some(
+          (b: any) => (b.isFavorite || b.favorite) &&
+                      ((b.id && (b.id === effTech.id || b.id === effTech.originalTechniqueId)) ||
+                       (b.name && (b.name.trim().toLowerCase() === effNameLower || b.name.trim().toLowerCase() === origNameLower)) ||
+                       (b.displayName && (b.displayName.trim().toLowerCase() === effNameLower || b.displayName.trim().toLowerCase() === origNameLower)))
         ));
 
       if (isFav) {
@@ -426,15 +448,15 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       }
     });
 
-    // Ergänzend: Transformations-Aktivierungen selbst (wenn als Favorit markiert)
+    // Ergänzend: Direkt favorisierte Fähigkeiten, Techniken und Transformationen aus player.abilities
     adventure?.player?.abilities?.forEach((ability: any) => {
       const abCat = ability.category || 'Techniken';
       const isTrans = abCat === 'Transformationen' || !!ability.transformName || (ability.type || '').toLowerCase().includes('transform');
       const isUlt = abCat === 'Ultimative Techniken' || (ability.type || '').toLowerCase().includes('ultimat');
 
-      if (isTrans || isUlt) {
+      if (ability.isFavorite || ability.favorite) {
         const mainName = isTrans ? (ability.transformName || ability.name) : ability.name;
-        if (mainName && (ability.isFavorite || ability.favorite)) {
+        if (mainName) {
           checkAndPush({
             id: ability.id,
             name: mainName,
@@ -448,7 +470,67 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
           }, abCat, isTrans, isUlt);
         }
       }
+
+      if (Array.isArray(ability.techniqueList)) {
+        ability.techniqueList.forEach((t: any) => {
+          if (t && (t.isFavorite || t.favorite)) {
+            const isTTrans = isTrans || t.category === 'Transformationen' || t.type === 'Transformation';
+            const isTUlt = isUlt || t.category === 'Ultimative Techniken' || (t.type || '').toLowerCase().includes('ultimat');
+            checkAndPush({
+              id: t.id,
+              name: t.name,
+              description: t.description || '',
+              category: t.category || abCat,
+              level: t.level || 1,
+              cost: t.cost || '',
+              abilityId: ability.id,
+              abilitySource: ability.source,
+              isFavorite: true,
+            }, t.category || abCat, isTTrans, isTUlt);
+          }
+        });
+      }
     });
+
+    // Ergänzend: Direkt favorisierte Techniken aus player.techniqueList
+    if (Array.isArray(adventure?.player?.techniqueList)) {
+      adventure.player.techniqueList.forEach((t: any) => {
+        if (t && (t.isFavorite || t.favorite)) {
+          const isTrans = t.category === 'Transformationen' || t.type === 'Transformation';
+          const isUlt = t.category === 'Ultimative Techniken' || (t.type || '').toLowerCase().includes('ultimat');
+          checkAndPush({
+            id: t.id,
+            name: t.name,
+            description: t.description || '',
+            category: t.category || 'Techniken',
+            level: t.level || 1,
+            cost: t.cost || '',
+            abilityId: t.id,
+            abilitySource: adventure?.player?.powerSource || '',
+            isFavorite: true,
+          }, t.category || 'Techniken', isTrans, isUlt);
+        }
+      });
+    }
+
+    // Ergänzend: Direkt favorisierte Grundfähigkeiten aus player.baseAbilities
+    if (Array.isArray(adventure?.player?.baseAbilities)) {
+      adventure.player.baseAbilities.forEach((ba: any) => {
+        if (ba && (ba.isFavorite || ba.favorite)) {
+          checkAndPush({
+            id: ba.id,
+            name: ba.displayName || ba.name,
+            description: ba.description || '',
+            category: 'Techniken',
+            level: ba.level || 1,
+            cost: ba.cost || '',
+            abilityId: ba.id,
+            abilitySource: ba.powerSourceName || adventure?.player?.powerSource || '',
+            isFavorite: true,
+          }, 'Techniken', false, false);
+        }
+      });
+    }
 
     return list;
   };
@@ -1605,7 +1687,8 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     const locOptions = {
       holdings: adventure.world?.economyConfig?.holdings,
       loreEntries: adventure.loreDatabase,
-      territories: adventure.world?.territories
+      territories: adventure.world?.territories,
+      recentMessages: messages
     };
     return LocationContextService.isCharacterAtLocation(npc, locCtx, locOptions);
   };
@@ -5483,30 +5566,43 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
 
   // Combined available characters from NPCs, LoreDatabase, and StoryState (strictly filtered by current location presence)
   const availableDialogueNpcs = React.useMemo(() => {
-    const allChars = getAllAdventureCharacters(adventure);
+    const allChars = getAllAdventureCharacters(adventure, messages);
     const locCtx = LocationContextService.resolveCurrentLocation(adventure);
     const locOptions = {
       holdings: adventure.world?.economyConfig?.holdings,
       loreEntries: adventure.loreDatabase,
-      territories: adventure.world?.territories
+      territories: adventure.world?.territories,
+      recentMessages: messages
     };
     const presentChars = LocationContextService.filterPresentCharacters(allChars, locCtx, locOptions);
-    const nonPlayerPresent = presentChars.filter(char => {
-      if (char.id === 'player') return false;
-      if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, char.name || (char as any).title)) return false;
-      return true;
-    });
+    const nonPlayerPresent = presentChars
+      .filter(char => {
+        if (char.id === 'player') return false;
+        const cName = char.name || (char as any).title;
+        if (!cName || isGenericOrPlaceholderName(cName)) return false;
+        if (adventure.player?.name && isNameMatch(adventure.player.name, adventure.player.nickname, cName)) return false;
+        return true;
+      })
+      .map(char => {
+        const rawName = char.name || (char as any).title || '';
+        const cleanFormatted = rawName.split(' ').map(w => w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1) : '').join(' ');
+        return {
+          ...char,
+          name: cleanFormatted || rawName
+        };
+      });
     return nonPlayerPresent;
-  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player, adventure.world?.economyConfig?.holdings, adventure.world?.territories]);
+  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player, adventure.world?.economyConfig?.holdings, adventure.world?.territories, messages]);
 
   // Combined available hostile characters (strictly filtered by current location presence)
   const availableCombatOpponents = React.useMemo(() => {
-    const allChars = getAllAdventureCharacters(adventure);
+    const allChars = getAllAdventureCharacters(adventure, messages);
     const locCtx = LocationContextService.resolveCurrentLocation(adventure);
     const locOptions = {
       holdings: adventure.world?.economyConfig?.holdings,
       loreEntries: adventure.loreDatabase,
-      territories: adventure.world?.territories
+      territories: adventure.world?.territories,
+      recentMessages: messages
     };
     const presentChars = LocationContextService.filterPresentCharacters(allChars, locCtx, locOptions);
     const hostilesPresent = presentChars.filter(char => {
@@ -5517,7 +5613,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       return !!isHostileField;
     });
     return hostilesPresent;
-  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player, adventure.world?.economyConfig?.holdings, adventure.world?.territories]);
+  }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player, adventure.world?.economyConfig?.holdings, adventure.world?.territories, messages]);
 
   // Available travel targets count from Navigation system (using known locations)
   const availableTravelTargetsCount = React.useMemo(() => {
@@ -9094,7 +9190,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     {getFavoriteTechniques().length === 0 ? (
                       <div className="p-4 text-center text-xs text-slate-500 italic leading-relaxed">
                         Keine Favoriten markiert.<br />
-                        Markiere Techniken im Codex mit dem Stern-Symbol für den Schnellzugriff.
+                        Markiere Fähigkeiten und Techniken im Logbuch unter Künste mit dem Stern-Symbol für den Schnellzugriff.
                       </div>
                     ) : (
                       getFavoriteTechniques().map((tech, i) => (

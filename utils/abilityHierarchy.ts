@@ -316,6 +316,10 @@ export function normalizeAbilityHierarchy(char: any): {
       if (tech.unlockedByTransformationId) existing.unlockedByTransformationId = tech.unlockedByTransformationId;
       if (tech.unlockedByTransformationIds) existing.unlockedByTransformationIds = tech.unlockedByTransformationIds;
       if (tech.isTransformationOnly !== undefined) existing.isTransformationOnly = tech.isTransformationOnly;
+      if (tech.isFavorite || tech.favorite) {
+        existing.isFavorite = true;
+        existing.favorite = true;
+      }
       return;
     }
 
@@ -323,6 +327,7 @@ export function normalizeAbilityHierarchy(char: any): {
     const costResource = tech.costResourceName || ps?.cost || 'Mana';
     const costVal = tech.costValue !== undefined ? tech.costValue : (category === 'Passive Fähigkeiten' ? 0 : 10);
     const costStr = tech.cost || (category === 'Passive Fähigkeiten' ? 'Passiv' : `${costVal} ${costResource}`);
+    const isFav = !!(tech.isFavorite || tech.favorite);
 
     const newTech: TechniqueItem = {
       ...tech,
@@ -377,7 +382,9 @@ export function normalizeAbilityHierarchy(char: any): {
       transformationModifiers: tech.transformationModifiers,
       unlockedByTransformationId: tech.unlockedByTransformationId,
       unlockedByTransformationIds: tech.unlockedByTransformationIds,
-      isTransformationOnly: tech.isTransformationOnly
+      isTransformationOnly: tech.isTransformationOnly,
+      isFavorite: isFav,
+      favorite: isFav
     };
 
     techniquesMap.set(techKey, newTech);

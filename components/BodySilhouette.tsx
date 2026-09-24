@@ -9,6 +9,7 @@ import {
   decayTransformationIntensity,
   updateTransformationIntensity
 } from './bodyConditionResolver';
+import { resolveChibiForm } from '../services/chibiFormResolver';
 
 interface BodySilhouetteProps {
   player: Character;
@@ -470,6 +471,13 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
     : rawActiveTransformationId;
 
   const activeTransformation = transformationList.find(t => t.id === activeTransformationId);
+
+  const resolvedChibi = resolveChibiForm({
+    player,
+    activeTransformation,
+    transformationState: player.appearance?.transformationState,
+    world
+  });
 
   const syncReciprocalSwapToTargetChar = (targetChar: any, isSwapActive: boolean) => {
     if (!targetChar) return;
@@ -2037,11 +2045,22 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
   legScaleX = Math.max(0.72, Math.min(1.75, legScaleX));
   legScaleY = Math.max(0.8, Math.min(1.3, legScaleY));
 
-  // 2. Age (Alter) modifiers
+  // 2. Age (Alter) & Chibi modifiers
   const isChild = displayForm === 'child' || appAge.includes('kind') || appAge.includes('baby') || appAge.includes('schüler') || (parseInt(appAge) > 0 && parseInt(appAge) < 12);
   const isTeenager = appAge.includes('teenager') || appAge.includes('teen') || appAge.includes('jugendlich') || (parseInt(appAge) >= 12 && parseInt(appAge) < 20);
 
-  if (isChild) {
+  if (resolvedChibi.active) {
+    const scaleX = resolvedChibi.bodyScale ?? 0.65;
+    const scaleY = resolvedChibi.heightScale ?? 0.70;
+    torsoScaleX *= scaleX;
+    torsoScaleY *= scaleY;
+    armScaleX *= scaleX;
+    armScaleY *= scaleY;
+    legScaleX *= scaleX;
+    legScaleY *= scaleY;
+    headScaleX *= Math.max(0.85, scaleX * 1.35);
+    headScaleY *= Math.max(0.85, scaleY * 1.35);
+  } else if (isChild) {
     headScaleX *= 1.18;
     headScaleY *= 1.18;
     torsoScaleY *= 0.78;
@@ -2147,6 +2166,7 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
           {/* Diagnostic Overlay */}
           <div className="absolute top-2 left-2 flex flex-col gap-0.5 text-[9px] font-bold text-indigo-400 font-mono select-none pointer-events-none bg-slate-950/85 px-2 py-1 rounded border border-slate-800/80 z-10">
             <div>GESTALT: {activeTransformation ? activeTransformation.name : 'STANDARD'}</div>
+            {resolvedChibi.active && <div className="text-amber-400">CHIBI: {resolvedChibi.sourceName || resolvedChibi.source}</div>}
             {isFemale && pregFactor > 0 && <div>SCHWANGER: {pregFactor}. Mon.</div>}
             {state.isVampire && <div>BLUT: {state.vampireBlood}%</div>}
           </div>
@@ -2594,6 +2614,24 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
           </div>
         </div>
 
+        {/* Active Chibi Condition Badge */}
+        {resolvedChibi.active && (
+          <div className="bg-amber-950/40 border border-amber-500/30 p-2.5 rounded-lg flex justify-between items-center mt-2">
+            <div className="flex flex-col text-[10px]">
+              <span className="font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                <span>Chibi-Form aktiv</span>
+                <span className="text-[9px] text-amber-400/80 font-normal">({resolvedChibi.sourceName || resolvedChibi.source})</span>
+              </span>
+              <span className="text-[9px] text-amber-200/80 mt-0.5">
+                {resolvedChibi.description || resolvedChibi.physicalChanges.join(' • ')}
+              </span>
+            </div>
+            <span className="text-[9.5px] font-mono text-amber-300 font-extrabold bg-amber-900/80 border border-amber-500/40 px-2 py-0.5 rounded shrink-0">
+              {(resolvedChibi.heightScale * 100).toFixed(0)}% Größe
+            </span>
+          </div>
+        )}
+
         {/* Active Injury Warning / Quick Heal */}
         {Object.values(state.injuries).some(arr => arr.length > 0) ? (
           <div className="bg-red-950/40 border border-red-500/30 p-2 rounded-lg flex justify-between items-center mt-1">
@@ -2829,6 +2867,261 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
             <i className="fa-solid fa-sliders text-indigo-400"></i>
             Körperliche Eigenschaften & Maße
           </h4>
+
+          {/* CHIBI FORM CONTROL CARD */}
+          <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-child text-amber-400 text-sm"></i>
+                <div>
+                  <h5 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                    Optionale Chibi-Form / Zustands-Schicht
+                  </h5>
+                  <span className="text-[9.5px] text-slate-400">
+                    Visuelle Körperdarstellung (keine eigenständige Technikliste oder Transformation)
+                  </span>
+                </div>
+              </div>
+
+              <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border ${
+                resolvedChibi.active 
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-900 text-slate-400 border-slate-700'
+              }`}>
+                {resolvedChibi.active ? `Aktiv (${resolvedChibi.sourceName || resolvedChibi.source})` : 'Inaktiv'}
+              </span>
+            </div>
+
+            {/* Quick Status / Description */}
+            {resolvedChibi.active && (
+              <div className="bg-amber-950/30 border border-amber-500/30 p-2.5 rounded-lg space-y-1 text-[10px]">
+                <div className="font-bold text-amber-300 flex items-center justify-between">
+                  <span>Aktive Quelle: {resolvedChibi.sourceName || resolvedChibi.source}</span>
+                  <span className="font-mono text-amber-200">Körper: {(resolvedChibi.bodyScale * 100).toFixed(0)}% / Höhe: {(resolvedChibi.heightScale * 100).toFixed(0)}%</span>
+                </div>
+                <p className="text-amber-100/80 leading-tight">
+                  {resolvedChibi.description || 'Chibi-Darstellung ist als körperlicher Zustand aktiv.'}
+                </p>
+                {resolvedChibi.physicalChanges.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {resolvedChibi.physicalChanges.map((change, idx) => (
+                      <span key={idx} className="bg-amber-900/60 border border-amber-500/40 text-amber-200 text-[9px] px-2 py-0.5 rounded">
+                        {change}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Manual Toggle & Config Controls */}
+            {!readOnly && (
+              <div className="space-y-2.5 pt-1">
+                <div className="flex flex-wrap gap-2 items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-300">
+                    Manuelle Chibi-Form Steuerung:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentApp = (player.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' }) as Appearance;
+                      const isCurrentlyEnabled = !!currentApp.chibiForm?.enabled;
+                      const updatedChibi: any = {
+                        enabled: !isCurrentlyEnabled,
+                        source: 'manual',
+                        sourceId: 'manual',
+                        sourceName: 'Manuelle Chibi-Form',
+                        bodyScale: currentApp.chibiForm?.bodyScale ?? 0.65,
+                        heightScale: currentApp.chibiForm?.heightScale ?? 0.70,
+                        visualAge: currentApp.chibiForm?.visualAge || 'kindlich dargestellt',
+                        physicalChanges: currentApp.chibiForm?.physicalChanges || ['verkleinerte Körperproportionen', 'größere Kopfproportion', 'kürzere Gliedmaßen'],
+                        movementModifier: currentApp.chibiForm?.movementModifier || 'flink',
+                        equipmentRule: currentApp.chibiForm?.equipmentRule || 'angepasst',
+                        visualOnly: currentApp.chibiForm?.visualOnly ?? true,
+                        description: 'Manuell aktivierte Chibi-Darstellung.'
+                      };
+                      if (onUpdatePlayerRef.current) {
+                        onUpdatePlayer({
+                          ...player,
+                          appearance: {
+                            ...currentApp,
+                            chibiForm: updatedChibi
+                          }
+                        });
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      player.appearance?.chibiForm?.enabled
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
+                        : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    {player.appearance?.chibiForm?.enabled ? 'Manuelle Chibi-Form Deaktivieren' : 'Manuelle Chibi-Form Aktivieren'}
+                  </button>
+                </div>
+
+                {/* Configuration Sliders & Inputs if manual or customization requested */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800 space-y-1">
+                    <label className="text-[9.5px] font-semibold text-slate-400 flex justify-between">
+                      <span>Körper-Skalierung (bodyScale)</span>
+                      <span className="font-mono text-indigo-300">
+                        {((player.appearance?.chibiForm?.bodyScale ?? 0.65) * 100).toFixed(0)}%
+                      </span>
+                    </label>
+                    <input
+                      type="range"
+                      min="0.30"
+                      max="1.00"
+                      step="0.05"
+                      value={player.appearance?.chibiForm?.bodyScale ?? 0.65}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        const currentApp = (player.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' }) as Appearance;
+                        const currentChibi = currentApp.chibiForm || { enabled: true, source: 'manual' };
+                        if (onUpdatePlayerRef.current) {
+                          onUpdatePlayer({
+                            ...player,
+                            appearance: {
+                              ...currentApp,
+                              chibiForm: {
+                                ...currentChibi,
+                                bodyScale: val
+                              }
+                            }
+                          });
+                        }
+                      }}
+                      className="w-full accent-indigo-500 h-1 bg-slate-800 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="bg-slate-900/60 p-2 rounded-lg border border-slate-800 space-y-1">
+                    <label className="text-[9.5px] font-semibold text-slate-400 flex justify-between">
+                      <span>Höhen-Skalierung (heightScale)</span>
+                      <span className="font-mono text-indigo-300">
+                        {((player.appearance?.chibiForm?.heightScale ?? 0.70) * 100).toFixed(0)}%
+                      </span>
+                    </label>
+                    <input
+                      type="range"
+                      min="0.30"
+                      max="1.00"
+                      step="0.05"
+                      value={player.appearance?.chibiForm?.heightScale ?? 0.70}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        const currentApp = (player.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' }) as Appearance;
+                        const currentChibi = currentApp.chibiForm || { enabled: true, source: 'manual' };
+                        if (onUpdatePlayerRef.current) {
+                          onUpdatePlayer({
+                            ...player,
+                            appearance: {
+                              ...currentApp,
+                              chibiForm: {
+                                ...currentChibi,
+                                heightScale: val
+                              }
+                            }
+                          });
+                        }
+                      }}
+                      className="w-full accent-indigo-500 h-1 bg-slate-800 rounded cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                {/* Overload Configuration */}
+                <div className="bg-slate-900/40 p-2.5 rounded-lg border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-300">
+                      Automatische Chibi-Form bei Kraftüberlastung:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentApp = (player.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' }) as Appearance;
+                        const currentOverload = currentApp.chibiOnPowerOverload || { enabled: false, activationThreshold: 120, recoveryThreshold: 80 };
+                        if (onUpdatePlayerRef.current) {
+                          onUpdatePlayer({
+                            ...player,
+                            appearance: {
+                              ...currentApp,
+                              chibiOnPowerOverload: {
+                                ...currentOverload,
+                                enabled: !currentOverload.enabled
+                              }
+                            }
+                          });
+                        }
+                      }}
+                      className={`text-[9.5px] font-bold px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                        player.appearance?.chibiOnPowerOverload?.enabled
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {player.appearance?.chibiOnPowerOverload?.enabled ? 'Aktiviert' : 'Inaktiv'}
+                    </button>
+                  </div>
+
+                  {player.appearance?.chibiOnPowerOverload?.enabled && (
+                    <div className="grid grid-cols-2 gap-2 text-[9.5px]">
+                      <div>
+                        <span className="text-slate-400 block font-semibold">Aktivierungsschwelle (% Kraft):</span>
+                        <input
+                          type="number"
+                          value={player.appearance?.chibiOnPowerOverload?.activationThreshold ?? 120}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 120;
+                            const currentApp = (player.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' }) as Appearance;
+                            if (onUpdatePlayerRef.current) {
+                              onUpdatePlayer({
+                                ...player,
+                                appearance: {
+                                  ...currentApp,
+                                  chibiOnPowerOverload: {
+                                    ...(currentApp.chibiOnPowerOverload || { enabled: true, recoveryThreshold: 80 }),
+                                    activationThreshold: val
+                                  }
+                                }
+                              });
+                            }
+                          }}
+                          className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 mt-0.5 font-mono"
+                        />
+                      </div>
+
+                      <div>
+                        <span className="text-slate-400 block font-semibold">Rückkehrschwelle (% Kraft):</span>
+                        <input
+                          type="number"
+                          value={player.appearance?.chibiOnPowerOverload?.recoveryThreshold ?? 80}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value) || 80;
+                            const currentApp = (player.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' }) as Appearance;
+                            if (onUpdatePlayerRef.current) {
+                              onUpdatePlayer({
+                                ...player,
+                                appearance: {
+                                  ...currentApp,
+                                  chibiOnPowerOverload: {
+                                    ...(currentApp.chibiOnPowerOverload || { enabled: true, activationThreshold: 120 }),
+                                    recoveryThreshold: val
+                                  }
+                                }
+                              });
+                            }
+                          }}
+                          className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-slate-200 mt-0.5 font-mono"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Form selector */}
           <div className="space-y-2.5">

@@ -885,7 +885,8 @@ function runTests() {
       name: 'Player A',
       role: 'Krieger',
       bio: 'Startcharakter A',
-      appearance: { hairColor: 'Blond', eyeColor: 'Blau', gender: 'Männlich' },
+      personality: 'Mutig',
+      appearance: { hairColor: 'Blond', eyeColor: 'Blau', age: '20', build: 'Normal', gender: 'Männlich' },
       attributes: [{ name: 'Stärke', value: 10, max: 100 }],
       activeConditions: []
     };
@@ -904,7 +905,7 @@ function runTests() {
     };
     const startInventoryA = ['Starter-Schwert', 'Brot'];
 
-    const newAdv: Adventure = {
+    const newAdv: any = {
       id: 'adv-lifecycle-new',
       authorId: 'user-1',
       isPublic: false,
@@ -947,7 +948,9 @@ function runTests() {
       id: 'char-a',
       name: 'Start A',
       role: 'Magier',
-      appearance: { hairColor: 'Silber', eyeColor: 'Grün', gender: 'Weiblich' },
+      bio: 'Start B',
+      personality: 'Ruhig',
+      appearance: { hairColor: 'Silber', eyeColor: 'Grün', age: '20', build: 'Normal', gender: 'Weiblich' },
       attributes: [{ name: 'Intelligenz', value: 20, max: 100 }],
       activeConditions: []
     };
@@ -980,7 +983,9 @@ function runTests() {
       id: 'char-a',
       name: 'Start A',
       role: 'Schurke',
-      appearance: { hairColor: 'Braun', eyeColor: 'Braun', gender: 'Männlich' },
+      bio: '',
+      personality: 'Schlau',
+      appearance: { hairColor: 'Braun', eyeColor: 'Braun', age: '20', build: 'Normal', gender: 'Männlich' },
       attributes: [],
       activeConditions: []
     };
@@ -1006,14 +1011,14 @@ function runTests() {
 
   // Test D – Bestehendes Adventure (initial = A, current = B -> Speichern -> initial = A, current = B)
   {
-    const existingAdv: Adventure = {
+    const existingAdv: any = {
       id: 'adv-existing',
       authorId: 'user-1',
       isPublic: false,
       world: { title: 'Welt B', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
-      player: { id: 'p1', name: 'Spieler B', role: '', appearance: { hairColor: '', eyeColor: '', gender: '' }, attributes: [], activeConditions: [] },
+      player: { id: 'p1', name: 'Spieler B', role: '', bio: '', personality: '', appearance: { hairColor: '', eyeColor: '', age: '20', build: 'Normal', gender: '' }, attributes: [], activeConditions: [] },
       npcs: [],
-      initialPlayer: { id: 'p1', name: 'Spieler A (Initial)', role: '', appearance: { hairColor: '', eyeColor: '', gender: '' }, attributes: [], activeConditions: [] },
+      initialPlayer: { id: 'p1', name: 'Spieler A (Initial)', role: '', bio: '', personality: '', appearance: { hairColor: '', eyeColor: '', age: '20', build: 'Normal', gender: '' }, attributes: [], activeConditions: [] },
       initialWorld: { title: 'Welt A (Initial)', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] }
     };
 
@@ -1029,7 +1034,9 @@ function runTests() {
       id: 'char-finish',
       name: 'Start A',
       role: 'Paladin',
-      appearance: { hairColor: 'Gold', eyeColor: 'Blau', gender: 'Divers' },
+      bio: '',
+      personality: 'Treuer Held',
+      appearance: { hairColor: 'Gold', eyeColor: 'Blau', age: '20', build: 'Normal', gender: 'Divers' },
       attributes: [{ name: 'Heiligkraft', value: 100, max: 100 }],
       activeConditions: []
     };
@@ -1041,7 +1048,7 @@ function runTests() {
     workingPlayer = { ...workingPlayer, name: 'Final C' };
 
     // Simulated handleFinish using initialSnapshotsRef
-    const finalAdv: Adventure = {
+    const finalAdv: any = {
       id: 'adv-finish-test',
       authorId: 'user-1',
       isPublic: true,
@@ -1061,12 +1068,14 @@ function runTests() {
       id: 'char-reset-f',
       name: 'Held A',
       role: 'Barde',
-      appearance: { hairColor: 'Kastanienbraun', eyeColor: 'Haselnuss', gender: 'Männlich' },
+      bio: '',
+      personality: 'Frohgemut',
+      appearance: { hairColor: 'Kastanienbraun', eyeColor: 'Haselnuss', age: '20', build: 'Normal', gender: 'Männlich' },
       attributes: [{ name: 'Charisma', value: 80, max: 100 }],
       activeConditions: []
     };
 
-    const adv: Adventure = {
+    const adv: any = {
       id: 'adv-reset-flow',
       authorId: 'user-1',
       isPublic: false,
@@ -1075,7 +1084,9 @@ function runTests() {
         id: 'char-reset-f',
         name: 'Transformierter Zustand D',
         role: 'Schattenfürst',
-        appearance: { hairColor: 'Pechschwarz', eyeColor: 'Glühend Rot', gender: 'Männlich' },
+        bio: '',
+        personality: 'Düster',
+        appearance: { hairColor: 'Pechschwarz', eyeColor: 'Glühend Rot', age: '20', build: 'Normal', gender: 'Männlich' },
         attributes: [{ name: 'Charisma', value: 10, max: 100 }],
         activeConditions: [{ id: 'cond-shadow', label: 'Schattengestalt', type: 'transformation', intensity: 'extrem' } as any]
       },
@@ -1096,12 +1107,14 @@ function runTests() {
       id: 'char-trans-g',
       name: 'Normaler Mensch',
       role: 'Novize',
-      appearance: { hairColor: 'Schwarz', eyeColor: 'Blau', gender: 'Weiblich', activeTransformationId: 'standard' },
+      bio: '',
+      personality: 'Ruhig',
+      appearance: { hairColor: 'Schwarz', eyeColor: 'Blau', age: '20', build: 'Normal', gender: 'Weiblich', activeTransformationId: 'standard' },
       attributes: [{ name: 'Psi', value: 0, max: 100 }],
       activeConditions: []
     };
 
-    const transAdv: Adventure = {
+    const transAdv: any = {
       id: 'adv-trans-g',
       authorId: 'user-1',
       isPublic: true,

@@ -760,6 +760,7 @@ export class LocationContextService {
       territories?: Territory[];
       allowSameBuildingWhenInRoom?: boolean;
       explicitParticipantIds?: string[];
+      recentMessages?: any[];
     }
   ): boolean {
     if (!character || !currentLocation) return false;
@@ -767,34 +768,78 @@ export class LocationContextService {
     // 1. Player is always at currentLocation
     if (character.id === 'player') return true;
 
-    // 2. Explicit participant in active scene (e.g. dialogueParticipantIds)
+    // 2. Explicit participant in active scene (e.g. dialogueParticipantIds or explicit IDs)
     const charId = character.id;
+    const charName = (character.name || character.title || '').trim().toLowerCase();
+    const charNick = (character.nickname || character.rufName || character.details?.nickname || character.details?.rufName || '').trim().toLowerCase();
+
     if (options?.explicitParticipantIds && charId && options.explicitParticipantIds.includes(charId)) {
       return true;
     }
 
-    // 3. Check presenceState enum if defined on character
+    // 3. Explicit companion / party member travelling with the player
+    const roleLower = (character.role || character.details?.role || '').toLowerCase();
+    const relLower = (character.relationship || character.details?.relationship || character.details?.beziehungZumSpieler || '').toLowerCase();
+    const isCompanion = character.isCompanion === true ||
+      character.details?.isCompanion === true ||
+      roleLower.includes('gefährte') || roleLower.includes('begleiter') || roleLower.includes('partner') || roleLower.includes('reisegefährte') ||
+      relLower.includes('gefährte') || relLower.includes('begleiter') || relLower.includes('partner') || relLower.includes('reisegefährte') || relLower.includes('in der gruppe');
+
+    if (isCompanion && character.presenceState?.state !== 'absent') {
+      return true;
+    }
+
+    // 4. Check presenceState enum if defined on character
     if (character.presenceState) {
       if (character.presenceState.state === 'absent') {
         return false;
       }
       if (character.presenceState.state === 'scene_participant') {
-        if (character.presenceState.sceneId && currentLocation.sceneId && character.presenceState.sceneId === currentLocation.sceneId) {
+        if (!character.presenceState.sceneId || !currentLocation.sceneId || character.presenceState.sceneId === currentLocation.sceneId) {
           return true;
         }
-        // Without matching valid sceneId, scene_participant state does NOT grant presence
       }
     }
 
-    // 4. Explicit boolean override flags (e.g. isExplicitlyPresent set for specific scene context)
+    // 5. Explicit boolean override flags (e.g. isExplicitlyPresent set for specific scene context)
     if ((character.isExplicitlyPresent === true || character.details?.isExplicitlyPresent === true) && character.presenceState?.state !== 'absent') {
-      const charSceneId = character.presenceState?.sceneId || character.sceneId;
-      if (charSceneId && currentLocation.sceneId && charSceneId === currentLocation.sceneId) {
+      return true;
+    }
+
+    // 6. Check currentSituation string for presence keywords
+    const situation = (character.currentSituation || character.details?.currentSituation || '').toLowerCase().trim();
+    if (situation && (
+      situation === 'anwesend' ||
+      situation.includes('am ort anwesend') ||
+      situation.includes('in der szene') ||
+      situation.includes('vor ort') ||
+      situation.includes('aktiv teil') ||
+      situation.includes('im raum') ||
+      situation.includes('im selben raum') ||
+      situation.includes('im selben gebäude')
+    )) {
+      if (character.presenceState?.state !== 'absent') {
         return true;
       }
     }
 
-    // 4. Extract structured location of the character
+    // 7. Check recent chat messages (if provided): if this character spoke or was dialogue target
+    if (options?.recentMessages && options.recentMessages.length > 0) {
+      const recent = options.recentMessages.slice(-5);
+      const isRecentSpeaker = recent.some(m => {
+        if (m.dialogueParticipantIds && charId && m.dialogueParticipantIds.includes(charId)) return true;
+        if (m.dialogueSpeakerId && charId && m.dialogueSpeakerId === charId) return true;
+        if (m.dialogueSpeakerName && (m.dialogueSpeakerName.trim().toLowerCase() === charName || (charNick && m.dialogueSpeakerName.trim().toLowerCase() === charNick))) return true;
+        if (m.dialogueTargetId && charId && m.dialogueTargetId === charId) return true;
+        if (m.dialogueTargetName && (m.dialogueTargetName.trim().toLowerCase() === charName || (charNick && m.dialogueTargetName.trim().toLowerCase() === charNick))) return true;
+        return false;
+      });
+      if (isRecentSpeaker && character.presenceState?.state !== 'absent') {
+        return true;
+      }
+    }
+
+    // 8. Extract structured location of the character
     const charLoc = this.extractCharacterLocationContext(
       character,
       options?.holdings,
@@ -803,6 +848,11 @@ export class LocationContextService {
     );
 
     if (!charLoc) {
+      // Character without explicit location: count ONLY if generated in current scene as temporary story entity
+      const isStoryEntityChar = character.id && typeof character.id === 'string' && character.id.startsWith('story-char-');
+      if (isStoryEntityChar && character.presenceState?.state !== 'absent') {
+        return true;
+      }
       return false;
     }
 
@@ -810,86 +860,38 @@ export class LocationContextService {
     if (charLoc.roomId && currentLocation.roomId && charLoc.roomId === currentLocation.roomId) {
       return true;
     }
-    if (charLoc.buildingId && currentLocation.buildingId && !currentLocation.roomName && charLoc.buildingId === currentLocation.buildingId) {
+    if (charLoc.buildingId && currentLocation.buildingId && charLoc.buildingId === currentLocation.buildingId) {
       return true;
     }
-    if (charLoc.locationId && currentLocation.locationId && !currentLocation.buildingName && !currentLocation.roomName && charLoc.locationId === currentLocation.locationId) {
-      return true;
-    }
-
-    // -------------------------------------------------------------
-    // FALL A: Aktueller Raum beim Spieler vorhanden (currentLocation.roomName)
-    // -------------------------------------------------------------
-    if (currentLocation.roomName) {
-      if (charLoc.roomName) {
-        // Room must match
-        if (!this.isExactLocationMatch(charLoc.roomName, currentLocation.roomName)) {
-          return false;
-        }
-        // If building is specified on character, it must also match
-        if (charLoc.buildingName && currentLocation.buildingName) {
-          if (!this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName)) {
-            return false;
-          }
-        }
-        // If location is specified on character, it must also match
-        if (charLoc.locationName && currentLocation.locationName) {
-          if (!this.isExactLocationMatch(charLoc.locationName, currentLocation.locationName)) {
-            return false;
-          }
-        }
+    if (charLoc.locationId && currentLocation.locationId && charLoc.locationId === currentLocation.locationId) {
+      if (!currentLocation.buildingName || !charLoc.buildingName || this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName)) {
         return true;
       }
-
-      // If character has no room specified:
-      if (options?.allowSameBuildingWhenInRoom && charLoc.buildingName && currentLocation.buildingName) {
-        return this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName);
-      }
-
-      // Character without room (e.g. only building or location) is NOT in this specific room
-      return false;
     }
 
-    // -------------------------------------------------------------
-    // FALL B: Gebäude ohne Raum beim Spieler (currentLocation.buildingName, but no roomName)
-    // -------------------------------------------------------------
-    if (currentLocation.buildingName) {
-      if (charLoc.buildingName) {
+    // Hierarchical location name comparison
+    if (charLoc.locationName && currentLocation.locationName) {
+      if (!this.isExactLocationMatch(charLoc.locationName, currentLocation.locationName)) {
+        return false; // Different settlement / location!
+      }
+
+      // Same location: check building
+      if (currentLocation.buildingName && charLoc.buildingName) {
         if (!this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName)) {
-          return false;
+          return false; // Different building in same location!
         }
-        // If location is specified on character, it must match
-        if (charLoc.locationName && currentLocation.locationName) {
-          if (!this.isExactLocationMatch(charLoc.locationName, currentLocation.locationName)) {
-            return false;
-          }
-        }
-        return true;
       }
 
-      // Character has no building (only location or territory) -> NOT in this building
-      return false;
-    }
-
-    // -------------------------------------------------------------
-    // FALL C: Ort ohne Gebäude/Raum beim Spieler (currentLocation.locationName, but no buildingName, no roomName)
-    // -------------------------------------------------------------
-    if (currentLocation.locationName) {
-      if (charLoc.locationName) {
-        if (!this.isExactLocationMatch(charLoc.locationName, currentLocation.locationName)) {
-          return false;
+      // Same building: check room
+      if (currentLocation.roomName && charLoc.roomName) {
+        if (!this.isExactLocationMatch(charLoc.roomName, currentLocation.roomName)) {
+          return false; // Different room in same building!
         }
-        return true;
       }
 
-      // Character has only territory or region -> NOT at location!
-      return false;
+      return true;
     }
 
-    // -------------------------------------------------------------
-    // FALL D: Nur Territorium oder Region
-    // -------------------------------------------------------------
-    // Territorium oder Region allein erzeugen niemals physische Anwesenheit!
     return false;
   }
 
@@ -910,14 +912,14 @@ export class LocationContextService {
 
     if (character.presenceState?.state === 'scene_participant') {
       const charSceneId = character.presenceState.sceneId || character.sceneId;
-      if (charSceneId && currentSceneId && charSceneId === currentSceneId) {
+      if (!charSceneId || !currentSceneId || charSceneId === currentSceneId) {
         return true;
       }
     }
 
     if ((character.isExplicitlyPresent === true || character.details?.isExplicitlyPresent === true) && character.presenceState?.state !== 'absent') {
       const charSceneId = character.presenceState?.sceneId || character.sceneId;
-      if (charSceneId && currentSceneId && charSceneId === currentSceneId) {
+      if (!charSceneId || !currentSceneId || charSceneId === currentSceneId) {
         return true;
       }
     }
@@ -959,25 +961,36 @@ export class LocationContextService {
       loreEntries?: LoreEntry[];
       territories?: Territory[];
       allowSameBuildingWhenInRoom?: boolean;
+      recentMessages?: any[];
     }
   ): T[] {
     if (!characters || characters.length === 0 || !currentLocation) return [];
 
     const seenIds = new Set<string>();
+    const seenNormalizedNames = new Set<string>();
 
     return characters.filter(char => {
       const c = char as any;
       const charId = c.id;
-      if (charId) {
-        if (seenIds.has(charId)) return false;
-        seenIds.add(charId);
-      }
+      const rawName = (c.name || c.title || '').trim().toLowerCase();
+      const normName = rawName
+        .replace(/\s*\([^)]*\)/g, '')
+        .replace(/^(sir|mr\.|mr|ms\.|ms|captain|kapitän|admiral|vizeadmiral|meister|lord|lady|prinz|könig|doktor|dr\.|herr|frau)\s+/i, '')
+        .replace(/[^a-z0-9äöüß]/g, '');
 
-      if (options?.sceneOnly) {
-        return this.isCharacterInScene(c, currentLocation, options.explicitParticipantIds, options);
-      }
+      if (charId && seenIds.has(charId)) return false;
+      if (normName && seenNormalizedNames.has(normName)) return false;
 
-      return this.isCharacterAtLocation(c, currentLocation, options);
+      const isPresent = options?.sceneOnly
+        ? this.isCharacterInScene(c, currentLocation, options.explicitParticipantIds, options)
+        : this.isCharacterAtLocation(c, currentLocation, options);
+
+      if (isPresent) {
+        if (charId) seenIds.add(charId);
+        if (normName) seenNormalizedNames.add(normName);
+        return true;
+      }
+      return false;
     });
   }
 

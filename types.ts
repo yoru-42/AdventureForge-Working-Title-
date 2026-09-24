@@ -128,6 +128,49 @@ export interface SilhouetteState {
   [key: string]: any;
 }
 
+export type ChibiFormSource =
+  | 'transformation'
+  | 'race'
+  | 'power_overload'
+  | 'manual';
+
+export interface ChibiFormState {
+  enabled: boolean;
+
+  source?: ChibiFormSource;
+  sourceId?: string;
+  sourceName?: string;
+
+  // Darstellung / Körper
+  bodyScale?: number;
+  heightScale?: number;
+  visualAge?: string;
+
+  // Optionale körperliche Änderungen
+  physicalChanges?: string[];
+
+  // Verhalten / Bewegung
+  movementModifier?: string;
+
+  // Ausrüstung
+  equipmentRule?: string;
+
+  // Automatische Aktivierung
+  triggerCondition?: string;
+  activationThreshold?: number;
+  recoveryThreshold?: number;
+
+  // Dauer
+  durationGameMinutes?: number;
+  startedAtGameMinutes?: number;
+  autoRevert?: boolean;
+
+  // Nur Darstellung oder tatsächlicher körperlicher Zustand
+  visualOnly?: boolean;
+
+  description?: string;
+}
+
 export interface WorldTime {
   day: number;
   hour: number;
@@ -294,6 +337,14 @@ export interface Appearance {
   silhouetteState?: SilhouetteState | any;
   activeConditions?: BodyCondition[];
   customConditions?: BodyCondition[];
+  chibiForm?: ChibiFormState;
+  chibiOnPowerOverload?: {
+    enabled: boolean;
+    activationThreshold: number;
+    recoveryThreshold?: number;
+    durationGameMinutes?: number;
+    autoRevert?: boolean;
+  };
   originalStandardAppearance?: Partial<Appearance>;
 }
 
@@ -516,6 +567,30 @@ export interface PowerAbility {
   techniqueList?: TechniqueItem[];
   parentTransformationId?: string; // Übergeordnete Transformationsstufe für Stufenhierarchien (z.B. Normal -> Esper -> Erwachte Esper)
   unlockedTechniqueIds?: string[]; // IDs von Techniken, die in dieser Transformation freigeschaltet sind
+  chibiForm?: {
+    enabled: boolean;
+    bodyScale?: number;
+    heightScale?: number;
+    visualAge?: string;
+    physicalChanges?: string[];
+    movementModifier?: string;
+    equipmentRule?: string;
+    visualOnly?: boolean;
+    chibiOnPowerOverload?: {
+      enabled: boolean;
+      activationThreshold: number;
+      recoveryThreshold?: number;
+      durationGameMinutes?: number;
+      autoRevert?: boolean;
+    };
+  };
+  chibiOnPowerOverload?: {
+    enabled: boolean;
+    activationThreshold: number;
+    recoveryThreshold?: number;
+    durationGameMinutes?: number;
+    autoRevert?: boolean;
+  };
 }
 
 export interface CharacterPowerSource {
