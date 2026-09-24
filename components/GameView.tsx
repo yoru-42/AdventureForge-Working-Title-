@@ -951,69 +951,7 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
     }
   });
 
-  const handleSelectEmotion = (emotion: string) => {
-    setEmotionUsage(prev => {
-      const updated = { ...prev, [emotion]: (prev[emotion] || 0) + 1 };
-      try {
-        localStorage.setItem('adventure_forge_emotion_usage', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
 
-    const newEmotionState = {
-      ...(adventure.player?.emotionState || {}),
-      emotion,
-      lastUpdated: new Date().toISOString()
-    };
-
-    let updatedStatus = [...(adventure.statusElements || [])];
-    const emIdx = updatedStatus.findIndex(s => s.label.toLowerCase().includes('emotion'));
-    if (emIdx > -1) {
-      updatedStatus[emIdx] = { ...updatedStatus[emIdx], value: emotion };
-    }
-
-    onUpdateAdventure({
-      ...adventure,
-      emotionState: newEmotionState,
-      player: {
-        ...adventure.player,
-        emotionState: newEmotionState
-      },
-      statusElements: updatedStatus
-    });
-  };
-
-  const handleSelectTone = (tone: string) => {
-    setToneUsage(prev => {
-      const updated = { ...prev, [tone]: (prev[tone] || 0) + 1 };
-      try {
-        localStorage.setItem('adventure_forge_tone_usage', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    const newEmotionState = {
-      ...(adventure.player?.emotionState || {}),
-      tone,
-      lastUpdated: new Date().toISOString()
-    };
-
-    let updatedStatus = [...(adventure.statusElements || [])];
-    const toneIdx = updatedStatus.findIndex(s => s.label.toLowerCase().includes('tonart') || s.label.toLowerCase().includes('stimme'));
-    if (toneIdx > -1) {
-      updatedStatus[toneIdx] = { ...updatedStatus[toneIdx], value: tone };
-    }
-
-    onUpdateAdventure({
-      ...adventure,
-      emotionState: newEmotionState,
-      player: {
-        ...adventure.player,
-        emotionState: newEmotionState
-      },
-      statusElements: updatedStatus
-    });
-  };
 
 
   const sortedEmotions = [...baseEmotions].sort((a, b) => {
@@ -5641,34 +5579,74 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
   type ControlTab = 'combat' | 'dialogue' | 'expression' | 'techniques' | 'travel' | 'story' | 'inventory' | 'management';
   const [activeControlTab, setActiveControlTab] = useState<ControlTab | null>(null);
 
-  const currentActiveEmotion = adventure.player?.emotionState?.emotion || adventure.emotionState?.emotion || '';
-  const currentActiveTone = adventure.player?.emotionState?.tone || adventure.emotionState?.tone || '';
+  const [selectedEmotion, setSelectedEmotion] = useState<string>('');
+  const [selectedTone, setSelectedTone] = useState<string>('');
+
+  const currentActiveEmotion = selectedEmotion;
+  const currentActiveTone = selectedTone;
+
+  const updateInputTextExpression = (nextEmotion: string, nextTone: string) => {
+    setInputText(prevText => {
+      let text = prevText.replace(/\[schaut\s+[^\]]+\]/gi, '').replace(/\[spricht\s+[^\]]+\]/gi, '');
+      text = text.replace(/\s+/g, ' ').trim();
+
+      const tags: string[] = [];
+      if (nextEmotion) tags.push(`[schaut ${nextEmotion}]`);
+      if (nextTone) tags.push(`[spricht ${nextTone}]`);
+
+      if (tags.length === 0) {
+        return text;
+      }
+
+      const tagsStr = tags.join(' ');
+      return text ? `${tagsStr} ${text}` : `${tagsStr} `;
+    });
+  };
+
+  const handleSelectEmotion = (emotion: string) => {
+    if (emotion) {
+      setEmotionUsage(prev => {
+        const updated = { ...prev, [emotion]: (prev[emotion] || 0) + 1 };
+        try {
+          localStorage.setItem('adventure_forge_emotion_usage', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+    }
+
+    const nextEmotion = selectedEmotion.toLowerCase() === emotion.toLowerCase() ? '' : emotion;
+    setSelectedEmotion(nextEmotion);
+    updateInputTextExpression(nextEmotion, selectedTone);
+
+    if (nextEmotion && selectedTone) {
+      closeAllControlTabs();
+    }
+  };
+
+  const handleSelectTone = (tone: string) => {
+    if (tone) {
+      setToneUsage(prev => {
+        const updated = { ...prev, [tone]: (prev[tone] || 0) + 1 };
+        try {
+          localStorage.setItem('adventure_forge_tone_usage', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+    }
+
+    const nextTone = selectedTone.toLowerCase() === tone.toLowerCase() ? '' : tone;
+    setSelectedTone(nextTone);
+    updateInputTextExpression(selectedEmotion, nextTone);
+
+    if (selectedEmotion && nextTone) {
+      closeAllControlTabs();
+    }
+  };
 
   const handleClearExpression = () => {
-    const newEmotionState = {
-      ...(adventure.player?.emotionState || {}),
-      emotion: '',
-      tone: '',
-      lastUpdated: new Date().toISOString()
-    };
-    let updatedStatus = [...(adventure.statusElements || [])];
-    const emIdx = updatedStatus.findIndex(s => s.label.toLowerCase().includes('emotion'));
-    if (emIdx > -1) {
-      updatedStatus[emIdx] = { ...updatedStatus[emIdx], value: '' };
-    }
-    const toneIdx = updatedStatus.findIndex(s => s.label.toLowerCase().includes('tonart') || s.label.toLowerCase().includes('stimme'));
-    if (toneIdx > -1) {
-      updatedStatus[toneIdx] = { ...updatedStatus[toneIdx], value: '' };
-    }
-    onUpdateAdventure({
-      ...adventure,
-      emotionState: newEmotionState,
-      player: {
-        ...adventure.player,
-        emotionState: newEmotionState
-      },
-      statusElements: updatedStatus
-    });
+    setSelectedEmotion('');
+    setSelectedTone('');
+    updateInputTextExpression('', '');
   };
 
   const isCombatOpen = activeControlTab === 'combat' || isCombatMenuExpanded;
@@ -5750,6 +5728,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
 
     setIsLoading(true);
     setInputText('');
+    setSelectedEmotion('');
+    setSelectedTone('');
     
     let userDisplayMsgText = '';
     let aiSystemDirective = '';
@@ -5951,6 +5931,8 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
     if (!rawText) return;
     const text = rawText;
     setInputText('');
+    setSelectedEmotion('');
+    setSelectedTone('');
 
     let nextHp = playerHp;
     let nextMp = playerMp;
@@ -9048,12 +9030,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                               key={e}
                               type="button"
                               onClick={() => {
-                                if (isSelected) {
-                                  handleSelectEmotion('');
-                                } else {
-                                  insertFormatting(`[schaut ${e}] `, '');
-                                  handleSelectEmotion(e);
-                                }
+                                handleSelectEmotion(e);
                               }}
                               className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
                                 isSelected
@@ -9120,12 +9097,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                               key={t}
                               type="button"
                               onClick={() => {
-                                if (isSelected) {
-                                  handleSelectTone('');
-                                } else {
-                                  insertFormatting(`[spricht ${t}] `, '');
-                                  handleSelectTone(t);
-                                }
+                                handleSelectTone(t);
                               }}
                               className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors flex items-center justify-between ${
                                 isSelected

@@ -450,6 +450,30 @@ export interface TechniqueItem {
   unlockedByTransformationId?: string; // ID der Transformation, die diese Technik freischaltet
   unlockedByTransformationIds?: string[]; // Mehrere Stufen/Formen, in denen die Technik freigeschaltet ist
   isTransformationOnly?: boolean; // Steht nur in einer Verwandlung zur Verfügung
+  chibiForm?: {
+    enabled: boolean;
+    bodyScale?: number;
+    heightScale?: number;
+    visualAge?: string;
+    physicalChanges?: string[];
+    movementModifier?: string;
+    equipmentRule?: string;
+    visualOnly?: boolean;
+    chibiOnPowerOverload?: {
+      enabled: boolean;
+      activationThreshold: number;
+      recoveryThreshold?: number;
+      durationGameMinutes?: number;
+      autoRevert?: boolean;
+    };
+  };
+  chibiOnPowerOverload?: {
+    enabled: boolean;
+    activationThreshold: number;
+    recoveryThreshold?: number;
+    durationGameMinutes?: number;
+    autoRevert?: boolean;
+  };
   isFavorite?: boolean;
   favorite?: boolean;
 }

@@ -128,34 +128,13 @@ export function resolveChibiForm(params: ResolveChibiFormParams): ResolvedChibiF
         source: 'power_overload',
         sourceId: 'power_overload',
         sourceName: 'Kraftüberlastung',
-        bodyScale: currentChibi?.bodyScale ?? 0.65,
-        heightScale: currentChibi?.heightScale ?? 0.70,
-        visualAge: currentChibi?.visualAge || 'kindlich / geschrumpft durch Überlastung',
-        physicalChanges: currentChibi?.physicalChanges || ['verkleinerte Körperproportionen', 'überlastungsbedingter Gestaltverlust zur Kleinkindform'],
-        movementModifier: currentChibi?.movementModifier || 'eingeschränkt',
-        equipmentRule: currentChibi?.equipmentRule || 'lockere Stofffalten',
-        visualOnly: currentChibi?.visualOnly ?? false,
-        description: `Automatische Chibi-Form durch Kraftüberlastung (${effectivePower}% Kraftnutzung).`
-      };
-    }
-  } else if (effectivePower >= 120 || (isCurrentlyOverloadChibi && effectivePower >= 80)) {
-    // Default fallback power overload trigger (>=120% activation, 80% recovery)
-    const recThreshold = 80;
-    const shouldBeActive = isCurrentlyOverloadChibi ? effectivePower >= recThreshold : effectivePower >= 120;
-
-    if (shouldBeActive) {
-      return {
-        active: true,
-        source: 'power_overload',
-        sourceId: 'power_overload',
-        sourceName: 'Kraftüberlastung',
-        bodyScale: 0.65,
-        heightScale: 0.70,
-        visualAge: 'kindlich / geschrumpft durch Überlastung',
-        physicalChanges: ['verkleinerte Körperproportionen', 'überlastungsbedingter Gestaltverlust zur Kleinkindform'],
-        movementModifier: 'eingeschränkt',
-        equipmentRule: 'lockere Stofffalten',
-        visualOnly: false,
+        bodyScale: activeTransformation?.chibiForm?.bodyScale ?? currentChibi?.bodyScale ?? 0.65,
+        heightScale: activeTransformation?.chibiForm?.heightScale ?? currentChibi?.heightScale ?? 0.70,
+        visualAge: activeTransformation?.chibiForm?.visualAge || currentChibi?.visualAge || 'kindlich / geschrumpft durch Überlastung',
+        physicalChanges: activeTransformation?.chibiForm?.physicalChanges || currentChibi?.physicalChanges || ['verkleinerte Körperproportionen', 'überlastungsbedingter Gestaltverlust zur Kleinkindform'],
+        movementModifier: activeTransformation?.chibiForm?.movementModifier || currentChibi?.movementModifier || 'eingeschränkt',
+        equipmentRule: activeTransformation?.chibiForm?.equipmentRule || currentChibi?.equipmentRule || 'lockere Stofffalten',
+        visualOnly: activeTransformation?.chibiForm?.visualOnly ?? currentChibi?.visualOnly ?? false,
         description: `Automatische Chibi-Form durch Kraftüberlastung (${effectivePower}% Kraftnutzung).`
       };
     }

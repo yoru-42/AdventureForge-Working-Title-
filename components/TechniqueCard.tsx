@@ -475,6 +475,384 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
                       <option value={25}>25% (Geringe körperliche Mutation)</option>
                     </select>
                   </div>
+
+                  {/* Optionale Chibi-Form */}
+                  <div className="col-span-full border border-slate-800/80 bg-slate-950/40 rounded-xl p-4 mt-2 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span className="text-xs font-black text-slate-200 uppercase tracking-wider">
+                          Optionale Chibi-Form
+                        </span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300">
+                        <input
+                          type="checkbox"
+                          disabled={readOnly}
+                          checked={!!entry.chibiForm?.enabled}
+                          onChange={e => {
+                            const isChecked = e.target.checked;
+                            const currentChibi: any = entry.chibiForm || {};
+                            const updatedChibi = {
+                              ...currentChibi,
+                              enabled: isChecked,
+                              bodyScale: currentChibi.bodyScale ?? 0.65,
+                              heightScale: currentChibi.heightScale ?? 0.70,
+                              visualAge: currentChibi.visualAge || 'kindlich dargestellt',
+                              physicalChanges: currentChibi.physicalChanges || ['verkleinerte Körperproportionen', 'größere Kopfproportion', 'kürzere Gliedmaßen'],
+                              movementModifier: currentChibi.movementModifier || 'flink',
+                              equipmentRule: currentChibi.equipmentRule || 'angepasst',
+                              visualOnly: currentChibi.visualOnly ?? true
+                            };
+                            onUpdate({ chibiForm: updatedChibi });
+                          }}
+                          className="rounded border-slate-700 bg-slate-900 text-amber-500 focus:ring-amber-500/30 w-4 h-4"
+                        />
+                        <span>Chibi-Form für diese Transformation aktivieren</span>
+                      </label>
+                    </div>
+
+                    {entry.chibiForm?.enabled && (
+                      <div className="space-y-4 pt-1">
+                        {/* Körperdarstellung */}
+                        <div className="space-y-2.5">
+                          <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block">
+                            Körperdarstellung
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-900/40 p-4 rounded-xl border border-slate-800/80">
+                            {/* Körpermaßstab */}
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between items-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                <span>Körpermaßstab</span>
+                                <span className="text-amber-400 font-mono text-xs">
+                                  {Math.round((entry.chibiForm?.bodyScale ?? 0.65) * 100)}%
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  disabled={readOnly}
+                                  min={0.30}
+                                  max={1.00}
+                                  step={0.05}
+                                  value={entry.chibiForm?.bodyScale ?? 0.65}
+                                  onChange={e => {
+                                    const val = parseFloat(e.target.value);
+                                    onUpdate({
+                                      chibiForm: {
+                                        ...entry.chibiForm!,
+                                        bodyScale: val
+                                      }
+                                    });
+                                  }}
+                                  className="w-full accent-amber-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Größenmaßstab */}
+                            <div className="flex flex-col gap-1.5">
+                              <div className="flex justify-between items-center text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                <span>Größenmaßstab</span>
+                                <span className="text-amber-400 font-mono text-xs">
+                                  {Math.round((entry.chibiForm?.heightScale ?? 0.70) * 100)}%
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  disabled={readOnly}
+                                  min={0.30}
+                                  max={1.00}
+                                  step={0.05}
+                                  value={entry.chibiForm?.heightScale ?? 0.70}
+                                  onChange={e => {
+                                    const val = parseFloat(e.target.value);
+                                    onUpdate({
+                                      chibiForm: {
+                                        ...entry.chibiForm!,
+                                        heightScale: val
+                                      }
+                                    });
+                                  }}
+                                  className="w-full accent-amber-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Visuelles Alter */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                Visuelles Alter / Darstellung
+                              </label>
+                              <input
+                                type="text"
+                                disabled={readOnly}
+                                className="bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
+                                value={entry.chibiForm?.visualAge || ''}
+                                placeholder="z.B. kindlich dargestellt"
+                                onChange={e => {
+                                  onUpdate({
+                                    chibiForm: {
+                                      ...entry.chibiForm!,
+                                      visualAge: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+
+                            {/* Bewegungsmodifikator */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                Bewegungsmodifikator
+                              </label>
+                              <input
+                                type="text"
+                                disabled={readOnly}
+                                className="bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
+                                value={entry.chibiForm?.movementModifier || ''}
+                                placeholder="z.B. flink und flauschig"
+                                onChange={e => {
+                                  onUpdate({
+                                    chibiForm: {
+                                      ...entry.chibiForm!,
+                                      movementModifier: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+
+                            {/* Ausrüstungsregel */}
+                            <div className="flex flex-col gap-1">
+                              <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                Ausrüstungsregel
+                              </label>
+                              <input
+                                type="text"
+                                disabled={readOnly}
+                                className="bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
+                                value={entry.chibiForm?.equipmentRule || ''}
+                                placeholder="z.B. angepasst / mitgeschrumpft"
+                                onChange={e => {
+                                  onUpdate({
+                                    chibiForm: {
+                                      ...entry.chibiForm!,
+                                      equipmentRule: e.target.value
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+
+                            {/* Körperliche Veränderungen */}
+                            <div className="flex flex-col gap-1 sm:col-span-2">
+                              <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                Körperliche Veränderungen (kommagetrennt)
+                              </label>
+                              <AutoExpandingTextarea
+                                disabled={readOnly}
+                                className="bg-slate-900/80 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 min-h-[44px] leading-relaxed"
+                                value={Array.isArray(entry.chibiForm?.physicalChanges) ? entry.chibiForm.physicalChanges.join(', ') : (entry.chibiForm?.physicalChanges || '')}
+                                placeholder="z.B. verkleinerte Körperproportionen, größere Kopfproportion, kürzere Gliedmaßen"
+                                onChange={e => {
+                                  const changesArr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                  onUpdate({
+                                    chibiForm: {
+                                      ...entry.chibiForm!,
+                                      physicalChanges: changesArr
+                                    }
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Nur visuell oder tatsächlich körperlich */}
+                        <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800/80 space-y-2.5">
+                          <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block">
+                            Natur der Chibi-Form
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              disabled={readOnly}
+                              onClick={() => {
+                                onUpdate({
+                                  chibiForm: {
+                                    ...entry.chibiForm!,
+                                    visualOnly: true
+                                  }
+                                });
+                              }}
+                              className={`p-3 rounded-lg text-left border transition-all cursor-pointer ${
+                                entry.chibiForm?.visualOnly !== false
+                                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+                                  : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-300'
+                              }`}
+                            >
+                              <div className="text-xs font-extrabold">Nur visuelle Darstellung</div>
+                              <div className="text-[10px] text-slate-400 mt-1 leading-normal">
+                                Die Chibi-Form ist hauptsächlich eine visuelle Darstellung ohne Auswirkung auf den physischen Körperzustand.
+                              </div>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={readOnly}
+                              onClick={() => {
+                                onUpdate({
+                                  chibiForm: {
+                                    ...entry.chibiForm!,
+                                    visualOnly: false
+                                  }
+                                });
+                              }}
+                              className={`p-3 rounded-lg text-left border transition-all cursor-pointer ${
+                                entry.chibiForm?.visualOnly === false
+                                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+                                  : 'bg-slate-950 border-slate-900 text-slate-400 hover:text-slate-300'
+                              }`}
+                            >
+                              <div className="text-xs font-extrabold">Körperlicher Zustand</div>
+                              <div className="text-[10px] text-slate-400 mt-1 leading-normal">
+                                Die Chibi-Form wird als tatsächlicher körperlicher Zustand im Spiel und in der Weltsimulation behandelt.
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Chibi bei Kraftüberlastung */}
+                        <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800/80 space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                            <span className="text-[10px] font-black text-amber-400 uppercase tracking-widest block">
+                              Chibi bei Kraftüberlastung
+                            </span>
+                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300">
+                              <input
+                                type="checkbox"
+                                disabled={readOnly}
+                                checked={!!(entry.chibiForm?.chibiOnPowerOverload?.enabled || entry.chibiOnPowerOverload?.enabled)}
+                                onChange={e => {
+                                  const isChecked = e.target.checked;
+                                  const curOverload: any = entry.chibiForm?.chibiOnPowerOverload || entry.chibiOnPowerOverload || {
+                                    enabled: false,
+                                    activationThreshold: 120,
+                                    recoveryThreshold: 80,
+                                    durationGameMinutes: 30,
+                                    autoRevert: true
+                                  };
+                                  const newOverload = {
+                                    ...curOverload,
+                                    enabled: isChecked
+                                  };
+                                  onUpdate({
+                                    chibiOnPowerOverload: newOverload,
+                                    chibiForm: {
+                                      ...entry.chibiForm!,
+                                      chibiOnPowerOverload: newOverload
+                                    }
+                                  });
+                                }}
+                                className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500/30 w-4 h-4"
+                              />
+                              <span>Überlastungsschutz aktivieren</span>
+                            </label>
+                          </div>
+
+                          {(entry.chibiForm?.chibiOnPowerOverload?.enabled || entry.chibiOnPowerOverload?.enabled) && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                  Aktivierungsschwelle (%)
+                                </label>
+                                <input
+                                  type="number"
+                                  disabled={readOnly}
+                                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
+                                  value={(entry.chibiForm?.chibiOnPowerOverload?.activationThreshold ?? entry.chibiOnPowerOverload?.activationThreshold) ?? 120}
+                                  onChange={e => {
+                                    const val = parseInt(e.target.value, 10) || 120;
+                                    const curOverload: any = entry.chibiForm?.chibiOnPowerOverload || entry.chibiOnPowerOverload || { enabled: true };
+                                    const newOverload = { ...curOverload, activationThreshold: val };
+                                    onUpdate({
+                                      chibiOnPowerOverload: newOverload,
+                                      chibiForm: { ...entry.chibiForm!, chibiOnPowerOverload: newOverload }
+                                    });
+                                  }}
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                  Rückkehrschwelle (%)
+                                </label>
+                                <input
+                                  type="number"
+                                  disabled={readOnly}
+                                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
+                                  value={(entry.chibiForm?.chibiOnPowerOverload?.recoveryThreshold ?? entry.chibiOnPowerOverload?.recoveryThreshold) ?? 80}
+                                  onChange={e => {
+                                    const val = parseInt(e.target.value, 10) || 80;
+                                    const curOverload: any = entry.chibiForm?.chibiOnPowerOverload || entry.chibiOnPowerOverload || { enabled: true };
+                                    const newOverload = { ...curOverload, recoveryThreshold: val };
+                                    onUpdate({
+                                      chibiOnPowerOverload: newOverload,
+                                      chibiForm: { ...entry.chibiForm!, chibiOnPowerOverload: newOverload }
+                                    });
+                                  }}
+                                />
+                              </div>
+
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                                  Dauer (Spielminuten)
+                                </label>
+                                <input
+                                  type="number"
+                                  disabled={readOnly}
+                                  className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
+                                  value={(entry.chibiForm?.chibiOnPowerOverload?.durationGameMinutes ?? entry.chibiOnPowerOverload?.durationGameMinutes) ?? 30}
+                                  onChange={e => {
+                                    const val = parseInt(e.target.value, 10) || 30;
+                                    const curOverload: any = entry.chibiForm?.chibiOnPowerOverload || entry.chibiOnPowerOverload || { enabled: true };
+                                    const newOverload = { ...curOverload, durationGameMinutes: val };
+                                    onUpdate({
+                                      chibiOnPowerOverload: newOverload,
+                                      chibiForm: { ...entry.chibiForm!, chibiOnPowerOverload: newOverload }
+                                    });
+                                  }}
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-2 pt-4">
+                                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300">
+                                  <input
+                                    type="checkbox"
+                                    disabled={readOnly}
+                                    checked={(entry.chibiForm?.chibiOnPowerOverload?.autoRevert ?? entry.chibiOnPowerOverload?.autoRevert) ?? true}
+                                    onChange={e => {
+                                      const isChecked = e.target.checked;
+                                      const curOverload: any = entry.chibiForm?.chibiOnPowerOverload || entry.chibiOnPowerOverload || { enabled: true };
+                                      const newOverload = { ...curOverload, autoRevert: isChecked };
+                                      onUpdate({
+                                        chibiOnPowerOverload: newOverload,
+                                        chibiForm: { ...entry.chibiForm!, chibiOnPowerOverload: newOverload }
+                                      });
+                                    }}
+                                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500/30 w-4 h-4"
+                                  />
+                                  <span>Automatische Rückkehr nach Erholung</span>
+                                </label>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </div>

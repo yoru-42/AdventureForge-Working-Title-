@@ -383,6 +383,8 @@ export function normalizeAbilityHierarchy(char: any): {
       unlockedByTransformationId: tech.unlockedByTransformationId,
       unlockedByTransformationIds: tech.unlockedByTransformationIds,
       isTransformationOnly: tech.isTransformationOnly,
+      chibiForm: tech.chibiForm,
+      chibiOnPowerOverload: tech.chibiOnPowerOverload,
       isFavorite: isFav,
       favorite: isFav
     };
@@ -483,7 +485,16 @@ export function syncCharacterAbilityTree(
         element: t.element,
         abilityType: t.abilityType as any,
         baseAbilityIds: t.baseAbilityIds || [],
-        techniqueList: [t]
+        techniqueList: [t],
+        transformName: t.transformName,
+        metamorphosisInfluence: t.metamorphosisInfluence,
+        activationCondition: t.activationCondition,
+        transformationModifiers: t.transformationModifiers,
+        unlockedByTransformationId: t.unlockedByTransformationId,
+        unlockedByTransformationIds: t.unlockedByTransformationIds,
+        isTransformationOnly: t.isTransformationOnly,
+        chibiForm: t.chibiForm,
+        chibiOnPowerOverload: t.chibiOnPowerOverload
       };
     });
 
