@@ -2174,6 +2174,20 @@ const App: React.FC = () => {
                                         Lv. {level} / {maxLevel}
                                       </span>
 
+                                      {/* Transformation Modifier Badge */}
+                                      {tech.transformationModifiers && tech.transformationModifiers.length > 0 && (
+                                        <span className="text-[9px] px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 font-bold flex items-center gap-1">
+                                          <i className="fa-solid fa-wand-magic-sparkles text-[8px]"></i>
+                                          {tech.transformationModifiers.length} {tech.transformationModifiers.length === 1 ? 'Form-Variante' : 'Form-Varianten'}
+                                        </span>
+                                      )}
+
+                                      {tech.unlockedByTransformationId && (
+                                        <span className="text-[9px] px-2 py-0.5 rounded-md bg-purple-950 border border-purple-500/40 text-purple-300 font-bold">
+                                          Form-Exklusiv
+                                        </span>
+                                      )}
+
                                       {/* Favorite Toggle */}
                                       <button
                                         type="button"
@@ -2187,6 +2201,27 @@ const App: React.FC = () => {
                                         <i className={tech.isFavorite ? "fa-solid fa-star text-amber-400" : "fa-regular fa-star"}></i>
                                       </button>
                                     </div>
+
+                                    {/* Active Transformation Modifier Note */}
+                                    {(() => {
+                                      const currentTransId = currentAdventure.player.appearance?.activeTransformationId;
+                                      if (!currentTransId || currentTransId === 'standard') return null;
+                                      const activeMod = (tech.transformationModifiers || []).find((m: any) =>
+                                        m.transformationId === currentTransId ||
+                                        (m.transformationName && m.transformationName.toLowerCase() === currentTransId.toLowerCase())
+                                      );
+                                      if (activeMod) {
+                                        return (
+                                          <div className="text-[10px] bg-purple-950/40 border border-purple-800/40 rounded-lg p-2 text-purple-200 flex items-center gap-2">
+                                            <i className="fa-solid fa-bolt text-purple-400"></i>
+                                            <span>
+                                              Aktiv in Form: <strong className="text-white">{activeMod.overrideName || tech.name}</strong> ({activeMod.modifierType || 'weiterentwickelt'})
+                                            </span>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
 
                                     <p className="text-[11px] text-slate-400 italic leading-relaxed">
                                       {tech.description || 'Keine nähere Beschreibung.'}

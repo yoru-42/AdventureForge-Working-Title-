@@ -145,6 +145,22 @@ export class AdventureResetService {
     resetPlayer.physicalChangeHistory = [];
     resetPlayer.emotionState = undefined;
     resetPlayer.temporaryConditions = [];
+    if (resetPlayer.appearance) {
+      const startTransId = adventure.initialPlayer?.appearance?.activeTransformationId || 'standard';
+      resetPlayer.appearance = {
+        ...resetPlayer.appearance,
+        activeTransformationId: startTransId
+      };
+      if (resetPlayer.appearance.transformationState) {
+        resetPlayer.appearance.transformationState = {
+          ...resetPlayer.appearance.transformationState,
+          activeTransformationId: startTransId,
+          currentIntensity: 0,
+          metamorphosisProgress: 0,
+          powerUsage: 0
+        };
+      }
+    }
     if (adventure.initialPlayer?.conditions) {
       resetPlayer.conditions = deepClone(adventure.initialPlayer.conditions);
     }

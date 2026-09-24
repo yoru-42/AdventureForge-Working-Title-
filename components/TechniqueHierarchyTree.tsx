@@ -686,6 +686,16 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     onChange(safePowerSources, updatedBa, updatedTech);
   };
 
+  const availableTransformations = useMemo(() => {
+    return techniques
+      .filter(t => t.category === 'Transformationen' || t.type === 'Transformation')
+      .map(t => ({
+        id: t.id,
+        name: t.transformName || t.name,
+        transformName: t.transformName
+      }));
+  }, [techniques]);
+
   return (
     <div className="flex flex-col gap-4 text-slate-100">
       {/* ============================================================ */}
@@ -1209,6 +1219,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                     baseAbilities={baseAbilities}
                     onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
                     progressionLogic={progressionLogic}
+                    availableTransformations={availableTransformations}
                   />
                 );
               })}

@@ -692,12 +692,20 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         });
       }
 
+      const cleanPlayer = {
+        ...player,
+        appearance: {
+          ...player.appearance,
+          activeTransformationId: 'standard'
+        }
+      };
+
       const currentAdventure: Adventure = {
         id: adventureIdRef.current,
         authorId: mode === GameViewMode.JOIN_CUSTOM_CHAR ? userId : (initialData?.authorId || userId),
         isPublic,
         world,
-        player,
+        player: cleanPlayer,
         npcs,
         loreDatabase,
         inventory: initialData?.inventory ?? ['Starterpaket'],
@@ -707,7 +715,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         chatHistory: newChatHistory,
         backgroundImage: bgImage,
         statusElements,
-        initialPlayer: JSON.parse(JSON.stringify(player))
+        initialPlayer: JSON.parse(JSON.stringify(cleanPlayer))
       };
       
       onAutoSave(currentAdventure);
@@ -2080,7 +2088,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     }
   };
 
-  const activeTransformationId = player.appearance?.activeTransformationId || 'standard';
+  const [editorSelectedTransformationId, setEditorSelectedTransformationId] = useState<string>('standard');
+  const activeTransformationId = editorSelectedTransformationId;
   const activeTransformation = (player.abilities || []).find(
     a => a.category === 'Transformationen' && a.id === activeTransformationId
   );
@@ -3143,6 +3152,10 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     const playerLore = loreDatabase.find(l => l.id === '__player_knowledge__' || (player.name && l.title === player.name));
     const finalPlayer = {
       ...player,
+      appearance: {
+        ...player.appearance,
+        activeTransformationId: 'standard'
+      },
       knowledge: playerLore?.knowledge || playerLore?.details?.knowledge || player.knowledge || ''
     };
 
@@ -4378,13 +4391,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                   <button
                     type="button"
                     onClick={() => {
-                      setPlayer({
-                        ...player,
-                        appearance: {
-                          ...player.appearance,
-                          activeTransformationId: 'standard'
-                        }
-                      });
+                      setEditorSelectedTransformationId('standard');
                     }}
                     className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                       !activeTransformation 
@@ -4401,13 +4408,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       key={t.id ? `trans-${t.id}-${tIdx}` : `trans-${tIdx}`}
                       type="button"
                       onClick={() => {
-                        setPlayer({
-                          ...player,
-                          appearance: {
-                            ...player.appearance,
-                            activeTransformationId: t.id
-                          }
-                        });
+                        setEditorSelectedTransformationId(t.id);
                       }}
                       className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                         activeTransformationId === t.id 
@@ -4789,13 +4790,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       <button
                         type="button"
                         onClick={() => {
-                          setPlayer({
-                            ...player,
-                            appearance: {
-                              ...player.appearance,
-                              activeTransformationId: 'standard'
-                            }
-                          });
+                          setEditorSelectedTransformationId('standard');
                         }}
                         className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-650 text-[10px] font-bold"
                       >

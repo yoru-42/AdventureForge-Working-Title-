@@ -312,6 +312,10 @@ export function normalizeAbilityHierarchy(char: any): {
       if (tech.wieldingStyle) existing.wieldingStyle = tech.wieldingStyle;
       if (tech.weaponManeuver) existing.weaponManeuver = tech.weaponManeuver;
       if (tech.progressionLogic) existing.progressionLogic = tech.progressionLogic;
+      if (tech.transformationModifiers) existing.transformationModifiers = tech.transformationModifiers;
+      if (tech.unlockedByTransformationId) existing.unlockedByTransformationId = tech.unlockedByTransformationId;
+      if (tech.unlockedByTransformationIds) existing.unlockedByTransformationIds = tech.unlockedByTransformationIds;
+      if (tech.isTransformationOnly !== undefined) existing.isTransformationOnly = tech.isTransformationOnly;
       return;
     }
 
@@ -369,7 +373,11 @@ export function normalizeAbilityHierarchy(char: any): {
       milestoneRequirement: tech.milestoneRequirement,
       staticCost: tech.staticCost,
       metamorphosisInfluence: tech.metamorphosisInfluence,
-      scaling: tech.scaling
+      scaling: tech.scaling,
+      transformationModifiers: tech.transformationModifiers,
+      unlockedByTransformationId: tech.unlockedByTransformationId,
+      unlockedByTransformationIds: tech.unlockedByTransformationIds,
+      isTransformationOnly: tech.isTransformationOnly
     };
 
     techniquesMap.set(techKey, newTech);

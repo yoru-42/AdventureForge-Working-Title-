@@ -1,5 +1,5 @@
 // -*- coding: utf-8 -*-
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Shield, 
   Flame, 
@@ -15,7 +15,7 @@ import {
   ChevronUp, 
   SlidersHorizontal 
 } from 'lucide-react';
-import { TechniqueItem, BaseAbility, CharacterPowerSource } from '../types';
+import { TechniqueItem, BaseAbility, CharacterPowerSource, TechniqueTransformationModifier, TransformationModifierType } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 
 export interface TechniqueCardProps {
@@ -30,6 +30,7 @@ export interface TechniqueCardProps {
   baseAbilities: BaseAbility[];
   onToggleLinkedBaseAbility: (baId: string) => void;
   progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
+  availableTransformations?: Array<{ id: string; name: string; transformName?: string }>;
 }
 
 export const TECHNIQUE_MODES = [
@@ -80,8 +81,10 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
   activePowerSource,
   baseAbilities = [],
   onToggleLinkedBaseAbility,
-  progressionLogic = 'ep'
+  progressionLogic = 'ep',
+  availableTransformations = []
 }) => {
+  const [showTransformModifiers, setShowTransformModifiers] = useState<boolean>(false);
   const isTechOrUlt = category === 'Techniken' || category === 'Ultimative Techniken';
   const isTransform = category === 'Transformationen';
   const isPassive = category === 'Passive Fähigkeiten';
@@ -981,6 +984,186 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
                   </button>
                 );
               })}
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* Sektion 5: Transformation-Modifikatoren & Freischaltung     */}
+          {/* ============================================================ */}
+          {category !== 'Transformationen' && availableTransformations.length > 0 && (
+            <div className="pt-2 border-t border-slate-800/60 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowTransformModifiers(!showTransformModifiers)}
+                  className="text-[10px] font-extrabold text-purple-300 uppercase tracking-wide flex items-center gap-1.5 hover:text-purple-200 transition cursor-pointer"
+                >
+                  <Sparkles className="w-3 h-3 text-purple-400" />
+                  <span>Transformation-Modifikatoren ({entry.transformationModifiers?.length || 0})</span>
+                  {showTransformModifiers ? (
+                    <ChevronUp className="w-3 h-3 text-slate-500" />
+                  ) : (
+                    <ChevronDown className="w-3 h-3 text-slate-500" />
+                  )}
+                </button>
+
+                {entry.unlockedByTransformationId && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-950/80 border border-purple-500/40 text-purple-300 font-bold">
+                    Form-Exklusiv
+                  </span>
+                )}
+              </div>
+
+              {showTransformModifiers && (
+                <div className="bg-slate-950/70 border border-purple-950/60 rounded-xl p-3 space-y-3 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800/60 pb-1.5">
+                    <span>Wie verhält sich diese Technik in Verwandlungen?</span>
+                    <span className="text-slate-500 italic">Modifier Layer</span>
+                  </div>
+
+                  {/* Freischaltungs-Schalter (nur in Verwandlung verfügbar) */}
+                  <div className="flex items-center justify-between bg-slate-900/60 p-2 rounded-lg border border-slate-850">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-slate-200">Nur in Verwandlung verfügbar</span>
+                      <span className="text-[9.5px] text-slate-400">Steht in Normalgestalt nicht zur Verfügung</span>
+                    </div>
+                    <select
+                      disabled={readOnly}
+                      value={entry.unlockedByTransformationId || ''}
+                      onChange={e => {
+                        const val = e.target.value;
+                        onUpdate({
+                          unlockedByTransformationId: val || undefined,
+                          isTransformationOnly: !!val
+                        });
+                      }}
+                      className="bg-slate-950 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-200 outline-none focus:border-purple-500"
+                    >
+                      <option value="">Immer verfügbar (Normal &amp; Transformiert)</option>
+                      {availableTransformations.map(t => (
+                        <option key={`unlock-opt-${t.id}`} value={t.id}>
+                          Nur in: {t.transformName || t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Liste der Modifikatoren je Transformation */}
+                  <div className="space-y-2.5">
+                    {availableTransformations.map(trans => {
+                      const existingMod = (entry.transformationModifiers || []).find(
+                        m => m.transformationId === trans.id
+                      );
+                      const modType = existingMod?.modifierType || 'unverändert';
+
+                      const handleUpdateModifier = (updates: Partial<TechniqueTransformationModifier>) => {
+                        const currentList = [...(entry.transformationModifiers || [])];
+                        const idx = currentList.findIndex(m => m.transformationId === trans.id);
+                        if (idx >= 0) {
+                          currentList[idx] = { ...currentList[idx], ...updates };
+                        } else {
+                          currentList.push({
+                            transformationId: trans.id,
+                            transformationName: trans.transformName || trans.name,
+                            modifierType: 'weiterentwicklung',
+                            ...updates
+                          });
+                        }
+                        onUpdate({ transformationModifiers: currentList });
+                      };
+
+                      const handleRemoveModifier = () => {
+                        const filtered = (entry.transformationModifiers || []).filter(
+                          m => m.transformationId !== trans.id
+                        );
+                        onUpdate({ transformationModifiers: filtered });
+                      };
+
+                      return (
+                        <div
+                          key={`trans-mod-${trans.id}`}
+                          className="bg-slate-900/80 border border-slate-800 rounded-lg p-2.5 space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                              <i className="fa-solid fa-bolt text-purple-400 text-[10px]"></i>
+                              {trans.transformName || trans.name}
+                            </span>
+                            <select
+                              disabled={readOnly}
+                              value={modType}
+                              onChange={e => {
+                                const val = e.target.value as TransformationModifierType;
+                                if (val === 'unverändert') {
+                                  handleRemoveModifier();
+                                } else {
+                                  handleUpdateModifier({
+                                    modifierType: val,
+                                    disabled: val === 'deaktiviert'
+                                  });
+                                }
+                              }}
+                              className="bg-slate-950 border border-slate-700 text-xs rounded px-2 py-0.5 text-slate-300 outline-none focus:border-purple-500 font-semibold"
+                            >
+                              <option value="unverändert">Unverändert (Basis beibehalten)</option>
+                              <option value="weiterentwicklung">Weiterentwickeln (Evolve)</option>
+                              <option value="verstärkung">Verstärken (Enhance)</option>
+                              <option value="veränderung">Verändern (Modify)</option>
+                              <option value="ersetzung">Ersetzen (Replace)</option>
+                              <option value="deaktiviert">Deaktivieren (Sperren)</option>
+                            </select>
+                          </div>
+
+                          {modType !== 'unverändert' && modType !== 'deaktiviert' && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-800/50">
+                              <div>
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
+                                  Modifizierter Name
+                                </label>
+                                <input
+                                  type="text"
+                                  disabled={readOnly}
+                                  placeholder={entry.name || 'z.B. Elementarkontrolle'}
+                                  value={existingMod?.overrideName || ''}
+                                  onChange={e => handleUpdateModifier({ overrideName: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-purple-500 font-bold"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
+                                  Modifizierte Kosten
+                                </label>
+                                <input
+                                  type="text"
+                                  disabled={readOnly}
+                                  placeholder={entry.cost || 'z.B. 25 MP'}
+                                  value={existingMod?.overrideCost || ''}
+                                  onChange={e => handleUpdateModifier({ overrideCost: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-purple-500"
+                                />
+                              </div>
+
+                              <div className="sm:col-span-2">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
+                                  Modifizierte Beschreibung
+                                </label>
+                                <AutoExpandingTextarea
+                                  disabled={readOnly}
+                                  placeholder="Beschreibung der Technik in dieser Verwandlungsform..."
+                                  value={existingMod?.overrideDescription || ''}
+                                  onChange={e => handleUpdateModifier({ overrideDescription: e.target.value })}
+                                  className="w-full bg-slate-950 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-purple-500 min-h-[44px]"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -41,6 +41,7 @@ import { CollectionTasksModal } from './CollectionTasksModal';
 import { InventorySettingsModal } from './InventorySettingsModal';
 import { InventoryLootService } from '../services/inventoryLootService';
 import { AdventureResetService } from '../services/adventureResetService';
+import { resolveEffectiveMoveset } from '../utils/movesetResolver';
 import { LootSource, PendingPickupProposal } from '../types';
 
 
@@ -403,35 +404,49 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
       }
     };
 
+    const activeTransId = adventure?.player?.appearance?.activeTransformationId || 'standard';
+    const effectiveMoveset = adventure?.player ? resolveEffectiveMoveset(adventure.player, activeTransId) : [];
+
+    effectiveMoveset.forEach(effTech => {
+      // Prüfen, ob diese Technik oder ihre ursprüngliche Basistechnik als Favorit markiert ist
+      const isFav = !!(effTech.isFavorite || (effTech as any).favorite) ||
+        (Array.isArray(adventure?.player?.techniqueList) && adventure.player.techniqueList.some(
+          t => (t.id === effTech.originalTechniqueId || t.name === effTech.originalTechniqueName) && (t.isFavorite || (t as any).favorite)
+        ));
+
+      if (isFav) {
+        const isTrans = effTech.category === 'Transformationen' || effTech.type === 'Transformation';
+        const isUlt = effTech.category === 'Ultimative Techniken' || (effTech.type || '').toLowerCase().includes('ultimat');
+        checkAndPush({
+          ...effTech,
+          abilityId: effTech.powerSourceId || effTech.id,
+          abilitySource: effTech.powerSourceName || adventure?.player?.powerSource || '',
+          isFavorite: true
+        }, effTech.category || 'Techniken', isTrans, isUlt);
+      }
+    });
+
+    // Ergänzend: Transformations-Aktivierungen selbst (wenn als Favorit markiert)
     adventure?.player?.abilities?.forEach((ability: any) => {
       const abCat = ability.category || 'Techniken';
       const isTrans = abCat === 'Transformationen' || !!ability.transformName || (ability.type || '').toLowerCase().includes('transform');
       const isUlt = abCat === 'Ultimative Techniken' || (ability.type || '').toLowerCase().includes('ultimat');
 
-      if (Array.isArray(ability.techniqueList)) {
-        ability.techniqueList.forEach((tech: any) => {
+      if (isTrans || isUlt) {
+        const mainName = isTrans ? (ability.transformName || ability.name) : ability.name;
+        if (mainName && (ability.isFavorite || ability.favorite)) {
           checkAndPush({
-            ...tech,
+            id: ability.id,
+            name: mainName,
+            description: ability.description || (isTrans ? 'Verwandlungsform mit modifizierten Attributen und Kräften.' : 'Fähigkeit des Charakters.'),
+            category: abCat,
+            level: ability.level || 1,
+            cost: ability.cost || '',
             abilityId: ability.id,
             abilitySource: ability.source,
+            isFavorite: true,
           }, abCat, isTrans, isUlt);
-        });
-      }
-
-      // Check ability itself (Transformationen like "Reine Esper Hoshiko", Ultimative Techniken, or standalone abilities)
-      const mainName = isTrans ? (ability.transformName || ability.name) : ability.name;
-      if (mainName) {
-        checkAndPush({
-          id: ability.id,
-          name: mainName,
-          description: ability.description || (isTrans ? 'Verwandlungsform mit modifizierten Attributen und Kräften.' : 'Fähigkeit des Charakters.'),
-          category: abCat,
-          level: ability.level || 1,
-          cost: ability.cost || '',
-          abilityId: ability.id,
-          abilitySource: ability.source,
-          isFavorite: !!ability.isFavorite || !!ability.favorite,
-        }, abCat, isTrans, isUlt);
+        }
       }
     });
 
@@ -2599,58 +2614,67 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
         }
       });
 
-      adventure.player.abilities.forEach(ability => {
-        if (ability.techniqueList && ability.techniqueList.length > 0) {
-          ability.techniqueList.forEach(t => {
-            if (t.name && t.name.trim().length > 0) {
+      // Zentrale Auflösung des effektiven Movesets (unter Berücksichtigung der aktiven Transformation)
+      const activeTransId = adventure.player.appearance?.activeTransformationId || 'standard';
+      const effectiveMoveset = resolveEffectiveMoveset(adventure.player, activeTransId);
+
+      if (effectiveMoveset.length > 0) {
+        effectiveMoveset.forEach(t => {
+          if (!t.name || !t.name.trim()) return;
+          const matchingAbility = adventure.player.abilities?.find(a =>
+            a.id === t.powerSourceId ||
+            (Array.isArray(a.techniqueList) && a.techniqueList.some(item => item.id === t.id || item.name === t.name || item.name === t.originalTechniqueName))
+          );
+
+          list.push({
+            name: t.name.trim(),
+            description: t.description,
+            source: t.powerSourceName || matchingAbility?.source || adventure.player.powerSource || 'Kraft',
+            cost: t.cost || matchingAbility?.cost || (t.costValue ? `${t.costValue} ${t.costResourceName || 'MP'}` : '0 MP'),
+            type: t.type || 'Angriff',
+            subtype: t.subtype,
+            level: t.level || 1,
+            xp: t.xp || 0,
+            maxLevel: t.maxLevel || 10,
+            xpNeeded: t.xpNeeded || 100,
+            abilityId: matchingAbility?.id || t.powerSourceId || t.id,
+            abilityCategory: t.category || matchingAbility?.category || 'Techniken',
+            staticCost: t.staticCost,
+            baseValue: t.baseValue,
+            effectValue: t.effectValue,
+            costFormula: t.costFormula,
+            costValue: t.costValue,
+            costResourceName: t.costResourceName,
+            applications: t.applications || t.effects,
+            summonCount: t.summonCount
+          });
+        });
+      } else {
+        adventure.player.abilities.forEach(ability => {
+          if (ability.techniques && ability.techniques.trim().length > 0) {
+            ability.techniques.split(/[,\n;]/).map(s => s.trim()).filter(Boolean).forEach(name => {
+              let guessedType: 'Angriff' | 'Transformation' | 'Verteidigung' | 'Support' = 'Angriff';
+              const lower = name.toLowerCase();
+              if (lower.includes('heil') || lower.includes('regen') || lower.includes('buff') || lower.includes('medizin') || lower.includes('support')) {
+                guessedType = 'Support';
+              } else if (lower.includes('schild') || lower.includes('abwehr') || lower.includes('barriere') || lower.includes('block') || lower.includes('verteidigung') || lower.includes('schutz')) {
+                guessedType = 'Verteidigung';
+              } else if (lower.includes('transform') || lower.includes('gestalt') || lower.includes('form') || lower.includes('modus') || lower.includes('frucht')) {
+                guessedType = 'Transformation';
+              }
               list.push({ 
-                name: t.name.trim(), 
-                description: t.description,
-                source: ability.source,
-                cost: t.cost || ability.cost, // use technique cost name if defined, else fallback to ability
-                type: t.type,
-                subtype: t.subtype,
-                level: t.level || 1,
-                xp: t.xp || 0,
-                maxLevel: t.maxLevel || 10,
-                xpNeeded: t.xpNeeded || 100,
+                name, 
+                source: ability.source, 
+                cost: ability.cost, 
+                type: guessedType,
+                level: 1,
                 abilityId: ability.id,
-                abilityCategory: ability.category,
-                staticCost: t.staticCost,
-                baseValue: t.baseValue,
-                effectValue: t.effectValue,
-                costFormula: t.costFormula,
-                costValue: t.costValue,
-                costResourceName: t.costResourceName,
-                applications: t.applications,
-                summonCount: t.summonCount
+                abilityCategory: ability.category
               });
-            }
-          });
-        } else if (ability.techniques && ability.techniques.trim().length > 0) {
-          // Fallback to ability-level comma strings only if there is no structured list for this specific ability
-          ability.techniques.split(/[,\n;]/).map(s => s.trim()).filter(Boolean).forEach(name => {
-            let guessedType: 'Angriff' | 'Transformation' | 'Verteidigung' | 'Support' = 'Angriff';
-            const lower = name.toLowerCase();
-            if (lower.includes('heil') || lower.includes('regen') || lower.includes('buff') || lower.includes('medizin') || lower.includes('support')) {
-              guessedType = 'Support';
-            } else if (lower.includes('schild') || lower.includes('abwehr') || lower.includes('barriere') || lower.includes('block') || lower.includes('verteidigung') || lower.includes('schutz')) {
-              guessedType = 'Verteidigung';
-            } else if (lower.includes('transform') || lower.includes('gestalt') || lower.includes('form') || lower.includes('modus') || lower.includes('frucht')) {
-              guessedType = 'Transformation';
-            }
-            list.push({ 
-              name, 
-              source: ability.source, 
-              cost: ability.cost, 
-              type: guessedType, 
-              level: 1,
-              abilityId: ability.id,
-              abilityCategory: ability.category
             });
-          });
-        }
-      });
+          }
+        });
+      }
     } else {
       // 2. Fallback to top-level ONLY if we don't have any abilities at all
       const addedNames = new Set<string>();

@@ -394,6 +394,61 @@ export interface TechniqueItem {
   masteryLevel?: string;
   wieldingStyle?: string;
   weaponManeuver?: string;
+  // Transformation Moveset-Modifikatoren & Freischalt-Bedingungen
+  transformationModifiers?: TechniqueTransformationModifier[];
+  unlockedByTransformationId?: string; // ID der Transformation, die diese Technik freischaltet
+  unlockedByTransformationIds?: string[]; // Mehrere Stufen/Formen, in denen die Technik freigeschaltet ist
+  isTransformationOnly?: boolean; // Steht nur in einer Verwandlung zur Verfügung
+  isFavorite?: boolean;
+  favorite?: boolean;
+}
+
+export type TransformationModifierType = 
+  | 'unverändert' 
+  | 'weiterentwicklung' 
+  | 'verstärkung' 
+  | 'veränderung' 
+  | 'ersetzung' 
+  | 'deaktiviert'
+  | 'unchanged'
+  | 'evolve'
+  | 'enhance'
+  | 'modify'
+  | 'replace'
+  | 'disable';
+
+export interface TechniqueTransformationModifier {
+  transformationId: string; // ID der Zieltransformation (z.B. "esper", oder Ability-ID)
+  transformationName?: string; // Optionaler Anzeigename der Stufe
+  modifierType?: TransformationModifierType; // Art der Modifikation
+  overrideName?: string; // Modifizierter Name (z.B. "Elementarkontrolle" statt "Elementarmanipulation")
+  overrideDescription?: string; // Modifizierte Beschreibung
+  overrideCost?: string; // Modifizierte Kosten (z.B. "25 MP")
+  overrideCostValue?: number;
+  overrideCostResourceName?: string;
+  overrideType?: 'Angriff' | 'Transformation' | 'Verteidigung' | 'Support' | 'Heilung' | 'Zustandseffekt' | 'Spezial' | 'Beschwörung' | string;
+  overrideSubtype?: string;
+  overrideMode?: string;
+  overrideTier?: string;
+  overrideEffects?: string[];
+  overrideBaseValue?: number;
+  overrideEffectValue?: string;
+  overrideRange?: string;
+  overrideDuration?: string;
+  disabled?: boolean; // Falls Technik in dieser Form gesperrt/deaktiviert ist
+  notes?: string;
+}
+
+export interface EffectiveTechniqueItem extends TechniqueItem {
+  originalTechniqueId?: string;
+  originalTechniqueName?: string;
+  isModifiedByTransformation?: boolean;
+  modificationType?: TransformationModifierType;
+  appliedModifier?: TechniqueTransformationModifier;
+  isUnlockedByTransformation?: boolean;
+  transformationId?: string;
+  transformationName?: string;
+  isDisabledInTransformation?: boolean;
 }
 
 export interface PowerAbility {
@@ -401,11 +456,14 @@ export interface PowerAbility {
   name?: string;
   displayName?: string;
   category?: string;
+  type?: string;
   source: string;
   cost: string;
   description: string;
   techniques: string;
   powerSourceId?: string;
+  isFavorite?: boolean;
+  favorite?: boolean;
   element?: string; // z.B. "Eis"
   abilityType?: AbilityType; // z.B. "creation_manipulation"
   baseAbilityIds?: string[];
@@ -456,6 +514,8 @@ export interface PowerAbility {
   transformSwappedOriginalData?: any;
   transformRelationships?: CharacterRelationship[];
   techniqueList?: TechniqueItem[];
+  parentTransformationId?: string; // Übergeordnete Transformationsstufe für Stufenhierarchien (z.B. Normal -> Esper -> Erwachte Esper)
+  unlockedTechniqueIds?: string[]; // IDs von Techniken, die in dieser Transformation freigeschaltet sind
 }
 
 export interface CharacterPowerSource {
