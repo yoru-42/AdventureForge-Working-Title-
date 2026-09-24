@@ -127,6 +127,13 @@ export function resolveEffectiveMoveset(
     if (tech.unlockedByTransformationId && tech.unlockedByTransformationId.trim().length > 0) return true;
     if (Array.isArray(tech.unlockedByTransformationIds) && tech.unlockedByTransformationIds.length > 0) return true;
     
+    // Prüfen, ob die Technik in den unlockedTechniqueIds einer Transformation vorkommt
+    const isUnlockedByAnyTrans = transAbilities.some(ta => 
+      Array.isArray(ta.unlockedTechniqueIds) && 
+      (ta.unlockedTechniqueIds.includes(tech.id) || (tech.name && ta.unlockedTechniqueIds.includes(tech.name)))
+    );
+    if (isUnlockedByAnyTrans) return true;
+
     // Prüfen, ob die Technik aus einer Transformations-Ability stammt
     const parentTrans = transAbilities.find(ta =>
       ta.id === tech.powerSourceId ||
@@ -169,6 +176,27 @@ export function resolveEffectiveMoveset(
     }
   });
 
+  // Lookup-Map aller verfügbaren Techniken für saubere ID-basierte Referenzierung
+  const allAvailableTechniquesMap = new Map<string, TechniqueItem>();
+  allTechniques.forEach(t => {
+    if (t.id) allAvailableTechniquesMap.set(t.id, t);
+    if (t.name) allAvailableTechniquesMap.set(t.name.toLowerCase(), t);
+  });
+  if (Array.isArray(character.techniqueList)) {
+    character.techniqueList.forEach(t => {
+      if (t.id && !allAvailableTechniquesMap.has(t.id)) allAvailableTechniquesMap.set(t.id, t);
+      if (t.name && !allAvailableTechniquesMap.has(t.name.toLowerCase())) allAvailableTechniquesMap.set(t.name.toLowerCase(), t);
+    });
+  }
+  allAbilities.forEach(a => {
+    if (Array.isArray(a.techniqueList)) {
+      a.techniqueList.forEach(t => {
+        if (t.id && !allAvailableTechniquesMap.has(t.id)) allAvailableTechniquesMap.set(t.id, t);
+        if (t.name && !allAvailableTechniquesMap.has(t.name.toLowerCase())) allAvailableTechniquesMap.set(t.name.toLowerCase(), t);
+      });
+    }
+  });
+
   // 4. Wenn Standardform (keine Verwandlung aktiv)
   if (!activeTransId || activeTransId === 'standard' || !activeTrans) {
     return baseTechniques.map(base => ({
@@ -183,6 +211,7 @@ export function resolveEffectiveMoveset(
 
   // 5. Verwandlung ist aktiv: Wende Modifikatoren auf Basis-Techniken an
   const effectiveList: EffectiveTechniqueItem[] = [];
+  const seenIds = new Set<string>();
   const seenNames = new Set<string>();
 
   baseTechniques.forEach(base => {
@@ -215,6 +244,8 @@ export function resolveEffectiveMoveset(
 
       if (isDisabled) {
         if (includeDisabled) {
+          seenIds.add(base.id);
+          seenNames.add(base.name.toLowerCase());
           effectiveList.push({
             ...base,
             originalTechniqueId: base.id,
@@ -233,6 +264,7 @@ export function resolveEffectiveMoveset(
 
       if (modType === 'unverändert') {
         // Explizit unverändert
+        seenIds.add(base.id);
         seenNames.add(base.name.toLowerCase());
         effectiveList.push({
           ...base,
@@ -250,11 +282,14 @@ export function resolveEffectiveMoveset(
 
       // Weiterentwickeln / Verstärken / Verändern / Ersetzen
       const effectiveName = matchedModifier.overrideName?.trim() || base.name;
+      const effectiveId = `${base.id}_trans_${activeTransId}`;
+      seenIds.add(base.id);
+      seenIds.add(effectiveId);
       seenNames.add(effectiveName.toLowerCase());
 
       const effectiveTech: EffectiveTechniqueItem = {
         ...base,
-        id: `${base.id}_trans_${activeTransId}`,
+        id: effectiveId,
         name: effectiveName,
         description: matchedModifier.overrideDescription !== undefined ? matchedModifier.overrideDescription : base.description,
         cost: matchedModifier.overrideCost !== undefined ? matchedModifier.overrideCost : base.cost,
@@ -282,6 +317,7 @@ export function resolveEffectiveMoveset(
       effectiveList.push(effectiveTech);
     } else {
       // Kein Modifikator vorhanden: Technik bleibt UNVERÄNDERT im Moveset erhalten!
+      seenIds.add(base.id);
       seenNames.add(base.name.toLowerCase());
       effectiveList.push({
         ...base,
@@ -295,6 +331,37 @@ export function resolveEffectiveMoveset(
   });
 
   // 6. Freigeschaltete Techniken der aktiven Transformation hinzufügen
+
+  // 6a. Strukturierte ID-Referenzen aus PowerAbility.unlockedTechniqueIds (bevorzugt)
+  activeTransChain.forEach(transAbil => {
+    if (Array.isArray(transAbil.unlockedTechniqueIds)) {
+      transAbil.unlockedTechniqueIds.forEach(targetId => {
+        if (!targetId || !targetId.trim()) return;
+        const targetClean = targetId.trim();
+        const found = allAvailableTechniquesMap.get(targetClean) || allAvailableTechniquesMap.get(targetClean.toLowerCase());
+        if (found) {
+          const lower = found.name.toLowerCase();
+          if (!seenIds.has(found.id) && !seenNames.has(lower)) {
+            seenIds.add(found.id);
+            seenNames.add(lower);
+            effectiveList.push({
+              ...found,
+              id: found.id, // Original-ID exakt erhalten
+              originalTechniqueId: found.id,
+              originalTechniqueName: found.name,
+              isModifiedByTransformation: false,
+              isUnlockedByTransformation: true,
+              transformationId: activeTransId,
+              transformationName: activeTrans.transformName || activeTrans.name,
+              isDisabledInTransformation: false
+            });
+          }
+        }
+      });
+    }
+  });
+
+  // 6b. Aus unlockedPool (unlockedByTransformationId / unlockedByTransformationIds)
   const isUnlockedForCurrentTransformation = (tech: TechniqueItem): boolean => {
     if (tech.unlockedByTransformationId) {
       const matchId = tech.unlockedByTransformationId.trim().toLowerCase();
@@ -308,14 +375,17 @@ export function resolveEffectiveMoveset(
     return false;
   };
 
-  // 6a. Aus unlockedPool
   unlockedPool.forEach(unlocked => {
     if (isUnlockedForCurrentTransformation(unlocked)) {
       const lower = unlocked.name.toLowerCase();
-      if (!seenNames.has(lower)) {
+      if (!seenIds.has(unlocked.id) && !seenNames.has(lower)) {
+        seenIds.add(unlocked.id);
         seenNames.add(lower);
         effectiveList.push({
           ...unlocked,
+          id: unlocked.id, // Original-ID erhalten
+          originalTechniqueId: unlocked.id,
+          originalTechniqueName: unlocked.name,
           isModifiedByTransformation: false,
           isUnlockedByTransformation: true,
           transformationId: activeTransId,
@@ -326,7 +396,7 @@ export function resolveEffectiveMoveset(
     }
   });
 
-  // 6b. Aus der Transformation Ability selbst (techniqueList auf der Ability)
+  // 6c. Legacy-Kompatibilität: Aus der Transformation Ability selbst (techniqueList auf der Ability)
   activeTransChain.forEach(transAbil => {
     if (Array.isArray(transAbil.techniqueList)) {
       transAbil.techniqueList.forEach(t => {
@@ -334,11 +404,13 @@ export function resolveEffectiveMoveset(
         if (!includeTransformActivation && isTransformActivationOrDetransform(t)) return;
 
         const lower = t.name.trim().toLowerCase();
-        if (!seenNames.has(lower)) {
+        const tId = t.id || `unlocked_${transAbil.id}_${Math.random().toString(36).substr(2, 6)}`;
+        if (!seenIds.has(tId) && !seenNames.has(lower)) {
+          seenIds.add(tId);
           seenNames.add(lower);
           effectiveList.push({
             ...t,
-            id: t.id || `unlocked_${transAbil.id}_${Math.random().toString(36).substr(2, 6)}`,
+            id: tId,
             name: t.name.trim(),
             category: t.category || 'Techniken',
             type: t.type || 'Angriff',

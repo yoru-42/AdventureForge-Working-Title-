@@ -288,6 +288,80 @@ export function runMovesetResolverTests() {
   assert(detransformedMoveset.some(t => t.name === 'Elementarmanipulation'), 'Elementarmanipulation ist wieder da');
   assert(!detransformedMoveset.some(t => t.name === 'Elementarkontrolle'), 'Elementarkontrolle ist nicht mehr da');
 
+  // 6. Test: unlockedTechniqueIds direkte Referenzierung & ID-Erhalt
+  const standaloneTech1: TechniqueItem = {
+    id: 'tech_dimensionsriss_explicit_id',
+    name: 'Dimensionsriss-Klinge',
+    description: 'Schneidet durch den Raum.',
+    type: 'Angriff',
+    cost: '35 MP'
+  };
+  const standaloneTech2: TechniqueItem = {
+    id: 'tech_levitation_explicit_id',
+    name: 'Freie Levitation',
+    description: 'Ermöglicht unbegrenzten Flug.',
+    type: 'Support',
+    cost: '15 MP'
+  };
+
+  const idBasedEsperAbility: PowerAbility = {
+    id: 'trans_id_esper',
+    name: 'Strukturierte Esper',
+    transformName: 'Strukturierte Esper',
+    category: 'Transformationen',
+    source: 'Esper-Kräfte',
+    cost: '25 MP',
+    description: 'Saubere ID-basierte Transformation.',
+    techniques: '',
+    unlockedTechniqueIds: ['tech_dimensionsriss_explicit_id', 'tech_levitation_explicit_id']
+  };
+
+  const idTestChar: Character = {
+    name: 'Hoshiko ID Test',
+    role: 'Esper',
+    powerSource: 'Psychisch',
+    personality: 'Fokussiert',
+    bio: 'Test',
+    attributes: [],
+    appearance: {
+      activeTransformationId: 'standard',
+      gender: 'Weiblich',
+      race: 'Mensch',
+      hairColor: 'Schwarz',
+      eyeColor: 'Braun',
+      age: '17',
+      build: 'Schlank'
+    },
+    abilities: [idBasedEsperAbility],
+    techniqueList: [
+      baseTech1,
+      baseTech2,
+      standaloneTech1,
+      standaloneTech2
+    ]
+  };
+
+  // Im Standardzustand dürfen die über unlockedTechniqueIds definierten Techniken nicht im Basismoveset sein
+  const idStandardMoveset = resolveEffectiveMoveset(idTestChar, 'standard');
+  assert(idStandardMoveset.length === 2, 'Im Standardzustand sind nur die 2 Basistechniken verfügbar');
+  assert(!idStandardMoveset.some(t => t.id === 'tech_dimensionsriss_explicit_id'), 'Dimensionsriss-Klinge ist im Standardzustand gesperrt');
+
+  // Im transformierten Zustand werden sie freigeschaltet mit exakt ihren originalen IDs
+  const idTransformedMoveset = resolveEffectiveMoveset(idTestChar, 'trans_id_esper');
+  assert(idTransformedMoveset.length === 4, 'Transformiert: 2 Basistechniken + 2 ID-freigeschaltete Techniken');
+  const dimTechResolved = idTransformedMoveset.find(t => t.id === 'tech_dimensionsriss_explicit_id');
+  assert(!!dimTechResolved, 'Dimensionsriss-Klinge wurde über unlockedTechniqueIds aufgelöst');
+  assert(dimTechResolved?.id === 'tech_dimensionsriss_explicit_id', 'Originale Technik-ID bleibt exakt erhalten (keine Zufalls-ID)');
+  assert(dimTechResolved?.isUnlockedByTransformation === true, 'Als freigeschaltet markiert');
+
+  // 7. Test: Deduplizierung (wenn unlockedTechniqueIds doppelt oder bereits in der Kette)
+  const duplicateEsperAbility: PowerAbility = {
+    ...idBasedEsperAbility,
+    unlockedTechniqueIds: ['tech_dimensionsriss_explicit_id', 'tech_dimensionsriss_explicit_id', 'tech_levitation_explicit_id']
+  };
+  const deduplicatedMoveset = resolveEffectiveMoveset({ ...idTestChar, abilities: [duplicateEsperAbility] }, 'trans_id_esper');
+  assert(deduplicatedMoveset.length === 4, 'Deduplizierung verhindert doppelte Techniken');
+
   console.log('=== ALL TRANSFORMATION MOVESET RESOLVER TESTS PASSED ===\n');
 }
 
