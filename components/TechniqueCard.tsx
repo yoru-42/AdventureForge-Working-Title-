@@ -20,7 +20,7 @@ import AutoExpandingTextarea from './AutoExpandingTextarea';
 
 export interface TechniqueCardProps {
   entry: TechniqueItem;
-  category: 'Passive Fähigkeiten' | 'Techniken' | 'Ultimative Techniken' | 'Transformationen';
+  category: 'Passive Fähigkeiten' | 'Techniken' | 'Ultimative Techniken' | 'Transformationen' | string;
   readOnly?: boolean;
   isExpanded: boolean;
   onToggleExpanded: () => void;
