@@ -250,7 +250,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return 'Techniken';
   };
 
-  // 9. Zähler für die Standard-Kategorien der aktiven Grundfähigkeit
+  // 9. Zähler für die Standard-Kategorien der aktiven Grundfähigkeit bzw. Kraftquelle
   const categoryCounts = useMemo(() => {
     const counts: Record<AbilityCategoryTab, number> = {
       'Passive Fähigkeiten': 0,
@@ -259,13 +259,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       'Waffenbeherrschung': 0
     };
 
-    if (!activeBaseAbility) return counts;
-
     standardTechniques.forEach(tech => {
-      const belongsToBase = (tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id)) ||
-        (!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (activePowerSource && tech.powerSourceId === activePowerSource.id);
+      const belongs = activeBaseAbility
+        ? ((tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id)) ||
+           ((!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (activePowerSource && tech.powerSourceId === activePowerSource.id)))
+        : (activePowerSource && (tech.powerSourceId === activePowerSource.id || !tech.powerSourceId));
 
-      if (belongsToBase) {
+      if (belongs) {
         const cat = getTechniqueCategory(tech);
         counts[cat] = (counts[cat] || 0) + 1;
       }
@@ -274,15 +274,15 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return counts;
   }, [standardTechniques, activeBaseAbility, activePowerSource]);
 
-  // 10. Einträge der aktuell ausgewählten Grundfähigkeit + aktuellen Standard-Kategorie
+  // 10. Einträge der aktuell ausgewählten Grundfähigkeit/Kraftquelle + aktuellen Standard-Kategorie
   const activeEntries = useMemo(() => {
-    if (!activeBaseAbility) return [];
-
     return standardTechniques.filter(tech => {
-      const belongsToBase = (tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id)) ||
-        (!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (activePowerSource && tech.powerSourceId === activePowerSource.id);
+      const belongs = activeBaseAbility
+        ? ((tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id)) ||
+           ((!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (activePowerSource && tech.powerSourceId === activePowerSource.id)))
+        : (activePowerSource && (tech.powerSourceId === activePowerSource.id || !tech.powerSourceId));
 
-      if (!belongsToBase) return false;
+      if (!belongs) return false;
       return getTechniqueCategory(tech) === activeCategory;
     });
   }, [standardTechniques, activeBaseAbility, activePowerSource, activeCategory]);
@@ -505,7 +505,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   // HANDLERS: Standard-Einträge (Techniken, Passive etc.)
   // -------------------------------------------------------------
   const handleAddEntry = () => {
-    if (!activeBaseAbility || !activePowerSource) return;
+    if (!activePowerSource) return;
 
     const newId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const costResource = activePowerSource.cost || 'Mana';
@@ -542,6 +542,11 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     const isWpnMastery = activeCategory === 'Waffenbeherrschung' || (activeCategory as string) === 'Talente';
     const defaultWeapon = isWpnMastery ? (ALL_WEAPONS[1] || ALL_WEAPONS[0]) : null;
 
+    const baseAbilityIds = activeBaseAbility ? [activeBaseAbility.id] : [];
+    const baseAbilityNames = activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name] : [];
+    const element = activeBaseAbility ? activeBaseAbility.element : 'Neutral';
+    const abilityType = activeBaseAbility ? activeBaseAbility.abilityType : 'creation_manipulation';
+
     const newEntry: TechniqueItem = {
       id: newId,
       name: defaultName,
@@ -551,12 +556,12 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       subtype: isWpnMastery && defaultWeapon ? defaultWeapon.categoryName : '',
       mode: defaultMode,
       tier: defaultTier,
-      baseAbilityIds: [activeBaseAbility.id],
-      baseAbilityNames: [activeBaseAbility.displayName || activeBaseAbility.name],
+      baseAbilityIds,
+      baseAbilityNames,
       powerSourceId: activePowerSource.id,
       powerSourceName: activePowerSource.powerName || activePowerSource.source,
-      element: activeBaseAbility.element,
-      abilityType: activeBaseAbility.abilityType,
+      element,
+      abilityType,
       targetType: isWpnMastery ? 'Einzelziel / Nahkampf' : 'Selbst / Verbündete / Feinde',
       effects: isWpnMastery && defaultWeapon ? [...defaultWeapon.damageTypes] : [],
       costResourceName: costResource,
@@ -580,15 +585,17 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
     const updatedTech = [...techniques, newEntry];
 
-    const updatedBa = baseAbilities.map(ba => {
-      if (ba.id === activeBaseAbility.id) {
-        return {
-          ...ba,
-          techniqueIds: [...(ba.techniqueIds || []), newId]
-        };
-      }
-      return ba;
-    });
+    const updatedBa = activeBaseAbility
+      ? baseAbilities.map(ba => {
+          if (ba.id === activeBaseAbility.id) {
+            return {
+              ...ba,
+              techniqueIds: [...(ba.techniqueIds || []), newId]
+            };
+          }
+          return ba;
+        })
+      : baseAbilities;
 
     setExpandedMap(prev => ({ ...prev, [newId]: true }));
     onChange(safePowerSources, updatedBa, updatedTech);
@@ -1154,7 +1161,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
               Kategorien
             </span>
             <span className="text-[10px] text-slate-500">
-              Gilt für: {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : 'Keine Grundfähigkeit'}
+              Gilt für: {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : (activePowerSource ? (activePowerSource.powerName || activePowerSource.source || 'Kraftquelle') : 'Keine Kraftquelle')}
             </span>
           </div>
 
@@ -1234,7 +1241,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/70 pb-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-400">
-                  {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : 'Keine Grundfähigkeit'}
+                  {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : (activePowerSource ? (activePowerSource.powerName || activePowerSource.source || 'Kraftquelle') : 'Keine Kraftquelle')}
                 </span>
                 <span className="text-slate-600">→</span>
                 <span className="text-xs font-extrabold text-amber-400">
@@ -1289,7 +1296,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                   </button>
                 )}
 
-                {!readOnly && activeBaseAbility && (
+                {!readOnly && activePowerSource && (
                   <>
                     <button
                       type="button"
@@ -1297,7 +1304,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                         setSmartFillModalState({
                           isOpen: true,
                           powerSourceId: activePowerSource?.id,
-                          baseAbilityId: activeBaseAbility.id
+                          baseAbilityId: activeBaseAbility?.id
                         });
                       }}
                       className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
@@ -1320,23 +1327,15 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
               </div>
             </div>
 
-            {!activeBaseAbility ? (
+            {!activePowerSource ? (
               <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-                <p>Bitte wähle oben eine Grundfähigkeit aus oder erstelle eine neue.</p>
-                {!readOnly && activePowerSource && (
-                  <button
-                    type="button"
-                    onClick={handleAddBaseAbility}
-                    className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <LucideIcons.Plus className="w-3.5 h-3.5" />
-                    <span>Grundfähigkeit erstellen</span>
-                  </button>
-                )}
+                <p>Bitte erstelle oder wähle zuerst eine Kraftquelle aus.</p>
               </div>
             ) : activeEntries.length === 0 ? (
               <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-                <p>Keine Einträge für &bdquo;{activeCategory}&ldquo; in {activeBaseAbility.displayName || activeBaseAbility.name} definiert.</p>
+                <p>
+                  Keine Einträge für &bdquo;{activeCategory}&ldquo;{activeBaseAbility ? ` in ${activeBaseAbility.displayName || activeBaseAbility.name}` : ''} definiert.
+                </p>
                 {!readOnly && (
                   <button
                     type="button"
