@@ -230,7 +230,8 @@ export class ActiveTimeEventService {
       if (sCond.minWorldTimeMinutes !== undefined) {
         const currentWorldTime = adventure.worldTime || { day: 1, hour: 8, minute: 0 };
         const createdWorldTime = ate.createdAtWorldTime || { day: 1, hour: 8, minute: 0 };
-        const totalElapsed = WorldSimulationService.toTotalMinutes(currentWorldTime) - WorldSimulationService.toTotalMinutes(createdWorldTime);
+        const diffMinutes = Math.max(0, WorldSimulationService.toTotalMinutes(currentWorldTime) - WorldSimulationService.toTotalMinutes(createdWorldTime));
+        const totalElapsed = Math.max(diffMinutes, ate.accumulatedTimeMinutes || 0);
 
         if (totalElapsed < sCond.minWorldTimeMinutes) {
           return { satisfied: false, reason: `Elapsed time (${totalElapsed}m) is less than required minimum (${sCond.minWorldTimeMinutes}m).` };
@@ -254,7 +255,8 @@ export class ActiveTimeEventService {
           const reqTime = parseInt(predStr.split('>=')[1], 10);
           const currentWorldTime = adventure.worldTime || { day: 1, hour: 8, minute: 0 };
           const createdWorldTime = ate.createdAtWorldTime || { day: 1, hour: 8, minute: 0 };
-          const totalElapsed = WorldSimulationService.toTotalMinutes(currentWorldTime) - WorldSimulationService.toTotalMinutes(createdWorldTime);
+          const diffMinutes = Math.max(0, WorldSimulationService.toTotalMinutes(currentWorldTime) - WorldSimulationService.toTotalMinutes(createdWorldTime));
+          const totalElapsed = Math.max(diffMinutes, ate.accumulatedTimeMinutes || 0);
           if (!isNaN(reqTime) && totalElapsed < reqTime) {
             return { satisfied: false, reason: `Custom predicate requires time >= ${reqTime}.` };
           }
@@ -315,7 +317,8 @@ export class ActiveTimeEventService {
 
       // Compute cumulative elapsed time from ATE creation
       const createdTotalMins = WorldSimulationService.toTotalMinutes(updatedAte.createdAtWorldTime || currentWorldTime);
-      const totalElapsedMinutes = Math.max(0, currentTotalMins - createdTotalMins);
+      const diffMinutes = Math.max(0, currentTotalMins - createdTotalMins);
+      const totalElapsedMinutes = Math.max(diffMinutes, (updatedAte.accumulatedTimeMinutes || 0) + (params.elapsedMinutes || 0));
       updatedAte.accumulatedTimeMinutes = totalElapsedMinutes;
 
       // Stage Advancement Loop (sequential step through ALL due stages)

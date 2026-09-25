@@ -432,7 +432,8 @@ export function runATETests(): { passed: number; failed: number; errors: string[
   try {
     let adv = createTestAdventure();
     adv.worldTime = { day: 1, hour: 11, minute: 0 };
-    ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 180 });
+    const res = ActiveTimeEventService.evaluateAndAdvanceATEs({ adventure: adv, elapsedMinutes: 180 });
+    adv = res.updatedAdventure;
 
     const serialized = JSON.stringify(adv);
     const deserialized: Adventure = JSON.parse(serialized);

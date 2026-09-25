@@ -8100,8 +8100,6 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               } else if (resolvedChibi.source === 'transformation') {
                 if (resolvedChibi.remainingDurationGameMinutes !== undefined && resolvedChibi.remainingDurationGameMinutes > 0) {
                   chibiDurationText = `Dauer: ${formatDuration(resolvedChibi.remainingDurationGameMinutes, 'Min.')}`;
-                } else if (isFinite(remainingDurationVal) && remainingDurationVal > 0) {
-                  chibiDurationText = `Dauer: ${remainingDurationFormatted}`;
                 } else {
                   chibiDurationText = 'dauerhaft';
                 }
@@ -8143,7 +8141,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       { label: 'Körperliche Merkmale', value: resolvedChibi.physicalChanges.join(' • ') },
                       { label: 'Bewegungsmodifikator', value: resolvedChibi.movementModifier || 'flink' },
                       { label: 'Ausrüstung', value: resolvedChibi.equipmentRule || 'angepasst' },
-                      { label: 'Verbleibende Dauer', value: chibiDurationText === 'Kraftüberlastung' ? 'Dynamisch (bis Erholung unter Erholungsschwelle)' : (chibiDurationText || 'dauerhaft') },
+                      { label: 'Verbleibende Dauer', value: resolvedChibi.source === 'power_overload' ? 'Dynamisch (bis Erholung unter Erholungsschwelle)' : (resolvedChibi.remainingDurationGameMinutes !== undefined && resolvedChibi.remainingDurationGameMinutes > 0 ? formatDuration(resolvedChibi.remainingDurationGameMinutes, 'Min.') : 'dauerhaft') },
                       { label: 'Ursache / Trigger', value: resolvedChibi.source === 'power_overload' ? 'Kraftüberlastung überschritten' : 'Manuelle oder transformationsbedingte Aktivierung' }
                     ] : (isTransActive ? [
                       { label: 'Kategorie', value: 'Charakter & Transformation' },

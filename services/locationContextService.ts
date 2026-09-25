@@ -777,19 +777,7 @@ export class LocationContextService {
       return true;
     }
 
-    // 3. Explicit companion / party member travelling with the player
-    const roleLower = (character.role || character.details?.role || '').toLowerCase();
-    const relLower = (character.relationship || character.details?.relationship || character.details?.beziehungZumSpieler || '').toLowerCase();
-    const isCompanion = character.isCompanion === true ||
-      character.details?.isCompanion === true ||
-      roleLower.includes('gefährte') || roleLower.includes('begleiter') || roleLower.includes('partner') || roleLower.includes('reisegefährte') ||
-      relLower.includes('gefährte') || relLower.includes('begleiter') || relLower.includes('partner') || relLower.includes('reisegefährte') || relLower.includes('in der gruppe');
-
-    if (isCompanion && character.presenceState?.state !== 'absent') {
-      return true;
-    }
-
-    // 4. Check presenceState enum if defined on character
+    // 3. Check presenceState enum if defined on character
     if (character.presenceState) {
       if (character.presenceState.state === 'absent') {
         return false;
@@ -801,9 +789,11 @@ export class LocationContextService {
       }
     }
 
-    // 5. Explicit boolean override flags (e.g. isExplicitlyPresent set for specific scene context)
+    // 4. Explicit boolean override flags (e.g. isExplicitlyPresent set for specific scene context)
     if ((character.isExplicitlyPresent === true || character.details?.isExplicitlyPresent === true) && character.presenceState?.state !== 'absent') {
-      return true;
+      if (currentLocation.sceneId && character.presenceState?.sceneId === currentLocation.sceneId) {
+        return true;
+      }
     }
 
     // 6. Check currentSituation string for presence keywords
@@ -861,12 +851,37 @@ export class LocationContextService {
       return true;
     }
     if (charLoc.buildingId && currentLocation.buildingId && charLoc.buildingId === currentLocation.buildingId) {
-      return true;
+      if (!currentLocation.roomName || !charLoc.roomName || this.isExactLocationMatch(charLoc.roomName, currentLocation.roomName)) {
+        return true;
+      }
+      return false;
     }
     if (charLoc.locationId && currentLocation.locationId && charLoc.locationId === currentLocation.locationId) {
       if (!currentLocation.buildingName || !charLoc.buildingName || this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName)) {
+        if (!currentLocation.roomName || !charLoc.roomName || this.isExactLocationMatch(charLoc.roomName, currentLocation.roomName)) {
+          return true;
+        }
+      }
+    }
+
+    // Direct building match (e.g. character has "Taverne Zum Hirsch → Schankraum")
+    if (charLoc.buildingName && currentLocation.buildingName) {
+      if (this.isExactLocationMatch(charLoc.buildingName, currentLocation.buildingName)) {
+        // If both specify locationName, verify they match
+        if (charLoc.locationName && currentLocation.locationName && !this.isExactLocationMatch(charLoc.locationName, currentLocation.locationName)) {
+          return false;
+        }
+        // If both specify roomName, verify they match
+        if (currentLocation.roomName && charLoc.roomName) {
+          return this.isExactLocationMatch(charLoc.roomName, currentLocation.roomName);
+        }
+        // If player is in a specific room but character is general in the building
+        if (currentLocation.roomName && !charLoc.roomName) {
+          return options?.allowSameBuildingWhenInRoom ?? true;
+        }
         return true;
       }
+      return false;
     }
 
     // Hierarchical location name comparison
