@@ -456,8 +456,8 @@ const App: React.FC = () => {
   };
 
   const autoSaveAdventure = (adventure: Adventure) => {
-    // Check if the current view is still EDIT_WORLD, otherwise don't auto-save over an active game
-    if (viewMode !== GameViewMode.EDIT_WORLD) return;
+    // Check if the current view is still an editor mode, otherwise don't auto-save over an active game
+    if (viewMode !== GameViewMode.EDIT_WORLD && viewMode !== GameViewMode.CREATE && viewMode !== GameViewMode.JOIN_CUSTOM_CHAR) return;
     
     const exists = adventures.find(a => a.id === adventure.id);
     let newAdventures;
@@ -472,7 +472,7 @@ const App: React.FC = () => {
       setCurrentAdventure(adventure);
       try {
         localStorage.setItem('active_adventure_id', adventure.id);
-        localStorage.setItem('active_view_mode', GameViewMode.EDIT_WORLD);
+        localStorage.setItem('active_view_mode', viewMode);
       } catch (_) {}
       
       StorageService.setItem('adventures', newAdventures);

@@ -899,6 +899,59 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         accessories: cleanAccessories
       });
     }
+
+    if (onAutoSave) {
+      const cleanPlayer = {
+        ...player,
+        appearance: {
+          ...player.appearance,
+          activeTransformationId: 'standard'
+        }
+      };
+
+      const updatedAdventure: Adventure = {
+        id: adventureIdRef.current,
+        authorId: mode === GameViewMode.JOIN_CUSTOM_CHAR ? userId : (initialData?.authorId || userId),
+        isPublic,
+        world,
+        player: cleanPlayer,
+        npcs,
+        loreDatabase: cleanLore,
+        inventory: initialData?.inventory ?? ['Starterpaket'],
+        structuredInventory: changedInv ? {
+          ...currentInv,
+          weapons: cleanWeapons,
+          generalItems: cleanGeneralItems,
+          armor: cleanArmor,
+          accessories: cleanAccessories
+        } : (structuredInventory || currentInv),
+        prologue: prologue || 'Die Reise beginnt...',
+        firstMessage: firstMessage,
+        chatHistory: (initialData?.chatHistory && initialData.chatHistory.length > 0)
+          ? [...initialData.chatHistory]
+          : [{ id: 'prologue-msg', role: 'model', text: prologue || 'Die Reise beginnt...', isCombatLog: false } as any],
+        backgroundImage: bgImage,
+        statusElements,
+        initialPlayer: initialSnapshotsRef.current.initialPlayer ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialPlayer)) : undefined,
+        initialWorld: initialSnapshotsRef.current.initialWorld ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorld)) : undefined,
+        initialWorldTime: initialSnapshotsRef.current.initialWorldTime ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldTime)) : { day: 1, hour: 8, minute: 0 },
+        initialStatusElements: initialSnapshotsRef.current.initialStatusElements ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialStatusElements)) : undefined,
+        initialStructuredInventory: initialSnapshotsRef.current.initialStructuredInventory ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialStructuredInventory)) : undefined,
+        initialLoreDatabase: initialSnapshotsRef.current.initialLoreDatabase ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialLoreDatabase)) : undefined,
+        initialNpcs: initialSnapshotsRef.current.initialNpcs ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialNpcs)) : undefined,
+        initialInventory: initialSnapshotsRef.current.initialInventory ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialInventory)) : (initialData?.inventory ?? ['Starterpaket']),
+        initialItemInstances: initialSnapshotsRef.current.initialItemInstances ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialItemInstances)) : undefined,
+        initialInventoryEntries: initialSnapshotsRef.current.initialInventoryEntries ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialInventoryEntries)) : undefined,
+        initialEquipmentState: initialSnapshotsRef.current.initialEquipmentState ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialEquipmentState)) : undefined,
+        initialStoryState: initialSnapshotsRef.current.initialStoryState ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialStoryState)) : undefined,
+        initialCharacterKnowledge: initialSnapshotsRef.current.initialCharacterKnowledge ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialCharacterKnowledge)) : undefined,
+        initialCurrentLocation: initialSnapshotsRef.current.initialCurrentLocation ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialCurrentLocation)) : undefined,
+        initialLootSources: initialSnapshotsRef.current.initialLootSources ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialLootSources)) : undefined,
+        initialWorldDrops: initialSnapshotsRef.current.initialWorldDrops ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldDrops)) : undefined,
+        initialActiveTimeEvents: initialSnapshotsRef.current.initialActiveTimeEvents ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialActiveTimeEvents)) : undefined
+      };
+      onAutoSave(updatedAdventure);
+    }
   };
 
   const handleUpdateLoreDatabaseFlexible = (updater: LoreEntry[] | ((prev: LoreEntry[]) => LoreEntry[])) => {

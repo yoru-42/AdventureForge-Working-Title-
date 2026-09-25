@@ -488,6 +488,9 @@ const LoreDatabaseView: React.FC<Props> = ({
   const [itemSubCategoryFilter, setItemSubCategoryFilter] = useState<string>('all');
   const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(new Set());
   const [editForm, setEditForm] = useState<Partial<LoreEntry>>({ category: 'Charaktere' });
+  const currentCategory = (editForm.category || activeCategory) as LoreCategory;
+  const [stationSavedMessage, setStationSavedMessage] = useState<string | null>(null);
+  const stationFormRef = useRef<HTMLDivElement>(null);
   const [isGeneratingImg, setIsGeneratingImg] = useState<boolean>(false);
   const [generatingExpression, setGeneratingExpression] = useState<string | null>(null);
   const formTopRef = useRef<HTMLDivElement>(null);
@@ -1317,36 +1320,114 @@ const LoreDatabaseView: React.FC<Props> = ({
     }
   };
 
+  const activeStoryLoreEntry = useMemo(() => {
+    if (currentCategory !== 'Story & Quests' && (currentCategory as string) !== 'Events') return null;
+    return (editForm.id ? lore.find(l => l.id === editForm.id) : null)
+      || (isEditing ? lore.find(l => l.id === isEditing) : null)
+      || lore.find(l => l.category === 'Story & Quests' || (l.category as string) === 'Events')
+      || null;
+  }, [currentCategory, editForm.id, isEditing, lore]);
+
+  const displayEventSteps = useMemo(() => {
+    if (editForm.details?.eventSteps && Array.isArray(editForm.details.eventSteps) && editForm.details.eventSteps.length > 0) {
+      return editForm.details.eventSteps;
+    }
+    if (activeStoryLoreEntry?.details?.eventSteps && Array.isArray(activeStoryLoreEntry.details.eventSteps)) {
+      return activeStoryLoreEntry.details.eventSteps;
+    }
+    return editForm.details?.eventSteps || [];
+  }, [editForm.details?.eventSteps, activeStoryLoreEntry?.details?.eventSteps]);
+
+  const updateAndSyncSteps = (updatedSteps: any[]) => {
+    const targetEntry = (editForm.id ? lore.find(l => l.id === editForm.id) : null)
+      || (isEditing ? lore.find(l => l.id === isEditing) : null)
+      || lore.find(l => l.category === 'Story & Quests' || (l.category as string) === 'Events');
+
+    const targetId = editForm.id || isEditing || targetEntry?.id || 'single-story-events-timeline';
+    const baseEntry = targetEntry || editForm;
+
+    const details = { ...(baseEntry.details || {}), ...(editForm.details || {}), eventSteps: updatedSteps };
+    const description = updatedSteps.map((s, idx) => `${idx + 1}. [${s.title}] ${s.description}`).join('\n');
+    const title = (editForm.title && editForm.title !== 'Ereignis-Timeline')
+      ? editForm.title
+      : ((baseEntry.title && baseEntry.title !== 'Ereignis-Timeline')
+        ? baseEntry.title
+        : (updatedSteps[0] ? `Ereignis-Timeline (${(updatedSteps[0].title || updatedSteps[0].description).slice(0, 25)}...)` : 'Ereignis-Timeline'));
+
+    const updatedEntry: LoreEntry = {
+      ...baseEntry,
+      ...editForm,
+      id: targetId,
+      category: 'Story & Quests',
+      title,
+      description,
+      details,
+      isUnlocked: editForm.isUnlocked !== undefined ? editForm.isUnlocked : (baseEntry.isUnlocked !== false)
+    };
+
+    setEditForm(updatedEntry);
+    setIsEditing(targetId);
+
+    const existsInLore = lore.some(l => l.id === targetId);
+    const nextLore = existsInLore 
+      ? lore.map(l => l.id === targetId ? updatedEntry : l)
+      : [...lore, updatedEntry];
+
+    onUpdateLore(nextLore);
+
+    if (onUpdateWorld && world) {
+      const currentEconomy = world.economyConfig || {
+        currencyName: 'Goldmünzen',
+        currencyIcon: '🪙',
+        payoutInterval: 'weekly',
+        allowPassiveIncome: true,
+        enableRandomEvents: true,
+        holdings: []
+      };
+      const { updatedEconomy } = syncEconomyWithWorld(currentEconomy, nextLore, world.territories || []);
+      onUpdateWorld({
+        ...world,
+        economyConfig: updatedEconomy
+      });
+    }
+
+    syncMapFromEvents(updatedSteps, nextLore);
+  };
+
   const handleAddManualStep = () => {
-    if (!newEventStepText.trim()) return;
-    const steps = [...(editForm.details?.eventSteps || [])];
+    const hasText = newEventStepText.trim().length > 0;
+    const hasTitle = newEventStepTitle.trim().length > 0;
+    if (!hasText && !hasTitle) return;
+
+    const steps = [...displayEventSteps];
     
     if (editingStepId) {
-      const updatedSteps = steps.map(s => s.id === editingStepId ? {
+      const updatedSteps = steps.map((s, idx) => s.id === editingStepId ? {
         ...s,
-        title: newEventStepTitle.trim() || s.title || `Station #${steps.indexOf(s) + 1}`,
-        description: newEventStepText.trim(),
+        title: newEventStepTitle.trim() || s.title || `Station #${idx + 1}`,
+        description: newEventStepText.trim() || s.description || newEventStepTitle.trim() || 'Keine Beschreibung',
         branch: newEventStepBranch,
         stepType: newEventStepType,
         questOutcome: newEventStepType === 'quest' ? newEventQuestOutcome : undefined,
-        unlockConditions: newEventStepConditions.trim() || 'Keine',
-        chatInstruction: newEventStepChatInstruction.trim(),
-        travelPath: newEventStepTravelPath.trim(),
-        travelDurationDays: newEventStepTravelDurationDays !== '' ? Number(newEventStepTravelDurationDays) : undefined,
-        timeOfDay: newEventStepTimeOfDay.trim(),
-        revealedKnowledge: newEventStepRevealedKnowledge.trim() || undefined,
-        trigger: newEventStepTrigger.trim() || undefined,
+        unlockConditions: newEventStepConditions.trim() || s.unlockConditions || 'Keine',
+        chatInstruction: newEventStepChatInstruction.trim() || s.chatInstruction,
+        travelPath: newEventStepTravelPath.trim() || s.travelPath,
+        travelDurationDays: newEventStepTravelDurationDays !== '' ? Number(newEventStepTravelDurationDays) : s.travelDurationDays,
+        timeOfDay: newEventStepTimeOfDay.trim() || s.timeOfDay,
+        revealedKnowledge: newEventStepRevealedKnowledge.trim() || s.revealedKnowledge,
+        trigger: newEventStepTrigger.trim() || s.trigger,
         cast: newEventStepCast.trim() || undefined,
         setting: newEventStepSetting.trim() || undefined,
-        conflict: newEventStepConflict.trim() || undefined
+        conflict: newEventStepConflict.trim() || s.conflict
       } : s);
       updateAndSyncSteps(updatedSteps);
       setEditingStepId(null);
+      setStationSavedMessage('Station wurde erfolgreich aktualisiert und im Codex gespeichert.');
     } else {
       const newStep = {
         id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 4),
         title: newEventStepTitle.trim() || `Station #${steps.length + 1}`,
-        description: newEventStepText.trim(),
+        description: newEventStepText.trim() || newEventStepTitle.trim() || 'Keine Beschreibung',
         status: 'planned' as const,
         branch: newEventStepBranch,
         stepType: newEventStepType,
@@ -1364,6 +1445,7 @@ const LoreDatabaseView: React.FC<Props> = ({
       };
       const updatedSteps = [...steps, newStep];
       updateAndSyncSteps(updatedSteps);
+      setStationSavedMessage('Station wurde erfolgreich angefügt und im Codex gespeichert.');
     }
     
     setNewEventStepText('');
@@ -1381,6 +1463,9 @@ const LoreDatabaseView: React.FC<Props> = ({
     setNewEventStepCast('');
     setNewEventStepSetting('');
     setNewEventStepConflict('');
+    setTimeout(() => {
+      setStationSavedMessage(null);
+    }, 4000);
   };
 
   const handleStartEditStep = (step: any) => {
@@ -1400,6 +1485,7 @@ const LoreDatabaseView: React.FC<Props> = ({
     setNewEventStepCast(step.cast || '');
     setNewEventStepSetting(step.setting || '');
     setNewEventStepConflict(step.conflict || '');
+    stationFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   };
 
   const handleCancelEditStep = () => {
@@ -1421,41 +1507,20 @@ const LoreDatabaseView: React.FC<Props> = ({
     setNewEventStepConflict('');
   };
 
-  const updateAndSyncSteps = (updatedSteps: any[]) => {
-    const prev = editForm;
-    const details = { ...(prev.details || {}), eventSteps: updatedSteps };
-    const description = updatedSteps.map((s, idx) => `${idx + 1}. [${s.title}] ${s.description}`).join('\n');
-    const title = prev.title && prev.title !== 'Ereignis-Timeline' ? prev.title : (updatedSteps[0] ? `Ereignis-Timeline (${updatedSteps[0].description.slice(0, 20)}...)` : 'Ereignis-Timeline');
-    const updatedEntry = {
-      ...prev,
-      title,
-      description,
-      details
-    } as LoreEntry;
-
-    setEditForm(updatedEntry);
-
-    if (prev.id) {
-      const nextLore = lore.map(l => l.id === prev.id ? updatedEntry : l);
-      onUpdateLore(nextLore);
-      syncMapFromEvents(updatedSteps, nextLore);
-    }
-  };
-
   const handleUpdateStepText = (id: string, text: string) => {
-    const steps = [...(editForm.details?.eventSteps || [])];
+    const steps = [...displayEventSteps];
     const updated = steps.map(s => s.id === id ? { ...s, description: text } : s);
     updateAndSyncSteps(updated);
   };
 
   const handleToggleStepStatus = (id: string) => {
-    const steps = [...(editForm.details?.eventSteps || [])];
+    const steps = [...displayEventSteps];
     const updated = steps.map(s => s.id === id ? { ...s, status: s.status === 'happened' ? 'planned' : 'happened' } : s);
     updateAndSyncSteps(updated);
   };
 
   const handleMoveStep = (fromIdx: number, toIdx: number) => {
-    const steps = [...(editForm.details?.eventSteps || [])];
+    const steps = [...displayEventSteps];
     if (toIdx < 0 || toIdx >= steps.length) return;
     const temp = steps[fromIdx];
     steps[fromIdx] = steps[toIdx];
@@ -1469,7 +1534,7 @@ const LoreDatabaseView: React.FC<Props> = ({
   };
 
   const handleDeleteStep = (id: string) => {
-    const steps = [...(editForm.details?.eventSteps || [])];
+    const steps = [...displayEventSteps];
     const updatedBeforeResort = steps.filter(s => s.id !== id);
     const updated = updatedBeforeResort.map((s, idx) => ({ 
       ...s, 
@@ -1671,12 +1736,18 @@ const LoreDatabaseView: React.FC<Props> = ({
   const handleSave = () => {
     const safeCategory = (activeCategory === 'Verhüllung' ? 'Charaktere' : activeCategory === 'Weltkarte' ? 'Weltregeln' : activeCategory) as LoreCategory;
     const targetCategory = editForm.category || safeCategory;
+    const isSpecialCategory = targetCategory === 'Gegenstände' || targetCategory === 'Story & Quests' || (targetCategory as string) === 'Events';
 
-    if (!editForm.title || (targetCategory !== 'Gegenstände' && !editForm.description)) return;
+    if (!editForm.title && !isSpecialCategory) return;
+    if (!editForm.description && !isSpecialCategory) return;
 
     let finalForm = { ...editForm };
     if (targetCategory === 'Gegenstände') {
       finalForm.description = finalForm.description || '';
+    }
+    if (targetCategory === 'Story & Quests' || (targetCategory as string) === 'Events') {
+      finalForm.title = finalForm.title || (finalForm.details?.eventSteps?.[0]?.title ? `Ereignis-Timeline (${finalForm.details.eventSteps[0].title})` : 'Ereignis-Timeline');
+      finalForm.description = finalForm.description || (finalForm.details?.eventSteps?.length ? finalForm.details.eventSteps.map((s: any, idx: number) => `${idx + 1}. [${s.title}] ${s.description}`).join('\n') : 'Chronologischer Ablauf der Geschichte');
     }
     if (targetCategory === 'Fraktionen') {
       const cleanMembers: FactionMember[] = effectiveMembers.map(m => {
@@ -1720,6 +1791,17 @@ const LoreDatabaseView: React.FC<Props> = ({
         economyConfig: updatedEconomy
       });
     }
+
+    if (targetCategory === 'Story & Quests' || (targetCategory as string) === 'Events') {
+      const savedStoryEntry = newLore.find(l => l.id === (isEditing || finalForm.id)) 
+        || newLore.find(l => l.category === 'Story & Quests' || (l.category as string) === 'Events');
+      if (savedStoryEntry) {
+        setIsEditing(savedStoryEntry.id);
+        setEditForm(savedStoryEntry);
+        return;
+      }
+    }
+
     setIsEditing(null);
     setEditForm({ category: safeCategory });
   };
@@ -2880,8 +2962,6 @@ const LoreDatabaseView: React.FC<Props> = ({
     setEditForm(preparedEntry);
     formTopRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
-
-  const currentCategory = editForm.category || activeCategory;
 
   const handleGenerateImage = async () => {
     if (!editForm.title) return;
@@ -6762,11 +6842,14 @@ const LoreDatabaseView: React.FC<Props> = ({
 
               {(currentCategory === 'Story & Quests' || (currentCategory as string) === 'Events') && (
                 <div className="flex flex-col gap-4">
-                  <div className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col gap-3">
+                  <div ref={stationFormRef} className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex flex-col gap-3">
                     <span className="text-xs font-bold text-slate-200 flex items-center justify-between">
-                      <span>Station hinzufügen oder bearbeiten</span>
+                      <span className="flex items-center gap-2">
+                        <i className={editingStepId ? "fa-solid fa-pen-to-square text-amber-400" : "fa-solid fa-plus text-amber-500"}></i>
+                        <span>{editingStepId ? `Station bearbeiten (${newEventStepTitle || 'Aktuelle Station'})` : 'Station hinzufügen oder bearbeiten'}</span>
+                      </span>
                       {editingStepId && (
-                        <button onClick={handleCancelEditStep} className="text-[10px] text-rose-400 hover:text-rose-300">
+                        <button type="button" onClick={handleCancelEditStep} className="text-[10px] text-rose-400 hover:text-rose-300 cursor-pointer">
                           Abbrechen
                         </button>
                       )}
@@ -6926,14 +7009,30 @@ const LoreDatabaseView: React.FC<Props> = ({
                       />
                     </div>
 
-                    <div className="flex justify-end">
+                    {stationSavedMessage && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-emerald-950/40 border border-emerald-500/40 rounded-lg text-xs text-emerald-300">
+                        <i className="fa-solid fa-circle-check text-emerald-400"></i>
+                        <span>{stationSavedMessage}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                      {editingStepId && (
+                        <button
+                          type="button"
+                          onClick={handleCancelEditStep}
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                        >
+                          Abbrechen
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={handleAddManualStep}
-                        disabled={!newEventStepText.trim()}
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md"
+                        disabled={!newEventStepText.trim() && !newEventStepTitle.trim()}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
                       >
-                        <i className="fa-solid fa-plus"></i>
+                        <i className={editingStepId ? "fa-solid fa-check" : "fa-solid fa-plus"}></i>
                         <span>{editingStepId ? 'Station aktualisieren' : 'Station anfügen'}</span>
                       </button>
                     </div>
@@ -6941,12 +7040,14 @@ const LoreDatabaseView: React.FC<Props> = ({
 
                   {/* List of Steps */}
                   <div className="flex flex-col gap-2">
-                    <span className="text-xs font-bold text-slate-300">Ablauf der Kampagne ({(editForm.details?.eventSteps || []).length} Stationen):</span>
-                    {(editForm.details?.eventSteps || []).map((step: any, idx: number) => (
+                    <span className="text-xs font-bold text-slate-300">Ablauf der Kampagne ({displayEventSteps.length} Stationen):</span>
+                    {displayEventSteps.map((step: any, idx: number) => (
                       <div
                         key={`event-step-${step.id || 'step'}-${idx}`}
-                        className={`bg-slate-950 border p-3 rounded-xl flex items-center justify-between gap-3 ${
-                          step.status === 'happened' ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800'
+                        className={`bg-slate-950 border p-3 rounded-xl flex items-center justify-between gap-3 transition-all ${
+                          editingStepId === step.id
+                            ? 'ring-2 ring-amber-500/80 border-amber-500 bg-amber-950/20'
+                            : (step.status === 'happened' ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-slate-800')
                         }`}
                       >
                         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -6973,6 +7074,11 @@ const LoreDatabaseView: React.FC<Props> = ({
                               {step.branch && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded border bg-slate-900 border-slate-700 text-slate-400">
                                   {step.branch === 'main' ? 'Hauptstrang' : 'Nebenstrang'}
+                                </span>
+                              )}
+                              {editingStepId === step.id && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-500/20 border-amber-500/40 text-amber-300 font-bold">
+                                  Wird bearbeitet
                                 </span>
                               )}
                             </div>
@@ -7003,29 +7109,31 @@ const LoreDatabaseView: React.FC<Props> = ({
                             type="button"
                             onClick={() => handleMoveStep(idx, idx - 1)}
                             disabled={idx === 0}
-                            className="p-1.5 text-slate-500 hover:text-slate-200 disabled:opacity-30 text-xs"
+                            className="p-1.5 text-slate-500 hover:text-slate-200 disabled:opacity-30 text-xs cursor-pointer"
                           >
                             <i className="fa-solid fa-arrow-up"></i>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleMoveStep(idx, idx + 1)}
-                            disabled={idx === (editForm.details?.eventSteps || []).length - 1}
-                            className="p-1.5 text-slate-500 hover:text-slate-200 disabled:opacity-30 text-xs"
+                            disabled={idx === displayEventSteps.length - 1}
+                            className="p-1.5 text-slate-500 hover:text-slate-200 disabled:opacity-30 text-xs cursor-pointer"
                           >
                             <i className="fa-solid fa-arrow-down"></i>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleStartEditStep(step)}
-                            className="p-1.5 text-slate-400 hover:text-amber-300 text-xs"
+                            className="p-1.5 text-slate-400 hover:text-amber-300 text-xs cursor-pointer"
+                            title="Station bearbeiten"
                           >
                             <i className="fa-solid fa-pen"></i>
                           </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteStep(step.id)}
-                            className="p-1.5 text-slate-500 hover:text-rose-400 text-xs"
+                            className="p-1.5 text-slate-500 hover:text-rose-400 text-xs cursor-pointer"
+                            title="Station löschen"
                           >
                             <i className="fa-solid fa-trash"></i>
                           </button>
