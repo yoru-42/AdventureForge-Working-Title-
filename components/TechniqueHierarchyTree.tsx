@@ -115,7 +115,9 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return techniques.filter(t => t.type === 'Transformation' || t.category === 'Transformationen');
   }, [techniques]);
 
-  // 3. Navigationszustände für Standard-Kampffähigkeiten
+  // 3. Navigationszustände für Standard-Kampffähigkeiten & Bereichs-Navigation
+  const [activeMainTab, setActiveMainTab] = useState<'standard' | 'transformations'>('standard');
+
   const [activePowerSourceId, setActivePowerSourceId] = useState<string>(() => {
     return safePowerSources[0]?.id || '';
   });
@@ -734,7 +736,41 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
     const updatedTech = [...techniques, newTrans];
     onChange(safePowerSources, baseAbilities, updatedTech);
+    setActiveMainTab('transformations');
     setSelectedTransformationId(newId);
+  };
+
+  const handleAddUnlockedTechniqueForTrans = (transId: string) => {
+    const newId = `tech_unlocked_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const trans = transformationItems.find(t => t.id === transId);
+    const transName = trans ? (trans.transformName || trans.name) : 'Transformation';
+    const costResource = activePowerSource?.cost || 'Mana';
+
+    const newTech: TechniqueItem = {
+      id: newId,
+      name: `Neue Technik (${transName})`,
+      description: `Form-exklusive Technik, die in der Gestalt ${transName} freigeschaltet ist.`,
+      category: 'Techniken',
+      type: 'Angriff',
+      mode: 'Normal',
+      tier: 'Tier 2',
+      baseAbilityIds: activeBaseAbility ? [activeBaseAbility.id] : (baseAbilities[0] ? [baseAbilities[0].id] : []),
+      baseAbilityNames: activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name] : (baseAbilities[0] ? [baseAbilities[0].displayName || baseAbilities[0].name] : []),
+      powerSourceId: activePowerSource?.id || safePowerSources[0]?.id,
+      powerSourceName: activePowerSource?.powerName || activePowerSource?.source || safePowerSources[0]?.powerName || safePowerSources[0]?.source,
+      costResourceName: costResource,
+      costValue: 15,
+      costFormula: 'absolut',
+      cost: `15 ${costResource}`,
+      range: 'Nahkampf / Mittlere Distanz',
+      duration: 'Sofort',
+      unlockedByTransformationId: transId,
+      isTransformationOnly: true
+    };
+
+    const updatedTech = [...techniques, newTech];
+    onChange(safePowerSources, baseAbilities, updatedTech);
+    setExpandedMap(prev => ({ ...prev, [newId]: true }));
   };
 
   const handleDeleteTransformation = (transId: string) => {
@@ -767,8 +803,50 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   return (
     <div className="flex flex-col gap-6 text-slate-100">
       {/* ============================================================ */}
+      {/* 0. HAUPT-NAVI: STANDARD-KAMPFFÄHIGKEITEN VS TRANSFORMATIONEN */}
+      {/* ============================================================ */}
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-3 flex-wrap bg-slate-900/60 p-3 rounded-2xl shadow-sm">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('standard')}
+          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center gap-2 cursor-pointer border ${
+            activeMainTab === 'standard'
+              ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-md'
+              : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+          }`}
+        >
+          <LucideIcons.Swords className="w-4 h-4" />
+          <span>Standard-Kampffähigkeiten</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+            activeMainTab === 'standard' ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {standardTechniques.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('transformations')}
+          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all flex items-center gap-2 cursor-pointer border ${
+            activeMainTab === 'transformations'
+              ? 'bg-cyan-600 text-white border-cyan-400 font-black shadow-md'
+              : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+          }`}
+        >
+          <LucideIcons.Zap className="w-4 h-4 text-cyan-300" />
+          <span>Transformationen &amp; Gestaltstufen</span>
+          <span className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+            activeMainTab === 'transformations' ? 'bg-cyan-950 text-cyan-200 font-bold' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {transformationItems.length}
+          </span>
+        </button>
+      </div>
+
+      {/* ============================================================ */}
       {/* ABSCHNITT 1: STANDARD-KAMPFFÄHIGKEITEN                       */}
       {/* ============================================================ */}
+      {activeMainTab === 'standard' && (
       <div className="flex flex-col gap-4 bg-slate-900/40 p-4 sm:p-5 rounded-2xl border border-slate-800/80 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2.5">
@@ -1299,10 +1377,12 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* ============================================================ */}
       {/* ABSCHNITT 2: TRANSFORMATIONEN (EIGENE EBENE)                 */}
       {/* ============================================================ */}
+      {activeMainTab === 'transformations' && (
       <div className="flex flex-col gap-4 bg-slate-900/40 p-4 sm:p-5 rounded-2xl border border-cyan-900/40 shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
@@ -1711,9 +1791,70 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 )}
               </div>
             )}
+
+            {/* 2.4 DURCH DIESE TRANSFORMATION FREIGESCHALTETE TECHNIKEN */}
+            <div className="mt-2 bg-slate-900/60 border border-cyan-950/80 rounded-xl p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b border-cyan-950/60 pb-2 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <LucideIcons.Unlock className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-extrabold uppercase text-cyan-300 tracking-wider">
+                    Form-exklusive Techniken in &bdquo;{selectedTransformation.transformName || selectedTransformation.name}&ldquo;
+                  </span>
+                </div>
+
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleAddUnlockedTechniqueForTrans(selectedTransformation.id)}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950 border border-cyan-700/60 hover:border-cyan-500 text-cyan-300 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <LucideIcons.Plus className="w-3.5 h-3.5" />
+                    <span>Technik freischalten</span>
+                  </button>
+                )}
+              </div>
+
+              {(() => {
+                const unlockedTechs = techniques.filter(
+                  t => t.unlockedByTransformationId === selectedTransformation.id ||
+                    (t.unlockedByTransformationIds && t.unlockedByTransformationIds.includes(selectedTransformation.id))
+                );
+
+                if (unlockedTechs.length === 0) {
+                  return (
+                    <p className="text-[11px] text-slate-400 italic py-1">
+                      Keine form-exklusiven Techniken für diese Transformation definiert. Mit &bdquo;Technik freischalten&ldquo; können Angriffe oder Fähigkeiten erzeugt werden, die ausschließlich in dieser Gestalt zur Verfügung stehen.
+                    </p>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3 pt-1">
+                    {unlockedTechs.map(tech => (
+                      <TechniqueCard
+                        key={`unlocked-tech-${tech.id}`}
+                        entry={tech}
+                        category={tech.category || 'Techniken'}
+                        readOnly={readOnly}
+                        isExpanded={expandedMap[tech.id] !== undefined ? expandedMap[tech.id] : true}
+                        onToggleExpanded={() => toggleCardExpanded(tech.id, true)}
+                        onUpdate={updates => handleUpdateEntry(tech.id, updates)}
+                        onDelete={() => handleDeleteEntry(tech.id)}
+                        activePowerSource={activePowerSource}
+                        baseAbilities={baseAbilities}
+                        onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(tech.id, baId)}
+                        progressionLogic={progressionLogic}
+                        availableTransformations={availableTransformations}
+                      />
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         )}
       </div>
+      )}
 
       {/* ============================================================ */}
       {/* 3. KI SMART FILL MODAL                                       */}
