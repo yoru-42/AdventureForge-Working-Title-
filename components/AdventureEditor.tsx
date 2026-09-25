@@ -1708,13 +1708,17 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           const mappedAbilities = data.abilities.map((abil: any, aIndex: number) => {
             const techniques = abil.techniques || (abil.techniqueList ? abil.techniqueList.map((t: any) => t.name).join(', ') : '');
             let cat = abil.category;
-            if (!cat || cat === 'Standard' || cat === 'Kernfähigkeit') {
+            const isTrans = cat === 'Transformationen' || abil.type === 'Transformation';
+            if (isTrans) {
+              cat = 'Transformationen';
+            } else if (!cat || cat === 'Standard' || cat === 'Kernfähigkeit' || cat === 'Transformationen') {
               cat = 'Techniken';
             }
             return {
               id: `${Date.now()}-${aIndex}-${Math.random().toString(36).substr(2, 5)}`,
               name: abil.name || 'Fähigkeit',
               category: cat,
+              type: isTrans ? 'Transformation' : (abil.type || 'Technik'),
               powerSourceId: abil.powerSourceId || defaultPsId,
               source: abil.source || data.powerSource || '',
               cost: abil.cost || data.powerCost || '',
@@ -1740,12 +1744,17 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
               transformLooks: abil.transformLooks || '',
               transformWings: !!abil.transformWings,
               transformHorns: !!abil.transformHorns,
+              transformationModifiers: abil.transformationModifiers,
+              unlockedByTransformationId: abil.unlockedByTransformationId,
+              unlockedByTransformationIds: abil.unlockedByTransformationIds,
+              isTransformationOnly: abil.isTransformationOnly || false,
+              parentTransformationId: abil.parentTransformationId,
               techniqueList: (abil.techniqueList && Array.isArray(abil.techniqueList))
                 ? abil.techniqueList.filter((t: any) => t && t.name).map((t: any, index: number) => ({ 
                     id: `${Date.now()}-${aIndex}-${index}-${Math.random().toString(36).substr(2, 3)}`, 
                     name: t.name.trim(), 
                     description: t.description ? t.description.trim() : '',
-                    type: t.type || 'Angriff',
+                    type: t.type || (isTrans ? 'Transformation' : 'Angriff'),
                     subtype: t.subtype || ''
                   }))
                 : (techniques 
@@ -1753,7 +1762,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                         id: `${Date.now()}-${aIndex}-${index}-${Math.random().toString(36).substr(2, 3)}`, 
                         name, 
                         description: '',
-                        type: 'Angriff',
+                        type: isTrans ? 'Transformation' : 'Angriff',
                         subtype: ''
                       }))
                     : []

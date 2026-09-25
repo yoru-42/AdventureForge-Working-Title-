@@ -1186,6 +1186,60 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
           items: this.getCharacterRelationshipItemSchema(),
           description: "Strukturierte Beziehungen zu anderen Charakteren der Welt."
         },
+        standardAbilities: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING, description: "Name der Standard-Kampffähigkeit." },
+              category: { 
+                type: Type.STRING, 
+                description: "Strikte Kategorie: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken' oder 'Waffenbeherrschung'." 
+              },
+              source: { type: Type.STRING, description: "Kraftquelle für diese Fähigkeit." },
+              cost: { type: Type.STRING, description: "Ressourcenkosten für die Nutzung." },
+              description: { type: Type.STRING, description: "Detaillierte Beschreibung der Fähigkeit." },
+              techniques: { type: Type.STRING, description: "Zugehörige Techniken/Manöver." }
+            },
+            required: ["name", "category", "description"]
+          },
+          description: "Liste der Standard-Kampffähigkeiten (Passive Fähigkeiten, Techniken, Ultimative Techniken, Waffenbeherrschung). Keine Transformationen hier!"
+        },
+        transformations: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING, description: "Name der Transformation oder Gestaltstufe." },
+              category: { type: Type.STRING, description: "Immer 'Transformationen'." },
+              source: { type: Type.STRING, description: "Kraftquelle." },
+              cost: { type: Type.STRING, description: "Aktivierungs- / Unterhaltskosten." },
+              description: { type: Type.STRING, description: "Detaillierte Beschreibung der Verwandlung oder Gestaltstufe." },
+              activationCondition: { type: Type.STRING, description: "Bedingung oder Trigger zum Aktivieren." },
+              transformName: { type: Type.STRING, description: "Name im transformierten Zustand." },
+              transformRole: { type: Type.STRING, description: "RPG-Rolle im transformierten Zustand." },
+              transformGender: { type: Type.STRING, description: "Geschlecht im transformierten Zustand." },
+              transformCupSize: { type: Type.STRING, description: "Körbchengröße im transformierten Zustand." },
+              transformHairColor: { type: Type.STRING, description: "Haarfarbe im transformierten Zustand." },
+              transformEyeColor: { type: Type.STRING, description: "Augenfarbe im transformierten Zustand." },
+              transformBuild: { type: Type.STRING, description: "Körperstatur im transformierten Zustand." },
+              transformAge: { type: Type.STRING, description: "Alter im transformierten Zustand." },
+              transformRace: { type: Type.STRING, description: "Rasse im transformierten Zustand." },
+              transformRaceFeatures: { type: Type.STRING, description: "Merkmale im transformierten Zustand." },
+              transformHeight: { type: Type.STRING, description: "Größe im transformierten Zustand." },
+              transformWeight: { type: Type.STRING, description: "Gewicht im transformierten Zustand." },
+              transformBodyFat: { type: Type.STRING, description: "KFA im transformierten Zustand." },
+              transformMuscleMass: { type: Type.STRING, description: "Muskelmasse im transformierten Zustand." },
+              transformMeasurements: { type: Type.STRING, description: "Körpermaße im transformierten Zustand." },
+              transformOutfit: { type: Type.STRING, description: "Kleidung im transformierten Zustand." },
+              transformLooks: { type: Type.STRING, description: "Aussehen und Gesichtszüge in der Transformation." },
+              transformWings: { type: Type.BOOLEAN, description: "Ob der Charakter Flügel besitzt." },
+              transformHorns: { type: Type.BOOLEAN, description: "Ob der Charakter Hörner besitzt." }
+            },
+            required: ["name", "description"]
+          },
+          description: "Liste der Transformationen und Gestaltstufen (Formwechsel, Metamorphosen, Erweckungen)."
+        },
         abilities: {
           type: Type.ARRAY,
           items: {
@@ -1194,7 +1248,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
               name: { type: Type.STRING, description: "Name der Fähigkeit oder Transformation." },
               category: { 
                 type: Type.STRING, 
-                description: "Kategorie: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen' oder 'Talente'." 
+                description: "Kategorie: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Waffenbeherrschung' oder 'Transformationen'." 
               },
               source: { type: Type.STRING, description: "Kraftquelle für diese Fähigkeit." },
               cost: { type: Type.STRING, description: "Ressourcenkosten für die Nutzung." },
@@ -1223,7 +1277,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
             },
             required: ["name", "category", "description"]
           },
-          description: "Liste aller Fähigkeiten und Transformationen des Charakters."
+          description: "Liste aller Kampffähigkeiten (Standard und Transformationen)."
         },
         secretsStage1: { type: Type.STRING, description: "Stufe 1 (Öffentliches Wissen): Allgemeine Gerüchte oder oberflächliches Wissen." },
         secretsStage2: { type: Type.STRING, description: "Stufe 2 (Indizien & Verdacht): Begründete Gerüchte oder Indizien aus der Vorgeschichte." },
@@ -1450,6 +1504,53 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
                 required: ["name", "type", "description"]
               }
             },
+            standardAbilities: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                  source: { type: Type.STRING },
+                  cost: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  techniques: { type: Type.STRING }
+                },
+                required: ["name", "category", "description"]
+              }
+            },
+            transformations: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  activationCondition: { type: Type.STRING },
+                  transformName: { type: Type.STRING },
+                  transformRole: { type: Type.STRING },
+                  transformGender: { type: Type.STRING },
+                  transformCupSize: { type: Type.STRING },
+                  transformHairColor: { type: Type.STRING },
+                  transformEyeColor: { type: Type.STRING },
+                  transformBuild: { type: Type.STRING },
+                  transformAge: { type: Type.STRING },
+                  transformRace: { type: Type.STRING },
+                  transformRaceFeatures: { type: Type.STRING },
+                  transformHeight: { type: Type.STRING },
+                  transformWeight: { type: Type.STRING },
+                  transformBodyFat: { type: Type.STRING },
+                  transformMuscleMass: { type: Type.STRING },
+                  transformMeasurements: { type: Type.STRING },
+                  transformOutfit: { type: Type.STRING },
+                  transformLooks: { type: Type.STRING },
+                  transformWings: { type: Type.BOOLEAN },
+                  transformHorns: { type: Type.BOOLEAN }
+                },
+                required: ["name", "description"]
+              }
+            },
             abilities: {
               type: Type.ARRAY,
               items: {
@@ -1557,6 +1658,23 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
   static sanitizeAndRepairTransformations(char: any): any {
     if (!char || typeof char !== 'object') return char;
     const rawAbilities: any[] = Array.isArray(char.abilities) ? [...char.abilities] : [];
+
+    if (Array.isArray(char.standardAbilities)) {
+      char.standardAbilities.forEach((sa: any) => {
+        if (sa && sa.name && !rawAbilities.some(a => (a.name || '').toLowerCase().trim() === (sa.name || '').toLowerCase().trim())) {
+          rawAbilities.push(sa);
+        }
+      });
+    }
+
+    if (Array.isArray(char.transformations)) {
+      char.transformations.forEach((tr: any) => {
+        if (tr && tr.name && !rawAbilities.some(a => (a.name || '').toLowerCase().trim() === (tr.name || '').toLowerCase().trim())) {
+          rawAbilities.push({ ...tr, category: 'Transformationen', type: 'Transformation' });
+        }
+      });
+    }
+
     const baseApp = char.appearance || {};
 
     const existingNames = new Set(rawAbilities.map((a: any) => (a.name || '').toLowerCase().trim()).filter(Boolean));
@@ -1719,9 +1837,14 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
       return repaired;
     });
 
+    const standardAbilities = updatedAbilities.filter((a: any) => a.category !== 'Transformationen' && a.type !== 'Transformation');
+    const transformations = updatedAbilities.filter((a: any) => a.category === 'Transformationen' || a.type === 'Transformation');
+
     return {
       ...char,
-      abilities: updatedAbilities
+      abilities: updatedAbilities,
+      standardAbilities,
+      transformations
     };
   }
 
