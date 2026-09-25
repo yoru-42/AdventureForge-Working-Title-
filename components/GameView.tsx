@@ -8106,11 +8106,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   chibiDurationText = 'dauerhaft';
                 }
               } else if (resolvedChibi.source === 'power_overload') {
-                if (resolvedChibi.remainingDurationGameMinutes !== undefined && resolvedChibi.remainingDurationGameMinutes > 0) {
-                  chibiDurationText = `Dauer: ${formatDuration(resolvedChibi.remainingDurationGameMinutes, 'Min.')}`;
-                } else {
-                  chibiDurationText = 'Kraftüberlastung';
-                }
+                chibiDurationText = 'Kraftüberlastung';
               } else {
                 chibiDurationText = 'dauerhaft';
               }

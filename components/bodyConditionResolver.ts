@@ -782,9 +782,7 @@ export const updateCharacterMetamorphosisState = (
             movementModifier: activeTransformation?.chibiForm?.movementModifier || currentApp.chibiForm?.movementModifier || 'eingeschränkt',
             equipmentRule: activeTransformation?.chibiForm?.equipmentRule || currentApp.chibiForm?.equipmentRule || 'lockere Stofffalten',
             visualOnly: activeTransformation?.chibiForm?.visualOnly ?? false,
-            description: `Automatische Chibi-Form durch Kraftüberlastung (${Math.round(nextPowerUsage)}% Kraftnutzung).`,
-            durationGameMinutes: overloadConfig.durationGameMinutes,
-            autoRevert: overloadConfig.autoRevert ?? true
+            description: `Automatische Chibi-Form durch Kraftüberlastung (${Math.round(nextPowerUsage)}% Kraftnutzung).`
           };
         }
       }
@@ -959,8 +957,15 @@ export const processElapsedGameTime = (
   }
 
   // 3. Handle explicit timed chibi duration (advances solely via central in-game time)
+  // Power-Overload Chibi is strictly governed by powerUsage & hysteresis, never ended by durationGameMinutes countdown.
   const postApp: any = updated.appearance || {};
-  if (postApp.chibiForm?.enabled && postApp.chibiForm.durationGameMinutes !== undefined && postApp.chibiForm.durationGameMinutes > 0) {
+  const isTimedChibi =
+    postApp.chibiForm?.enabled &&
+    postApp.chibiForm.source !== 'power_overload' &&
+    postApp.chibiForm.durationGameMinutes !== undefined &&
+    postApp.chibiForm.durationGameMinutes > 0;
+
+  if (isTimedChibi) {
     const nextChibiDuration = Math.max(0, postApp.chibiForm.durationGameMinutes - elapsedMinutes);
     if (nextChibiDuration <= 0 && postApp.chibiForm.autoRevert !== false) {
       // Timed Chibi form expired independently without touching transformation or moveset

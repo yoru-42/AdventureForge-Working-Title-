@@ -145,9 +145,7 @@ export function resolveChibiForm(params: ResolveChibiFormParams): ResolvedChibiF
         movementModifier: activeTransformation?.chibiForm?.movementModifier || currentChibi?.movementModifier || 'eingeschränkt',
         equipmentRule: activeTransformation?.chibiForm?.equipmentRule || currentChibi?.equipmentRule || 'lockere Stofffalten',
         visualOnly: activeTransformation?.chibiForm?.visualOnly ?? currentChibi?.visualOnly ?? false,
-        description: `Automatische Chibi-Form durch Kraftüberlastung (${Math.round(currentPowerUsage)}% Kraftnutzung).`,
-        durationGameMinutes: currentChibi?.durationGameMinutes ?? overloadConfig.durationGameMinutes,
-        remainingDurationGameMinutes: currentChibi?.durationGameMinutes
+        description: `Automatische Chibi-Form durch Kraftüberlastung (${Math.round(currentPowerUsage)}% Kraftnutzung).`
       };
     }
   }

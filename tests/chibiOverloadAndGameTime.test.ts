@@ -47,152 +47,91 @@ export function runChibiOverloadAndGameTimeTests() {
     ]
   };
 
-  // Test 1 – normale Transformation
-  console.log('\n--- Test 1: Normale Transformation (Keine Überlastung) ---');
+  // Test 1 – Overload aktiviert
+  console.log('\n--- Test 1: Overload aktiviert bei powerUsage = 100% ---');
   const playerTrans1: Character = {
     ...basePlayer,
     appearance: {
       ...basePlayer.appearance!,
       activeTransformationId: 'trans-esper',
-      powerUsage: 0,
-      transformationIntensity: 50
+      powerUsage: 100,
+      transformationIntensity: 75
     }
   };
   const res1 = resolveChibiForm({
     player: playerTrans1,
     activeTransformation: playerTrans1.abilities![0]
   });
-  assert(!res1.active, 'Test 1: Bei normaler Transformation ohne Überlastung ist kein Chibi aktiv');
+  assert(res1.active, 'Test 1a: Chibi ist aktiv bei powerUsage = 100%');
+  assert(res1.source === 'power_overload', 'Test 1b: Quelle ist power_overload');
+  assert(res1.remainingDurationGameMinutes === undefined, 'Test 1c: Power-Overload hat keine feste Restdauer');
 
-  // Test 2 – Kraftüberlastung unter Schwelle (79% bei Schwelle 100%)
-  console.log('\n--- Test 2: Kraftüberlastung unter Schwelle (79% bei 100%) ---');
-  const playerTrans2: Character = {
-    ...basePlayer,
-    appearance: {
-      ...basePlayer.appearance!,
-      activeTransformationId: 'trans-esper',
-      powerUsage: 79,
-      transformationIntensity: 100
-    }
-  };
-  const res2 = resolveChibiForm({
-    player: playerTrans2,
-    activeTransformation: playerTrans2.abilities![0]
-  });
-  assert(!res2.active, 'Test 2: powerUsage = 79% löst bei activationThreshold = 100% kein Chibi aus');
-
-  // Test 3 – Aktivierung bei 100%
-  console.log('\n--- Test 3: Aktivierung bei 100% Kraftüberlastung ---');
-  const playerTrans3: Character = {
-    ...basePlayer,
-    appearance: {
-      ...basePlayer.appearance!,
-      activeTransformationId: 'trans-esper',
-      powerUsage: 100,
-      transformationIntensity: 100
-    }
-  };
-  const res3 = resolveChibiForm({
-    player: playerTrans3,
-    activeTransformation: playerTrans3.abilities![0]
-  });
-  assert(res3.active, 'Test 3: Chibi ist aktiv bei powerUsage = 100%');
-  assert(res3.source === 'power_overload', 'Test 3: Quelle ist power_overload');
-
-  // Test 4 – Hysterese
-  console.log('\n--- Test 4: Hysterese (Aktivierung 100%, Erholung 80%) ---');
-  // Initial activate at 100%
+  // Test 2 – Overload bleibt aktiv (Hysterese bei 90%)
+  console.log('\n--- Test 2: Overload bleibt aktiv bei powerUsage = 90% (Hysterese) ---');
   let playerHysteresis = updateCharacterMetamorphosisState(playerTrans1, { powerUsage: 100 });
-  assert(Boolean(playerHysteresis.appearance?.chibiForm?.enabled), 'Test 4a: 100% -> Chibi aktiviert');
-
-  // Drop to 95% -> should remain active
-  playerHysteresis = updateCharacterMetamorphosisState(playerHysteresis, { powerUsage: 95 });
-  const resHyst95 = resolveChibiForm({
+  playerHysteresis = updateCharacterMetamorphosisState(playerHysteresis, { powerUsage: 90 });
+  const res2 = resolveChibiForm({
     player: playerHysteresis,
     activeTransformation: playerHysteresis.abilities![0]
   });
-  assert(resHyst95.active && resHyst95.source === 'power_overload', 'Test 4b: 95% -> Chibi bleibt aktiv');
+  assert(res2.active && res2.source === 'power_overload', 'Test 2: Chibi bleibt aktiv bei powerUsage = 90% (>= 80%)');
 
-  // Drop to 85% -> should remain active
-  playerHysteresis = updateCharacterMetamorphosisState(playerHysteresis, { powerUsage: 85 });
-  const resHyst85 = resolveChibiForm({
-    player: playerHysteresis,
-    activeTransformation: playerHysteresis.abilities![0]
+  // Test 3 – Overload endet bei 79% (Transformation bleibt aktiv)
+  console.log('\n--- Test 3: Overload endet bei powerUsage = 79% ---');
+  const playerRecovered = updateCharacterMetamorphosisState(playerHysteresis, { powerUsage: 79 });
+  const res3 = resolveChibiForm({
+    player: playerRecovered,
+    activeTransformation: playerRecovered.abilities![0]
   });
-  assert(resHyst85.active && resHyst85.source === 'power_overload', 'Test 4c: 85% -> Chibi bleibt aktiv');
+  assert(!res3.active, 'Test 3a: Chibi ist deaktiviert bei powerUsage = 79% (< 80%)');
+  assert(playerRecovered.appearance?.activeTransformationId === 'trans-esper', 'Test 3b: Transformation trans-esper bleibt weiterhin aktiv!');
 
-  // Drop to 81% -> should remain active
-  playerHysteresis = updateCharacterMetamorphosisState(playerHysteresis, { powerUsage: 81 });
-  const resHyst81 = resolveChibiForm({
-    player: playerHysteresis,
-    activeTransformation: playerHysteresis.abilities![0]
-  });
-  assert(resHyst81.active && resHyst81.source === 'power_overload', 'Test 4d: 81% -> Chibi bleibt aktiv');
+  // Test 4 – Ingame-Zeit bei Overload (Kein künstlicher Countdown)
+  console.log('\n--- Test 4: Ingame-Zeit bei Overload (Kein falscher Zeitablauf) ---');
+  const overloadedPlayer: Character = updateCharacterMetamorphosisState(playerTrans1, { powerUsage: 100 });
+  assert(Boolean(overloadedPlayer.appearance?.chibiForm?.enabled), 'Test 4a: Overload-Chibi ist initial aktiv');
+  
+  // 30 Minuten Ingame-Zeit vergehen mit Standard-Decay (10%/Stunde = 5% Decay) -> powerUsage = 95%
+  const after30Min = processElapsedGameTime(overloadedPlayer, 30, 10);
+  assert(Boolean(after30Min.appearance?.chibiForm?.enabled), 'Test 4b: Nach 30 Min Ingame-Zeit bleibt Chibi aktiv (powerUsage ist 95% >= 80%)');
+  assert(after30Min.appearance?.chibiForm?.source === 'power_overload', 'Test 4c: Chibi-Quelle bleibt power_overload');
+  assert(after30Min.appearance?.chibiForm?.durationGameMinutes === undefined, 'Test 4d: Overload-Chibi besitzt keinen Countdown in durationGameMinutes');
 
-  // Drop to 79% -> should deactivate!
-  playerHysteresis = updateCharacterMetamorphosisState(playerHysteresis, { powerUsage: 79 });
-  const resHyst79 = resolveChibiForm({
-    player: playerHysteresis,
-    activeTransformation: playerHysteresis.abilities![0]
-  });
-  assert(!resHyst79.active, 'Test 4e: 79% (< 80%) -> Chibi deaktivert');
-
-  // Test 5 – Tatsächliche Game-Time bei zeitbasierter Chibi-Form
-  console.log('\n--- Test 5: Tatsächliche Ingame-Zeit (10 Minuten Dauer) ---');
+  // Test 5 – Echte zeitbasierte Chibi-Form (z.B. source: transformation, durationGameMinutes = 30)
+  console.log('\n--- Test 5: Echte zeitbasierte Chibi-Form (30 Minuten) ---');
   const timedChibiPlayer: Character = {
     ...basePlayer,
     appearance: {
       ...basePlayer.appearance!,
+      activeTransformationId: 'trans-esper',
       chibiForm: {
         enabled: true,
-        source: 'manual',
-        durationGameMinutes: 10,
+        source: 'transformation',
+        durationGameMinutes: 30,
         autoRevert: true
       }
     }
   };
 
-  // 0 Minuten verstrichen
-  const after0Min = processElapsedGameTime(timedChibiPlayer, 0);
-  assert(after0Min.appearance?.chibiForm?.durationGameMinutes === 10, 'Test 5a: Nach 0 Minuten Ingame-Zeit verbleiben 10 Minuten');
+  // 10 Minuten vergangen -> Restdauer 20 Minuten
+  const after10Min = processElapsedGameTime(timedChibiPlayer, 10);
+  assert(after10Min.appearance?.chibiForm?.durationGameMinutes === 20, 'Test 5a: Nach 10 Min Ingame-Zeit verbleiben 20 Minuten');
+  assert(after10Min.appearance?.activeTransformationId === 'trans-esper', 'Test 5b: Transformation bleibt während zeitbasierter Chibi-Form aktiv');
 
-  // 5 Minuten verstrichen
-  const after5Min = processElapsedGameTime(timedChibiPlayer, 5);
-  assert(after5Min.appearance?.chibiForm?.durationGameMinutes === 5, 'Test 5b: Nach 5 Minuten Ingame-Zeit verbleiben 5 Minuten');
+  // Weitere 20 Minuten vergangen -> Chibi endet
+  const after30MinTotal = processElapsedGameTime(after10Min, 20);
+  assert(!after30MinTotal.appearance?.chibiForm, 'Test 5c: Nach Ablauf der 30 Minuten Ingame-Zeit endet die Chibi-Form');
+  assert(after30MinTotal.appearance?.activeTransformationId === 'trans-esper', 'Test 5d: Transformation bleibt nach Chibi-Ablauf bestehen');
 
-  // Weitere 5 Minuten verstrichen (insgesamt 10 Minuten)
-  const after10Min = processElapsedGameTime(after5Min, 5);
-  assert(!after10Min.appearance?.chibiForm, 'Test 5c: Nach Ablauf der 10 Minuten Ingame-Zeit endet die Chibi-Form');
+  // Test 6 – Transformation unabhängig
+  console.log('\n--- Test 6: Transformation & Moveset bleiben nach Chibi-Ende unverändert ---');
+  assert(after30MinTotal.appearance?.activeTransformationId === 'trans-esper', 'Test 6a: activeTransformationId bleibt unverändert');
+  assert(after30MinTotal.appearance?.transformationIntensity === timedChibiPlayer.appearance?.transformationIntensity, 'Test 6b: transformationIntensity bleibt erhalten');
+  assert(after30MinTotal.appearance?.metamorphosisProgress === timedChibiPlayer.appearance?.metamorphosisProgress, 'Test 6c: metamorphosisProgress bleibt erhalten');
+  assert(after30MinTotal.abilities?.length === basePlayer.abilities?.length, 'Test 6d: Moveset bleibt vollständig unabhängig');
 
-  // Test 6 – Keine Spielzeit verstrichen
-  console.log('\n--- Test 6: Keine Spielzeit verstrichen ---');
-  const unchangedPlayer = processElapsedGameTime(timedChibiPlayer, 0);
-  assert(unchangedPlayer.appearance?.chibiForm?.durationGameMinutes === 10, 'Test 6: Wenn keine Ingame-Zeit vergeht, bleibt die Restdauer exakt erhalten');
-
-  // Test 7 – Chibi endet, Transformation bleibt aktiv & Moveset unverändert
-  console.log('\n--- Test 7: Chibi endet, Transformation bleibt aktiv & Moveset unberührt ---');
-  const activeEsperOverloaded: Character = {
-    ...basePlayer,
-    appearance: {
-      ...basePlayer.appearance!,
-      activeTransformationId: 'trans-esper',
-      powerUsage: 100,
-      chibiForm: {
-        enabled: true,
-        source: 'power_overload',
-        sourceName: 'Kraftüberlastung'
-      }
-    }
-  };
-
-  // Kraft sinkt unter Erholungsschwelle auf 75%
-  const recoveredPlayer = updateCharacterMetamorphosisState(activeEsperOverloaded, { powerUsage: 75 });
-  assert(!recoveredPlayer.appearance?.chibiForm, 'Test 7a: Chibi-Form ist beendet');
-  assert(recoveredPlayer.appearance?.activeTransformationId === 'trans-esper', 'Test 7b: Esper-Transformation ist unverändert aktiv!');
-  assert(recoveredPlayer.abilities?.length === basePlayer.abilities?.length, 'Test 7c: Moveset / Fähigkeiten bleiben voll erhalten');
-
-  // Test 8 – Permanente Chibi-Form
-  console.log('\n--- Test 8: Permanente / Dauerhafte Chibi-Form ---');
+  // Test 7 – Dauerhafte Chibi-Form (source: manual, ohne durationGameMinutes)
+  console.log('\n--- Test 7: Dauerhafte Chibi-Form ---');
   const permChibiPlayer: Character = {
     ...basePlayer,
     appearance: {
@@ -204,8 +143,11 @@ export function runChibiOverloadAndGameTimeTests() {
     }
   };
   const resPerm = resolveChibiForm({ player: permChibiPlayer });
-  assert(resPerm.active, 'Test 8a: Permanente Chibi-Form ist aktiv');
-  assert(resPerm.remainingDurationGameMinutes === undefined, 'Test 8b: Permanente Chibi-Form hat keine ablaufende Dauer (dauerhaft)');
+  assert(resPerm.active, 'Test 7a: Dauerhafte Chibi-Form ist aktiv');
+  assert(resPerm.remainingDurationGameMinutes === undefined, 'Test 7b: Dauerhafte Chibi-Form hat keine ablaufende Dauer (dauerhaft)');
+
+  const after60MinPerm = processElapsedGameTime(permChibiPlayer, 60);
+  assert(Boolean(after60MinPerm.appearance?.chibiForm?.enabled), 'Test 7c: Dauerhafte Chibi-Form bleibt auch nach 60 Min Ingame-Zeit aktiv');
 
   console.log('\n✨ ALLE CHIBI- & INGAME-ZEIT-TESTS ERFOLGREICH BESTANDEN! ✨\n');
 }
