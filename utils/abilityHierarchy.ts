@@ -214,7 +214,22 @@ export function normalizeAbilityHierarchy(char: any): {
       element,
       abilityType,
       description: candidate.description || `Erschaffung und Manipulation von ${element}.`,
-      techniqueIds: []
+      level: candidate.level !== undefined ? candidate.level : 1,
+      maxLevel: candidate.maxLevel || 10,
+      xp: candidate.xp !== undefined ? candidate.xp : 0,
+      xpNeeded: candidate.xpNeeded || 100,
+      progressionLogic: candidate.progressionLogic || 'ep',
+      cost: candidate.cost || '',
+      costValue: candidate.costValue,
+      costResourceName: candidate.costResourceName || ps?.cost || '',
+      baseValue: candidate.baseValue,
+      effectValue: candidate.effectValue,
+      score: candidate.score,
+      trainingProgress: candidate.trainingProgress,
+      trainingUnits: candidate.trainingUnits,
+      milestoneNote: candidate.milestoneNote,
+      points: candidate.points,
+      techniqueIds: candidate.techniqueIds || []
     };
 
     baseAbilitiesList.push(newBa);
@@ -231,12 +246,17 @@ export function normalizeAbilityHierarchy(char: any): {
     });
   }
 
-  // 2b. Aus char.abilities laden
+  // 2b. Aus char.abilities laden (NUR explizit als Grundfähigkeit gekennzeichnete Elemente)
   if (Array.isArray(char.abilities)) {
     char.abilities.forEach(ability => {
       if (!ability) return;
-      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung', 'Talente'].includes(ability.category);
-      if (!isOtherCategory) {
+      const isExplicitBaseAbility = ability.category === 'Grundfähigkeiten' || 
+        ability.category === 'Grundfähigkeit' || 
+        ability.category === 'BaseAbility' || 
+        (ability as any).isBaseAbility === true || 
+        ability.type === 'Grundfähigkeit';
+
+      if (isExplicitBaseAbility) {
         registerBaseAbility({
           id: ability.id,
           powerSourceId: ability.powerSourceId,
@@ -244,7 +264,14 @@ export function normalizeAbilityHierarchy(char: any): {
           displayName: ability.displayName || ability.name,
           element: ability.element,
           abilityType: ability.abilityType,
-          description: ability.description
+          description: ability.description,
+          level: ability.level,
+          xp: ability.xp,
+          maxLevel: ability.maxLevel,
+          progressionLogic: ability.progressionLogic,
+          cost: ability.cost,
+          costValue: ability.costValue,
+          costResourceName: ability.costResourceName
         });
       }
     });
@@ -264,19 +291,15 @@ export function normalizeAbilityHierarchy(char: any): {
       : defaultPsId;
     const ps = powerSourcesMap.get(psId);
 
-    const defaultForPs = baseAbilitiesList.find(b => b.powerSourceId === psId)?.id || baseAbilitiesList[0]?.id;
-
     const rawBaIds: string[] = Array.isArray(tech.baseAbilityIds) && tech.baseAbilityIds.length > 0
       ? tech.baseAbilityIds
-      : (fallbackBaId ? [fallbackBaId] : (defaultForPs ? [defaultForPs] : []));
+      : (fallbackBaId ? [fallbackBaId] : []);
 
     const mappedBaIds = Array.from(new Set(
       rawBaIds.map(id => baIdAliasMap.get(id) || id)
     )).filter(id => baseAbilitiesList.some(b => b.id === id));
 
-    const finalBaIds = mappedBaIds.length > 0
-      ? mappedBaIds
-      : (defaultForPs ? [defaultForPs] : []);
+    const finalBaIds = mappedBaIds;
 
     const finalBaNames = finalBaIds.map(id => {
       const ba = baseAbilitiesList.find(b => b.id === id);
@@ -455,16 +478,22 @@ export function syncCharacterAbilityTree(
       id: ba.id,
       name: ba.displayName || ba.name,
       displayName: ba.displayName,
-      category: 'Techniken',
+      category: 'Grundfähigkeiten',
       source: ps?.powerName || ps?.source || 'Kraftquelle',
-      cost: ps?.cost || 'Mana',
+      cost: ba.cost || ps?.cost || 'Mana',
       description: ba.description || '',
       techniques: techForBa.map(t => t.name).join(', '),
       powerSourceId: ba.powerSourceId,
       element: ba.element,
       abilityType: ba.abilityType,
       baseAbilityIds: [ba.id],
-      techniqueList: techForBa
+      techniqueList: techForBa,
+      level: ba.level,
+      xp: ba.xp,
+      maxLevel: ba.maxLevel,
+      progressionLogic: ba.progressionLogic,
+      costValue: ba.costValue,
+      costResourceName: ba.costResourceName
     };
   });
 

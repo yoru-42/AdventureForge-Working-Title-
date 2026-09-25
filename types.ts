@@ -389,6 +389,26 @@ export interface BaseAbility {
   abilityType: AbilityType;
   description?: string;
   techniqueIds?: string[];
+  level?: number;
+  xp?: number;
+  maxLevel?: number;
+  xpNeeded?: number;
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static' | string;
+  xpGainPerUse?: number;
+  trainingRequired?: number;
+  trainingUnits?: number;
+  trainingProgress?: number;
+  score?: number;
+  milestoneRequirement?: string;
+  milestoneNote?: string;
+  points?: number;
+  baseValue?: number;
+  effectValue?: string;
+  cost?: string;
+  costFormula?: 'absolut' | 'proz.' | string;
+  costValue?: number;
+  costResourceName?: string;
+  staticCost?: string;
 }
 
 export interface TechniqueItem {

@@ -126,20 +126,24 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   const [activeCategory, setActiveCategory] = useState<AbilityCategoryTab>('Techniken');
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
-  // 4. Transformations-Zustand (Standard / Spezifische Transformation)
-  const [selectedTransformationId, setSelectedTransformationId] = useState<string>('standard');
+  // 4. Transformations-Zustand (Spezifische Transformation)
+  const [selectedTransformationId, setSelectedTransformationId] = useState<string>('');
   const [showTransModifiersInEditor, setShowTransModifiersInEditor] = useState<boolean>(true);
 
-  // Synchronisation bei Löschen von Transformationen
+  // Synchronisation bei Löschen oder Laden von Transformationen
   useEffect(() => {
-    if (selectedTransformationId !== 'standard' && !transformationItems.some(t => t.id === selectedTransformationId)) {
-      setSelectedTransformationId('standard');
+    if (transformationItems.length > 0) {
+      if (!selectedTransformationId || !transformationItems.some(t => t.id === selectedTransformationId)) {
+        setSelectedTransformationId(transformationItems[0].id);
+      }
+    } else {
+      setSelectedTransformationId('');
     }
   }, [transformationItems, selectedTransformationId]);
 
   const selectedTransformation = useMemo(() => {
-    if (selectedTransformationId === 'standard') return null;
-    return transformationItems.find(t => t.id === selectedTransformationId) || null;
+    if (!selectedTransformationId) return transformationItems[0] || null;
+    return transformationItems.find(t => t.id === selectedTransformationId) || transformationItems[0] || null;
   }, [transformationItems, selectedTransformationId]);
 
   const toggleCardExpanded = (id: string, defaultExpanded: boolean) => {
@@ -1095,60 +1099,108 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           </div>
 
           {activeBaseAbility && !readOnly && (
-            <div className="mt-1 pt-2 border-t border-slate-800/60 grid grid-cols-1 sm:grid-cols-5 gap-2">
-              <div className="flex flex-col gap-1 sm:col-span-2">
-                <label className="text-[9px] font-bold text-slate-400 uppercase">
-                  Kinese / Bezeichner
-                </label>
-                <input
-                  type="text"
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                  value={activeBaseAbility.displayName || activeBaseAbility.name || ''}
-                  placeholder="z.B. Kryokinese, Eiserne Haut"
-                  onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { displayName: e.target.value, name: e.target.value })}
-                />
+            <div className="mt-1 pt-2 border-t border-slate-800/60 flex flex-col gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                <div className="flex flex-col gap-1 sm:col-span-2">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">
+                    Kinese / Bezeichner
+                  </label>
+                  <input
+                    type="text"
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                    value={activeBaseAbility.displayName || activeBaseAbility.name || ''}
+                    placeholder="z.B. Kryokinese, Eiserne Haut"
+                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { displayName: e.target.value, name: e.target.value })}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">
+                    Element
+                  </label>
+                  <select
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
+                    value={activeBaseAbility.element || 'Neutral'}
+                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { element: e.target.value })}
+                  >
+                    {ADVENTURE_FORGE_ELEMENTS.map((el, elIdx) => (
+                      <option key={`el-${el}-${elIdx}`} value={el}>{el}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">
+                    Fähigkeitsart
+                  </label>
+                  <select
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
+                    value={activeBaseAbility.abilityType || 'creation_manipulation'}
+                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { abilityType: e.target.value as AbilityType })}
+                  >
+                    {ABILITY_TYPES.map((at, atIdx) => (
+                      <option key={`at-${at.id}-${atIdx}`} value={at.id}>{at.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-end justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
+                    className="px-2.5 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[30px] flex items-center gap-1 cursor-pointer"
+                    title="Diese Grundfähigkeit löschen"
+                  >
+                    <LucideIcons.Trash2 className="w-3 h-3" />
+                    <span>Löschen</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase">
-                  Element
-                </label>
-                <select
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                  value={activeBaseAbility.element || 'Neutral'}
-                  onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { element: e.target.value })}
-                >
-                  {ADVENTURE_FORGE_ELEMENTS.map((el, elIdx) => (
-                    <option key={`el-${el}-${elIdx}`} value={el}>{el}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Zusatzzeile für Beschreibung, Stufe & Kosten */}
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1 border-t border-slate-850/60">
+                <div className="sm:col-span-6 flex flex-col gap-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">
+                    Beschreibung der Grundfähigkeit
+                  </label>
+                  <input
+                    type="text"
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                    value={activeBaseAbility.description || ''}
+                    placeholder="Fundamentales Vermögen / Wirkungsbereich..."
+                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { description: e.target.value })}
+                  />
+                </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase">
-                  Fähigkeitsart
-                </label>
-                <select
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                  value={activeBaseAbility.abilityType || 'creation_manipulation'}
-                  onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { abilityType: e.target.value as AbilityType })}
-                >
-                  {ABILITY_TYPES.map((at, atIdx) => (
-                    <option key={`at-${at.id}-${atIdx}`} value={at.id}>{at.label}</option>
-                  ))}
-                </select>
-              </div>
+                <div className="sm:col-span-3 flex flex-col gap-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">
+                    Stufe / Level
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={activeBaseAbility.maxLevel || 10}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                      value={activeBaseAbility.level !== undefined ? activeBaseAbility.level : 1}
+                      onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { level: parseInt(e.target.value, 10) || 1 })}
+                    />
+                    <span className="text-[10px] text-slate-500 whitespace-nowrap">/ {activeBaseAbility.maxLevel || 10}</span>
+                  </div>
+                </div>
 
-              <div className="flex items-end justify-end">
-                <button
-                  type="button"
-                  onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
-                  className="px-2.5 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[30px] flex items-center gap-1 cursor-pointer"
-                  title="Diese Grundfähigkeit löschen"
-                >
-                  <LucideIcons.Trash2 className="w-3 h-3" />
-                  <span>Löschen</span>
-                </button>
+                <div className="sm:col-span-3 flex flex-col gap-1">
+                  <label className="text-[9px] font-bold text-slate-400 uppercase">
+                    Grundkosten / Ressource
+                  </label>
+                  <input
+                    type="text"
+                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                    value={activeBaseAbility.cost || ''}
+                    placeholder="z.B. 10 Mana oder Passiv"
+                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { cost: e.target.value })}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -1410,127 +1462,83 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           )}
         </div>
 
-        {/* 2.1 FORMEN-AUSWAHLLEISTE */}
-        <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Transformations-Hierarchie &amp; Formen
-            </span>
-            <span className="text-[10px] text-slate-500 font-medium">
-              {transformationItems.length} Transformation{transformationItems.length === 1 ? '' : 'en'} definiert
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Normalform Button */}
-            <button
-              type="button"
-              onClick={() => setSelectedTransformationId('standard')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                selectedTransformationId === 'standard'
-                  ? 'bg-indigo-600 text-white border-indigo-400 shadow font-black'
-                  : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-              }`}
-            >
-              <LucideIcons.User className="w-3.5 h-3.5 text-indigo-300" />
-              <span>Normalform (Standard)</span>
-            </button>
-
-            {/* Transformierte Stufen */}
-            {transformationItems.map((trans, transIdx) => {
-              const isSelected = selectedTransformationId === trans.id;
-              const hasChibi = !!trans.chibiForm?.enabled;
-              return (
-                <button
-                  key={`trans-tab-${trans.id || transIdx}`}
-                  type="button"
-                  onClick={() => setSelectedTransformationId(trans.id)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                    isSelected
-                      ? 'bg-cyan-600 text-white border-cyan-400 shadow-md font-black'
-                      : 'bg-slate-950/90 text-cyan-200 border-cyan-900/50 hover:border-cyan-700/80 hover:text-white'
-                  }`}
-                >
-                  <LucideIcons.Zap className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-cyan-400'}`} />
-                  <span>{trans.transformName || trans.name}</span>
-                  {trans.metamorphosisInfluence !== undefined && (
-                    <span className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono ${
-                      isSelected ? 'bg-cyan-950/60 text-cyan-200' : 'bg-slate-900 text-cyan-400'
-                    }`}>
-                      {trans.metamorphosisInfluence}%
-                    </span>
-                  )}
-                  {hasChibi && (
-                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Chibi-Form aktiv" />
-                  )}
-                </button>
-              );
-            })}
-
+        {/* 2.1 FORMEN-AUSWAHL UND DETAILANSICHT */}
+        {transformationItems.length === 0 ? (
+          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-6 text-center flex flex-col items-center gap-3">
+            <LucideIcons.Zap className="w-8 h-8 text-cyan-400 opacity-60" />
+            <p className="text-xs text-slate-300">
+              Noch keine Transformationen oder Gestaltstufen für diesen Charakter definiert.
+            </p>
             {!readOnly && (
               <button
                 type="button"
                 onClick={handleAddTransformation}
-                className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-950 border border-dashed border-cyan-700/70 hover:border-cyan-400 text-cyan-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
-                title="Neue Transformation anlegen"
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow"
               >
-                <LucideIcons.Plus className="w-3.5 h-3.5" />
-                <span>Transformation erstellen</span>
+                <LucideIcons.Plus className="w-4 h-4" />
+                <span>+ Erste Transformation erstellen</span>
               </button>
             )}
           </div>
-        </div>
-
-        {/* 2.2 DETAILANSICHT: NORMALFORM ODER AUSGEWÄHLTE TRANSFORMATION */}
-        {selectedTransformationId === 'standard' || !selectedTransformation ? (
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 sm:p-5 flex flex-col gap-3">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
-              <div className="flex items-center gap-2">
-                <LucideIcons.Shield className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-extrabold uppercase text-slate-200 tracking-wider">
-                  Normalform (Untransformierte Basis)
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                  Transformationen
+                </span>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  {transformationItems.length} Transformation{transformationItems.length === 1 ? '' : 'en'} definiert
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400 font-medium">
-                Standardgestalt
-              </span>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {transformationItems.map((trans, transIdx) => {
+                  const isSelected = selectedTransformation?.id === trans.id;
+                  const hasChibi = !!trans.chibiForm?.enabled;
+                  return (
+                    <button
+                      key={`trans-tab-${trans.id || transIdx}`}
+                      type="button"
+                      onClick={() => setSelectedTransformationId(trans.id)}
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+                        isSelected
+                          ? 'bg-cyan-600 text-white border-cyan-400 shadow-md font-black'
+                          : 'bg-slate-950/90 text-cyan-200 border-cyan-900/50 hover:border-cyan-700/80 hover:text-white'
+                      }`}
+                    >
+                      <LucideIcons.Zap className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-cyan-400'}`} />
+                      <span>{trans.transformName || trans.name}</span>
+                      {trans.metamorphosisInfluence !== undefined && (
+                        <span className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono ${
+                          isSelected ? 'bg-cyan-950/60 text-cyan-200' : 'bg-slate-900 text-cyan-400'
+                        }`}>
+                          {trans.metamorphosisInfluence}%
+                        </span>
+                      )}
+                      {hasChibi && (
+                        <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Chibi-Form aktiv" />
+                      )}
+                    </button>
+                  );
+                })}
+
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={handleAddTransformation}
+                    className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-950 border border-dashed border-cyan-700/70 hover:border-cyan-400 text-cyan-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
+                    title="Neue Transformation anlegen"
+                  >
+                    <LucideIcons.Plus className="w-3.5 h-3.5" />
+                    <span>Transformation erstellen</span>
+                  </button>
+                )}
+              </div>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
-              In der Normalform greift der Charakter auf alle unmodifizierten Standard-Kampffähigkeiten zu. Transformationen bauen auf dieser Normalform oder vorhergehenden Gestaltstufen auf und können einzelne Fähigkeiten gezielt verstärken, modifizieren oder form-exklusiv freischalten.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 flex flex-col gap-1">
-                <span className="text-[10px] font-extrabold uppercase text-slate-400">Aktive Kraftquellen</span>
-                <span className="text-sm font-bold text-amber-400">{safePowerSources.length}</span>
-              </div>
-              <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 flex flex-col gap-1">
-                <span className="text-[10px] font-extrabold uppercase text-slate-400">Standardfähigkeiten</span>
-                <span className="text-sm font-bold text-amber-400">{standardTechniques.length}</span>
-              </div>
-              <div className="bg-slate-900/60 p-3 rounded-lg border border-slate-800 flex flex-col gap-1">
-                <span className="text-[10px] font-extrabold uppercase text-slate-400">Verfügbare Transformationen</span>
-                <span className="text-sm font-bold text-cyan-400">{transformationItems.length}</span>
-              </div>
-            </div>
-
-            {transformationItems.length === 0 && !readOnly && (
-              <div className="mt-2 text-center py-4 bg-slate-900/40 rounded-xl border border-dashed border-cyan-800/50 flex flex-col items-center gap-2">
-                <p className="text-xs text-slate-400">Noch keine Transformationen für diesen Charakter definiert.</p>
-                <button
-                  type="button"
-                  onClick={handleAddTransformation}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow"
-                >
-                  <LucideIcons.Plus className="w-3.5 h-3.5" />
-                  <span>+ Erste Transformation erstellen</span>
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-slate-950/70 border border-cyan-900/50 rounded-xl p-4 sm:p-5 flex flex-col gap-4">
+            {selectedTransformation && (
+              <div className="bg-slate-950/70 border border-cyan-900/50 rounded-xl p-4 sm:p-5 flex flex-col gap-4">
             {/* Header der ausgewählten Transformation */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-900/40 pb-3">
               <div className="flex flex-col gap-1">
@@ -1854,6 +1862,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         )}
       </div>
       )}
+    </div>
+  )}
 
       {/* ============================================================ */}
       {/* 3. KI SMART FILL MODAL                                       */}

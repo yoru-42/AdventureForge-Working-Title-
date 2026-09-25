@@ -1677,7 +1677,34 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
 
     const baseApp = char.appearance || {};
 
-    const existingNames = new Set(rawAbilities.map((a: any) => (a.name || '').toLowerCase().trim()).filter(Boolean));
+    // 3. Detect Chibi / Kinder-Form trigger caused by power overload / exhaustion and filter artificial Kinder-Form transformation
+    let hasChibiOverload = false;
+    const filteredAbilities = rawAbilities.filter((ab: any) => {
+      const nLower = (ab.name || ab.transformName || '').toLowerCase().trim();
+      const dLower = (ab.description || '').toLowerCase();
+      const isChibiOverloadText = (nLower.includes('kind') || nLower.includes('chibi') || dLower.includes('kinder form') || dLower.includes('kinder-form') || dLower.includes('kinderform')) &&
+        (dLower.includes('benutzung') || dLower.includes('überlastung') || dLower.includes('erschöpfung') || dLower.includes('energieverbrauch') || dLower.includes('kraftnutzung') || dLower.includes('groß'));
+
+      if (isChibiOverloadText) {
+        hasChibiOverload = true;
+        return false; // Remove artificial Kinder-Form transformation
+      }
+      return true;
+    });
+
+    if (hasChibiOverload) {
+      if (!char.appearance) char.appearance = {};
+      char.appearance.chibiOnPowerOverload = {
+        enabled: true,
+        activationThreshold: 80,
+        recoveryThreshold: 30,
+        durationGameMinutes: 60,
+        autoRevert: true
+      };
+      char.chibiOnPowerOverload = char.appearance.chibiOnPowerOverload;
+    }
+
+    const existingNames = new Set(filteredAbilities.map((a: any) => (a.name || '').toLowerCase().trim()).filter(Boolean));
 
     // 1. Extract any techniques from top-level techniqueList if they don't already exist as standalone abilities
     if (char.techniqueList && Array.isArray(char.techniqueList)) {
@@ -1752,7 +1779,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
       }
     });
 
-    const updatedAbilities = rawAbilities.map((ab: any) => {
+    const updatedAbilities = filteredAbilities.map((ab: any) => {
       const nameLower = (ab.name || ab.transformName || '').toLowerCase().trim();
       const descLower = (ab.description || '').toLowerCase();
 
