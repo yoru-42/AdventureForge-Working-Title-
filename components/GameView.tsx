@@ -9,6 +9,7 @@ import { GoogleGenAI, Modality } from '@google/genai';
 import { TacticalCombatMap } from './TacticalCombatMap';
 import { BodySilhouette } from './BodySilhouette';
 import { resolveBodyAppearance, migrateFremdeinflussConditions } from './bodyConditionResolver';
+import { resolveChibiForm } from '../services/chibiFormResolver';
 import { buildPhysicalStatusAndPerceptionPrompt, calculatePhysicalChanges } from '../utils/changeTracker';
 import { getTransformationCardSettings, getFormSideEffects, formatDuration, formatNum } from './TransformationIntensityCard';
 import { formatRelationshipForAI, formatMotivationCoreForAI, formatNPCForAIPrompt, formatPlayerForAIPrompt } from '../lib/relationshipHelper';
@@ -7955,6 +7956,43 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             return l.includes('körperlicher zustand') || (l.includes('zustand') && !l.includes('verwandlung') && !l.includes('geist') && !l.includes('flüche') && !l.includes('segen'));
           }).forEach((el, idx) => {
             const cond = resolvedApp.bodyConditionSummary || { statusText: 'Gesund', detailText: 'Keine Beschwerden', severity: 'healthy' };
+
+            const activeTransId = adventure.player.appearance?.activeTransformationId || 'standard';
+            const activeTransformation = (adventure.player.abilities || []).find(
+              a => a.id === activeTransId || a.name === activeTransId
+            );
+            const resolvedChibi = resolveChibiForm({
+              player: adventure.player,
+              activeTransformation,
+              transformationState: adventure.player.appearance?.transformationState || (resolvedApp as any).transformationState
+            });
+
+            const silState = (adventure.player.appearance as any)?.silhouetteState || {};
+            let valueReduction = 0;
+            if (resolvedChibi.active && !resolvedChibi.visualOnly) {
+              const scale = resolvedChibi.bodyScale ?? 0.65;
+              valueReduction += Math.round((1 - scale) * 100);
+            }
+            const pain = silState.painLevel || 'keine';
+            const fatigue = silState.fatigueLevel || 'normal';
+
+            if (pain === 'leicht') valueReduction += 10;
+            else if (pain === 'mittel') valueReduction += 25;
+            else if (pain === 'stark') valueReduction += 40;
+            else if (pain === 'unerträglich') valueReduction += 60;
+
+            if (fatigue === 'leicht') valueReduction += 10;
+            else if (fatigue === 'mittel') valueReduction += 25;
+            else if (fatigue === 'erschöpft') valueReduction += 40;
+            else if (fatigue === 'kollaps') valueReduction += 60;
+
+            valueReduction = Math.min(90, valueReduction);
+
+            const effectivePower = Math.max(resolvedApp.powerUsageVal || 0, resolvedApp.transformationIntensityVal || 0);
+            const reductionText = valueReduction > 0 ? `Werte −${valueReduction} %` : 'Gesund';
+            const overloadText = effectivePower > 0 ? `Kraftüberlastung ${Math.round(effectivePower)} %` : '';
+            const bodyStatusValText = overloadText ? `${reductionText} · ${overloadText}` : reductionText;
+
             hudItems.push(
               <button
                 key={`hud-bodycond-${el.id || idx}`}
@@ -7964,14 +8002,19 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     id: el.id || 'bodycond',
                     category: 'Charakter',
                     label: 'Körperlicher Zustand',
-                    value: `${cond.statusText} (${cond.detailText})`,
+                    value: bodyStatusValText,
                     icon: 'fa-heart-pulse',
                     colorClass: cond.severity === 'healthy' ? 'text-emerald-400' : cond.severity === 'minor' ? 'text-amber-400' : 'text-rose-400',
                     details: [
                       { label: 'Status', value: cond.statusText },
                       { label: 'Details', value: cond.detailText },
-                      { label: 'Gesundheitsstufe', value: cond.severity === 'healthy' ? 'Optimal' : cond.severity === 'minor' ? 'Eingeschränkt' : 'Kritisch' },
-                      { label: 'Change Tracker', value: 'Aktiv' }
+                      { label: 'Wertminderung', value: valueReduction > 0 ? `−${valueReduction}% (durch körperliche Form/Zustand)` : 'Keine Einschränkung (Optimal)' },
+                      { label: 'Kraftüberlastung', value: `${Math.round(effectivePower)}%` },
+                      { label: 'Aktivierungsschwelle', value: activeTransformation ? `${activeTransformation.chibiOnPowerOverload?.activationThreshold ?? activeTransformation.chibiForm?.chibiOnPowerOverload?.activationThreshold ?? 120}%` : 'Keine' },
+                      { label: 'Erholungsschwelle', value: activeTransformation ? `${activeTransformation.chibiOnPowerOverload?.recoveryThreshold ?? activeTransformation.chibiForm?.chibiOnPowerOverload?.recoveryThreshold ?? 80}%` : 'Keine' },
+                      { label: 'Ursache', value: resolvedChibi.active ? `Chibi-Form durch ${resolvedChibi.sourceName || resolvedChibi.source}` : 'Standardgestalt' },
+                      { label: 'Auswirkungen', value: resolvedChibi.active ? `Körpergröße auf ${Math.round(resolvedChibi.heightScale * 100)}% geschrumpft, Proportionen angepasst` : 'Keine körperlichen Einschränkungen' },
+                      { label: 'Erholungsverlauf', value: transSettings.abklingenStep > 0 ? `Abklingen mit ${transSettings.abklingenStep}% pro Zeitschritt` : 'Stabil' }
                     ],
                     actionType: 'silhouette'
                   });
@@ -7981,8 +8024,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <span className="font-semibold text-slate-300">
                   Körperlicher Zustand
                 </span>
-                <span className="font-bold text-emerald-400">
-                  {cond.statusText}
+                <span className={`font-bold ${cond.severity === 'healthy' ? 'text-emerald-400' : cond.severity === 'minor' ? 'text-amber-400' : 'text-rose-400'}`}>
+                  {bodyStatusValText}
                 </span>
               </button>
             );
@@ -8023,6 +8066,42 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
             const transName = activeTransformation?.transformName || activeTransformation?.name || resolvedApp.transformationStageName || 'Aktive Verwandlung';
 
+            const resolvedChibi = resolveChibiForm({
+              player: adventure.player,
+              activeTransformation,
+              transformationState: adventure.player.appearance?.transformationState || (resolvedApp as any).transformationState
+            });
+
+            const effectivePower = Math.max(resolvedApp.powerUsageVal || 0, resolvedApp.transformationIntensityVal || 0);
+
+            let chibiDurationText = 'dauerhaft';
+            if (resolvedChibi.active) {
+              if (resolvedChibi.source === 'manual') {
+                chibiDurationText = 'dauerhaft';
+              } else if (resolvedChibi.source === 'race') {
+                chibiDurationText = 'dauerhaft';
+              } else if (resolvedChibi.source === 'transformation') {
+                chibiDurationText = `Dauer: ${remainingDurationFormatted}`;
+              } else if (resolvedChibi.source === 'power_overload') {
+                const actThreshold = activeTransformation?.chibiOnPowerOverload?.activationThreshold ?? activeTransformation?.chibiForm?.chibiOnPowerOverload?.activationThreshold ?? 120;
+                const recThreshold = activeTransformation?.chibiOnPowerOverload?.recoveryThreshold ?? activeTransformation?.chibiForm?.chibiOnPowerOverload?.recoveryThreshold ?? 80;
+                const abklingenStep = transSettings.abklingenStep || 5;
+                const overshoot = effectivePower - recThreshold;
+                const overloadRemaining = (abklingenStep > 0 && overshoot > 0) ? overshoot / abklingenStep : 0;
+                if (overloadRemaining > 0) {
+                  chibiDurationText = `Dauer: ${formatDuration(overloadRemaining, transSettings.timeUnit || 'Min.')}`;
+                } else {
+                  chibiDurationText = 'Erholung bevorstehend';
+                }
+              } else {
+                chibiDurationText = 'dauerhaft';
+              }
+            }
+
+            const changeValueText = resolvedChibi.active
+              ? `Chibi-Form · ${chibiDurationText}`
+              : (summaryText && summaryText !== 'Keine' ? `${summaryText} · dauerhaft` : 'Keine');
+
             hudItems.push(
               <button
                 key={`hud-physchange-${el.id || idx}`}
@@ -8032,10 +8111,23 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     id: el.id || 'physchange',
                     category: 'Charakter',
                     label: 'Körperliche Veränderungen',
-                    value: summaryText,
+                    value: changeValueText,
                     icon: 'fa-dna',
                     colorClass: 'text-teal-400',
-                    details: isTransActive ? [
+                    details: resolvedChibi.active ? [
+                      { label: 'Kategorie', value: 'Körperliche Veränderung' },
+                      { label: 'Aktiver Zustand', value: 'Chibi-Form (Zustandsschicht)' },
+                      { label: 'Quelle', value: resolvedChibi.sourceName || resolvedChibi.source || 'Unbekannt' },
+                      { label: 'Natur der Form', value: resolvedChibi.visualOnly ? 'Nur visuelle Darstellung' : 'Tatsächlicher körperlicher Zustand' },
+                      { label: 'Körpermaßstab', value: `${Math.round(resolvedChibi.bodyScale * 100)}%` },
+                      { label: 'Größenmaßstab', value: `${Math.round(resolvedChibi.heightScale * 100)}%` },
+                      { label: 'Visuelles Alter', value: resolvedChibi.visualAge || 'kindlich dargestellt' },
+                      { label: 'Körperliche Merkmale', value: resolvedChibi.physicalChanges.join(' • ') },
+                      { label: 'Bewegungsmodifikator', value: resolvedChibi.movementModifier || 'flink' },
+                      { label: 'Ausrüstung', value: resolvedChibi.equipmentRule || 'angepasst' },
+                      { label: 'Verbleibende Dauer', value: chibiDurationText || 'unbegrenzt' },
+                      { label: 'Ursache / Trigger', value: resolvedChibi.source === 'power_overload' ? 'Kraftüberlastung überschritten' : 'Manuelle oder transformationsbedingte Aktivierung' }
+                    ] : (isTransActive ? [
                       { label: 'Kategorie', value: 'Charakter & Transformation' },
                       { label: 'Aktive Form', value: `${transName} (${formatNum(resolvedApp.transformationIntensityVal)}%)` },
                       { label: 'Verbleibende Dauer', value: `${remainingDurationFormatted} (${formatNum(currentRes)} / ${formatNum(maxRes)} ${resName})` },
@@ -8051,7 +8143,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       { label: 'Aktuelle Veränderungen', value: summaryText },
                       { label: 'Originalprofil', value: 'Unverändert geschützt' },
                       { label: 'Änderungshistorie', value: 'Logbuch-Aktiv' }
-                    ],
+                    ]),
                     actionType: 'silhouette'
                   });
                 }}
@@ -8060,23 +8152,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <span className="font-semibold text-slate-300">
                   Körperliche Veränderungen
                 </span>
-                {isTransActive ? (
-                  <span className="font-bold text-teal-400 flex items-center gap-1.5 flex-wrap">
-                    <span>{summaryText}</span>
-                    <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      Dauer: {remainingDurationFormatted}
-                    </span>
-                    {duringEffects.length > 0 && (
-                      <span className="text-[10px] font-mono font-medium text-rose-300/90" title={duringEffects.map(s => `${s.name}: ${s.effect}`).join('\n')}>
-                        ({duringEffects.length} Nebenwirkung{duringEffects.length > 1 ? 'en' : ''})
-                      </span>
-                    )}
-                  </span>
-                ) : (
-                  <span className="font-bold text-teal-400">
-                    {summaryText}
-                  </span>
-                )}
+                <span className="font-bold text-teal-400">
+                  {changeValueText}
+                </span>
               </button>
             );
           });
