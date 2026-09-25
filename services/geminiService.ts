@@ -195,7 +195,7 @@ export class GeminiService {
       try {
         attempt++;
         const res = await fetch(url, options);
-        if (!res.ok && (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) && attempt <= maxRetries) {
+        if (!res.ok && (res.status === 429 || res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) && attempt <= maxRetries) {
           let waitMs = delay;
           try {
             const clone = res.clone();

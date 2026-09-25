@@ -450,6 +450,7 @@ export interface TechniqueItem {
   unlockedByTransformationId?: string; // ID der Transformation, die diese Technik freischaltet
   unlockedByTransformationIds?: string[]; // Mehrere Stufen/Formen, in denen die Technik freigeschaltet ist
   isTransformationOnly?: boolean; // Steht nur in einer Verwandlung zur Verfügung
+  parentTransformationId?: string; // Übergeordnete Transformationsstufe für Stufenhierarchien (z.B. Normal -> Esper -> Erwachte Esper)
   chibiForm?: {
     enabled: boolean;
     bodyScale?: number;
