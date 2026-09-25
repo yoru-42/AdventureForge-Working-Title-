@@ -737,10 +737,65 @@ export const updateCharacterMetamorphosisState = (
     permanentChanges
   };
 
+  // Manage power overload chibi state with strict hysteresis based on nextPowerUsage
+  const activeTransId = currentApp.activeTransformationId || 'standard';
+  const activeTransformation = (character.abilities || []).find(
+    a => a.id === activeTransId && a.category === 'Transformationen'
+  );
+
+  const isCurrentlyOverload = currentApp.chibiForm?.enabled && currentApp.chibiForm?.source === 'power_overload';
+
+  const overloadConfig = activeTransformation?.chibiOnPowerOverload ||
+    activeTransformation?.chibiForm?.chibiOnPowerOverload ||
+    (currentApp.chibiForm as any)?.chibiOnPowerOverload ||
+    (character as any)?.chibiOnPowerOverload ||
+    currentApp.chibiOnPowerOverload ||
+    (isCurrentlyOverload ? { enabled: true, activationThreshold: 100, recoveryThreshold: 80 } : undefined);
+
+  let nextChibiForm = currentApp.chibiForm;
+  if (overloadConfig?.enabled) {
+    const rawActThreshold = overloadConfig.activationThreshold ?? 100;
+    const actThreshold = Math.min(100, Math.max(0, rawActThreshold));
+    const rawRecThreshold = overloadConfig.recoveryThreshold ?? 80;
+    const recThreshold = Math.min(actThreshold, Math.max(0, rawRecThreshold));
+    const isManualOrTrans = currentApp.chibiForm?.enabled && (currentApp.chibiForm?.source === 'manual' || currentApp.chibiForm?.source === 'transformation' || currentApp.chibiForm?.source === 'race');
+
+    // Only power_overload source is governed by overload logic; manual or transformation chibi remain intact
+    if (!isManualOrTrans) {
+      if (isCurrentlyOverload) {
+        if (nextPowerUsage < recThreshold) {
+          // Falls below recovery threshold: Chibi ends without affecting the transformation
+          nextChibiForm = undefined;
+        }
+      } else {
+        if (nextPowerUsage >= actThreshold) {
+          // Reaches or exceeds activation threshold: Chibi activates
+          nextChibiForm = {
+            enabled: true,
+            source: 'power_overload',
+            sourceId: 'power_overload',
+            sourceName: 'Kraftüberlastung',
+            bodyScale: activeTransformation?.chibiForm?.bodyScale ?? currentApp.chibiForm?.bodyScale ?? 0.65,
+            heightScale: activeTransformation?.chibiForm?.heightScale ?? currentApp.chibiForm?.heightScale ?? 0.70,
+            visualAge: activeTransformation?.chibiForm?.visualAge || currentApp.chibiForm?.visualAge || 'kindlich / geschrumpft durch Überlastung',
+            physicalChanges: activeTransformation?.chibiForm?.physicalChanges || currentApp.chibiForm?.physicalChanges || ['verkleinerte Körperproportionen', 'überlastungsbedingter Gestaltverlust zur Kleinkindform'],
+            movementModifier: activeTransformation?.chibiForm?.movementModifier || currentApp.chibiForm?.movementModifier || 'eingeschränkt',
+            equipmentRule: activeTransformation?.chibiForm?.equipmentRule || currentApp.chibiForm?.equipmentRule || 'lockere Stofffalten',
+            visualOnly: activeTransformation?.chibiForm?.visualOnly ?? false,
+            description: `Automatische Chibi-Form durch Kraftüberlastung (${Math.round(nextPowerUsage)}% Kraftnutzung).`,
+            durationGameMinutes: overloadConfig.durationGameMinutes,
+            autoRevert: overloadConfig.autoRevert ?? true
+          };
+        }
+      }
+    }
+  }
+
   return {
     ...character,
     appearance: {
       ...currentApp,
+      chibiForm: nextChibiForm,
       transformationIntensity: nextIntensity,
       metamorphosisProgress: nextMetamorphosis,
       powerUsage: nextPowerUsage,
@@ -831,31 +886,27 @@ export const processElapsedGameTime = (
   let updated = character;
 
   // 1. Decay transformation intensity and power usage (exertion) over elapsed in-game time
-  if (!resolved.isPastPNR) {
-    const currentApp: any = character.appearance || {};
-    const tState = currentApp.transformationState;
-    const decayAmount = (elapsedMinutes / 60) * decayRatePerHour;
+  const currentApp: any = character.appearance || {};
+  const tState = currentApp.transformationState;
+  const decayAmount = (elapsedMinutes / 60) * decayRatePerHour;
 
-    const currentIntensity = currentApp.transformationIntensity ?? 0;
-    const nextIntensity = Math.max(currentApp.metamorphosisProgress ?? 0, currentIntensity - decayAmount);
+  const currentIntensity = currentApp.transformationIntensity ?? 0;
+  const nextIntensity = resolved.isPastPNR
+    ? currentIntensity
+    : Math.max(currentApp.metamorphosisProgress ?? 0, currentIntensity - decayAmount);
 
-    const currentPowerUsage = currentApp.powerUsage ?? tState?.powerUsage ?? 0;
-    const nextPowerUsage = Math.max(0, currentPowerUsage - decayAmount);
+  const currentPowerUsage = currentApp.powerUsage ?? tState?.powerUsage ?? 0;
+  const nextPowerUsage = Math.max(0, currentPowerUsage - decayAmount);
 
-    updated = updateCharacterMetamorphosisState(character, {
-      intensity: nextIntensity,
-      powerUsage: nextPowerUsage,
-      durationDeltaMinutes: elapsedMinutes
-    });
-  } else {
-    updated = updateCharacterMetamorphosisState(character, {
-      durationDeltaMinutes: elapsedMinutes
-    });
-  }
+  updated = updateCharacterMetamorphosisState(character, {
+    intensity: nextIntensity,
+    powerUsage: nextPowerUsage,
+    durationDeltaMinutes: elapsedMinutes
+  });
 
   // 2. Handle active transformation resource drain and duration limit
-  const currentApp: any = updated.appearance || {};
-  const activeTransId = currentApp.activeTransformationId || 'standard';
+  const activeApp: any = updated.appearance || {};
+  const activeTransId = activeApp.activeTransformationId || 'standard';
   if (activeTransId !== 'standard') {
     const activeTransformation = (updated.abilities || []).find(
       a => a.id === activeTransId && a.category === 'Transformationen'
@@ -904,6 +955,33 @@ export const processElapsedGameTime = (
           };
         }
       }
+    }
+  }
+
+  // 3. Handle explicit timed chibi duration (advances solely via central in-game time)
+  const postApp: any = updated.appearance || {};
+  if (postApp.chibiForm?.enabled && postApp.chibiForm.durationGameMinutes !== undefined && postApp.chibiForm.durationGameMinutes > 0) {
+    const nextChibiDuration = Math.max(0, postApp.chibiForm.durationGameMinutes - elapsedMinutes);
+    if (nextChibiDuration <= 0 && postApp.chibiForm.autoRevert !== false) {
+      // Timed Chibi form expired independently without touching transformation or moveset
+      updated = {
+        ...updated,
+        appearance: {
+          ...postApp,
+          chibiForm: undefined
+        }
+      };
+    } else {
+      updated = {
+        ...updated,
+        appearance: {
+          ...postApp,
+          chibiForm: {
+            ...postApp.chibiForm,
+            durationGameMinutes: nextChibiDuration
+          }
+        }
+      };
     }
   }
 

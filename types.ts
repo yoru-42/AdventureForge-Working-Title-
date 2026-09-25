@@ -459,6 +459,8 @@ export interface TechniqueItem {
     movementModifier?: string;
     equipmentRule?: string;
     visualOnly?: boolean;
+    durationGameMinutes?: number;
+    autoRevert?: boolean;
     chibiOnPowerOverload?: {
       enabled: boolean;
       activationThreshold: number;
@@ -600,6 +602,8 @@ export interface PowerAbility {
     movementModifier?: string;
     equipmentRule?: string;
     visualOnly?: boolean;
+    durationGameMinutes?: number;
+    autoRevert?: boolean;
     chibiOnPowerOverload?: {
       enabled: boolean;
       activationThreshold: number;

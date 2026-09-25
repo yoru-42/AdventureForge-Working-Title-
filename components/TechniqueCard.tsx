@@ -739,7 +739,7 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
                                   const isChecked = e.target.checked;
                                   const curOverload: any = entry.chibiForm?.chibiOnPowerOverload || entry.chibiOnPowerOverload || {
                                     enabled: false,
-                                    activationThreshold: 120,
+                                    activationThreshold: 100,
                                     recoveryThreshold: 80,
                                     durationGameMinutes: 30,
                                     autoRevert: true
@@ -772,9 +772,9 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
                                   type="number"
                                   disabled={readOnly}
                                   className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[32px]"
-                                  value={(entry.chibiForm?.chibiOnPowerOverload?.activationThreshold ?? entry.chibiOnPowerOverload?.activationThreshold) ?? 120}
+                                  value={(entry.chibiForm?.chibiOnPowerOverload?.activationThreshold ?? entry.chibiOnPowerOverload?.activationThreshold) ?? 100}
                                   onChange={e => {
-                                    const val = parseInt(e.target.value, 10) || 120;
+                                    const val = parseInt(e.target.value, 10) || 100;
                                     const curOverload: any = entry.chibiForm?.chibiOnPowerOverload || entry.chibiOnPowerOverload || { enabled: true };
                                     const newOverload = { ...curOverload, activationThreshold: val };
                                     onUpdate({

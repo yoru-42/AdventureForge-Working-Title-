@@ -20,6 +20,8 @@ export interface ResolvedChibiForm {
   equipmentRule?: string;
   visualOnly: boolean;
   description?: string;
+  durationGameMinutes?: number;
+  remainingDurationGameMinutes?: number;
 }
 
 export function resolveChibiForm(params: ResolveChibiFormParams): ResolvedChibiForm {
@@ -51,7 +53,9 @@ export function resolveChibiForm(params: ResolveChibiFormParams): ResolvedChibiF
       movementModifier: currentChibi.movementModifier || 'flink und flauschig',
       equipmentRule: currentChibi.equipmentRule || 'angepasst',
       visualOnly: currentChibi.visualOnly ?? true,
-      description: currentChibi.description || 'Manuell aktivierte Chibi-Darstellung.'
+      description: currentChibi.description || 'Manuell aktivierte Chibi-Darstellung.',
+      durationGameMinutes: currentChibi.durationGameMinutes,
+      remainingDurationGameMinutes: currentChibi.durationGameMinutes
     };
   }
 
@@ -71,7 +75,9 @@ export function resolveChibiForm(params: ResolveChibiFormParams): ResolvedChibiF
         movementModifier: tChibi.movementModifier || 'flink',
         equipmentRule: tChibi.equipmentRule || 'angepasst',
         visualOnly: tChibi.visualOnly ?? true,
-        description: `Chibi-Form als Eigenschaft der Transformation ${activeTransformation.displayName || activeTransformation.name || ''}.`
+        description: `Chibi-Form als Eigenschaft der Transformation ${activeTransformation.displayName || activeTransformation.name || ''}.`,
+        durationGameMinutes: tChibi.durationGameMinutes,
+        remainingDurationGameMinutes: currentChibi?.durationGameMinutes ?? tChibi.durationGameMinutes
       };
     }
   }
@@ -98,28 +104,32 @@ export function resolveChibiForm(params: ResolveChibiFormParams): ResolvedChibiF
   }
 
   // 4. Check Power Overload (Kraftüberlastung) with Hysteresis
+  // Note: Only powerUsage (0-100%) represents exertion / power overload.
+  // transformationIntensity describes form intensity and is NEVER merged with powerUsage.
   const currentPowerUsage = transformationState?.powerUsage ?? appearance.powerUsage ?? 0;
-  const currentIntensity = transformationState?.currentIntensity ?? appearance.transformationIntensity ?? 0;
-  const effectivePower = Math.max(currentPowerUsage, currentIntensity);
-
-  const overloadConfig = activeTransformation?.chibiOnPowerOverload ||
-    activeTransformation?.chibiForm?.chibiOnPowerOverload ||
-    (player as any)?.chibiOnPowerOverload ||
-    appearance.chibiOnPowerOverload;
 
   const isCurrentlyOverloadChibi = currentChibi?.enabled && currentChibi.source === 'power_overload';
 
+  const overloadConfig = activeTransformation?.chibiOnPowerOverload ||
+    activeTransformation?.chibiForm?.chibiOnPowerOverload ||
+    (currentChibi as any)?.chibiOnPowerOverload ||
+    (player as any)?.chibiOnPowerOverload ||
+    appearance.chibiOnPowerOverload ||
+    (isCurrentlyOverloadChibi ? { enabled: true, activationThreshold: 100, recoveryThreshold: 80 } : undefined);
+
   if (overloadConfig?.enabled) {
-    const actThreshold = overloadConfig.activationThreshold ?? 100;
-    const recThreshold = overloadConfig.recoveryThreshold ?? actThreshold;
+    const rawActThreshold = overloadConfig.activationThreshold ?? 100;
+    const actThreshold = Math.min(100, Math.max(0, rawActThreshold));
+    const rawRecThreshold = overloadConfig.recoveryThreshold ?? 80;
+    const recThreshold = Math.min(actThreshold, Math.max(0, rawRecThreshold));
 
     let shouldBeActive = false;
     if (isCurrentlyOverloadChibi) {
       // Hysteresis: stays active until power falls below recoveryThreshold
-      shouldBeActive = effectivePower >= recThreshold;
+      shouldBeActive = currentPowerUsage >= recThreshold;
     } else {
       // Activates when power reaches or exceeds activationThreshold
-      shouldBeActive = effectivePower >= actThreshold;
+      shouldBeActive = currentPowerUsage >= actThreshold;
     }
 
     if (shouldBeActive) {
@@ -135,7 +145,9 @@ export function resolveChibiForm(params: ResolveChibiFormParams): ResolvedChibiF
         movementModifier: activeTransformation?.chibiForm?.movementModifier || currentChibi?.movementModifier || 'eingeschränkt',
         equipmentRule: activeTransformation?.chibiForm?.equipmentRule || currentChibi?.equipmentRule || 'lockere Stofffalten',
         visualOnly: activeTransformation?.chibiForm?.visualOnly ?? currentChibi?.visualOnly ?? false,
-        description: `Automatische Chibi-Form durch Kraftüberlastung (${effectivePower}% Kraftnutzung).`
+        description: `Automatische Chibi-Form durch Kraftüberlastung (${Math.round(currentPowerUsage)}% Kraftnutzung).`,
+        durationGameMinutes: currentChibi?.durationGameMinutes ?? overloadConfig.durationGameMinutes,
+        remainingDurationGameMinutes: currentChibi?.durationGameMinutes
       };
     }
   }

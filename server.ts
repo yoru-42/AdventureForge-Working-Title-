@@ -5,10 +5,12 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
 let aiClient: GoogleGenAI | null = null;
+let currentApiKey = '';
 
 function getAiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+  const key = process.env.GEMINI_API_KEY || process.env.API_KEY || '';
+  if (!aiClient || currentApiKey !== key) {
+    currentApiKey = key;
     aiClient = new GoogleGenAI({
       apiKey: key,
       httpOptions: {
@@ -136,7 +138,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   }
   
   // Build deduplicated ordered candidate models list
-  const modelsToTry = Array.from(new Set([targetModel, ...defaultModels]));
+  let modelsToTry = Array.from(new Set([targetModel, ...defaultModels]));
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -144,7 +146,8 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   let lastError: any = null;
   
   // Phase 1: Try candidate models in order.
-  for (const currentModel of modelsToTry) {
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const currentModel = modelsToTry[i];
     try {
       console.log(`[Gemini Server] Generating content with model: ${currentModel}`);
       const response = await getAiClient().models.generateContent({
@@ -218,8 +221,10 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
                                      rawMsg.includes('UNAVAILABLE');
 
       if (isPermissionDenied) {
-        console.log(`[Gemini Server] Note: ${currentModel} permission limitation (403). Switching immediately to flash candidate...`);
-        await delay(100);
+        console.log(`[Gemini Server] Note: ${currentModel} permission limitation (403). Filtering out model and switching immediately to standard flash...`);
+        modelsToTry = modelsToTry.filter(m => m !== currentModel);
+        i--;
+        await delay(50);
       } else if (isQuotaOrRateLimit) {
         console.log(`[Gemini Server] Note: ${currentModel} reached rate/quota limit. Switching to alternative candidate...`);
         await delay(250);
@@ -234,6 +239,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
   }
 
   // Phase 2: If all candidates failed on Phase 1, wait cooldown window and auto-retry across candidates
+  const candidatePool = modelsToTry.length > 0 ? modelsToTry : defaultModels;
   for (let cooldownAttempt = 1; cooldownAttempt <= 5; cooldownAttempt++) {
     const errStr = lastError?.message || String(lastError || '');
     const isRateLimit = errStr.includes('429') || errStr.toLowerCase().includes('quota') || errStr.toLowerCase().includes('rate limit') || errStr.includes('RESOURCE_EXHAUSTED');
@@ -245,7 +251,7 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
     console.log(`[Gemini Server] Phase 2 recovery attempt ${cooldownAttempt}/5 (waiting ${waitSeconds}s)...`);
     await delay(waitSeconds * 1000);
     
-    for (const retryModel of modelsToTry) {
+    for (const retryModel of candidatePool) {
       try {
         const recoveryResponse = await getAiClient().models.generateContent({
           model: retryModel,
@@ -312,8 +318,8 @@ async function startServer() {
         errorMsg.toLowerCase().includes('permission') ||
         errorMsg.toLowerCase().includes('caller does not have permission')
       ) {
-        userFriendlyError = 'Für dieses Modell oder diese Funktion sind erweiterte API-Berechtigungen erforderlich. Es wird automatisch auf das Standard-Flash-Modell zurückgegriffen.';
-        return res.status(403).json({ error: userFriendlyError });
+        userFriendlyError = 'Für dieses Modell oder diese Funktion sind erweiterte API-Berechtigungen erforderlich. Das Standard-Modell steht weiterhin bereit.';
+        return res.status(200).json({ text: '', error: userFriendlyError, grounding: [] });
       }
 
       if (

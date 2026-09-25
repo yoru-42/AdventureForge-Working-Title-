@@ -3041,7 +3041,7 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                       type="button"
                       onClick={() => {
                         const currentApp = (player.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' }) as Appearance;
-                        const currentOverload = currentApp.chibiOnPowerOverload || { enabled: false, activationThreshold: 120, recoveryThreshold: 80 };
+                        const currentOverload = currentApp.chibiOnPowerOverload || { enabled: false, activationThreshold: 100, recoveryThreshold: 80 };
                         if (onUpdatePlayerRef.current) {
                           onUpdatePlayer({
                             ...player,
@@ -3071,9 +3071,9 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                         <span className="text-slate-400 block font-semibold">Aktivierungsschwelle (% Kraft):</span>
                         <input
                           type="number"
-                          value={player.appearance?.chibiOnPowerOverload?.activationThreshold ?? 120}
+                          value={player.appearance?.chibiOnPowerOverload?.activationThreshold ?? 100}
                           onChange={(e) => {
-                            const val = parseInt(e.target.value) || 120;
+                            const val = parseInt(e.target.value) || 100;
                             const currentApp = (player.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' }) as Appearance;
                             if (onUpdatePlayerRef.current) {
                               onUpdatePlayer({
@@ -3106,7 +3106,7 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                                 appearance: {
                                   ...currentApp,
                                   chibiOnPowerOverload: {
-                                    ...(currentApp.chibiOnPowerOverload || { enabled: true, activationThreshold: 120 }),
+                                    ...(currentApp.chibiOnPowerOverload || { enabled: true, activationThreshold: 100 }),
                                     recoveryThreshold: val
                                   }
                                 }

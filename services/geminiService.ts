@@ -1,4 +1,32 @@
-import { GoogleGenAI, Type, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
+export enum Type {
+  TYPE_UNSPECIFIED = "TYPE_UNSPECIFIED",
+  STRING = "STRING",
+  NUMBER = "NUMBER",
+  INTEGER = "INTEGER",
+  BOOLEAN = "BOOLEAN",
+  ARRAY = "ARRAY",
+  OBJECT = "OBJECT",
+  NULL = "NULL",
+}
+
+export enum HarmCategory {
+  HARM_CATEGORY_UNSPECIFIED = "HARM_CATEGORY_UNSPECIFIED",
+  HARM_CATEGORY_HATE_SPEECH = "HARM_CATEGORY_HATE_SPEECH",
+  HARM_CATEGORY_SEXUALLY_EXPLICIT = "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+  HARM_CATEGORY_HARASSMENT = "HARM_CATEGORY_HARASSMENT",
+  HARM_CATEGORY_DANGEROUS_CONTENT = "HARM_CATEGORY_DANGEROUS_CONTENT",
+}
+
+export enum HarmBlockThreshold {
+  HARM_BLOCK_THRESHOLD_UNSPECIFIED = "HARM_BLOCK_THRESHOLD_UNSPECIFIED",
+  BLOCK_LOW_AND_ABOVE = "BLOCK_LOW_AND_ABOVE",
+  BLOCK_MEDIUM_AND_ABOVE = "BLOCK_MEDIUM_AND_ABOVE",
+  BLOCK_ONLY_HIGH = "BLOCK_ONLY_HIGH",
+  BLOCK_NONE = "BLOCK_NONE",
+}
+
+export type GenerateContentResponse = any;
+
 import { jsonrepair } from "jsonrepair";
 import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
 import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
@@ -319,42 +347,9 @@ export class GeminiService {
             serverFailed = true;
           }
 
-          // Direct client SDK fallback if server endpoint returned non-JSON / HTML or is unavailable
+          // Return clean error if server endpoint failed
           if (serverFailed) {
-            const apiKey = (typeof process !== 'undefined' && (process.env?.GEMINI_API_KEY || process.env?.API_KEY)) ||
-                           (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.VITE_GEMINI_API_KEY) || '';
-            if (apiKey) {
-              try {
-                const clientAi = new GoogleGenAI({ apiKey });
-                const targetModel = reqArgs.model || 'gemini-3.8-flash';
-                const directRes = await clientAi.models.generateContent({
-                  model: targetModel,
-                  contents: reqArgs.contents,
-                  config: reqArgs.config
-                });
-                let directText = '';
-                if (typeof (directRes as any).text === 'string') {
-                  directText = (directRes as any).text;
-                } else if (typeof (directRes as any).text === 'function') {
-                  directText = (directRes as any).text();
-                } else if (directRes.candidates?.[0]?.content?.parts?.[0]?.text) {
-                  directText = directRes.candidates[0].content.parts.map((p: any) => p.text || '').join('\n');
-                }
-                return {
-                  text: directText,
-                  candidates: directRes.candidates || [
-                    {
-                      groundingMetadata: { groundingChunks: [] },
-                      content: { parts: [{ text: directText }] }
-                    }
-                  ]
-                };
-              } catch (directErr: any) {
-                throw directErr;
-              }
-            } else {
-              throw new Error(serverError || "Verbindung zum KI-Server fehlgeschlagen. Bitte versuche es in wenigen Sekunden erneut.");
-            }
+            throw new Error(serverError || "Verbindung zum KI-Server fehlgeschlagen. Bitte versuche es in wenigen Sekunden erneut.");
           }
 
           throw new Error("Antwort konnte nicht generiert werden.");

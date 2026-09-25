@@ -5,7 +5,6 @@ import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, 
 import { GeminiService, audioUtils } from '../services/geminiService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import ReactMarkdown from 'react-markdown';
-import { GoogleGenAI, Modality } from '@google/genai';
 import { TacticalCombatMap } from './TacticalCombatMap';
 import { BodySilhouette } from './BodySilhouette';
 import { resolveBodyAppearance, migrateFremdeinflussConditions, processElapsedGameTime } from './bodyConditionResolver';
@@ -7997,10 +7996,17 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
             valueReduction = Math.min(90, valueReduction);
 
-            const effectivePower = Math.max(resolvedApp.powerUsageVal || 0, resolvedApp.transformationIntensityVal || 0);
+            const currentPowerUsage = resolvedApp.powerUsageVal || 0;
             const reductionText = valueReduction > 0 ? `Werte −${valueReduction} %` : 'Gesund';
-            const overloadText = effectivePower > 0 ? `Kraftüberlastung ${Math.round(effectivePower)} %` : '';
+            const overloadText = currentPowerUsage > 0 ? `Kraftüberlastung ${Math.round(currentPowerUsage)} %` : '';
             const bodyStatusValText = overloadText ? `${reductionText} · ${overloadText}` : reductionText;
+
+            const overloadConfig = activeTransformation?.chibiOnPowerOverload ||
+              activeTransformation?.chibiForm?.chibiOnPowerOverload ||
+              (adventure.player.appearance?.chibiForm as any)?.chibiOnPowerOverload ||
+              adventure.player.appearance?.chibiOnPowerOverload;
+            const actThreshold = overloadConfig?.activationThreshold ?? 100;
+            const recThreshold = overloadConfig?.recoveryThreshold ?? 80;
 
             hudItems.push(
               <button
@@ -8018,9 +8024,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       { label: 'Status', value: cond.statusText },
                       { label: 'Details', value: cond.detailText },
                       { label: 'Wertminderung', value: valueReduction > 0 ? `−${valueReduction}% (durch körperliche Form/Zustand)` : 'Keine Einschränkung (Optimal)' },
-                      { label: 'Kraftüberlastung', value: `${Math.round(effectivePower)}%` },
-                      { label: 'Aktivierungsschwelle', value: activeTransformation ? `${activeTransformation.chibiOnPowerOverload?.activationThreshold ?? activeTransformation.chibiForm?.chibiOnPowerOverload?.activationThreshold ?? 120}%` : 'Keine' },
-                      { label: 'Erholungsschwelle', value: activeTransformation ? `${activeTransformation.chibiOnPowerOverload?.recoveryThreshold ?? activeTransformation.chibiForm?.chibiOnPowerOverload?.recoveryThreshold ?? 80}%` : 'Keine' },
+                      { label: 'Kraftüberlastung', value: `${Math.round(currentPowerUsage)}%` },
+                      { label: 'Aktivierungsschwelle', value: overloadConfig ? `${actThreshold}%` : 'Keine' },
+                      { label: 'Erholungsschwelle', value: overloadConfig ? `${recThreshold}%` : 'Keine' },
                       { label: 'Ursache', value: resolvedChibi.active ? `Chibi-Form durch ${resolvedChibi.sourceName || resolvedChibi.source}` : 'Standardgestalt' },
                       { label: 'Auswirkungen', value: resolvedChibi.active ? `Körpergröße auf ${Math.round(resolvedChibi.heightScale * 100)}% geschrumpft, Proportionen angepasst` : 'Keine körperlichen Einschränkungen' },
                       { label: 'Erholungsverlauf', value: transSettings.abklingenStep > 0 ? `Abklingen mit ${transSettings.abklingenStep}% pro Zeitschritt` : 'Stabil' }
@@ -8081,26 +8087,29 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               transformationState: adventure.player.appearance?.transformationState || (resolvedApp as any).transformationState
             });
 
-            const effectivePower = Math.max(resolvedApp.powerUsageVal || 0, resolvedApp.transformationIntensityVal || 0);
-
             let chibiDurationText = 'dauerhaft';
             if (resolvedChibi.active) {
               if (resolvedChibi.source === 'manual') {
-                chibiDurationText = 'dauerhaft';
+                if (resolvedChibi.remainingDurationGameMinutes !== undefined && resolvedChibi.remainingDurationGameMinutes > 0) {
+                  chibiDurationText = `Dauer: ${formatDuration(resolvedChibi.remainingDurationGameMinutes, 'Min.')}`;
+                } else {
+                  chibiDurationText = 'dauerhaft';
+                }
               } else if (resolvedChibi.source === 'race') {
                 chibiDurationText = 'dauerhaft';
               } else if (resolvedChibi.source === 'transformation') {
-                chibiDurationText = `Dauer: ${remainingDurationFormatted}`;
-              } else if (resolvedChibi.source === 'power_overload') {
-                const actThreshold = activeTransformation?.chibiOnPowerOverload?.activationThreshold ?? activeTransformation?.chibiForm?.chibiOnPowerOverload?.activationThreshold ?? 120;
-                const recThreshold = activeTransformation?.chibiOnPowerOverload?.recoveryThreshold ?? activeTransformation?.chibiForm?.chibiOnPowerOverload?.recoveryThreshold ?? 80;
-                const abklingenStep = transSettings.abklingenStep || 5;
-                const overshoot = effectivePower - recThreshold;
-                const overloadRemaining = (abklingenStep > 0 && overshoot > 0) ? overshoot / abklingenStep : 0;
-                if (overloadRemaining > 0) {
-                  chibiDurationText = `Dauer: ${formatDuration(overloadRemaining, transSettings.timeUnit || 'Min.')}`;
+                if (resolvedChibi.remainingDurationGameMinutes !== undefined && resolvedChibi.remainingDurationGameMinutes > 0) {
+                  chibiDurationText = `Dauer: ${formatDuration(resolvedChibi.remainingDurationGameMinutes, 'Min.')}`;
+                } else if (isFinite(remainingDurationVal) && remainingDurationVal > 0) {
+                  chibiDurationText = `Dauer: ${remainingDurationFormatted}`;
                 } else {
-                  chibiDurationText = 'Erholung bevorstehend';
+                  chibiDurationText = 'dauerhaft';
+                }
+              } else if (resolvedChibi.source === 'power_overload') {
+                if (resolvedChibi.remainingDurationGameMinutes !== undefined && resolvedChibi.remainingDurationGameMinutes > 0) {
+                  chibiDurationText = `Dauer: ${formatDuration(resolvedChibi.remainingDurationGameMinutes, 'Min.')}`;
+                } else {
+                  chibiDurationText = 'Kraftüberlastung';
                 }
               } else {
                 chibiDurationText = 'dauerhaft';
@@ -8108,7 +8117,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             }
 
             const changeValueText = resolvedChibi.active
-              ? `Chibi-Form · ${chibiDurationText}`
+              ? (chibiDurationText === 'Kraftüberlastung'
+                  ? 'Chibi-Form · Kraftüberlastung'
+                  : (chibiDurationText === 'dauerhaft'
+                      ? 'Chibi-Form · dauerhaft'
+                      : `Chibi-Form · ${chibiDurationText}`))
               : (summaryText && summaryText !== 'Keine' ? `${summaryText} · dauerhaft` : 'Keine');
 
             hudItems.push(
@@ -8134,7 +8147,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       { label: 'Körperliche Merkmale', value: resolvedChibi.physicalChanges.join(' • ') },
                       { label: 'Bewegungsmodifikator', value: resolvedChibi.movementModifier || 'flink' },
                       { label: 'Ausrüstung', value: resolvedChibi.equipmentRule || 'angepasst' },
-                      { label: 'Verbleibende Dauer', value: chibiDurationText || 'unbegrenzt' },
+                      { label: 'Verbleibende Dauer', value: chibiDurationText === 'Kraftüberlastung' ? 'Dynamisch (bis Erholung unter Erholungsschwelle)' : (chibiDurationText || 'dauerhaft') },
                       { label: 'Ursache / Trigger', value: resolvedChibi.source === 'power_overload' ? 'Kraftüberlastung überschritten' : 'Manuelle oder transformationsbedingte Aktivierung' }
                     ] : (isTransActive ? [
                       { label: 'Kategorie', value: 'Charakter & Transformation' },

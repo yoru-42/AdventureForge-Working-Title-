@@ -1,5 +1,16 @@
 {
   "entities": {
+    "TestConnection": {
+      "title": "TestConnection",
+      "description": "Connection test document",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Connection status"
+        }
+      }
+    },
     "UserData": {
       "title": "UserData",
       "description": "User storage items such as settings, lore, etc.",
@@ -24,6 +35,10 @@
     }
   },
   "firestore": {
+    "/test/connection": {
+      "schema": "TestConnection",
+      "description": "Connection test endpoint"
+    },
     "/users/{userId}/data/{key}": {
       "schema": "UserData",
       "description": "User data key-value storage synced by StorageService"
