@@ -8,7 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import { GoogleGenAI, Modality } from '@google/genai';
 import { TacticalCombatMap } from './TacticalCombatMap';
 import { BodySilhouette } from './BodySilhouette';
-import { resolveBodyAppearance, migrateFremdeinflussConditions } from './bodyConditionResolver';
+import { resolveBodyAppearance, migrateFremdeinflussConditions, processElapsedGameTime } from './bodyConditionResolver';
 import { resolveChibiForm } from '../services/chibiFormResolver';
 import { buildPhysicalStatusAndPerceptionPrompt, calculatePhysicalChanges } from '../utils/changeTracker';
 import { getTransformationCardSettings, getFormSideEffects, formatDuration, formatNum } from './TransformationIntensityCard';
@@ -4574,6 +4574,15 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     const condMig = migrateFremdeinflussConditions(updatedPlayer);
     if (condMig.updated) {
       updatedPlayer = { ...updatedPlayer, ...condMig.player };
+    }
+
+    // Process elapsed game time on the player character (duration and intensity decay)
+    if (updatedWorld?.worldTime && baseAdventure.world?.worldTime) {
+      const elapsedMins = WorldSimulationService.toTotalMinutes(updatedWorld.worldTime) - WorldSimulationService.toTotalMinutes(baseAdventure.world.worldTime);
+      if (elapsedMins > 0) {
+        const decayRate = transSettings.abklingenStep ?? 10;
+        updatedPlayer = processElapsedGameTime(updatedPlayer, elapsedMins, decayRate) as any;
+      }
     }
 
     const updatedStoryState: StoryInfoState = {

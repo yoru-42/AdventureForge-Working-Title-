@@ -1,6 +1,6 @@
 import { Character, Appearance, BodyCondition, TransformationState, PhysicalChangeItem } from '../types';
 import { BODY_CONDITION_PRESETS } from './bodyConditionPresets';
-import { getTransformationCardSettings } from './TransformationIntensityCard';
+import { getTransformationCardSettings, deriveCostResourceFromCampaignScale } from './TransformationIntensityCard';
 import { calculatePhysicalChanges, getCompactChangesSummary, getCompactBodyConditionSummary } from '../utils/changeTracker';
 
 export interface ResolvedBodyAppearance extends Appearance {
@@ -829,17 +829,82 @@ export const processElapsedGameTime = (
   const resolved = resolveBodyAppearance(character);
 
   let updated = character;
-  if (!resolved.isPastPNR && resolved.transformationIntensityVal > resolved.metamorphosisProgressVal) {
+
+  // 1. Decay transformation intensity and power usage (exertion) over elapsed in-game time
+  if (!resolved.isPastPNR) {
+    const currentApp: any = character.appearance || {};
+    const tState = currentApp.transformationState;
     const decayAmount = (elapsedMinutes / 60) * decayRatePerHour;
-    const nextIntensity = Math.max(resolved.metamorphosisProgressVal, resolved.transformationIntensityVal - decayAmount);
+
+    const currentIntensity = currentApp.transformationIntensity ?? 0;
+    const nextIntensity = Math.max(currentApp.metamorphosisProgress ?? 0, currentIntensity - decayAmount);
+
+    const currentPowerUsage = currentApp.powerUsage ?? tState?.powerUsage ?? 0;
+    const nextPowerUsage = Math.max(0, currentPowerUsage - decayAmount);
+
     updated = updateCharacterMetamorphosisState(character, {
       intensity: nextIntensity,
+      powerUsage: nextPowerUsage,
       durationDeltaMinutes: elapsedMinutes
     });
   } else {
     updated = updateCharacterMetamorphosisState(character, {
       durationDeltaMinutes: elapsedMinutes
     });
+  }
+
+  // 2. Handle active transformation resource drain and duration limit
+  const currentApp: any = updated.appearance || {};
+  const activeTransId = currentApp.activeTransformationId || 'standard';
+  if (activeTransId !== 'standard') {
+    const activeTransformation = (updated.abilities || []).find(
+      a => a.id === activeTransId && a.category === 'Transformationen'
+    );
+
+    if (activeTransformation) {
+      const cardSettings = getTransformationCardSettings();
+      const costResData = deriveCostResourceFromCampaignScale(
+        updated,
+        activeTransformation,
+        [],
+        activeTransformation.source,
+        activeTransformation.cost,
+        cardSettings
+      );
+
+      const resName = costResData.resourceName;
+      const upkeepRate = costResData.resourceUpkeepRate;
+
+      if (resName && upkeepRate > 0 && updated.campaignPowerLevels?.[resName]) {
+        const currentResVal = updated.campaignPowerLevels[resName].value ?? 0;
+        const totalCost = upkeepRate * elapsedMinutes;
+        const nextResVal = Math.max(0, currentResVal - totalCost);
+
+        const updatedPowerLevels = {
+          ...(updated.campaignPowerLevels || {}),
+          [resName]: {
+            ...updated.campaignPowerLevels[resName],
+            value: nextResVal
+          }
+        };
+
+        updated = {
+          ...updated,
+          campaignPowerLevels: updatedPowerLevels
+        };
+
+        // If resource is fully depleted, end the transformation!
+        if (nextResVal <= 0) {
+          updated = {
+            ...updated,
+            appearance: {
+              ...(updated.appearance as Appearance),
+              activeTransformationId: 'standard'
+            }
+          };
+        }
+      }
+    }
   }
 
   return updated;
