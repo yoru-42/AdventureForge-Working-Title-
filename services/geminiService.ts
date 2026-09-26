@@ -1194,7 +1194,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
               name: { type: Type.STRING, description: "Name der Standard-Kampffähigkeit." },
               category: { 
                 type: Type.STRING, 
-                description: "Strikte Kategorie: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken' oder 'Waffenbeherrschung'." 
+                description: "Strikte Kategorie: 'Grundfähigkeiten' (für fundamentale Fähigkeiten wie Elementarmanipulation, Telekinese, Empathie, Schutzbarrieren, etc.), 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken' oder 'Waffenbeherrschung'." 
               },
               source: { type: Type.STRING, description: "Kraftquelle für diese Fähigkeit." },
               cost: { type: Type.STRING, description: "Ressourcenkosten für die Nutzung." },
@@ -1203,7 +1203,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
             },
             required: ["name", "category", "description"]
           },
-          description: "Liste der Standard-Kampffähigkeiten (Passive Fähigkeiten, Techniken, Ultimative Techniken, Waffenbeherrschung). Keine Transformationen hier!"
+          description: "Liste der Standard-Kampffähigkeiten (Grundfähigkeiten, Passive Fähigkeiten, Techniken, Ultimative Techniken, Waffenbeherrschung). Keine Transformationen hier!"
         },
         transformations: {
           type: Type.ARRAY,
@@ -1248,7 +1248,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
               name: { type: Type.STRING, description: "Name der Fähigkeit oder Transformation." },
               category: { 
                 type: Type.STRING, 
-                description: "Kategorie: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Waffenbeherrschung' oder 'Transformationen'." 
+                description: "Kategorie: 'Grundfähigkeiten', 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Waffenbeherrschung' oder 'Transformationen'." 
               },
               source: { type: Type.STRING, description: "Kraftquelle für diese Fähigkeit." },
               cost: { type: Type.STRING, description: "Ressourcenkosten für die Nutzung." },
