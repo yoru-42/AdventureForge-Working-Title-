@@ -32,14 +32,6 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
     return CharacterKnowledgeService.getEffectiveKnowledge(adventure);
   }, [adventure]);
 
-  const locationEntries = useMemo(() => {
-    return loreDatabase.filter(l => l.category === 'Orte');
-  }, [loreDatabase]);
-
-  const activeTargetLocation = useMemo(() => {
-    return locationEntries.find(l => l.category === 'Orte' && l.details?.isActiveTarget);
-  }, [locationEntries]);
-
   const currentLocationContext = useMemo(() => {
     return LocationContextService.resolveCurrentLocation(adventure);
   }, [adventure]);
@@ -48,36 +40,122 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
     return LocationContextService.formatLocationDisplay(currentLocationContext);
   }, [currentLocationContext]);
 
+  // Aggregate all navigable locations: Codex (loreDatabase) + Story-Info (storyEntities) + Holdings/Territories
+  const allNavigableLocations = useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      category: string;
+      description: string;
+      type: string;
+      region: string;
+      isTemporaryStoryInfo: boolean;
+      isKnown: boolean;
+      isActiveTarget: boolean;
+      loreEntry?: LoreEntry;
+      storyEntity?: any;
+    }> = [];
+
+    const titleSet = new Set<string>();
+
+    // 1. Permanent Codex Locations (loreDatabase)
+    loreDatabase.forEach(loc => {
+      if ((loc.category as string) === 'Orte' || (loc.category as string) === 'Gebäude') {
+        const titleKey = loc.title.toLowerCase().trim();
+        titleSet.add(titleKey);
+        const isKnown = CharacterKnowledgeService.isLocationKnown(
+          { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
+          effectiveKnowledge,
+          adventure.player,
+          adventure.world
+        );
+        list.push({
+          id: loc.id,
+          title: loc.title,
+          category: loc.category,
+          description: loc.description || '',
+          type: loc.details?.itemType || loc.details?.type || loc.category,
+          region: loc.details?.region || loc.details?.territory || loc.details?.area || '',
+          isTemporaryStoryInfo: false,
+          isKnown,
+          isActiveTarget: !!loc.details?.isActiveTarget,
+          loreEntry: loc
+        });
+      }
+    });
+
+    // 2. Temporarily Discovered Story Locations (storyEntities)
+    (adventure.storyState?.storyEntities || []).forEach(ent => {
+      if ((ent.category as string) === 'Orte' || (ent.category as string) === 'Gebäude') {
+        const titleKey = ent.title.toLowerCase().trim();
+        if (!titleSet.has(titleKey)) {
+          titleSet.add(titleKey);
+          const isActive = !!ent.details?.isActiveTarget || adventure.storyState?.activeTargetLocationId === ent.id;
+          list.push({
+            id: ent.id,
+            title: ent.title,
+            category: ent.category,
+            description: ent.description || 'Neu entdeckter Ort aus der laufenden Geschichte.',
+            type: ent.details?.itemType || ent.details?.type || ent.category,
+            region: ent.details?.territory || ent.details?.region || currentLocationContext.territoryName || '',
+            isTemporaryStoryInfo: true,
+            isKnown: true, // Discovered in story
+            isActiveTarget: isActive,
+            storyEntity: ent
+          });
+        }
+      }
+    });
+
+    // 3. Economy Holdings from World Configuration
+    (adventure.world?.economyConfig?.holdings || []).forEach(h => {
+      const titleKey = h.name.toLowerCase().trim();
+      if (!titleSet.has(titleKey)) {
+        titleSet.add(titleKey);
+        const isActive = adventure.storyState?.activeTargetLocationId === h.id;
+        list.push({
+          id: h.id,
+          title: h.name,
+          category: 'Gebäude',
+          description: h.description || `${h.type} in ${h.locationName || 'der Umgebung'}.`,
+          type: h.type || 'Gebäude',
+          region: h.territoryId || currentLocationContext.territoryName || '',
+          isTemporaryStoryInfo: true,
+          isKnown: true,
+          isActiveTarget: isActive
+        });
+      }
+    });
+
+    return list;
+  }, [loreDatabase, adventure.storyState?.storyEntities, adventure.world?.economyConfig?.holdings, effectiveKnowledge, adventure.player, adventure.world, currentLocationContext]);
+
+  const activeTargetLocation = useMemo(() => {
+    return allNavigableLocations.find(l => l.isActiveTarget);
+  }, [allNavigableLocations]);
+
   const regions = useMemo(() => {
     const list = new Set<string>();
-    locationEntries.forEach(loc => {
-      const reg = loc.details?.region || loc.details?.territory || loc.details?.area;
-      if (reg && typeof reg === 'string' && reg.trim()) {
-        list.add(reg.trim());
+    allNavigableLocations.forEach(loc => {
+      if (loc.region && loc.region.trim()) {
+        list.add(loc.region.trim());
       }
     });
     return Array.from(list).sort();
-  }, [locationEntries]);
+  }, [allNavigableLocations]);
 
   // Separate known vs total
   const knownLocationsList = useMemo(() => {
-    return locationEntries.filter(loc => {
-      return CharacterKnowledgeService.isLocationKnown(
-        { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
-        effectiveKnowledge,
-        adventure.player,
-        adventure.world
-      );
-    });
-  }, [locationEntries, effectiveKnowledge, adventure.player, adventure.world]);
+    return allNavigableLocations.filter(loc => loc.isKnown);
+  }, [allNavigableLocations]);
 
   const filteredLocations = useMemo(() => {
-    const sourceList = viewScope === 'known' ? knownLocationsList : locationEntries;
+    const sourceList = viewScope === 'known' ? knownLocationsList : allNavigableLocations;
 
     return sourceList.filter(loc => {
       const title = loc.title || '';
       const desc = loc.description || '';
-      const region = (loc.details?.region || loc.details?.territory || '').toLowerCase();
+      const region = loc.region.toLowerCase();
       const matchesSearch = searchTerm.trim() === '' || 
         title.toLowerCase().includes(searchTerm.toLowerCase()) || 
         desc.toLowerCase().includes(searchTerm.toLowerCase());
@@ -87,33 +165,60 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
 
       return matchesSearch && matchesRegion;
     });
-  }, [viewScope, knownLocationsList, locationEntries, searchTerm, selectedRegionFilter]);
+  }, [viewScope, knownLocationsList, allNavigableLocations, searchTerm, selectedRegionFilter]);
 
   if (!isOpen) return null;
 
-  const handleSetAsTarget = (location: LoreEntry) => {
-    const updatedLore = loreDatabase.map(l => {
-      if (l.category === 'Orte') {
-        return {
-          ...l,
-          details: {
-            ...(l.details || {}),
-            isActiveTarget: l.id === location.id
-          }
-        };
-      }
-      return l;
-    });
+  const handleSetAsTarget = (location: any) => {
+    if (location.isTemporaryStoryInfo) {
+      // Update storyEntities or activeTargetLocationId in storyState without adding to loreDatabase!
+      const updatedStoryEntities = (adventure.storyState?.storyEntities || []).map(ent => {
+        if ((ent.category as string) === 'Orte' || (ent.category as string) === 'Gebäude') {
+          return {
+            ...ent,
+            details: {
+              ...(ent.details || {}),
+              isActiveTarget: ent.id === location.id
+            }
+          };
+        }
+        return ent;
+      });
 
-    onUpdateAdventure({
-      ...adventure,
-      loreDatabase: updatedLore
-    });
+      onUpdateAdventure({
+        ...adventure,
+        storyState: {
+          ...(adventure.storyState || { storyEntities: [] }),
+          storyEntities: updatedStoryEntities,
+          activeTargetLocationId: location.id,
+          activeTargetLocationName: location.title
+        }
+      });
+    } else {
+      // Update loreDatabase as before
+      const updatedLore = loreDatabase.map(l => {
+        if ((l.category as string) === 'Orte' || (l.category as string) === 'Gebäude') {
+          return {
+            ...l,
+            details: {
+              ...(l.details || {}),
+              isActiveTarget: l.id === location.id
+            }
+          };
+        }
+        return l;
+      });
+
+      onUpdateAdventure({
+        ...adventure,
+        loreDatabase: updatedLore
+      });
+    }
   };
 
   const handleClearTarget = () => {
     const updatedLore = loreDatabase.map(l => {
-      if (l.category === 'Orte' && l.details?.isActiveTarget) {
+      if (((l.category as string) === 'Orte' || (l.category as string) === 'Gebäude') && l.details?.isActiveTarget) {
         return {
           ...l,
           details: {
@@ -125,13 +230,32 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
       return l;
     });
 
+    const updatedStoryEntities = (adventure.storyState?.storyEntities || []).map(ent => {
+      if (((ent.category as string) === 'Orte' || (ent.category as string) === 'Gebäude') && ent.details?.isActiveTarget) {
+        return {
+          ...ent,
+          details: {
+            ...(ent.details || {}),
+            isActiveTarget: false
+          }
+        };
+      }
+      return ent;
+    });
+
     onUpdateAdventure({
       ...adventure,
-      loreDatabase: updatedLore
+      loreDatabase: updatedLore,
+      storyState: {
+        ...(adventure.storyState || { storyEntities: [] }),
+        storyEntities: updatedStoryEntities,
+        activeTargetLocationId: undefined,
+        activeTargetLocationName: undefined
+      }
     });
   };
 
-  const handleDiscoverLocation = (location: LoreEntry) => {
+  const handleDiscoverLocation = (location: any) => {
     const updated = CharacterKnowledgeService.addKnowledgeEntry(adventure, {
       category: 'location',
       entityId: location.id,
@@ -143,7 +267,7 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
     onUpdateAdventure(updated);
   };
 
-  const handleTravelTo = (location: LoreEntry) => {
+  const handleTravelTo = (location: any) => {
     handleSetAsTarget(location);
     const actionText = `*bricht auf und reist nach ${location.title}*`;
     if (onSendChatMessage) {
@@ -269,9 +393,9 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                 <div className="text-sm sm:text-base font-bold text-white mb-1">
                   {activeTargetLocation ? activeTargetLocation.title : 'Kein Reiseziel gewählt'}
                 </div>
-                {activeTargetLocation && activeTargetLocation.details?.region && (
+                {activeTargetLocation && activeTargetLocation.region && (
                   <div className="text-xs text-slate-400">
-                    Region: {activeTargetLocation.details.region}
+                    Region: {activeTargetLocation.region}
                   </div>
                 )}
               </div>
@@ -329,7 +453,7 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                       : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  Alle Orte im Codex ({locationEntries.length})
+                  Alle Orte im Codex ({allNavigableLocations.length})
                 </button>
               </div>
 
@@ -388,10 +512,10 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                 {filteredLocations.map(loc => {
                   const isCurrent = currentLocationName.toLowerCase().includes(loc.title.toLowerCase());
                   const isTarget = activeTargetLocation?.id === loc.id;
-                  const locType = loc.details?.type || loc.details?.category || 'Ort';
-                  const locRegion = loc.details?.region || loc.details?.territory || '';
+                  const locType = loc.type || loc.category || 'Ort';
+                  const locRegion = loc.region || '';
                   const isKnown = CharacterKnowledgeService.isLocationKnown(
-                    { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
+                    { id: loc.id, name: loc.title, title: loc.title, details: loc.loreEntry?.details },
                     effectiveKnowledge,
                     adventure.player,
                     adventure.world
@@ -427,12 +551,17 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                                 Reiseziel
                               </span>
                             )}
-                            {!isKnown && (
+                            {loc.isTemporaryStoryInfo && (
+                              <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-950 border border-cyan-800/80 text-cyan-300 font-bold" title="In der Geschichte entdeckter Ort">
+                                Neu entdeckt
+                              </span>
+                            )}
+                            {!loc.isKnown && (
                               <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-400 font-medium">
                                 Dem Charakter unbekannt
                               </span>
                             )}
-                            {isKnown && !isCurrent && !isTarget && (
+                            {loc.isKnown && !isCurrent && !isTarget && !loc.isTemporaryStoryInfo && (
                               <span className="text-[9px] px-2 py-0.5 rounded-full bg-teal-950/50 border border-teal-800/50 text-teal-400 font-medium">
                                 Bekannt
                               </span>
@@ -449,6 +578,11 @@ export const NavigationModal: React.FC<NavigationModalProps> = ({
                           {locRegion && (
                             <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
                               Region: {locRegion}
+                            </span>
+                          )}
+                          {loc.isTemporaryStoryInfo && (
+                            <span className="px-2 py-0.5 rounded bg-cyan-950/60 border border-cyan-900 text-cyan-400 font-medium">
+                              Aus Chat / Story-Info
                             </span>
                           )}
                         </div>

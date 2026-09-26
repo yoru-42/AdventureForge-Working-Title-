@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, Character, LoreEntry, Territory, WorldSetting, TacticalFormation, TacticalDirection } from '../types';
+import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, Character, LoreEntry, Territory, WorldSetting, TacticalFormation, TacticalDirection, PlacedCombatObject } from '../types';
 import { GeminiService, audioUtils } from '../services/geminiService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import ReactMarkdown from 'react-markdown';
@@ -846,6 +846,97 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [isExtractingEnemies, setIsExtractingEnemies] = useState(false);
   const [lastExtractedMessageId, setLastExtractedMessageId] = useState('');
   const [selectedPrepEnemyIds, setSelectedPrepEnemyIds] = useState<string[]>([]);
+
+  // Training & Kampfvorbereitung States
+  const [combatPrepTab, setCombatPrepTab] = useState<'enemies' | 'training'>('enemies');
+  const [selectedTrainingPreset, setSelectedTrainingPreset] = useState<string>('dummy');
+  const [customTrainingTargetName, setCustomTrainingTargetName] = useState<string>('');
+  const [selectedTrainingTechniqueId, setSelectedTrainingTechniqueId] = useState<string>('');
+
+  const handleExecuteTraining = (targetPresetId: string, customName: string, techniqueId: string) => {
+    let targetName = 'Trainingspuppe';
+    let targetCategory = 'training_target';
+    let targetDesc = 'Hölzerne Übungspuppe zum Testen von Hieben, Tritten und Schlagtechniken.';
+
+    if (targetPresetId === 'wall') {
+      targetName = 'Stabile Steinwand';
+      targetCategory = 'training_surface';
+      targetDesc = 'Massive Wand/Mauer zur Zerstörungs- und Wuchtprüfung.';
+    } else if (targetPresetId === 'rock') {
+      targetName = 'Massiver Felsbrocken';
+      targetCategory = 'training_object';
+      targetDesc = 'Schwerer Felsblock für Schnitt-, Explosions- und Wuchtübungen.';
+    } else if (targetPresetId === 'free') {
+      targetName = 'Freies Körper- & Krafttraining';
+      targetCategory = 'free_exercise';
+      targetDesc = 'Atem-, Bewusstseins- und Formübungen ohne physisches Hindernis.';
+    } else if (targetPresetId === 'custom' && customName.trim()) {
+      targetName = customName.trim();
+      targetCategory = 'training_object';
+      targetDesc = `Trainingsziel: ${targetName}`;
+    } else if (customName.trim()) {
+      targetName = customName.trim();
+    }
+
+    const allPlayerTechs = adventure.player?.techniqueList || (adventure.player as any)?.techniques || (adventure as any).techniques || [];
+    const selectedTech = allPlayerTechs.find((t: any) => t.id === techniqueId || t.name === techniqueId);
+    const techName = selectedTech ? (selectedTech.name || (selectedTech as any).title) : 'der eigenen Kraft';
+
+    const existingPlaced = adventure.combatState?.placedObjects || [];
+    const newTrainingObject: PlacedCombatObject = {
+      id: `training_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: targetName,
+      icon: 'fa-solid fa-bullseye',
+      category: targetCategory,
+      description: targetDesc,
+      x: 5,
+      y: 5,
+      durability: 100,
+      condition: 'intact',
+      rules: 'Trainingsziel (kein Feind)'
+    };
+
+    const updatedCombatState = adventure.combatState ? {
+      ...adventure.combatState,
+      placedObjects: [...existingPlaced, newTrainingObject]
+    } : undefined;
+
+    let updatedTechniques = (adventure as any).techniques;
+    if (selectedTech && updatedTechniques) {
+      updatedTechniques = updatedTechniques.map((t: any) => {
+        if (t.id === selectedTech.id) {
+          const currentXp = t.xp || 0;
+          const xpNeeded = t.xpNeeded || 100;
+          const nextXp = currentXp + 25;
+          let newLevel = t.level || 1;
+          let finalXp = nextXp;
+
+          if (nextXp >= xpNeeded) {
+            newLevel = Math.min((t.maxLevel || 10), newLevel + 1);
+            finalXp = nextXp - xpNeeded;
+          }
+
+          return {
+            ...t,
+            level: newLevel,
+            xp: finalXp
+          };
+        }
+        return t;
+      });
+    }
+
+    const actionText = `*führt ein gezieltes Training mit ${techName} an ${targetName} durch*`;
+    
+    onUpdateAdventure({
+      ...adventure,
+      ...(updatedCombatState ? { combatState: updatedCombatState } : {}),
+      ...(updatedTechniques ? { techniques: updatedTechniques } : {})
+    });
+
+    closeAllControlTabs();
+    setInputText(actionText);
+  };
 
   const [newItemName, setNewItemName] = useState('');
   const [newItemType, setNewItemType] = useState('Waffen');
@@ -5562,21 +5653,38 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
     return hostilesPresent;
   }, [adventure.npcs, adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.currentLocation, adventure.player, adventure.world?.economyConfig?.holdings, adventure.world?.territories, messages]);
 
-  // Available travel targets count from Navigation system (using known locations)
+  // Available travel targets count from Navigation system (using known locations from Codex + Story-Info)
   const availableTravelTargetsCount = React.useMemo(() => {
+    const titleSet = new Set<string>();
     const loreDatabase = adventure.loreDatabase || [];
-    const locationEntries = loreDatabase.filter(l => l.category === 'Orte');
     const effectiveKnowledge = CharacterKnowledgeService.getEffectiveKnowledge(adventure);
-    const knownLocationsList = locationEntries.filter(loc => {
-      return CharacterKnowledgeService.isLocationKnown(
-        { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
-        effectiveKnowledge,
-        adventure.player,
-        adventure.world
-      );
+
+    loreDatabase.forEach(loc => {
+      if ((loc.category as string) === 'Orte' || (loc.category as string) === 'Gebäude') {
+        const isKnown = CharacterKnowledgeService.isLocationKnown(
+          { id: loc.id, name: loc.title, title: loc.title, details: loc.details },
+          effectiveKnowledge,
+          adventure.player,
+          adventure.world
+        );
+        if (isKnown) {
+          titleSet.add(loc.title.toLowerCase().trim());
+        }
+      }
     });
-    return knownLocationsList.length;
-  }, [adventure.loreDatabase, adventure.player, adventure.world]);
+
+    (adventure.storyState?.storyEntities || []).forEach(ent => {
+      if (ent.category === 'Orte' || ent.category === 'Gebäude') {
+        titleSet.add(ent.title.toLowerCase().trim());
+      }
+    });
+
+    (adventure.world?.economyConfig?.holdings || []).forEach(h => {
+      titleSet.add(h.name.toLowerCase().trim());
+    });
+
+    return titleSet.size;
+  }, [adventure.loreDatabase, adventure.storyState?.storyEntities, adventure.world?.economyConfig?.holdings, adventure.player, adventure.world]);
 
   // Most specific location name of the player for the chat-steering bar header
   const mostSpecificLocationName = React.useMemo(() => {

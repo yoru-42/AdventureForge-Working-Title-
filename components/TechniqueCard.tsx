@@ -255,8 +255,12 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-          {/* Kosten Badge */}
-          {isPassive ? (
+          {/* Kosten / Kategorie Badge */}
+          {isTransform ? (
+            <span className="px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-800/60 text-cyan-300 text-[10px] font-semibold">
+              Transformation
+            </span>
+          ) : isPassive ? (
             <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/60 text-emerald-300 text-[10px] font-semibold">
               Passiv
             </span>

@@ -3599,6 +3599,8 @@ export interface StoryInfoState {
   currentLocationContext?: CurrentLocationContext;
   currentLocationName?: string;
   currentTerritoryName?: string;
+  activeTargetLocationId?: string;
+  activeTargetLocationName?: string;
   activeSituation?: string;
   activeGoals?: string[];
   relationships?: { fromName: string; toName: string; relationType: string; description?: string }[];
