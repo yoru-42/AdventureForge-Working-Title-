@@ -230,9 +230,9 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
         onClick={onToggleExpanded}
         className="p-3 bg-slate-900/60 hover:bg-slate-900 cursor-pointer flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/60 transition-colors select-none"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           {renderCategoryIcon()}
-          <span className="font-bold text-sm text-white truncate max-w-[200px] sm:max-w-[320px]">
+          <span className="font-bold text-sm text-white break-words">
             {entry.name || 'Unbenannte Fähigkeit'}
           </span>
 
@@ -243,12 +243,12 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
             </span>
           )}
           {isPassive && entry.activationCondition && (
-            <span className="hidden sm:inline-block text-[11px] text-emerald-400/90 font-medium truncate max-w-[220px]">
+            <span className="hidden sm:inline-block text-[11px] text-emerald-400/90 font-medium break-words">
               {entry.activationCondition}
             </span>
           )}
           {isTransform && entry.transformName && (
-            <span className="hidden sm:inline-block text-[11px] text-cyan-400/90 font-medium truncate max-w-[220px]">
+            <span className="hidden sm:inline-block text-[11px] text-cyan-400/90 font-medium break-words">
               Form: {entry.transformName}
             </span>
           )}
@@ -1464,7 +1464,7 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                              <i className="fa-solid fa-bolt text-purple-400 text-[10px]"></i>
+                              <Zap className="w-3.5 h-3.5 text-purple-400" />
                               {trans.transformName || trans.name}
                             </span>
                             <select

@@ -66,6 +66,26 @@ export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
   'Waffenbeherrschung': 'Erste Waffenbeherrschung erstellen',
 };
 
+export const TRANS_CATEGORY_TABS = [
+  'Passive Fähigkeiten',
+  'Techniken',
+  'Ultimative Techniken'
+] as const;
+
+export type TransCategoryTab = typeof TRANS_CATEGORY_TABS[number];
+
+export const TRANS_CATEGORY_ADD_LABELS: Record<TransCategoryTab, string> = {
+  'Passive Fähigkeiten': 'Passive Fähigkeit hinzufügen',
+  'Techniken': 'Technik hinzufügen',
+  'Ultimative Techniken': 'Ultimative Technik hinzufügen'
+};
+
+export const TRANS_CATEGORY_EMPTY_LABELS: Record<TransCategoryTab, string> = {
+  'Passive Fähigkeiten': 'Erste passive Fähigkeit für diese Gestalt erstellen',
+  'Techniken': 'Erste Technik für diese Gestalt erstellen',
+  'Ultimative Techniken': 'Erste ultimative Technik für diese Gestalt erstellen'
+};
+
 export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   powerSources,
   baseAbilities,
@@ -108,7 +128,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
   // 2. Trennung zwischen Standard-Kampffähigkeiten und Transformationen
   const standardTechniques = useMemo(() => {
-    return techniques.filter(t => t.type !== 'Transformation' && t.category !== 'Transformationen');
+    return techniques.filter(t => 
+      t.type !== 'Transformation' && 
+      t.category !== 'Transformationen' && 
+      !t.isTransformationOnly && 
+      !t.unlockedByTransformationId &&
+      (!t.unlockedByTransformationIds || t.unlockedByTransformationIds.length === 0)
+    );
   }, [techniques]);
 
   const transformationItems = useMemo(() => {
@@ -126,9 +152,10 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   const [activeCategory, setActiveCategory] = useState<AbilityCategoryTab>('Techniken');
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
-  // 4. Transformations-Zustand (Spezifische Transformation)
+  // 4. Transformations-Zustand (Spezifische Transformation & Kategorien)
   const [selectedTransformationId, setSelectedTransformationId] = useState<string>('');
-  const [showTransModifiersInEditor, setShowTransModifiersInEditor] = useState<boolean>(true);
+  const [activeTransCategory, setActiveTransCategory] = useState<TransCategoryTab>('Techniken');
+  const [showTransModifiersInEditor, setShowTransModifiersInEditor] = useState<boolean>(false);
 
   // Synchronisation bei Löschen oder Laden von Transformationen
   useEffect(() => {
@@ -298,6 +325,46 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       transformName: t.transformName
     }));
   }, [transformationItems]);
+
+  // 11. Transformationseigene Fähigkeiten & Techniken für die aktive Transformation
+  const currentTransTechniques = useMemo(() => {
+    if (!selectedTransformation) return [];
+    return techniques.filter(t => 
+      t.unlockedByTransformationId === selectedTransformation.id ||
+      (Array.isArray(t.unlockedByTransformationIds) && t.unlockedByTransformationIds.includes(selectedTransformation.id)) ||
+      (t.parentTransformationId === selectedTransformation.id && t.type !== 'Transformation' && t.category !== 'Transformationen')
+    );
+  }, [techniques, selectedTransformation]);
+
+  const transCategoryCounts = useMemo(() => {
+    const counts: Record<TransCategoryTab, number> = {
+      'Passive Fähigkeiten': 0,
+      'Techniken': 0,
+      'Ultimative Techniken': 0
+    };
+    currentTransTechniques.forEach(t => {
+      if (t.category === 'Passive Fähigkeiten') {
+        counts['Passive Fähigkeiten']++;
+      } else if (t.category === 'Ultimative Techniken' || t.tier === 'Tier 4') {
+        counts['Ultimative Techniken']++;
+      } else {
+        counts['Techniken']++;
+      }
+    });
+    return counts;
+  }, [currentTransTechniques]);
+
+  const activeTransEntries = useMemo(() => {
+    return currentTransTechniques.filter(t => {
+      if (activeTransCategory === 'Passive Fähigkeiten') {
+        return t.category === 'Passive Fähigkeiten';
+      }
+      if (activeTransCategory === 'Ultimative Techniken') {
+        return t.category === 'Ultimative Techniken' || t.tier === 'Tier 4';
+      }
+      return t.category !== 'Passive Fähigkeiten' && t.category !== 'Ultimative Techniken' && t.tier !== 'Tier 4';
+    });
+  }, [currentTransTechniques, activeTransCategory]);
 
   // -------------------------------------------------------------
   // HANDLERS: Kraftquellen
@@ -751,37 +818,66 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     setSelectedTransformationId(newId);
   };
 
-  const handleAddUnlockedTechniqueForTrans = (transId: string) => {
-    const newId = `tech_unlocked_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const trans = transformationItems.find(t => t.id === transId);
-    const transName = trans ? (trans.transformName || trans.name) : 'Transformation';
+  const handleAddTransAbility = (targetCategory: TransCategoryTab = 'Techniken') => {
+    if (!selectedTransformation) return;
+    const transId = selectedTransformation.id;
+    const transName = selectedTransformation.transformName || selectedTransformation.name;
+    const newId = `tech_trans_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const costResource = activePowerSource?.cost || 'Mana';
+
+    let defaultName = `Neue Technik (${transName})`;
+    let defaultType = 'Angriff';
+    let defaultTier = 'Tier 2';
+    let defaultCostVal = 15;
+    let defaultCostStr = `15 ${costResource}`;
+
+    if (targetCategory === 'Passive Fähigkeiten') {
+      defaultName = `Neue passive Fähigkeit (${transName})`;
+      defaultType = 'Support';
+      defaultTier = 'Tier 1';
+      defaultCostVal = 0;
+      defaultCostStr = 'Passiv';
+    } else if (targetCategory === 'Ultimative Techniken') {
+      defaultName = `Neue ultimative Technik (${transName})`;
+      defaultType = 'Angriff';
+      defaultTier = 'Tier 4';
+      defaultCostVal = 50;
+      defaultCostStr = `50 ${costResource}`;
+    }
 
     const newTech: TechniqueItem = {
       id: newId,
-      name: `Neue Technik (${transName})`,
-      description: `Form-exklusive Technik, die in der Gestalt ${transName} freigeschaltet ist.`,
-      category: 'Techniken',
-      type: 'Angriff',
+      name: defaultName,
+      description: `In der Gestalt ${transName} aktive Fähigkeit.`,
+      category: targetCategory,
+      type: defaultType,
       mode: 'Normal',
-      tier: 'Tier 2',
+      tier: defaultTier,
       baseAbilityIds: [],
       baseAbilityNames: [],
-      powerSourceId: activePowerSource?.id || safePowerSources[0]?.id,
-      powerSourceName: activePowerSource?.powerName || activePowerSource?.source || safePowerSources[0]?.powerName || safePowerSources[0]?.source,
+      powerSourceId: selectedTransformation.powerSourceId || activePowerSource?.id || safePowerSources[0]?.id,
+      powerSourceName: selectedTransformation.powerSourceName || activePowerSource?.powerName || activePowerSource?.source,
       costResourceName: costResource,
-      costValue: 15,
+      costValue: defaultCostVal,
       costFormula: 'absolut',
-      cost: `15 ${costResource}`,
-      range: 'Nahkampf / Mittlere Distanz',
-      duration: 'Sofort',
+      cost: defaultCostStr,
+      range: targetCategory === 'Passive Fähigkeiten' ? 'Selbst / Aura' : 'Nahkampf / Mittlere Distanz',
+      duration: targetCategory === 'Passive Fähigkeiten' ? 'Permanent' : 'Sofort',
       unlockedByTransformationId: transId,
-      isTransformationOnly: true
+      isTransformationOnly: true,
+      level: 1,
+      maxLevel: 10,
+      xp: 0,
+      xpNeeded: 100
     };
 
     const updatedTech = [...techniques, newTech];
     onChange(safePowerSources, baseAbilities, updatedTech);
     setExpandedMap(prev => ({ ...prev, [newId]: true }));
+  };
+
+  const handleAddUnlockedTechniqueForTrans = (_transId: string) => {
+    handleAddTransAbility('Techniken');
   };
 
   const handleDeleteTransformation = (transId: string) => {
@@ -943,7 +1039,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                   <input
                     type="text"
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs font-semibold outline-none focus:border-amber-500 h-[34px] placeholder:text-slate-600 transition-colors"
-                    placeholder="Name der Kraftquelle eintragen..."
+                    placeholder="Name der Kraftquelle eingeben..."
                     value={activePowerSource.powerName || activePowerSource.source || ''}
                     onChange={e => {
                       const val = e.target.value;
@@ -1109,7 +1205,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                     type="text"
                     className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
                     value={activeBaseAbility.displayName || activeBaseAbility.name || ''}
-                    placeholder="z.B. Kryokinese, Eiserne Haut"
+                    placeholder="Bezeichnung der Grundfähigkeit eingeben..."
                     onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { displayName: e.target.value, name: e.target.value })}
                   />
                 </div>
@@ -1167,7 +1263,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                     type="text"
                     className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
                     value={activeBaseAbility.description || ''}
-                    placeholder="Fundamentales Vermögen / Wirkungsbereich..."
+                    placeholder="Wirkungsbereich und Funktionsweise beschreiben..."
                     onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { description: e.target.value })}
                   />
                 </div>
@@ -1197,7 +1293,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                     type="text"
                     className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
                     value={activeBaseAbility.cost || ''}
-                    placeholder="z.B. 10 Mana oder Passiv"
+                    placeholder="Kostenwert oder Passiv eingeben..."
                     onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { cost: e.target.value })}
                   />
                 </div>
@@ -1232,7 +1328,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                       : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
                   }`}
                 >
-                  <span className="text-left leading-tight truncate">{tab}</span>
+                  <span className="text-left leading-tight break-words">{tab}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
                     isTabActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800/80 text-slate-400'
                   }`}>
@@ -1650,30 +1746,118 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
               />
             </div>
 
-            {/* 2.3 MOVESET-MODIFIKATOREN FÜR DIESE TRANSFORMATION */}
+            {/* 2.3 TRANSFORMATIONSEIGENE FÄHIGKEITEN & TECHNIKEN */}
+            <div className="mt-2 bg-slate-900/60 border border-cyan-950/80 rounded-xl p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between border-b border-cyan-950/60 pb-2 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <LucideIcons.Unlock className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-extrabold uppercase text-cyan-300 tracking-wider">
+                    Transformationseigene Fähigkeiten in &bdquo;{selectedTransformation.transformName || selectedTransformation.name}&ldquo;
+                  </span>
+                </div>
+
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleAddTransAbility(activeTransCategory)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <LucideIcons.Plus className="w-3.5 h-3.5" />
+                    <span>{TRANS_CATEGORY_ADD_LABELS[activeTransCategory]}</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Kategorie-Tabs für diese Transformation */}
+              <div className="grid grid-cols-3 gap-2">
+                {TRANS_CATEGORY_TABS.map(tab => {
+                  const isTabActive = activeTransCategory === tab;
+                  const count = transCategoryCounts[tab] || 0;
+                  return (
+                    <button
+                      key={`trans-cat-${tab}`}
+                      type="button"
+                      onClick={() => setActiveTransCategory(tab)}
+                      className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1.5 cursor-pointer border min-w-0 ${
+                        isTabActive
+                          ? 'bg-cyan-600 text-white border-cyan-400 font-black shadow-sm'
+                          : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-left leading-tight break-words">{tab}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
+                        isTabActive ? 'bg-cyan-950 text-cyan-200' : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Aktive Einträge der ausgewählten Kategorie für die Transformation */}
+              {activeTransEntries.length === 0 ? (
+                <div className="text-center py-6 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
+                  <p>
+                    Keine Einträge für &bdquo;{activeTransCategory}&ldquo; in dieser Gestalt definiert.
+                  </p>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddTransAbility(activeTransCategory)}
+                      className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-cyan-400 hover:border-cyan-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <LucideIcons.Plus className="w-3.5 h-3.5" />
+                      <span>{TRANS_CATEGORY_EMPTY_LABELS[activeTransCategory]}</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  {activeTransEntries.map((tech, idx) => (
+                    <TechniqueCard
+                      key={`trans-tech-${tech.id || idx}`}
+                      entry={tech}
+                      category={tech.category || activeTransCategory}
+                      readOnly={readOnly}
+                      isExpanded={expandedMap[tech.id] !== undefined ? expandedMap[tech.id] : true}
+                      onToggleExpanded={() => toggleCardExpanded(tech.id, true)}
+                      onUpdate={updates => handleUpdateEntry(tech.id, updates)}
+                      onDelete={() => handleDeleteEntry(tech.id)}
+                      activePowerSource={activePowerSource}
+                      baseAbilities={baseAbilities}
+                      onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(tech.id, baId)}
+                      progressionLogic={progressionLogic}
+                      availableTransformations={availableTransformations}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 2.4 OPTIONALE MOVESET-MODIFIKATOREN FÜR STANDARD-FÄHIGKEITEN */}
             {standardTechniques.length > 0 && (
-              <div className="mt-2 bg-slate-900/60 border border-purple-950/80 rounded-xl p-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between border-b border-purple-950/60 pb-2">
-                  <div className="flex items-center gap-2">
-                    <LucideIcons.Sparkles className="w-4 h-4 text-purple-400" />
-                    <span className="text-xs font-extrabold uppercase text-purple-300 tracking-wider">
-                      Moveset-Modifikatoren für &bdquo;{selectedTransformation.transformName || selectedTransformation.name}&ldquo;
-                    </span>
-                  </div>
+              <div className="mt-2 bg-slate-900/40 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
                   <button
                     type="button"
                     onClick={() => setShowTransModifiersInEditor(!showTransModifiersInEditor)}
-                    className="text-[11px] text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1 cursor-pointer"
+                    className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                   >
-                    <span>{showTransModifiersInEditor ? 'Zuklappen' : 'Aufklappen'}</span>
-                    {showTransModifiersInEditor ? <LucideIcons.ChevronUp className="w-3.5 h-3.5" /> : <LucideIcons.ChevronDown className="w-3.5 h-3.5" />}
+                    <LucideIcons.SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Modifikatoren für Standard-Fähigkeiten (Optional)</span>
+                    {showTransModifiersInEditor ? (
+                      <LucideIcons.ChevronUp className="w-3.5 h-3.5 ml-1 text-slate-500" />
+                    ) : (
+                      <LucideIcons.ChevronDown className="w-3.5 h-3.5 ml-1 text-slate-500" />
+                    )}
                   </button>
                 </div>
 
                 {showTransModifiersInEditor && (
-                  <div className="space-y-3 pt-1">
+                  <div className="space-y-3 pt-2 border-t border-slate-800/60">
                     <p className="text-[11px] text-slate-400">
-                      Lege fest, wie bestehende Standardfähigkeiten beim Aktivieren von &bdquo;{selectedTransformation.transformName || selectedTransformation.name}&ldquo; angepasst werden (Weiterentwicklung, Verstärkung, Modifikation, Ersetzung oder Deaktivierung).
+                      Standardfähigkeiten bei Aktivierung von &bdquo;{selectedTransformation.transformName || selectedTransformation.name}&ldquo; anpassen (Weiterentwicklung, Verstärkung, Modifikation, Ersetzung oder Deaktivierung).
                     </p>
 
                     <div className="space-y-2.5">
@@ -1735,7 +1919,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                                     });
                                   }
                                 }}
-                                className="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-200 outline-none focus:border-purple-500 font-semibold cursor-pointer"
+                                className="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-200 outline-none focus:border-cyan-500 font-semibold cursor-pointer"
                               >
                                 <option value="unverändert">Unverändert (Basis beibehalten)</option>
                                 <option value="weiterentwicklung">Weiterentwickeln (Evolve)</option>
@@ -1758,7 +1942,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                                     placeholder={tech.name}
                                     value={existingMod?.overrideName || ''}
                                     onChange={e => handleUpdateTechMod({ overrideName: e.target.value })}
-                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-purple-500 font-bold"
+                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-cyan-500 font-bold"
                                   />
                                 </div>
 
@@ -1769,10 +1953,10 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                                   <input
                                     type="text"
                                     disabled={readOnly}
-                                    placeholder={tech.cost || 'z.B. 25 MP'}
+                                    placeholder={tech.cost || 'Kostenwert eingeben...'}
                                     value={existingMod?.overrideCost || ''}
                                     onChange={e => handleUpdateTechMod({ overrideCost: e.target.value })}
-                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-purple-500"
+                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-cyan-500"
                                   />
                                 </div>
 
@@ -1782,10 +1966,10 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                                   </label>
                                   <AutoExpandingTextarea
                                     disabled={readOnly}
-                                    placeholder={`Wie wirkt ${tech.name} in der Gestalt ${selectedTransformation.transformName || selectedTransformation.name}?`}
+                                    placeholder="Wirkung und Veränderung dieser Technik in der Gestalt beschreiben..."
                                     value={existingMod?.overrideDescription || ''}
                                     onChange={e => handleUpdateTechMod({ overrideDescription: e.target.value })}
-                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-purple-500 min-h-[44px]"
+                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-cyan-500 min-h-[44px]"
                                   />
                                 </div>
                               </div>
@@ -1798,66 +1982,6 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 )}
               </div>
             )}
-
-            {/* 2.4 DURCH DIESE TRANSFORMATION FREIGESCHALTETE TECHNIKEN */}
-            <div className="mt-2 bg-slate-900/60 border border-cyan-950/80 rounded-xl p-4 flex flex-col gap-3">
-              <div className="flex items-center justify-between border-b border-cyan-950/60 pb-2 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <LucideIcons.Unlock className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-extrabold uppercase text-cyan-300 tracking-wider">
-                    Form-exklusive Techniken in &bdquo;{selectedTransformation.transformName || selectedTransformation.name}&ldquo;
-                  </span>
-                </div>
-
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => handleAddUnlockedTechniqueForTrans(selectedTransformation.id)}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950 border border-cyan-700/60 hover:border-cyan-500 text-cyan-300 hover:text-white transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <LucideIcons.Plus className="w-3.5 h-3.5" />
-                    <span>Technik freischalten</span>
-                  </button>
-                )}
-              </div>
-
-              {(() => {
-                const unlockedTechs = techniques.filter(
-                  t => t.unlockedByTransformationId === selectedTransformation.id ||
-                    (t.unlockedByTransformationIds && t.unlockedByTransformationIds.includes(selectedTransformation.id))
-                );
-
-                if (unlockedTechs.length === 0) {
-                  return (
-                    <p className="text-[11px] text-slate-400 italic py-1">
-                      Keine form-exklusiven Techniken für diese Transformation definiert. Mit &bdquo;Technik freischalten&ldquo; können Angriffe oder Fähigkeiten erzeugt werden, die ausschließlich in dieser Gestalt zur Verfügung stehen.
-                    </p>
-                  );
-                }
-
-                return (
-                  <div className="space-y-3 pt-1">
-                    {unlockedTechs.map(tech => (
-                      <TechniqueCard
-                        key={`unlocked-tech-${tech.id}`}
-                        entry={tech}
-                        category={tech.category || 'Techniken'}
-                        readOnly={readOnly}
-                        isExpanded={expandedMap[tech.id] !== undefined ? expandedMap[tech.id] : true}
-                        onToggleExpanded={() => toggleCardExpanded(tech.id, true)}
-                        onUpdate={updates => handleUpdateEntry(tech.id, updates)}
-                        onDelete={() => handleDeleteEntry(tech.id)}
-                        activePowerSource={activePowerSource}
-                        baseAbilities={baseAbilities}
-                        onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(tech.id, baId)}
-                        progressionLogic={progressionLogic}
-                        availableTransformations={availableTransformations}
-                      />
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
           </div>
         )}
       </div>

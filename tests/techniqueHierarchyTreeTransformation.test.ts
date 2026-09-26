@@ -1,5 +1,12 @@
 import { Character, PowerAbility, TechniqueItem, CharacterPowerSource, BaseAbility } from '../types';
-import { CATEGORY_TABS, CATEGORY_ADD_LABELS, CATEGORY_EMPTY_LABELS } from '../components/TechniqueHierarchyTree';
+import { 
+  CATEGORY_TABS, 
+  CATEGORY_ADD_LABELS, 
+  CATEGORY_EMPTY_LABELS,
+  TRANS_CATEGORY_TABS,
+  TRANS_CATEGORY_ADD_LABELS,
+  TRANS_CATEGORY_EMPTY_LABELS
+} from '../components/TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { resolveEffectiveMoveset, getTransformationChain } from '../utils/movesetResolver';
 
@@ -183,6 +190,77 @@ export function runTechniqueHierarchyTreeTransformationTests() {
 
   assert(legStandard.length === 1 && legStandard[0].name === 'Drachenhieb', 'Test 5a: Legacy-Standardtechnik Drachenhieb erhalten');
   assert(legTrans.length === 1 && (legTrans[0].transformName === 'Drachengestalt' || legTrans[0].name === 'Drachengestalt'), 'Test 5b: Legacy-Transformation Drachengestalt erhalten');
+
+  // Test 6: Transformationseigene Passive & Techniken (z.B. Esper -> Levitation als Passiv, Elementarerschaffung als Technik)
+  console.log('\n--- Test 6: Transformationseigene Kategorien & Techniken (Esper) ---');
+  assert((TRANS_CATEGORY_TABS as readonly string[]).includes('Passive Fähigkeiten'), 'Test 6a: TRANS_CATEGORY_TABS enthält "Passive Fähigkeiten"');
+  assert((TRANS_CATEGORY_TABS as readonly string[]).includes('Techniken'), 'Test 6b: TRANS_CATEGORY_TABS enthält "Techniken"');
+  assert((TRANS_CATEGORY_TABS as readonly string[]).includes('Ultimative Techniken'), 'Test 6c: TRANS_CATEGORY_TABS enthält "Ultimative Techniken"');
+  assert('Passive Fähigkeiten' in TRANS_CATEGORY_ADD_LABELS, 'Test 6d: TRANS_CATEGORY_ADD_LABELS für Passive vorhanden');
+  assert('Techniken' in TRANS_CATEGORY_ADD_LABELS, 'Test 6e: TRANS_CATEGORY_ADD_LABELS für Techniken vorhanden');
+
+  const esperPlayer: Character = {
+    id: 'char-esper-1',
+    name: 'Aria',
+    role: 'Esper',
+    attributes: {} as any,
+    appearance: {} as any,
+    powerSources: [{ id: 'ps_psi', source: 'Psi-Energie', powerName: 'Psi-Energie', cost: 'Psi' }],
+    baseAbilities: [
+      {
+        id: 'ba_telekinesis',
+        displayName: 'Begrenzte Telekinese',
+        element: 'Geist',
+        abilityType: 'manipulation'
+      }
+    ],
+    techniqueList: [
+      {
+        id: 'tech_tele_strike',
+        name: 'Telekinetischer Stoß',
+        category: 'Techniken',
+        type: 'Angriff',
+        baseAbilityIds: ['ba_telekinesis']
+      },
+      {
+        id: 'trans_esper',
+        name: 'Esper',
+        transformName: 'Esper',
+        category: 'Transformationen',
+        type: 'Transformation'
+      },
+      {
+        id: 'tech_levitation',
+        name: 'Levitation',
+        category: 'Passive Fähigkeiten',
+        type: 'Support',
+        unlockedByTransformationId: 'trans_esper',
+        isTransformationOnly: true
+      },
+      {
+        id: 'tech_elem_create',
+        name: 'Elementarerschaffung',
+        category: 'Techniken',
+        type: 'Angriff',
+        unlockedByTransformationId: 'trans_esper',
+        isTransformationOnly: true
+      }
+    ]
+  };
+
+  const normEsper = normalizeAbilityHierarchy(esperPlayer);
+  const esperStandardOnly = normEsper.techniques.filter(t => 
+    t.type !== 'Transformation' && 
+    t.category !== 'Transformationen' && 
+    !t.isTransformationOnly && 
+    !t.unlockedByTransformationId
+  );
+  const esperTransOnly = normEsper.techniques.filter(t => t.unlockedByTransformationId === 'trans_esper');
+
+  assert(esperStandardOnly.length === 1 && esperStandardOnly[0].name === 'Telekinetischer Stoß', 'Test 6f: Standard-Moveset enthält nur Telekinetischer Stoß');
+  assert(esperTransOnly.length === 2, 'Test 6g: Genau 2 form-exklusive Fähigkeiten für Esper');
+  assert(esperTransOnly.some(t => t.name === 'Levitation' && t.category === 'Passive Fähigkeiten'), 'Test 6h: Levitation ist form-eigenes Passiv');
+  assert(esperTransOnly.some(t => t.name === 'Elementarerschaffung' && t.category === 'Techniken'), 'Test 6i: Elementarerschaffung ist form-eigene Technik');
 
   console.log('\n✨ ALLE TECHNIQUE-HIERARCHY-TREE & TRANSFORMATION-TRENNUNG TESTS BESTANDEN! ✨\n');
 }

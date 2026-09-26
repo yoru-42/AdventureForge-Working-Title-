@@ -306,7 +306,7 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
                               }}
                               className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-0"
                             />
-                            <span className="truncate">
+                            <span className="break-words">
                               {ba.displayName || ba.name} ({ba.element})
                             </span>
                           </label>
@@ -324,7 +324,7 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
             </label>
             <AutoExpandingTextarea
               className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500 min-h-[90px] leading-relaxed"
-              placeholder="z.B. Erschaffe mit Eis eine Kuppel um mich, Verbündete oder Feinde, um sie zu schützen oder einzusperren."
+              placeholder="Kurze Beschreibung der gewünschten Technik oder Wirkungsweise eingeben..."
               value={description}
               onChange={e => setDescription(e.target.value)}
               disabled={isLoading}
