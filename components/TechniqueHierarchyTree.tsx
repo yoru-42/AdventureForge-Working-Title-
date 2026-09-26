@@ -292,9 +292,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
     standardTechniques.forEach(tech => {
       const belongs = activeBaseAbility
-        ? ((tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id)) ||
-           ((!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (activePowerSource && tech.powerSourceId === activePowerSource.id)))
-        : (activePowerSource && (tech.powerSourceId === activePowerSource.id || !tech.powerSourceId));
+        ? Boolean(tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id))
+        : Boolean(activePowerSource && (tech.powerSourceId === activePowerSource.id || !tech.powerSourceId));
 
       if (belongs) {
         const cat = getTechniqueCategory(tech);
@@ -309,9 +308,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   const activeEntries = useMemo(() => {
     return standardTechniques.filter(tech => {
       const belongs = activeBaseAbility
-        ? ((tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id)) ||
-           ((!tech.baseAbilityIds || tech.baseAbilityIds.length === 0) && (activePowerSource && tech.powerSourceId === activePowerSource.id)))
-        : (activePowerSource && (tech.powerSourceId === activePowerSource.id || !tech.powerSourceId));
+        ? Boolean(tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id))
+        : Boolean(activePowerSource && (tech.powerSourceId === activePowerSource.id || !tech.powerSourceId));
 
       if (!belongs) return false;
       return getTechniqueCategory(tech) === activeCategory;

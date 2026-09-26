@@ -256,26 +256,33 @@ export function normalizeAbilityHierarchy(char: any): {
         (ability as any).isBaseAbility === true || 
         ability.type === 'Grundfähigkeit';
 
-      if (isExplicitBaseAbility) {
-        registerBaseAbility({
-          id: ability.id,
-          powerSourceId: ability.powerSourceId,
-          name: ability.name,
-          displayName: ability.displayName || ability.name,
-          element: ability.element,
-          abilityType: ability.abilityType,
-          description: ability.description,
-          level: ability.level,
-          xp: ability.xp,
-          maxLevel: ability.maxLevel,
-          progressionLogic: ability.progressionLogic,
-          cost: ability.cost,
-          costValue: ability.costValue,
-          costResourceName: ability.costResourceName
-        });
-      }
-    });
-  }
+    if (isExplicitBaseAbility) {
+      registerBaseAbility({
+        ...ability,
+        displayName: ability.displayName || ability.name
+      });
+    }
+  });
+}
+
+// 2c. Aus char.standardAbilities laden (falls vorhanden)
+if (Array.isArray(char.standardAbilities)) {
+  char.standardAbilities.forEach(ability => {
+    if (!ability) return;
+    const isExplicitBaseAbility = ability.category === 'Grundfähigkeiten' || 
+      ability.category === 'Grundfähigkeit' || 
+      ability.category === 'BaseAbility' || 
+      (ability as any).isBaseAbility === true || 
+      ability.type === 'Grundfähigkeit';
+
+    if (isExplicitBaseAbility) {
+      registerBaseAbility({
+        ...ability,
+        displayName: ability.displayName || ability.name
+      });
+    }
+  });
+}
 
   // 3. Techniken sammeln und deduplizieren
   const techniquesMap = new Map<string, TechniqueItem>();
@@ -426,18 +433,82 @@ export function normalizeAbilityHierarchy(char: any): {
     char.abilities.forEach(ability => {
       if (!ability) return;
       const canonicalBaId = baIdAliasMap.get(ability.id) || ability.id;
-      const isOtherCategory = ability.category && ['Passive Fähigkeiten', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung', 'Talente'].includes(ability.category);
+      const isExplicitBa = ability.category === 'Grundfähigkeiten' || 
+        ability.category === 'Grundfähigkeit' || 
+        ability.category === 'BaseAbility' || 
+        (ability as any).isBaseAbility === true || 
+        ability.type === 'Grundfähigkeit';
+      const isTransformation = ability.category === 'Transformationen' || ability.type === 'Transformation';
+      const isRegisteredBa = baseAbilitiesList.some(b => b.id === canonicalBaId);
 
-      if (isOtherCategory) {
-        registerTechnique(ability, ability.category, canonicalBaId);
+      // Eine Fähigkeit, die KEINE Grundfähigkeit ist, wird als eigenständige Technik/Passiv/Transformation registriert.
+      // WICHTIG: Niemals canonicalBaId als fallbackBaId für die Fähigkeit selbst übergeben!
+      // Eine Technik gehört nur zu einer Grundfähigkeit, wenn explizit baseAbilityIds vorhanden sind.
+      if (!isExplicitBa && !isRegisteredBa) {
+        registerTechnique(ability, ability.category);
       }
 
+      // Verarbeite eingebettete Techniken (Legacy-Format)
       if (Array.isArray(ability.techniqueList)) {
-        ability.techniqueList.forEach(t => registerTechnique(t, undefined, canonicalBaId));
+        ability.techniqueList.forEach(t => {
+          if (isTransformation) {
+            registerTechnique({
+              ...t,
+              unlockedByTransformationId: t.unlockedByTransformationId || ability.id,
+              parentTransformationId: t.parentTransformationId || ability.id,
+              isTransformationOnly: t.isTransformationOnly !== undefined ? t.isTransformationOnly : true
+            }, t.category || (t.type === 'Support' ? 'Passive Fähigkeiten' : (t.tier === 'Tier 4' ? 'Ultimative Techniken' : 'Techniken')));
+          } else {
+            // Nur wenn ability tatsächlich eine registrierte Grundfähigkeit war, ist canonicalBaId der Fallback für Kind-Techniken
+            registerTechnique(t, undefined, isRegisteredBa ? canonicalBaId : undefined);
+          }
+        });
       } else if (typeof ability.techniques === 'string' && ability.techniques.trim().length > 0) {
         const tNames = ability.techniques.split(/[,\n;]/).map((s: string) => s.trim()).filter(Boolean);
         tNames.forEach((tName: string) => {
-          registerTechnique({ name: tName }, undefined, canonicalBaId);
+          if (isTransformation) {
+            registerTechnique({
+              name: tName,
+              unlockedByTransformationId: ability.id,
+              parentTransformationId: ability.id,
+              isTransformationOnly: true
+            }, 'Techniken');
+          } else {
+            registerTechnique({ name: tName }, undefined, isRegisteredBa ? canonicalBaId : undefined);
+          }
+        });
+      }
+    });
+  }
+
+  // 3c. Aus char.standardAbilities (Techniken / Passive / etc., die keine Grundfähigkeiten sind)
+  if (Array.isArray(char.standardAbilities)) {
+    char.standardAbilities.forEach(ability => {
+      if (!ability) return;
+      const isExplicitBa = ability.category === 'Grundfähigkeiten' || 
+        ability.category === 'Grundfähigkeit' || 
+        ability.category === 'BaseAbility' || 
+        (ability as any).isBaseAbility === true || 
+        ability.type === 'Grundfähigkeit';
+      if (!isExplicitBa) {
+        registerTechnique(ability, ability.category);
+      }
+    });
+  }
+
+  // 3d. Aus char.transformations
+  if (Array.isArray(char.transformations)) {
+    char.transformations.forEach(tr => {
+      if (!tr) return;
+      registerTechnique(tr, 'Transformationen');
+      if (Array.isArray(tr.techniqueList)) {
+        tr.techniqueList.forEach((t: any) => {
+          registerTechnique({
+            ...t,
+            unlockedByTransformationId: t.unlockedByTransformationId || tr.id,
+            parentTransformationId: t.parentTransformationId || tr.id,
+            isTransformationOnly: t.isTransformationOnly !== undefined ? t.isTransformationOnly : true
+          }, t.category || (t.type === 'Support' ? 'Passive Fähigkeiten' : (t.tier === 'Tier 4' ? 'Ultimative Techniken' : 'Techniken')));
         });
       }
     });
@@ -567,7 +638,7 @@ export function buildTechniqueTree(
 
     const baseAbilityNodes = matchingBaseAbilities.map(ba => {
       const matchingTechs = techniques.filter(
-        t => t.baseAbilityIds?.includes(ba.id) || (!t.baseAbilityIds?.length && t.powerSourceId === ps.id)
+        t => Boolean(t.baseAbilityIds?.includes(ba.id))
       );
       return {
         baseAbility: ba,

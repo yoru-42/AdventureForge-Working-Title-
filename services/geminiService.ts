@@ -1716,15 +1716,19 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
           const tDesc = tech.description || '';
           const tNameLower = tName.toLowerCase();
           
-          let cat = 'Techniken';
-          if (tType === 'transformation' || tNameLower.includes('form') || tNameLower.includes('metamorphose')) {
-            cat = 'Transformationen';
-          } else if (tNameLower.includes('passiv') || tNameLower.includes('empathie') || tNameLower.includes('wiederherstellung') || tNameLower.includes('aura') || tNameLower.includes('immunität') || tDesc.toLowerCase().includes('passiv')) {
-            cat = 'Passive Fähigkeiten';
-          } else if (tNameLower.includes('ultimativ') || tNameLower.includes('explosion') || tNameLower.includes('dimensionsriss') || tNameLower.includes('finisher') || tNameLower.includes('vollständige') || (tech.tier && tech.tier.includes('4'))) {
-            cat = 'Ultimative Techniken';
-          } else if (tNameLower.includes('talent') || tNameLower.includes('fokus') || tNameLower.includes('begabung')) {
-            cat = 'Talente';
+          let cat = tech.category;
+          if (!cat) {
+            if (tType === 'transformation' || tNameLower.includes('form') || tNameLower.includes('metamorphose')) {
+              cat = 'Transformationen';
+            } else if (tNameLower.includes('passiv') || tDesc.toLowerCase().includes('passiv')) {
+              cat = 'Passive Fähigkeiten';
+            } else if (tNameLower.includes('ultimativ') || (tech.tier && tech.tier.includes('4'))) {
+              cat = 'Ultimative Techniken';
+            } else if (tNameLower.includes('talent') || tNameLower.includes('waffenbeherrschung')) {
+              cat = 'Waffenbeherrschung';
+            } else {
+              cat = 'Techniken';
+            }
           }
 
           rawAbilities.push({
@@ -1742,6 +1746,7 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
 
     // 2. Extract sub-techniques from inside transformation / container abilities if they are standalone combat powers
     rawAbilities.forEach((ab: any) => {
+      const isTrans = ab.category === 'Transformationen' || ab.type === 'Transformation';
       if (ab.techniqueList && Array.isArray(ab.techniqueList)) {
         ab.techniqueList.forEach((tech: any) => {
           const tName = (tech.name || '').trim();
@@ -1754,15 +1759,19 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
             const tType = (tech.type || '').toLowerCase();
             const tDesc = tech.description || '';
 
-            let cat = 'Techniken';
-            if (tType === 'transformation' || tNameLower.endsWith('-form') || tNameLower.endsWith(' form')) {
-              cat = 'Transformationen';
-            } else if (tNameLower.includes('passiv') || tNameLower.includes('empathie') || tNameLower.includes('wiederherstellung') || tNameLower.includes('aura') || tNameLower.includes('immunität') || tDesc.toLowerCase().includes('passiv')) {
-              cat = 'Passive Fähigkeiten';
-            } else if (tNameLower.includes('ultimativ') || tNameLower.includes('explosion') || tNameLower.includes('dimensionsriss') || tNameLower.includes('finisher') || tNameLower.includes('vollständige elementarkontrolle') || (tech.tier && tech.tier.includes('4'))) {
-              cat = 'Ultimative Techniken';
-            } else if (tNameLower.includes('talent') || tNameLower.includes('fokus') || tNameLower.includes('begabung')) {
-              cat = 'Talente';
+            let cat = tech.category;
+            if (!cat) {
+              if (isTrans) {
+                if (tType === 'support' || tNameLower.includes('passiv') || tNameLower === 'levitation' || tDesc.toLowerCase().includes('passiv')) {
+                  cat = 'Passive Fähigkeiten';
+                } else if (tNameLower.includes('ultimativ') || (tech.tier && tech.tier.includes('4')) || tNameLower.includes('energieexplosion')) {
+                  cat = 'Ultimative Techniken';
+                } else {
+                  cat = 'Techniken';
+                }
+              } else {
+                cat = 'Techniken';
+              }
             }
 
             rawAbilities.push({
@@ -1772,7 +1781,11 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
               cost: tech.costValue ? `${tech.costValue} ${tech.costResourceName || ''}`.trim() : (ab.cost || char.powerCost || ''),
               description: tDesc || `Fähigkeit von ${ab.name || 'Charakter'}: ${tName}`,
               techniqueList: [tech],
-              techniques: tName
+              techniques: tName,
+              unlockedByTransformationId: isTrans ? (ab.id || ab.name) : tech.unlockedByTransformationId,
+              parentTransformationId: isTrans ? (ab.id || ab.name) : tech.parentTransformationId,
+              isTransformationOnly: isTrans ? true : tech.isTransformationOnly,
+              baseAbilityIds: isTrans ? [] : (tech.baseAbilityIds || [])
             });
           }
         });
@@ -1786,23 +1799,35 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
       // Check if it is a true transformation
       const isTransCategory = ab.category === 'Transformationen';
       const isStrictFormName = /\b(transformation|metamorphose|gestaltwechsel|verwandlung|werwolf|dämonenform|esper-form|kinder-form|kinderform|super-saiyajin|bestienform)\b/i.test(nameLower) 
-        || nameLower.endsWith('-form') || nameLower.endsWith(' form');
-      
-      const isKnownCombatTechnique = nameLower.includes('manipulation') || nameLower.includes('berührung') || nameLower.includes('telekinese') || nameLower.includes('barriere') || nameLower.includes('schild') || nameLower.includes('riss') || nameLower.includes('levitation') || nameLower.includes('absorption') || nameLower.includes('unterdrückung') || nameLower.includes('explosion') || nameLower.includes('strahl') || nameLower.includes('kugel') || nameLower.includes('hieb') || nameLower.includes('stoß') || nameLower.includes('wiederherstellung') || nameLower.includes('empathie') || nameLower.includes('heilung');
+        || nameLower.endsWith('-form') || nameLower.endsWith(' form') || Boolean(ab.transformName);
 
-      const isTrueTransformation = (isTransCategory || isStrictFormName) && !isKnownCombatTechnique;
+      // Strukturierte Kategorien haben absoluten Vorrang und dürfen nicht durch Keyword-Heuristiken überschrieben werden
+      const rawCat = (ab.category || '').trim();
+      const explicitCategories = ['grundfähigkeiten', 'grundfähigkeit', 'baseability', 'passive fähigkeiten', 'techniken', 'ultimative techniken', 'waffenbeherrschung', 'talente'];
+      const hasExplicitNonTransCategory = explicitCategories.includes(rawCat.toLowerCase());
+
+      const isTrueTransformation = (isTransCategory || (isStrictFormName && !hasExplicitNonTransCategory));
 
       if (!isTrueTransformation) {
-        let category = ab.category;
-        if (!category || category === 'Standard' || category === 'Kernfähigkeit' || category === 'Transformationen') {
-          if (nameLower.includes('passiv') || nameLower.includes('empathie') || nameLower.includes('wiederherstellung') || nameLower.includes('regen') || nameLower.includes('immunität') || descLower.includes('passiv') || descLower.includes('empathie') || descLower.includes('dauerhaft')) {
+        let category = rawCat;
+        // Normalisiere Aliasse
+        if (category === 'Grundfähigkeit' || category === 'BaseAbility') {
+          category = 'Grundfähigkeiten';
+        } else if (category === 'Talente') {
+          category = 'Waffenbeherrschung';
+        }
+
+        // NUR wenn absolut keine Kategorie oder generischer Platzhalter vorhanden ist
+        if (!category || category === 'Standard' || category === 'Kernfähigkeit' || (category === 'Transformationen' && !isTrueTransformation)) {
+          if (nameLower.includes('passiv') || descLower.includes('passiv') || descLower.includes('dauerhaft')) {
             category = 'Passive Fähigkeiten';
-          } else if (nameLower.includes('ultimativ') || nameLower.includes('explosion') || nameLower.includes('dimensionsriss') || nameLower.includes('finisher') || nameLower.includes('vollständige elementarkontrolle') || descLower.includes('ultimativ') || descLower.includes('extrem')) {
+          } else if (nameLower.includes('ultimativ') || descLower.includes('ultimativ') || (ab.tier && ab.tier.includes('4'))) {
             category = 'Ultimative Techniken';
-          } else if (nameLower.includes('talent') || nameLower.includes('fokus') || nameLower.includes('begabung') || nameLower.includes('meditation') || descLower.includes('talent')) {
-            category = 'Talente';
+          } else if (nameLower.includes('talent') || nameLower.includes('waffenbeherrschung') || descLower.includes('talent')) {
+            category = 'Waffenbeherrschung';
           } else {
-            category = 'Techniken';
+            // Standardmäßig Grundfähigkeiten für Basisfähigkeiten
+            category = 'Grundfähigkeiten';
           }
         }
         return { ...ab, category };
@@ -1864,7 +1889,13 @@ ${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
       return repaired;
     });
 
-    const standardAbilities = updatedAbilities.filter((a: any) => a.category !== 'Transformationen' && a.type !== 'Transformation');
+    const standardAbilities = updatedAbilities.filter((a: any) => 
+      a.category !== 'Transformationen' && 
+      a.type !== 'Transformation' && 
+      !a.unlockedByTransformationId && 
+      !a.parentTransformationId && 
+      !a.isTransformationOnly
+    );
     const transformations = updatedAbilities.filter((a: any) => a.category === 'Transformationen' || a.type === 'Transformation');
 
     return {
@@ -4828,13 +4859,14 @@ ${powerSourcesListStr}
      * Bei Kraftquelle "Körperkraft / Waffenkampf": Die Kampfkunst oder Waffenfertigkeit (z.B. "Schwertkunst (Ein-Schwert-Stil)", "Waffenloser Faustkampf", "Bogenkunst").
      * Bei Kraftquelle "Quirk / Esper": Die Kern-Begabung (z.B. "Telekinese / Psychokinese", "Explosion", "Gravitationskontrolle").
 
-4. STRUKTURIERTER AUFBAU IM 'abilities'-ARRAY:
-   Jeder Eintrag im 'abilities'-Array repräsentiert eine konkrete Kampf-Fähigkeit, passive Eigenschaft, Technik oder Transformation mit einer der 5 Kategorien:
-   - 'Passive Fähigkeiten': Passive Kampf-Eigenschaften, Schärfe der Sinne, Immunitäten, Körperhärte (z.B. "Hitzeimmunität", "Eiserne Zähigkeit", "Gefahreninstinkt", "Fester Stand").
-   - 'Techniken': Aktive Manöver, Angriffe, Zauber, Schilde, Heilung (z.B. "Feuerstrahl", "Schwertstoß", "Schildschlag", "Barriere", "Wundheilung").
-   - 'Ultimative Techniken': Mächtige Finisher, geheime Großangriffe (z.B. "Großer Feuerkaiser", "Drachenspalter-Klingenhieb").
-   - 'Transformationen': Echte Formwechsel, Verstärkungsmodi, Erweckungen (z.B. "Bestienform", "Raserei-Modus", "Gear-Stufe").
-   - 'Talente': Spezielle Kampf-Begabungen oder energetischer Fokus.
+4. STRUKTURIERTER AUFBAU IM 'abilities'- UND 'standardAbilities'-ARRAY:
+   Jeder Eintrag im 'abilities'- / 'standardAbilities'-Array repräsentiert eine konkrete Kampf-Fähigkeit mit einer der folgenden strikten Kategorien:
+   - 'Grundfähigkeiten': Fundamentale Standardfähigkeiten, Kinesen, Magieschulen, Kampfkünste oder übernatürliche Grundkräfte (z.B. "Elementarmanipulation", "Heilende Berührung", "Begrenzte Telekinese", "Empathie", "Schutzbarrieren"). Alle als Standard- oder Basisfähigkeiten genannten Kräfte MÜSSEN zwingend diese Kategorie erhalten!
+   - 'Passive Fähigkeiten': Passive Kampf-Eigenschaften, Schärfe der Sinne, Immunitäten, Körperhärte oder form-eigene passive Effekte (z.B. "Levitation", "Hitzeimmunität", "Eiserne Zähigkeit", "Gefahreninstinkt").
+   - 'Techniken': Aktive Manöver, Angriffe, Zauber, Schilde oder form-spezifische Spezialkräfte (z.B. "Elementarerschaffung", "Dimensionsrisse", "Absorption", "Feuerstrahl", "Schwertstoß").
+   - 'Ultimative Techniken': Mächtige Finisher, geheime Großangriffe oder ultimative Techniken einer Form (z.B. "Gewaltige Energieexplosion", "Großer Feuerkaiser", "Drachenspalter-Klingenhieb").
+   - 'Waffenbeherrschung': Spezielle Waffenstile, Manöver oder Kampf-Begabungen.
+   - 'Transformationen': Echte Formwechsel, Gestaltstufen, Erweckungen (z.B. "Esper", "Erwachte Esper", "Bestienform").
 
 ### AUSSEHEN (MANDATORISCH):
 Befülle im 'appearance'-Objekt das Feld 'looks' detailliert mit dem Gesichtsaussehen, Haarstil und besonderen Merkmalen im untransformierten Zustand. Grenzer dies sauber von 'outfit' (Kleidung) und 'raceFeatures' (nicht-menschliche physische Rassemerkmale) ab!
@@ -4843,7 +4875,15 @@ Befülle im 'appearance'-Objekt das Feld 'looks' detailliert mit dem Gesichtsaus
 Befülle zwingend die 'abilities'-Liste mit ALLEN Kräften, Fähigkeiten, Standardfähigkeiten, passiven Eigenschaften, Kampftechniken, Barrieren und Verwandlungen des Charakters. ES DARF ABSOLUT NICHTS WEGGELASSEN WERDEN!
 
 WICHTIGSTE DIRECTIVE FÜR DIE ERSTELLUNG:
-- JEDE EINZELNE genannte oder ableitbare Kraft, Kampftechnik, Barriere, Fähigkeit oder Gestalt (z.B. "Elementarmanipulation", "Heilende Berührung", "Begrenzte Telekinese", "Empathie", "Schutzbarrieren", "Vollständige Elementarkontrolle", "Dimensionsrisse", "Levitation", "Absorption", "Unterdrückung", "Gewaltige Energieexplosionen", "Vollständige körperliche Wiederherstellung", "Reine Esper-Form") MUSS ALS EIGENSTÄNDIGER EINTRAG im Array 'abilities' mit der jeweils passenden Kategorie existieren!
+- STANDARD-FÄHIGKEITEN ALS 'Grundfähigkeiten' ANLEGEN:
+  Alle als Standardfähigkeiten oder Basiskräfte genannten oder beschriebenen Fähigkeiten (wie z.B. "Elementarmanipulation", "Heilende Berührung", "Begrenzte Telekinese", "Empathie", "Schutzbarrieren") MÜSSEN ZWINGEND als eigenständige Einträge mit 'category: "Grundfähigkeiten"' im Array 'abilities' (und 'standardAbilities') angelegt werden! Sie dürfen NIEMALS zu gewöhnlichen 'Techniken' oder 'Passive Fähigkeiten' herabgestuft werden!
+- TRANSFORMATIONEN & GESTALTSTUFEN (z.B. "Esper", "Erwachte Esper"):
+  Transformationen haben stets 'category: "Transformationen"' und besitzen ihre EIGENEN Fähigkeiten und Techniken unter 'techniqueList':
+  * Eigene passive Fähigkeiten (z.B. "Levitation" mit category: 'Passive Fähigkeiten', type: 'Support')
+  * Eigene Techniken (z.B. "Elementarerschaffung", "Dimensionsrisse", "Absorption" mit category: 'Techniken', type: 'Angriff' oder 'Spezial')
+  * Eigene ultimative Techniken (z.B. "Gewaltige Energieexplosion" mit category: 'Ultimative Techniken', tier: 'Tier 4')
+  Transformationseigene Fähigkeiten gehören ausschließlich zur jeweiligen Transformation und dürfen NIEMALS als Standard-Grundfähigkeiten der Normalform angelegt werden!
+- JEDE EINZELNE genannte oder ableitbare Kraft, Kampftechnik, Barriere, Fähigkeit oder Gestalt MUSS ALS EIGENSTÄNDIGER EINTRAG im Array 'abilities' mit der jeweils passenden Kategorie existieren!
 - STRENGES VERBOT: Fasse die Kampftechniken NICHT nur als Text in einem einzigen Sammelblock oder nur innerhalb einer Transformation zusammen. Wenn 8 Techniken genannt werden, MÜSSEN 8 separate Einträge im 'abilities'-Array mit ihren eigenen Namen, Beschreibungen und Kosten erstellt werden!
 
 BEI TRANSFORMATIONEN (FORMEN & GESTALTWECHSEL):
@@ -6072,7 +6112,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
    - 'harvestableParts': Verwertbare Handwerksmaterialien & Alchemiezutaten
    - 'goldDrop': Typische Währungsausbeute
 6. Fähigkeiten & Macht:
-   - 'abilities': Liste von 2-4 spezifischen Fähigkeiten mit Name, category ('Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung'), cost, description und activationCondition.`;
+   - 'abilities': Liste von 2-4 spezifischen Fähigkeiten mit Name, category ('Grundfähigkeiten', 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung'), cost, description und activationCondition.`;
       }
 
       contextPrompt += `\n\nText: "${text}"\n`;
@@ -6369,7 +6409,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
               type: Type.OBJECT,
               properties: {
                 name: { type: Type.STRING, description: "Name der Fähigkeit." },
-                category: { type: Type.STRING, description: "Eines aus: 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung'." },
+                category: { type: Type.STRING, description: "Eines aus: 'Grundfähigkeiten', 'Passive Fähigkeiten', 'Techniken', 'Ultimative Techniken', 'Transformationen', 'Waffenbeherrschung'." },
                 cost: { type: Type.STRING, description: "Kosten oder Abklingzeit (z.B. '20 MP', 'Alle 3 Runden')." },
                 description: { type: Type.STRING, description: "Wirkung und Ablauf der Fertigkeit." },
                 activationCondition: { type: Type.STRING, description: "Auslöserbedingung (z.B. 'Bei <30% HP')." },

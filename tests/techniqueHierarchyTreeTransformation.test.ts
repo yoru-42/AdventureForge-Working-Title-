@@ -9,6 +9,7 @@ import {
 } from '../components/TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { resolveEffectiveMoveset, getTransformationChain } from '../utils/movesetResolver';
+import { GeminiService } from '../services/geminiService';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -203,6 +204,8 @@ export function runTechniqueHierarchyTreeTransformationTests() {
     id: 'char-esper-1',
     name: 'Aria',
     role: 'Esper',
+    personality: 'Ruhig und fokussiert',
+    bio: 'Eine mächtige Esperin.',
     attributes: {} as any,
     appearance: {} as any,
     powerSources: [{ id: 'ps_psi', source: 'Psi-Energie', powerName: 'Psi-Energie', cost: 'Psi' }],
@@ -261,6 +264,89 @@ export function runTechniqueHierarchyTreeTransformationTests() {
   assert(esperTransOnly.length === 2, 'Test 6g: Genau 2 form-exklusive Fähigkeiten für Esper');
   assert(esperTransOnly.some(t => t.name === 'Levitation' && t.category === 'Passive Fähigkeiten'), 'Test 6h: Levitation ist form-eigenes Passiv');
   assert(esperTransOnly.some(t => t.name === 'Elementarerschaffung' && t.category === 'Techniken'), 'Test 6i: Elementarerschaffung ist form-eigene Technik');
+
+  // Test 7: Hoshiko-Testfall (5 Grundfähigkeiten + Esper Transformation)
+  console.log('\n--- Test 7: Hoshiko-Testfall (Grundfähigkeiten vs. Esper) ---');
+  const rawHoshiko = {
+    id: 'char_hoshiko',
+    name: 'Hoshiko',
+    role: 'Esperin',
+    powerSource: 'Psi-Energie',
+    powerCost: 'Psi',
+    standardAbilities: [
+      { name: 'Elementarmanipulation', category: 'Grundfähigkeiten', description: 'Beherrschung der Elemente' },
+      { name: 'Heilende Berührung', category: 'Grundfähigkeiten', description: 'Heilung durch Berührung' },
+      { name: 'Begrenzte Telekinese', category: 'Grundfähigkeiten', description: 'Bewegung von Gegenständen' },
+      { name: 'Empathie', category: 'Grundfähigkeiten', description: 'Einfühlung in Emotionen' },
+      { name: 'Schutzbarrieren', category: 'Grundfähigkeiten', description: 'Errichtung von Barrieren' }
+    ],
+    transformations: [
+      {
+        id: 'trans_esper_hoshiko',
+        name: 'Esper',
+        transformName: 'Esper',
+        category: 'Transformationen',
+        description: 'Vollständige Entfaltung der Esper-Kräfte',
+        techniqueList: [
+          { name: 'Levitation', type: 'Support', category: 'Passive Fähigkeiten', description: 'Schweben durch Gedankenkraft' },
+          { name: 'Elementarerschaffung', type: 'Angriff', category: 'Techniken', description: 'Erschaffung reiner Elementarenergie' },
+          { name: 'Dimensionsrisse', type: 'Spezial', category: 'Techniken', description: 'Öffnen von Raumrissen' },
+          { name: 'Absorption', type: 'Verteidigung', category: 'Techniken', description: 'Einsaugen gegnerischer Angriffe' },
+          { name: 'Gewaltige Energieexplosion', type: 'Angriff', category: 'Ultimative Techniken', tier: 'Tier 4', description: 'Großflächige Entladung' }
+        ]
+      }
+    ]
+  };
+
+  // 7a. Sanitize & Post-Processing darf Grundfähigkeiten NICHT überschreiben
+  const repairedHoshiko = GeminiService.sanitizeAndRepairTransformations(rawHoshiko);
+  const hoshikoAbilities = repairedHoshiko.abilities || [];
+  
+  const grundfaehigkeitenInAbilities = hoshikoAbilities.filter((a: any) => a.category === 'Grundfähigkeiten');
+  assert(grundfaehigkeitenInAbilities.length === 5, 'Test 7a: Genau 5 Grundfähigkeiten im post-processed abilities-Array');
+  assert(grundfaehigkeitenInAbilities.some((a: any) => a.name === 'Elementarmanipulation'), 'Test 7b: Elementarmanipulation bleibt Grundfähigkeit (nicht Technik trotz "Manipulation")');
+  assert(grundfaehigkeitenInAbilities.some((a: any) => a.name === 'Heilende Berührung'), 'Test 7c: Heilende Berührung bleibt Grundfähigkeit (nicht Technik trotz "Berührung")');
+  assert(grundfaehigkeitenInAbilities.some((a: any) => a.name === 'Begrenzte Telekinese'), 'Test 7d: Begrenzte Telekinese bleibt Grundfähigkeit (nicht Technik trotz "Telekinese")');
+  assert(grundfaehigkeitenInAbilities.some((a: any) => a.name === 'Empathie'), 'Test 7e: Empathie bleibt Grundfähigkeit (nicht Passiv trotz "Empathie")');
+  assert(grundfaehigkeitenInAbilities.some((a: any) => a.name === 'Schutzbarrieren'), 'Test 7f: Schutzbarrieren bleibt Grundfähigkeit (nicht Technik trotz "Barriere")');
+
+  // 7b. Normalisierung & Ability-Hierarchy
+  const normHoshiko = normalizeAbilityHierarchy(repairedHoshiko);
+  assert(normHoshiko.baseAbilities.length === 5, 'Test 7g: Exakt 5 BaseAbilities in normalizeAbilityHierarchy');
+  
+  // Unter diesen Standard-Grundfähigkeiten dürfen keine unberechtigten Techniken hängen
+  normHoshiko.baseAbilities.forEach(ba => {
+    assert((ba.techniqueIds || []).length === 0, `Test 7h: Grundfähigkeit "${ba.name}" hat 0 unberechtigte Techniken`);
+  });
+
+  // 7c. Transformationseigene Fähigkeiten
+  const hoshikoTransTechs = normHoshiko.techniques.filter(t => 
+    t.unlockedByTransformationId === 'trans_esper_hoshiko' || 
+    t.parentTransformationId === 'trans_esper_hoshiko' ||
+    t.unlockedByTransformationId === 'Esper'
+  );
+  assert(hoshikoTransTechs.length === 5, 'Test 7i: Genau 5 form-exklusive Fähigkeiten bei Esper');
+  assert(hoshikoTransTechs.some(t => t.name === 'Levitation' && t.category === 'Passive Fähigkeiten'), 'Test 7j: Levitation ist passive Fähigkeit von Esper');
+  assert(hoshikoTransTechs.some(t => t.name === 'Elementarerschaffung' && t.category === 'Techniken'), 'Test 7k: Elementarerschaffung ist Technik von Esper');
+  assert(hoshikoTransTechs.some(t => t.name === 'Dimensionsrisse' && t.category === 'Techniken'), 'Test 7l: Dimensionsrisse ist Technik von Esper');
+  assert(hoshikoTransTechs.some(t => t.name === 'Absorption' && t.category === 'Techniken'), 'Test 7m: Absorption ist Technik von Esper');
+  assert(hoshikoTransTechs.some(t => t.name === 'Gewaltige Energieexplosion' && t.category === 'Ultimative Techniken'), 'Test 7n: Gewaltige Energieexplosion ist Ultimative Technik von Esper');
+
+  // 7d. Keine Vermischung ins Basis-Moveset der Normalform
+  const baseMoveset = resolveEffectiveMoveset(repairedHoshiko, 'standard');
+  const hasEsperInBaseMoveset = baseMoveset.some(m => 
+    m.name === 'Elementarerschaffung' || 
+    m.name === 'Dimensionsrisse' || 
+    m.name === 'Levitation' || 
+    m.name === 'Absorption' || 
+    m.name === 'Gewaltige Energieexplosion'
+  );
+  assert(!hasEsperInBaseMoveset, 'Test 7o: Basis-Moveset der Normalform enthält KEINE Esper-Fähigkeiten');
+
+  // In Esper-Form sind die Fähigkeiten aktiv
+  const esperMoveset = resolveEffectiveMoveset(repairedHoshiko, 'trans_esper_hoshiko');
+  assert(esperMoveset.some(m => m.name === 'Levitation'), 'Test 7p: Levitation ist im Esper-Moveset aktiv');
+  assert(esperMoveset.some(m => m.name === 'Gewaltige Energieexplosion'), 'Test 7q: Gewaltige Energieexplosion ist im Esper-Moveset aktiv');
 
   console.log('\n✨ ALLE TECHNIQUE-HIERARCHY-TREE & TRANSFORMATION-TRENNUNG TESTS BESTANDEN! ✨\n');
 }
