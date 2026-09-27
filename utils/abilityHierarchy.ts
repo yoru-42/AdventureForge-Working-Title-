@@ -436,9 +436,12 @@ if (Array.isArray(char.standardAbilities)) {
     techniquesMap.set(techKey, newTech);
   };
 
-  // 3a. Aus char.techniqueList
+  // 3a. Aus char.techniqueList oder char.techniques (falls Array)
   if (Array.isArray(char.techniqueList)) {
     char.techniqueList.forEach(t => registerTechnique(t));
+  }
+  if (Array.isArray(char.techniques)) {
+    char.techniques.forEach(t => registerTechnique(t));
   }
 
   // 3b. Aus char.abilities
@@ -1091,24 +1094,37 @@ export function convertLegacyToPowerHierarchy(char: any): {
 
   const powerSystems = Array.from(powerSystemsMap.values());
 
-  // Verknüpfungen konsistent halten
+  const validPowerIds = new Set(powers.map(p => p.id));
+  const validAbilityIds = new Set(abilities.map(a => a.id));
+  const validTechIds = new Set(techniques.map(t => t.id));
+  const validFormIds = new Set(forms.map(f => f.id));
+
+  // Verknüpfungen konsistent halten & Phantom-IDs ausschließen
+  powerSystems.forEach(sys => {
+    const existing = (sys.powerIds || []).filter(id => validPowerIds.has(id));
+    const linked = powers.filter(p => p.powerSystemId === sys.id).map(p => p.id);
+    sys.powerIds = Array.from(new Set([...existing, ...linked]));
+  });
+
   powers.forEach(p => {
-    const matchingAbilities = abilities.filter(a => a.powerId === p.id);
-    const matchingForms = forms.filter(f => f.powerId === p.id);
-    p.abilityIds = matchingAbilities.map(a => a.id);
-    p.formIds = matchingForms.map(f => f.id);
+    const matchingAbilities = abilities.filter(a => a.powerId === p.id).map(a => a.id);
+    const matchingForms = forms.filter(f => f.powerId === p.id).map(f => f.id);
+    p.abilityIds = Array.from(new Set([...(p.abilityIds || []).filter(id => validAbilityIds.has(id)), ...matchingAbilities]));
+    p.formIds = Array.from(new Set([...(p.formIds || []).filter(id => validFormIds.has(id)), ...matchingForms]));
   });
 
   abilities.forEach(a => {
-    const matchingTechs = techniques.filter(t => t.abilityId === a.id);
-    a.techniqueIds = matchingTechs.map(t => t.id);
+    const matchingTechs = techniques.filter(t => t.abilityId === a.id).map(t => t.id);
+    a.techniqueIds = Array.from(new Set([...(a.techniqueIds || []).filter(id => validTechIds.has(id)), ...matchingTechs]));
   });
 
   forms.forEach(f => {
-    const matchingTechs = normalized.techniques.filter(
-      t => t.unlockedByTransformationId === f.id || t.parentTransformationId === f.id
-    );
-    f.techniqueIds = matchingTechs.map(t => t.id);
+    const matchingTechs = normalized.techniques
+      .filter(t => t.unlockedByTransformationId === f.id || t.parentTransformationId === f.id)
+      .map(t => t.id)
+      .filter(id => validTechIds.has(id));
+    f.techniqueIds = Array.from(new Set([...(f.techniqueIds || []).filter(id => validTechIds.has(id)), ...matchingTechs]));
+    f.abilityIds = Array.from(new Set((f.abilityIds || []).filter(id => validAbilityIds.has(id))));
   });
 
   return {
@@ -1122,8 +1138,8 @@ export function convertLegacyToPowerHierarchy(char: any): {
 
 /**
  * Hauptfunktion zum Aufbau der neuen Power-Hierarchie aus einem Charakter-Objekt.
- * Priorisiert bereits vorhandene neue Daten (char.powers / char.powerSystems) und
- * greift nur bei Fehlen auf die verlustfreie Legacy-Migration zurück.
+ * Priorisiert bereits vorhandene neue Daten (char.powers / char.powerSystems / char.characterAbilities / char.characterTechniques / char.powerForms) und
+ * greift nur bei vollständigem Fehlen auf die verlustfreie Legacy-Migration zurück.
  */
 export function buildCharacterPowerHierarchy(char: any): {
   powerSystems: PowerSystem[];
@@ -1142,50 +1158,125 @@ export function buildCharacterPowerHierarchy(char: any): {
     };
   }
 
-  // 1. Prüfen, ob bereits neue strukturierte Daten vorhanden sind (Höchste Priorität)
-  const hasNewPowers = Array.isArray(char.powers) && char.powers.length > 0;
-  const hasNewSystems = Array.isArray(char.powerSystems) && char.powerSystems.length > 0;
-  const hasNewAbilities = Array.isArray(char.characterAbilities) && char.characterAbilities.length > 0;
-  const hasNewTechniques = Array.isArray(char.characterTechniques) && char.characterTechniques.length > 0;
-  const hasNewForms = Array.isArray(char.powerForms) && char.powerForms.length > 0;
+  // 1. Prüfen, ob mindestens eines der 5 neuen hierarchischen Arrays vorhanden ist
+  const hasNewHierarchyData =
+    (Array.isArray(char.powerSystems) && char.powerSystems.length > 0) ||
+    (Array.isArray(char.powers) && char.powers.length > 0) ||
+    (Array.isArray(char.characterAbilities) && char.characterAbilities.length > 0) ||
+    (Array.isArray(char.characterTechniques) && char.characterTechniques.length > 0) ||
+    (Array.isArray(char.powerForms) && char.powerForms.length > 0);
 
-  if (hasNewPowers || hasNewSystems) {
-    const powerSystems: PowerSystem[] = Array.isArray(char.powerSystems) ? [...char.powerSystems] : [];
-    const powers: CharacterPower[] = Array.isArray(char.powers) ? [...char.powers] : [];
-    const abilities: CharacterAbility[] = Array.isArray(char.characterAbilities) ? [...char.characterAbilities] : [];
-    const techniques: CharacterTechnique[] = Array.isArray(char.characterTechniques) ? [...char.characterTechniques] : [];
-    const forms: CharacterPowerForm[] = Array.isArray(char.powerForms) ? [...char.powerForms] : [];
+  if (hasNewHierarchyData) {
+    const powerSystems: PowerSystem[] = Array.isArray(char.powerSystems) 
+      ? char.powerSystems.map((s: PowerSystem) => ({ ...s, powerIds: s.powerIds ? [...s.powerIds] : [] })) 
+      : [];
+    const powers: CharacterPower[] = Array.isArray(char.powers) 
+      ? char.powers.map((p: CharacterPower) => ({ ...p, abilityIds: p.abilityIds ? [...p.abilityIds] : [], formIds: p.formIds ? [...p.formIds] : [] })) 
+      : [];
+    const abilities: CharacterAbility[] = Array.isArray(char.characterAbilities) 
+      ? char.characterAbilities.map((a: CharacterAbility) => ({ ...a, techniqueIds: a.techniqueIds ? [...a.techniqueIds] : [] })) 
+      : [];
+    const techniques: CharacterTechnique[] = Array.isArray(char.characterTechniques) 
+      ? char.characterTechniques.map((t: CharacterTechnique) => ({ ...t })) 
+      : [];
+    const forms: CharacterPowerForm[] = Array.isArray(char.powerForms) 
+      ? char.powerForms.map((f: CharacterPowerForm) => ({ ...f, abilityIds: f.abilityIds ? [...f.abilityIds] : [], techniqueIds: f.techniqueIds ? [...f.techniqueIds] : [] })) 
+      : [];
 
-    // System-Referenzen sicherstellen
-    if (powerSystems.length === 0 && powers.length > 0) {
+    // Fall A: Keine powers vorhanden, aber untergeordnete Elemente existieren
+    if (powers.length === 0) {
+      const defaultPowerId = slugifyPowerId(powerSystems[0]?.name || 'power_main', 'power');
+      const defaultPower: CharacterPower = {
+        id: defaultPowerId,
+        powerSystemId: powerSystems[0]?.id || slugifyPowerId(powerSystems[0]?.name || 'sys_main', 'sys'),
+        name: powerSystems[0]?.name || 'Konkrete Kraft',
+        abilityIds: abilities.map(a => a.id),
+        formIds: forms.map(f => f.id)
+      };
+      powers.push(defaultPower);
+    }
+
+    // Fall B: Keine powerSystems vorhanden, aber powers existieren
+    if (powerSystems.length === 0) {
       powers.forEach(p => {
-        const sysId = p.powerSystemId || `sys_${p.id}`;
+        const sysId = p.powerSystemId || slugifyPowerId(p.subtype || p.name || 'sys_main', 'sys');
+        p.powerSystemId = sysId;
         if (!powerSystems.some(s => s.id === sysId)) {
           powerSystems.push({
             id: sysId,
             name: p.subtype || p.name || 'Kraftsystem',
             systemType: p.subtype || 'Magie',
+            resourceName: p.resourceName,
             powerIds: [p.id]
           });
         }
       });
     }
 
-    powerSystems.forEach(sys => {
-      const matchingPowers = powers.filter(p => p.powerSystemId === sys.id || (!p.powerSystemId && powerSystems.length === 1));
-      sys.powerIds = Array.from(new Set([...(sys.powerIds || []), ...matchingPowers.map(p => p.id)]));
-    });
-
+    // Stellen sicher, dass jede Power ein gültiges System referenziert
     powers.forEach(p => {
-      const matchingAbilities = abilities.filter(a => a.powerId === p.id);
-      const matchingForms = forms.filter(f => f.powerId === p.id);
-      p.abilityIds = Array.from(new Set([...(p.abilityIds || []), ...matchingAbilities.map(a => a.id)]));
-      p.formIds = Array.from(new Set([...(p.formIds || []), ...matchingForms.map(f => f.id)]));
+      if (!p.powerSystemId || !powerSystems.some(s => s.id === p.powerSystemId)) {
+        p.powerSystemId = powerSystems[0]?.id || 'sys_default';
+      }
     });
 
+    // Validierte ID-Sets (gegen Phantom-IDs!)
+    const validSystemIds = new Set(powerSystems.map(s => s.id));
+    const validPowerIds = new Set(powers.map(p => p.id));
+    const validAbilityIds = new Set(abilities.map(a => a.id));
+    const validTechIds = new Set(techniques.map(t => t.id));
+    const validFormIds = new Set(forms.map(f => f.id));
+
+    // 1. PowerSystems konsolidieren (nur valide Power-IDs & dedupliziert)
+    powerSystems.forEach(sys => {
+      const existingValidPowerIds = (sys.powerIds || []).filter(id => validPowerIds.has(id));
+      const linkedPowers = powers.filter(p => p.powerSystemId === sys.id).map(p => p.id);
+      sys.powerIds = Array.from(new Set([...existingValidPowerIds, ...linkedPowers]));
+    });
+
+    // 2. CharacterPowers konsolidieren (nur valide Ability- & Form-IDs & dedupliziert)
+    powers.forEach(p => {
+      const existingValidAbilityIds = (p.abilityIds || []).filter(id => validAbilityIds.has(id));
+      const linkedAbilities = abilities.filter(a => a.powerId === p.id).map(a => a.id);
+      p.abilityIds = Array.from(new Set([...existingValidAbilityIds, ...linkedAbilities]));
+
+      const existingValidFormIds = (p.formIds || []).filter(id => validFormIds.has(id));
+      const linkedForms = forms.filter(f => f.powerId === p.id).map(f => f.id);
+      p.formIds = Array.from(new Set([...existingValidFormIds, ...linkedForms]));
+    });
+
+    // 3. CharacterAbilities konsolidieren
     abilities.forEach(a => {
-      const matchingTechs = techniques.filter(t => t.abilityId === a.id);
-      a.techniqueIds = Array.from(new Set([...(a.techniqueIds || []), ...matchingTechs.map(t => t.id)]));
+      if (!a.powerId || !validPowerIds.has(a.powerId)) {
+        const referencingPower = powers.find(p => p.abilityIds?.includes(a.id));
+        a.powerId = referencingPower?.id || powers[0]?.id || 'power_default';
+      }
+
+      const existingValidTechIds = (a.techniqueIds || []).filter(id => validTechIds.has(id));
+      const linkedTechniques = techniques.filter(t => t.abilityId === a.id).map(t => t.id);
+      a.techniqueIds = Array.from(new Set([...existingValidTechIds, ...linkedTechniques]));
+    });
+
+    // 4. CharacterTechniques konsolidieren (keine Phantom-AbilityIds!)
+    techniques.forEach(t => {
+      if (t.abilityId && !validAbilityIds.has(t.abilityId)) {
+        const referencingAbility = abilities.find(a => a.techniqueIds?.includes(t.id));
+        t.abilityId = referencingAbility?.id;
+      }
+      if (!t.powerId || !validPowerIds.has(t.powerId)) {
+        const parentAbility = abilities.find(a => a.id === t.abilityId);
+        t.powerId = parentAbility?.powerId || powers[0]?.id;
+      }
+    });
+
+    // 5. CharacterPowerForms konsolidieren
+    forms.forEach(f => {
+      if (!f.powerId || !validPowerIds.has(f.powerId)) {
+        const referencingPower = powers.find(p => p.formIds?.includes(f.id));
+        f.powerId = referencingPower?.id || powers[0]?.id;
+      }
+      f.abilityIds = Array.from(new Set((f.abilityIds || []).filter(id => validAbilityIds.has(id))));
+      f.techniqueIds = Array.from(new Set((f.techniqueIds || []).filter(id => validTechIds.has(id))));
     });
 
     return {

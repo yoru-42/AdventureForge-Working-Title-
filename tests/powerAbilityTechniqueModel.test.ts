@@ -646,4 +646,253 @@ assert.strictEqual(techEntry.powerId, powerEntry.id, 'CharacterTechnique -> Char
 
 console.log('[PASS] Test 9: Graph relationships in all directions verified');
 
+// ----------------------------------------------------------------------------
+// Test A: Legacy with `techniques` array prop
+// ----------------------------------------------------------------------------
+console.log('\n--- Test A: Legacy with `techniques` array prop ---');
+
+const legacyWithTechniquesProp = {
+  powerSources: [
+    {
+      id: 'ps_shadow',
+      source: 'Schattenmagie',
+      powerName: 'Dunkle Künste',
+      cost: 'Mana'
+    }
+  ],
+  baseAbilities: [
+    {
+      id: 'ba_shadow_shape',
+      displayName: 'Umbrakinese',
+      element: 'Dunkelheit',
+      abilityType: 'creation_manipulation'
+    }
+  ],
+  techniques: [
+    {
+      id: 'tech_shadow_step',
+      name: 'Schattenschritt',
+      category: 'Techniken',
+      baseAbilityIds: ['ba_shadow_shape']
+    },
+    {
+      id: 'form_shadow_avatar',
+      name: 'Schattenavatar',
+      transformName: 'Schattenavatar',
+      category: 'Transformationen',
+      type: 'Transformation'
+    }
+  ]
+};
+
+const hierarchyFromLegacyProp = buildCharacterPowerHierarchy(legacyWithTechniquesProp);
+assert.strictEqual(hierarchyFromLegacyProp.powerSystems.length, 1);
+assert.strictEqual(hierarchyFromLegacyProp.powers.length, 1);
+assert.strictEqual(hierarchyFromLegacyProp.abilities.length, 1);
+assert.strictEqual(hierarchyFromLegacyProp.techniques.length, 1);
+assert.strictEqual(hierarchyFromLegacyProp.forms.length, 1);
+assert.strictEqual(hierarchyFromLegacyProp.techniques[0].name, 'Schattenschritt');
+assert.strictEqual(hierarchyFromLegacyProp.forms[0].name, 'Schattenavatar');
+console.log('[PASS] Test A: Legacy fallback with techniques array prop works seamlessly');
+
+// ----------------------------------------------------------------------------
+// Test B: Pure new data directly used
+// ----------------------------------------------------------------------------
+console.log('\n--- Test B: Pure new data directly used ---');
+
+const pureNewChar: Partial<Character> = {
+  powerSystems: [
+    {
+      id: 'sys_ki',
+      name: 'Ki',
+      systemType: 'Ki',
+      resourceName: 'Ki',
+      powerIds: ['power_ki_control']
+    }
+  ],
+  powers: [
+    {
+      id: 'power_ki_control',
+      powerSystemId: 'sys_ki',
+      name: 'Ki-Kontrolle',
+      resourceName: 'Ki',
+      abilityIds: ['ab_ki_blast'],
+      formIds: []
+    }
+  ],
+  characterAbilities: [
+    {
+      id: 'ab_ki_blast',
+      powerId: 'power_ki_control',
+      name: 'Ki-Fokussierung',
+      abilityType: 'Erzeugung',
+      techniqueIds: ['tech_kameha']
+    }
+  ],
+  characterTechniques: [
+    {
+      id: 'tech_kameha',
+      abilityId: 'ab_ki_blast',
+      powerId: 'power_ki_control',
+      name: 'Ki-Strahl',
+      techniqueType: 'Angriff'
+    }
+  ],
+  powerForms: []
+};
+
+const hierarchyB = buildCharacterPowerHierarchy(pureNewChar);
+assert.strictEqual(hierarchyB.powerSystems[0].id, 'sys_ki');
+assert.strictEqual(hierarchyB.powers[0].id, 'power_ki_control');
+assert.strictEqual(hierarchyB.abilities[0].id, 'ab_ki_blast');
+assert.strictEqual(hierarchyB.techniques[0].id, 'tech_kameha');
+console.log('[PASS] Test B: Pure new data utilized directly without unnecessary legacy fallback');
+
+// ----------------------------------------------------------------------------
+// Test C: Partial new data (powers & abilities without powerSystems)
+// ----------------------------------------------------------------------------
+console.log('\n--- Test C: Partial new data (powers & abilities without powerSystems) ---');
+
+const partialNewChar: Partial<Character> = {
+  powers: [
+    {
+      id: 'power_wind_mastery',
+      name: 'Aeromantie',
+      subtype: 'Elementarmagie',
+      abilityIds: ['ab_wind_gust']
+    }
+  ],
+  characterAbilities: [
+    {
+      id: 'ab_wind_gust',
+      powerId: 'power_wind_mastery',
+      name: 'Windstoß-Fähigkeit',
+      abilityType: 'Erzeugung',
+      techniqueIds: ['tech_gale']
+    }
+  ],
+  characterTechniques: [
+    {
+      id: 'tech_gale',
+      abilityId: 'ab_wind_gust',
+      name: 'Sturmböe'
+    }
+  ]
+};
+
+const hierarchyC = buildCharacterPowerHierarchy(partialNewChar);
+assert.strictEqual(hierarchyC.powerSystems.length, 1, 'Synthesizes missing power system');
+assert.strictEqual(hierarchyC.powerSystems[0].powerIds?.[0], 'power_wind_mastery');
+assert.strictEqual(hierarchyC.powers[0].powerSystemId, hierarchyC.powerSystems[0].id);
+assert.strictEqual(hierarchyC.techniques[0].powerId, 'power_wind_mastery');
+console.log('[PASS] Test C: Partial new data correctly synthesized missing power systems and relations');
+
+// ----------------------------------------------------------------------------
+// Test D: Repeated loading & Idempotency (no duplicate IDs in arrays)
+// ----------------------------------------------------------------------------
+console.log('\n--- Test D: Repeated loading & Idempotency ---');
+
+const charWithDuplicatesInput: Partial<Character> = {
+  powerSystems: [
+    {
+      id: 'sys_alchemy',
+      name: 'Alchemie',
+      powerIds: ['power_transmutation', 'power_transmutation'] // Duplikat
+    }
+  ],
+  powers: [
+    {
+      id: 'power_transmutation',
+      powerSystemId: 'sys_alchemy',
+      name: 'Transmutation',
+      abilityIds: ['ab_matter_shaping', 'ab_matter_shaping'] // Duplikat
+    }
+  ],
+  characterAbilities: [
+    {
+      id: 'ab_matter_shaping',
+      powerId: 'power_transmutation',
+      name: 'Materie formen',
+      techniqueIds: ['tech_iron_wall', 'tech_iron_wall'] // Duplikat
+    }
+  ],
+  characterTechniques: [
+    {
+      id: 'tech_iron_wall',
+      abilityId: 'ab_matter_shaping',
+      name: 'Eisenwand'
+    }
+  ]
+};
+
+const pass1 = buildCharacterPowerHierarchy(charWithDuplicatesInput);
+const pass2 = buildCharacterPowerHierarchy({
+  powerSystems: pass1.powerSystems,
+  powers: pass1.powers,
+  characterAbilities: pass1.abilities,
+  characterTechniques: pass1.techniques,
+  powerForms: pass1.forms
+});
+
+assert.strictEqual(pass2.powerSystems[0].powerIds?.length, 1, 'powerIds must remain deduplicated');
+assert.strictEqual(pass2.powers[0].abilityIds?.length, 1, 'abilityIds must remain deduplicated');
+assert.strictEqual(pass2.abilities[0].techniqueIds?.length, 1, 'techniqueIds must remain deduplicated');
+console.log('[PASS] Test D: Deduplication across multiple passes verified');
+
+// ----------------------------------------------------------------------------
+// Test E: Phantom ID Elimination
+// ----------------------------------------------------------------------------
+console.log('\n--- Test E: Phantom ID Elimination ---');
+
+const charWithPhantomIds: Partial<Character> = {
+  powerSystems: [
+    {
+      id: 'sys_runes',
+      name: 'Runenmagie',
+      powerIds: ['power_runes', 'power_non_existent_phantom'] // Phantom
+    }
+  ],
+  powers: [
+    {
+      id: 'power_runes',
+      powerSystemId: 'sys_runes',
+      name: 'Uralte Runen',
+      abilityIds: ['ab_rune_carving', 'ab_phantom_ability'], // Phantom
+      formIds: ['form_phantom_form'] // Phantom
+    }
+  ],
+  characterAbilities: [
+    {
+      id: 'ab_rune_carving',
+      powerId: 'power_runes',
+      name: 'Runenschnitzen',
+      techniqueIds: ['tech_flame_rune', 'tech_phantom_tech'] // Phantom
+    }
+  ],
+  characterTechniques: [
+    {
+      id: 'tech_flame_rune',
+      abilityId: 'ab_rune_carving',
+      name: 'Flammenrune'
+    },
+    {
+      id: 'tech_unattached',
+      abilityId: 'ab_non_existent_parent', // Ungültig
+      name: 'Freistehende Technik'
+    }
+  ]
+};
+
+const cleanedHierarchy = buildCharacterPowerHierarchy(charWithPhantomIds);
+
+assert.strictEqual(cleanedHierarchy.powerSystems[0].powerIds?.includes('power_non_existent_phantom'), false);
+assert.strictEqual(cleanedHierarchy.powers[0].abilityIds?.includes('ab_phantom_ability'), false);
+assert.strictEqual(cleanedHierarchy.powers[0].formIds?.includes('form_phantom_form'), false);
+assert.strictEqual(cleanedHierarchy.abilities[0].techniqueIds?.includes('tech_phantom_tech'), false);
+
+const unattached = cleanedHierarchy.techniques.find(t => t.id === 'tech_unattached');
+assert.strictEqual(unattached?.abilityId, undefined, 'Ungültige Phantom-AbilityId wurde bereinigt');
+
+console.log('[PASS] Test E: Phantom IDs completely eradicated and relationships validated');
+
 console.log('\n✨ ALL POWER-ABILITY-TECHNIQUE-FORM TESTS PASSED SUCCESSFULLY! ✨');

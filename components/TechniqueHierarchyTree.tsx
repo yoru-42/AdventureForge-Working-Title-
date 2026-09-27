@@ -250,13 +250,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   // 0. Neue Hierarchie ermitteln (Schritt 2: Interne Anbindung)
   const powerHierarchy = useMemo(() => {
     if (powerSystems || powers || abilities || characterTechniques || forms) {
-      return {
-        powerSystems: powerSystems || [],
-        powers: powers || [],
-        abilities: abilities || [],
-        techniques: characterTechniques || [],
-        forms: forms || []
-      };
+      return buildCharacterPowerHierarchy({
+        powerSystems,
+        powers,
+        characterAbilities: abilities,
+        characterTechniques,
+        powerForms: forms
+      });
     }
     if (character) {
       return buildCharacterPowerHierarchy(character);
@@ -264,7 +264,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return buildCharacterPowerHierarchy({
       powerSources,
       baseAbilities,
-      techniqueList: techniques
+      techniques
     });
   }, [powerSystems, powers, abilities, characterTechniques, forms, character, powerSources, baseAbilities, techniques]);
 
