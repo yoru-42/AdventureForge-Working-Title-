@@ -28,7 +28,7 @@ export enum HarmBlockThreshold {
 export type GenerateContentResponse = any;
 
 import { jsonrepair } from "jsonrepair";
-import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder } from "../types";
+import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder, SmartFillContext, SmartFillSection } from "../types";
 import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
 import { enrichAndCompleteLoreEntry, sanitizeCharacterNameAndProfession, sanitizeRulerNameAndTitle } from "../lib/loreSanitizer";
 import {
@@ -4745,7 +4745,7 @@ Gib die Antwort im exakten JSON-Format gemäß des vorgegebenen Schemas zurück.
     worldContext?: any, 
     existingFactions?: string[],
     existingCodexCharacters?: any[],
-    targetSection?: string
+    targetSection?: string | SmartFillContext
   ): Promise<any> {
     return this.callWithRetry(async () => {
       const ai = this.getAI();
@@ -5007,8 +5007,11 @@ ${existingCodexCharacters.slice(0, 8).map(c => `- Name: "${c.name}" (${c.role ||
   * Beziehung/Details: "${(c.relation || c.description || 'Keine Angabe').slice(0, 150)}"`).join('\n')}`;
       }
 
-      if (targetSection && targetSection !== 'all') {
+      const activeSectionStr: string = typeof targetSection === 'object' && targetSection !== null ? String(targetSection.section) : String(targetSection || 'all');
+
+      if (activeSectionStr && activeSectionStr !== 'all' && activeSectionStr !== 'full_character') {
         const sectionDescriptions: Record<string, string> = {
+          profile: 'Profil & Aussehen (Name, Rufname, Spitzname, Rolle, Aussehen, Körpermerkmale, Persönlichkeit, Biografie, Aktuelle Situation)',
           appearance: 'Statur & Erscheinung (Geschlecht, Alter, Statur, Haare, Augen, Kleidung, Looks, Rasse, Rassemerkmale, Maße, Körbchengröße, Gewicht, KFA, Muskelmasse, Standort und Verwandlungen)',
           personality: 'Persönlichkeit (Wesenszüge, Archetyp, Eigenschaften, Vorlieben/Abneigungen, Temperament)',
           bio: 'Vergangenheit / Biografie (Lebenslauf, Herkunft, Kindheit, prägende Ereignisse, Familie)',
@@ -5018,10 +5021,11 @@ ${existingCodexCharacters.slice(0, 8).map(c => `- Name: "${c.name}" (${c.role ||
           secrets: 'Geheimnis-Stufen / Verborgenes Wissen (secretsStage1: Öffentliches Wissen, secretsStage2: Gerüchte & Indizien, secretsStage3: Verborgenes Geheimnis, knowledge)',
           relationships: 'Beziehungen (Verhältnis zu anderen Charakteren, Gilden, Familie, Anredeformen, Verhalten)',
           combat: 'Kampffähigkeiten & Techniken (Kräfte, Spezialfähigkeiten, Techniken, Kraftquelle, Kraftkosten, Machtlevel)',
+          abilities: 'Kampffähigkeiten & Kräfthierarchie',
           professions: 'Berufe & Talente (Hauptberuf, Berufsrang, Nebenberufe, Handwerkskünste, Talente, Alltagsfertigkeiten)',
           inventory: 'Besitz & Inventar (Waffen, Kleidung/Rüstung, Accessoires/Schmuck, Geld/Währung, Werkzeuge und Gegenstände im Rucksack)'
         };
-        const desc = sectionDescriptions[targetSection] || targetSection;
+        const desc = sectionDescriptions[activeSectionStr] || activeSectionStr;
         contextPrompt += `\n\n### GEZIELTER BEARBEITUNGS-FOKUS: "${desc}"
 MANDATORISCHE DIRECTIVE: Der Nutzer möchte gezielt diesen Bereich bearbeiten oder verfeinern!
 Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend zur Freitext-Eingabe. Behalte bestehende, ausgefüllte Daten anderer Bereiche bei bzw. passe sie nur an, wenn dies zur logischen Stimmigkeit mit dem bearbeiteten Bereich zwingend erforderlich ist.`;
@@ -5029,8 +5033,8 @@ Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend 
 
       contextPrompt += `\n\nText: "${text}"\n`;
 
-      const responseSchema = targetSection && targetSection !== 'all' 
-        ? this.getSectionCharacterSchema(targetSection, powerSettings) 
+      const responseSchema = activeSectionStr && activeSectionStr !== 'all' && activeSectionStr !== 'full_character' 
+        ? this.getSectionCharacterSchema(activeSectionStr, powerSettings) 
         : this.getCharacterSchema(powerSettings);
 
       const response = await this.generateContentWithFallback(ai, {

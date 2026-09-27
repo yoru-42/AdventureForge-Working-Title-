@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits } from '../types';
+import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection } from '../types';
 import { GeminiService } from '../services/geminiService';
+import { applySmartFillUpdates } from '../utils/smartFillUtils';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import ProfessionSelect from './ProfessionSelect';
 import CompetenceProfileEditor from './CompetenceProfileEditor';
@@ -1647,10 +1648,18 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     reader.readAsDataURL(file);
   };
 
-  const handlePlayerSmartFill = async () => {
+  const handlePlayerSmartFill = async (overrideContext?: SmartFillContext) => {
     setIsSmartFillingChar(true);
     try {
-      const promptToUse = playerSmartFill.trim() || 'Vollständigen Charakter automatisch mit passenden Details, Vorgeschichte, Beziehungen und Fähigkeiten ausstatten.';
+      const activeSection: SmartFillSection = playerCharTab === 'profil' ? 'profile' : 'full_character';
+      const context: SmartFillContext = overrideContext || {
+        section: activeSection,
+        targetId: player.id,
+        mode: keepExistingPlayerDetails ? 'supplement' : 'replace',
+        instruction: playerSmartFill
+      };
+
+      const promptToUse = context.instruction || playerSmartFill.trim() || (context.section === 'profile' ? 'Profil & Aussehen des Charakters automatisch ergänzen.' : 'Vollständigen Charakter automatisch mit passenden Details, Vorgeschichte, Beziehungen und Fähigkeiten ausstatten.');
       const existingFactions = loreDatabase
         .filter(l => l.category === 'Fraktionen')
         .map(l => l.title)
@@ -1696,330 +1705,35 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       const data = await GeminiService.autofillCharacter(
         promptToUse, 
         world.campaignPowerSettings,
-        keepExistingPlayerDetails ? player : undefined,
+        context.mode === 'supplement' ? player : undefined,
         world,
         existingFactions,
-        existingCodexCharacters
+        existingCodexCharacters,
+        context
       );
+
       setPlayer(prev => {
-        let generatedAbilities = prev.abilities || [];
-        if (data.abilities && Array.isArray(data.abilities)) {
-          const defaultPsId = activePowerSource?.id || playerPowerSourcesList[0]?.id || 'ps-1';
-          const mappedAbilities = data.abilities.map((abil: any, aIndex: number) => {
-            const techniques = abil.techniques || (abil.techniqueList ? abil.techniqueList.map((t: any) => t.name).join(', ') : '');
-            let cat = abil.category;
-            const isTrans = cat === 'Transformationen' || abil.type === 'Transformation';
-            if (isTrans) {
-              cat = 'Transformationen';
-            } else if (!cat || cat === 'Standard' || cat === 'Kernfähigkeit' || cat === 'Transformationen') {
-              cat = 'Techniken';
-            }
-            return {
-              id: `${Date.now()}-${aIndex}-${Math.random().toString(36).substr(2, 5)}`,
-              name: abil.name || 'Fähigkeit',
-              category: cat,
-              type: isTrans ? 'Transformation' : (abil.type || 'Technik'),
-              powerSourceId: abil.powerSourceId || defaultPsId,
-              source: abil.source || data.powerSource || '',
-              cost: abil.cost || data.powerCost || '',
-              description: abil.description || abil.skills || '',
-              techniques: techniques,
-              activationCondition: abil.activationCondition || '',
-              transformName: abil.transformName || '',
-              transformRole: abil.transformRole || '',
-              transformGender: abil.transformGender || '',
-              transformCupSize: abil.transformCupSize || '',
-              transformHairColor: abil.transformHairColor || '',
-              transformEyeColor: abil.transformEyeColor || '',
-              transformBuild: abil.transformBuild || '',
-              transformAge: abil.transformAge || '',
-              transformRace: abil.transformRace || '',
-              transformRaceFeatures: abil.transformRaceFeatures || '',
-              transformHeight: abil.transformHeight || '',
-              transformMeasurements: abil.transformMeasurements || '',
-              transformOrigin: abil.transformOrigin || '',
-              transformFamily: abil.transformFamily || '',
-              transformFaction: abil.transformFaction || '',
-              transformOutfit: abil.transformOutfit || '',
-              transformLooks: abil.transformLooks || '',
-              transformWings: !!abil.transformWings,
-              transformHorns: !!abil.transformHorns,
-              transformationModifiers: abil.transformationModifiers,
-              unlockedByTransformationId: abil.unlockedByTransformationId,
-              unlockedByTransformationIds: abil.unlockedByTransformationIds,
-              isTransformationOnly: abil.isTransformationOnly || false,
-              parentTransformationId: abil.parentTransformationId,
-              techniqueList: (abil.techniqueList && Array.isArray(abil.techniqueList))
-                ? abil.techniqueList.filter((t: any) => t && t.name).map((t: any, index: number) => ({ 
-                    id: `${Date.now()}-${aIndex}-${index}-${Math.random().toString(36).substr(2, 3)}`, 
-                    name: t.name.trim(), 
-                    description: t.description ? t.description.trim() : '',
-                    type: t.type || (isTrans ? 'Transformation' : 'Angriff'),
-                    subtype: t.subtype || ''
-                  }))
-                : (techniques 
-                    ? techniques.split(/[,\n;]/).map((s: string) => s.trim()).filter(Boolean).map((name: string, index: number) => ({ 
-                        id: `${Date.now()}-${aIndex}-${index}-${Math.random().toString(36).substr(2, 3)}`, 
-                        name, 
-                        description: '',
-                        type: isTrans ? 'Transformation' : 'Angriff',
-                        subtype: ''
-                      }))
-                    : []
-                  )
-            };
-          });
-
-          if (keepExistingPlayerDetails && prev.abilities && prev.abilities.length > 0) {
-            const mergedAbilities = prev.abilities.map(existingAbil => {
-              const matchingNewAbil = mappedAbilities.find(
-                a => (a.name || '').toLowerCase().trim() === (existingAbil.name || '').toLowerCase().trim()
-              );
-              if (matchingNewAbil) {
-                return {
-                  ...existingAbil,
-                  category: existingAbil.category || matchingNewAbil.category,
-                  source: existingAbil.source || matchingNewAbil.source,
-                  cost: existingAbil.cost || matchingNewAbil.cost,
-                  description: existingAbil.description || matchingNewAbil.description,
-                  techniques: existingAbil.techniques || matchingNewAbil.techniques,
-                  activationCondition: existingAbil.activationCondition || matchingNewAbil.activationCondition,
-                  transformName: existingAbil.transformName || matchingNewAbil.transformName,
-                  transformRole: existingAbil.transformRole || matchingNewAbil.transformRole,
-                  transformGender: existingAbil.transformGender || matchingNewAbil.transformGender,
-                  transformCupSize: existingAbil.transformCupSize || matchingNewAbil.transformCupSize,
-                  transformHairColor: existingAbil.transformHairColor || matchingNewAbil.transformHairColor,
-                  transformEyeColor: existingAbil.transformEyeColor || matchingNewAbil.transformEyeColor,
-                  transformBuild: existingAbil.transformBuild || matchingNewAbil.transformBuild,
-                  transformAge: existingAbil.transformAge || matchingNewAbil.transformAge,
-                  transformRace: existingAbil.transformRace || matchingNewAbil.transformRace,
-                  transformRaceFeatures: existingAbil.transformRaceFeatures || matchingNewAbil.transformRaceFeatures,
-                  transformHeight: existingAbil.transformHeight || matchingNewAbil.transformHeight,
-                  transformMeasurements: existingAbil.transformMeasurements || matchingNewAbil.transformMeasurements,
-                  transformOrigin: existingAbil.transformOrigin || matchingNewAbil.transformOrigin,
-                  transformFamily: existingAbil.transformFamily || matchingNewAbil.transformFamily,
-                  transformFaction: existingAbil.transformFaction || matchingNewAbil.transformFaction,
-                  transformOutfit: existingAbil.transformOutfit || matchingNewAbil.transformOutfit,
-                  transformLooks: existingAbil.transformLooks || matchingNewAbil.transformLooks,
-                  transformWings: existingAbil.transformWings !== undefined && existingAbil.transformWings !== false ? existingAbil.transformWings : matchingNewAbil.transformWings,
-                  transformHorns: existingAbil.transformHorns !== undefined && existingAbil.transformHorns !== false ? existingAbil.transformHorns : matchingNewAbil.transformHorns,
-                  techniqueList: (existingAbil.techniqueList && existingAbil.techniqueList.length > 0)
-                    ? existingAbil.techniqueList
-                    : matchingNewAbil.techniqueList
-                };
-              }
-              return existingAbil;
-            });
-            const existingNames = new Set(prev.abilities.map(a => (a.name || '').toLowerCase().trim()));
-            const nonDuplicates = mappedAbilities.filter(a => !existingNames.has((a.name || '').toLowerCase().trim()));
-            generatedAbilities = [...mergedAbilities, ...nonDuplicates];
-          } else {
-            generatedAbilities = mappedAbilities;
-          }
-        } else if (data.skills || data.powerSource) {
-          const newAbil = {
-            id: `ab-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-            source: data.powerSource || '',
-            cost: data.powerCost || '',
-            description: data.skills || '',
-            techniques: data.techniques || '',
-            techniqueList: (data.techniqueList && Array.isArray(data.techniqueList))
-              ? data.techniqueList.filter((t: any) => t && t.name).map((t: any, index: number) => ({ 
-                  id: `${Date.now()}-${index}`, 
-                  name: t.name.trim(), 
-                  description: t.description ? t.description.trim() : '' 
-                }))
-              : (data.techniques 
-                  ? data.techniques.split(/[,\n;]/).map((s: string) => s.trim()).filter(Boolean).map((name: string, index: number) => ({ 
-                      id: `${Date.now()}-${index}`, 
-                      name, 
-                      description: '' 
-                    }))
-                  : []
-                )
-          };
-          if (keepExistingPlayerDetails && prev.abilities && prev.abilities.length > 0) {
-            generatedAbilities = [...prev.abilities, newAbil];
-          } else {
-            generatedAbilities = [newAbil];
-          }
-        }
-
-        const finalBio = keepExistingPlayerDetails && prev.bio ? prev.bio : (data.bio || '');
-
-        const finalPersonality = keepExistingPlayerDetails && prev.personality ? prev.personality : (data.personality || '');
-
-        const finalArchetype = data.personalityArchetype || (keepExistingPlayerDetails ? prev.personalityArchetype : '');
-        const rawTraits = data.personalityTraits || (keepExistingPlayerDetails ? prev.personalityTraits : undefined);
-        const finalTraits = finalArchetype && finalArchetype !== '-' ? applyArchetypeToTraits(rawTraits, finalArchetype) : rawTraits;
-
-        const finalOutfit = data.appearance?.outfit || (keepExistingPlayerDetails ? prev.appearance?.outfit : '') || '';
-
-        let mergedRelationships = keepExistingPlayerDetails ? (prev.relationships || []) : [];
-        if (data.relationships && Array.isArray(data.relationships)) {
-          const seenRelIds = new Set(mergedRelationships.map(r => r.id).filter(Boolean));
-          const incoming = data.relationships.map((r: any, index: number) => {
-            let uniqueId = r.id;
-            if (!uniqueId || seenRelIds.has(uniqueId)) {
-              uniqueId = `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 6)}`;
-            }
-            seenRelIds.add(uniqueId);
-            return {
-              id: uniqueId,
-              targetCharacter: r.targetCharacter || '',
-              type: r.type || '',
-              relationshipStatus: r.relationshipStatus || '',
-              addressFromSelfToTarget: r.addressFromSelfToTarget || '',
-              addressFromTargetToSelf: r.addressFromTargetToSelf || '',
-              behavior: r.behavior || '',
-              aiDirectives: r.aiDirectives || '',
-              perceptionSelfToTarget: r.perceptionSelfToTarget || '',
-              perceptionTargetToSelf: r.perceptionTargetToSelf || '',
-              secretsAndMotives: r.secretsAndMotives || '',
-              boundariesAndTaboos: r.boundariesAndTaboos || '',
-              sharedPast: r.sharedPast || '',
-              keyMemories: r.keyMemories || '',
-              valuesSelfToTarget: r.valuesSelfToTarget || {
-                affection: 0, trust: 50, respect: 50, loyalty: 50, familiarity: 30, fear: 0, bond: 30, hostility: 0
-              },
-              valuesTargetToSelf: r.valuesTargetToSelf || {
-                affection: 0, trust: 50, respect: 50, loyalty: 50, familiarity: 30, fear: 0, bond: 30, hostility: 0
-              },
-              keyEvents: Array.isArray(r.keyEvents) ? r.keyEvents.map((ev: any, evI: number) => ({
-                id: ev.id || `${Date.now()}-${evI}`,
-                title: ev.title || 'Schlüsselereignis',
-                description: ev.description || '',
-                dateOrChapter: ev.dateOrChapter || '',
-                impact: ev.impact || ''
-              })) : [],
-              _isCustom: r._isCustom || false
-            };
-          });
-          if (keepExistingPlayerDetails) {
-            const existingTargets = new Set(mergedRelationships.map(r => (r.targetCharacter || '').toLowerCase().trim()));
-            const newFiltered = incoming.filter(r => r.targetCharacter && !existingTargets.has(r.targetCharacter.toLowerCase().trim()));
-            mergedRelationships = [...mergedRelationships, ...newFiltered];
-          } else {
-            mergedRelationships = incoming;
-          }
-        }
-
-        const nextSecrets1 = data.secretsStage1 !== undefined ? data.secretsStage1 : (keepExistingPlayerDetails ? prev.secretsStage1 : '');
-        const nextSecrets2 = data.secretsStage2 !== undefined ? data.secretsStage2 : (keepExistingPlayerDetails ? prev.secretsStage2 : '');
-        const nextSecrets3 = data.secretsStage3 !== undefined ? data.secretsStage3 : (keepExistingPlayerDetails ? prev.secretsStage3 : '');
-        const nextKnowledge = data.knowledge !== undefined ? data.knowledge : (keepExistingPlayerDetails ? prev.knowledge : '');
-
-        const newAppearance = keepExistingPlayerDetails ? {
-          ...prev.appearance,
-          gender: data.appearance?.gender || prev.appearance?.gender || 'Unbekannt',
-          age: data.appearance?.age || prev.appearance?.age || '',
-          build: data.appearance?.build || prev.appearance?.build || '',
-          hairColor: data.appearance?.hairColor || prev.appearance?.hairColor || '',
-          eyeColor: data.appearance?.eyeColor || prev.appearance?.eyeColor || '',
-          cupSize: data.appearance?.cupSize || prev.appearance?.cupSize || '-',
-          outfit: finalOutfit,
-          looks: data.appearance?.looks || prev.appearance?.looks || '',
-          height: data.appearance?.height || prev.appearance?.height || '',
-          measurements: data.appearance?.measurements || prev.appearance?.measurements || '',
-          origin: data.appearance?.origin || prev.appearance?.origin || '',
-          family: data.appearance?.family || prev.appearance?.family || '',
-          faction: data.appearance?.faction || prev.appearance?.faction || '',
-          race: data.appearance?.race || prev.appearance?.race || 'Mensch',
-          raceFeatures: data.appearance?.raceFeatures || prev.appearance?.raceFeatures || 'keine',
-          personalityArchetype: finalArchetype,
-        } : {
-          gender: data.appearance?.gender || 'Unbekannt',
-          age: data.appearance?.age || '',
-          build: data.appearance?.build || '',
-          hairColor: data.appearance?.hairColor || '',
-          eyeColor: data.appearance?.eyeColor || '',
-          cupSize: data.appearance?.cupSize || '-',
-          outfit: finalOutfit,
-          looks: data.appearance?.looks || '',
-          height: data.appearance?.height || '',
-          measurements: data.appearance?.measurements || '',
-          origin: data.appearance?.origin || '',
-          family: data.appearance?.family || '',
-          faction: data.appearance?.faction || '',
-          race: data.appearance?.race || 'Mensch',
-          raceFeatures: data.appearance?.raceFeatures || 'keine',
-          personalityArchetype: finalArchetype,
-        };
-
-        const getSafePlayerName = (val: any): string => {
-          if (typeof val === 'string') return val.trim();
-          if (val && typeof val === 'object') return (val.name || val.title || val.callName || '').toString().trim();
-          return val ? String(val).trim() : '';
-        };
-        const generatedPlayerName = getSafePlayerName(data.name) || getSafePlayerName(data.callName) || getSafePlayerName(data.rufName);
-        const finalRole = data.role || data.profession || (keepExistingPlayerDetails ? (prev.role || prev.profession || '') : '');
-        const finalProfession = data.profession || data.role || (keepExistingPlayerDetails ? (prev.profession || prev.role || '') : '');
-
-        const rawPlayerDetails = {
-          ...prev,
-          name: keepExistingPlayerDetails && prev.name ? prev.name : (generatedPlayerName || (prev.name && prev.name.length < 50 ? prev.name : 'Neuer Spieler-Charakter')),
-          nickname: data.nickname || (keepExistingPlayerDetails ? prev.nickname : ''),
-          rufName: data.rufName || data.nickname || generatedPlayerName || (keepExistingPlayerDetails ? prev.rufName : ''),
-          role: finalRole,
-          profession: finalProfession || finalRole,
-          professionField: data.professionField || (keepExistingPlayerDetails ? prev.professionField : ''),
-          professionSpecialization: data.professionSpecialization || (keepExistingPlayerDetails ? prev.professionSpecialization : ''),
-          professionRank: data.professionRank || data.professionLevel || (keepExistingPlayerDetails ? prev.professionRank : ''),
-          professionLevel: data.professionLevel || (keepExistingPlayerDetails ? prev.professionLevel : ''),
-          secondaryProfessions: data.secondaryProfessions || (keepExistingPlayerDetails ? prev.secondaryProfessions : []),
-          jobTitle: data.jobTitle || (keepExistingPlayerDetails ? prev.jobTitle : ''),
-          professionDescription: data.professionDescription || (keepExistingPlayerDetails ? prev.professionDescription : ''),
-          craftingSkills: data.craftingSkills || (keepExistingPlayerDetails ? prev.craftingSkills : ''),
-          talents: data.talents || (keepExistingPlayerDetails ? prev.talents : ''),
-          everydaySkills: data.everydaySkills || (keepExistingPlayerDetails ? prev.everydaySkills : ''),
-          toolsAndEquipment: data.toolsAndEquipment || (keepExistingPlayerDetails ? prev.toolsAndEquipment : ''),
-          personality: finalPersonality,
-          personalityArchetype: finalArchetype,
-          personalityTraits: finalTraits,
-          bio: finalBio,
-          currentSituation: data.currentSituation || (keepExistingPlayerDetails ? prev.currentSituation : ''),
-          goal: data.goal || (keepExistingPlayerDetails ? prev.goal : ''),
-          motivationCore: data.motivationCore || (keepExistingPlayerDetails ? prev.motivationCore : (data.goal ? { mainGoal: data.goal } : undefined)),
-          goals: Array.isArray(data.goals) && data.goals.length > 0 ? data.goals : (keepExistingPlayerDetails ? prev.goals : (data.goal ? [{ id: 'goal-1', title: data.goal, timeframe: 'langfristig', targetType: 'self', targetName: 'Selbst', priority: 'hoch', status: 'aktiv', progress: 0 }] : [])),
-          relationship: data.relationship || (keepExistingPlayerDetails ? prev.relationship : ''),
-          conduct: data.conduct || (keepExistingPlayerDetails ? prev.conduct : ''),
-          relationships: mergedRelationships,
-          skills: data.skills || (keepExistingPlayerDetails ? prev.skills : ''),
-          powerSource: data.powerSource || (keepExistingPlayerDetails ? prev.powerSource : ''),
-          powerCost: data.powerCost || (keepExistingPlayerDetails ? prev.powerCost : ''),
-          techniques: data.techniques || (keepExistingPlayerDetails ? prev.techniques : ''),
-          abilities: generatedAbilities,
-          techniqueList: Array.isArray(data.techniqueList) ? data.techniqueList : (keepExistingPlayerDetails ? prev.techniqueList : []),
-          campaignPowerLevels: data.campaignPowerLevels || (keepExistingPlayerDetails ? prev.campaignPowerLevels : {}),
-          secretsStage1: nextSecrets1,
-          secretsStage2: nextSecrets2,
-          secretsStage3: nextSecrets3,
-          knowledge: nextKnowledge,
-          appearance: newAppearance
-        };
-
-        const { powerSources: normalizedPs, baseAbilities: normalizedBa, techniques: normalizedTech } = normalizeAbilityHierarchy(rawPlayerDetails);
-        const syncedPlayer = syncCharacterAbilityTree(rawPlayerDetails, normalizedPs, normalizedBa, normalizedTech);
-
-        return syncedPlayer;
+        return applySmartFillUpdates(prev, data, context);
       });
 
-      // Pull structured inventory automatically from generated smart fill info
-      try {
-        const tempCharForExtraction = {
-          name: data.name || player.name,
-          role: data.role || player.role,
-          appearance: {
-            outfit: data.appearance?.outfit || player.appearance?.outfit || ''
-          } as any,
-          bio: data.bio || player.bio,
-          skills: data.skills || player.skills,
-          techniques: data.techniques || player.techniques
-        } as any;
-        const inv = await GeminiService.extractStructuredInventory(tempCharForExtraction, world);
-        setStructuredInventory(inv);
-      } catch (invErr) {
-        console.error("Fehler bei der automatischen Inventarextraktion nach Smart Fill:", invErr);
+      // Pull structured inventory automatically ONLY if not in profile section
+      if (context.section !== 'profile') {
+        try {
+          const tempCharForExtraction = {
+            name: data.name || player.name,
+            role: data.role || player.role,
+            appearance: {
+              outfit: data.appearance?.outfit || player.appearance?.outfit || ''
+            } as any,
+            bio: data.bio || player.bio,
+            skills: data.skills || player.skills,
+            techniques: data.techniques || player.techniques
+          } as any;
+          const inv = await GeminiService.extractStructuredInventory(tempCharForExtraction, world);
+          setStructuredInventory(inv);
+        } catch (invErr) {
+          console.error("Fehler bei der automatischen Inventarextraktion nach Smart Fill:", invErr);
+        }
       }
 
       setPlayerSmartFill('');
@@ -4292,20 +4006,58 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
               {/* Player Smart Fill */}
               <div className="bg-slate-800/30 border border-indigo-500/30 rounded-xl p-4 flex flex-col gap-3">
-                <label className="text-xs text-indigo-400 font-bold uppercase flex justify-between items-center">
-                  <span>Smart Fill Charakter</span>
-                  <button 
-                    onClick={handlePlayerSmartFill}
-                    disabled={isSmartFillingChar}
-                    className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-[10px] transition-all flex items-center gap-2"
-                  >
-                    <i className={`fa-solid ${isSmartFillingChar ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
-                    Automatisch Ausfüllen
-                  </button>
-                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs text-indigo-400 font-bold uppercase flex items-center gap-2">
+                    <span>
+                      {playerCharTab === 'profil' 
+                        ? 'Smart Fill: Profil & Aussehen' 
+                        : 'Smart Fill Charakter'}
+                    </span>
+                    {playerCharTab === 'profil' && (
+                      <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
+                        Bereich: Profil & Aussehen
+                      </span>
+                    )}
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      type="button"
+                      onClick={() => handlePlayerSmartFill({
+                        section: playerCharTab === 'profil' ? 'profile' : 'full_character',
+                        targetId: player.id,
+                        mode: keepExistingPlayerDetails ? 'supplement' : 'replace',
+                        instruction: playerSmartFill
+                      })}
+                      disabled={isSmartFillingChar}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-[10px] font-bold transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      <i className={`fa-solid ${isSmartFillingChar ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
+                      {playerCharTab === 'profil' ? 'Profil Ausfüllen' : 'Automatisch Ausfüllen'}
+                    </button>
+                    {playerCharTab === 'profil' && (
+                      <button 
+                        type="button"
+                        onClick={() => handlePlayerSmartFill({
+                          section: 'full_character',
+                          targetId: player.id,
+                          mode: keepExistingPlayerDetails ? 'supplement' : 'replace',
+                          instruction: playerSmartFill
+                        })}
+                        disabled={isSmartFillingChar}
+                        title="Füllt alle Tabs des Charakters aus (Profil, Fähigkeiten, Beziehungen, Inventar)"
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 border border-slate-700 rounded text-[10px] transition-all cursor-pointer"
+                      >
+                        Alle Tabs ausfüllen
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <AutoExpandingTextarea 
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
-                  placeholder="Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus." 
+                  placeholder={playerCharTab === 'profil' 
+                    ? "Beschreibe Aussehen, Persönlichkeit, Biografie, Rasse oder Herkunft des Charakters. Es werden ausschließlich Profil- und Aussehensdaten aktualisiert."
+                    : "Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus."
+                  } 
                   value={playerSmartFill} 
                   onChange={e => setPlayerSmartFill(e.target.value)} 
                 />
