@@ -19,6 +19,16 @@ import { WorkManagementModal } from './WorkManagementModal';
 import { NavigationModal } from './NavigationModal';
 import { TradeModal } from './TradeModal';
 import { TrainingSkillsModal, SkillCategoryTab } from './TrainingSkillsModal';
+import {
+  getCharacterCapabilities,
+  getCapabilityActionText,
+  trainCharacterCapability,
+  toggleFavoriteCapability,
+  CharacterCapabilityEntry,
+  CapabilityCategory,
+  getCategoryLabels,
+  getCategoryStyles
+} from '../utils/capabilityAdapter';
 import { isClothingPlaceholder, isClothingItemTitle, consolidateLoreOutfits } from '../App';
 import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
@@ -9407,7 +9417,9 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      {quickSkillTab === 'all' ? 'Erworbene Fähigkeiten & Favoriten:' : `Kategorie: ${quickSkillTab}`}
+                      {quickSkillTab === 'all'
+                        ? 'Meine Fähigkeiten & Kompetenzen:'
+                        : `${getCategoryLabels(quickSkillTab as CapabilityCategory).label}:`}
                     </span>
                     <button
                       type="button"
@@ -9423,74 +9435,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
                   <div className="max-h-56 overflow-y-auto pr-1 space-y-1.5 bg-slate-950/40 p-1.5 rounded-xl border border-slate-850 font-sans custom-scrollbar">
                     {(() => {
-                      const allList: any[] = [];
-                      const seen = new Set<string>();
-
-                      const pushItem = (it: any, cat: string) => {
-                        if (!it || !it.name || !it.name.trim()) return;
-                        const key = it.name.trim().toLowerCase();
-                        if (seen.has(key)) return;
-                        seen.add(key);
-                        allList.push({
-                          ...it,
-                          id: it.id || key,
-                          name: it.name.trim(),
-                          category: it.category || cat,
-                          level: it.level || 1,
-                          cost: it.cost || '',
-                          isFavorite: !!(it.isFavorite || it.favorite)
-                        });
-                      };
-
-                      if (Array.isArray(adventure?.player?.techniqueList)) {
-                        adventure.player.techniqueList.forEach(t => {
-                          let cat = t.category || 'Techniken';
-                          if ((t as any).isUltimate || cat.toLowerCase().includes('ultimat')) cat = 'Ultimative Techniken';
-                          else if (cat.toLowerCase().includes('passiv') || t.type === 'Passiv') cat = 'Passive Fähigkeiten';
-                          else if (cat.toLowerCase().includes('waffe') || t.weaponType) cat = 'Waffenbeherrschung';
-                          else if (cat.toLowerCase().includes('alltag') || cat.toLowerCase().includes('kompetenz')) cat = 'Alltagskompetenzen';
-                          else if (cat.toLowerCase().includes('beruf')) cat = 'Berufe';
-                          pushItem(t, cat);
-                        });
-                      }
-
-                      getFavoriteTechniques().forEach(fav => pushItem(fav, fav.category || 'Techniken'));
-
-                      if (Array.isArray(adventure?.player?.professionCompetencies)) {
-                        adventure.player.professionCompetencies.forEach(pc => {
-                          pushItem({
-                            id: pc.id,
-                            name: pc.name,
-                            category: 'Berufe',
-                            level: Math.max(1, Math.ceil((pc.proficiency || 10) / 10)),
-                            description: pc.description
-                          }, 'Berufe');
-                        });
-                      }
-
-                      if (typeof adventure?.player?.everydaySkills === 'string' && adventure.player.everydaySkills.trim()) {
-                        adventure.player.everydaySkills.split(',').forEach((s, idx) => {
-                          const tr = s.trim();
-                          if (tr) {
-                            pushItem({
-                              id: `es-${idx}-${tr}`,
-                              name: tr,
-                              category: 'Alltagskompetenzen',
-                              level: 1,
-                              description: `Alltagskompetenz: ${tr}`
-                            }, 'Alltagskompetenzen');
-                          }
-                        });
-                      }
-
-                      const filtered = allList.filter(item => {
-                        if (quickSkillTab === 'passive') return item.category === 'Passive Fähigkeiten';
-                        if (quickSkillTab === 'technique') return item.category === 'Techniken';
-                        if (quickSkillTab === 'ultimate') return item.category === 'Ultimative Techniken';
-                        if (quickSkillTab === 'weapon') return item.category === 'Waffenbeherrschung';
-                        if (quickSkillTab === 'competence') return item.category === 'Alltagskompetenzen';
-                        if (quickSkillTab === 'profession') return item.category === 'Berufe';
-                        return true;
+                      const activeTransId = adventure?.player?.appearance?.activeTransformationId || 'standard';
+                      const allCapabilities = getCharacterCapabilities(adventure?.player, activeTransId);
+                      const filtered = allCapabilities.filter(item => {
+                        if (quickSkillTab === 'all') return true;
+                        return item.category === quickSkillTab;
                       });
 
                       if (filtered.length === 0) {
@@ -9502,84 +9451,110 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         );
                       }
 
-                      return filtered.map((tech, i) => (
-                        <div
-                          key={tech.id ? `quick-tech-${tech.id}-${i}` : `quick-tech-${i}`}
-                          className="w-full text-left p-2 rounded-xl bg-slate-900/80 hover:bg-slate-850 border border-slate-850 transition-all flex flex-col gap-1.5"
-                        >
-                          <div className="flex justify-between items-center w-full gap-1.5">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              {tech.isFavorite && (
-                                <i className="fa-solid fa-star text-amber-400 text-[10px] shrink-0"></i>
+                      return filtered.map((cap, i) => {
+                        const styles = getCategoryStyles(cap.category);
+                        return (
+                          <div
+                            key={cap.id ? `quick-cap-${cap.id}-${i}` : `quick-cap-${i}`}
+                            className="w-full text-left p-2 rounded-xl bg-slate-900/80 hover:bg-slate-850 border border-slate-850 transition-all flex flex-col gap-1.5"
+                          >
+                            <div className="flex justify-between items-center w-full gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const updatedAdv = toggleFavoriteCapability(adventure, cap);
+                                    onUpdateAdventure(updatedAdv);
+                                  }}
+                                  className={`p-1 rounded transition-all shrink-0 ${
+                                    cap.isFavorite
+                                      ? 'text-amber-400 hover:text-amber-300'
+                                      : 'text-slate-600 hover:text-slate-400'
+                                  }`}
+                                  title={cap.isFavorite ? 'Aus Favoriten entfernen' : 'Als Favorit markieren'}
+                                >
+                                  <i className="fa-solid fa-star text-[10px]"></i>
+                                </button>
+                                <span className="font-bold text-xs text-slate-200 truncate">{cap.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className={`text-[8px] px-1.5 py-0.2 rounded font-extrabold uppercase border ${styles.badgeBg} ${styles.badgeBorder} ${styles.badgeText}`}>
+                                  {cap.categoryBadge}
+                                </span>
+                                {cap.level !== undefined && (
+                                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-850 text-slate-400 font-bold">
+                                    Lv. {cap.level}
+                                  </span>
+                                )}
+                                {cap.category === 'competence' && (
+                                  <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-emerald-400 font-bold">
+                                    {cap.progress}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {cap.description && (
+                              <p className="text-[10px] text-slate-400 leading-tight italic break-words">{cap.description}</p>
+                            )}
+
+                            <div className="flex items-center justify-end gap-1.5 pt-0.5 border-t border-slate-800/60">
+                              {cap.canTrain ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const { updatedAdventure, notificationTitle, roleplayText, levelUp } = trainCharacterCapability(adventure, cap);
+                                    onUpdateAdventure(updatedAdventure);
+                                    if (levelUp) {
+                                      setLoreNotifications(prev => [
+                                        ...prev,
+                                        {
+                                          id: Math.random().toString(),
+                                          type: 'unlock',
+                                          title: notificationTitle,
+                                          category: 'Fähigkeit'
+                                        }
+                                      ]);
+                                    }
+                                    insertFormatting(roleplayText, '');
+                                    closeAllControlTabs();
+                                  }}
+                                  className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[10px] font-bold transition-all flex items-center gap-1 border border-slate-700"
+                                  title="Übung & Training"
+                                >
+                                  <i className="fa-solid fa-dumbbell text-[9px] text-indigo-400"></i>
+                                  <span>Trainieren</span>
+                                </button>
+                              ) : (
+                                <span className="text-[9px] text-slate-500 font-mono italic px-1">
+                                  Meisterschaft
+                                </span>
                               )}
-                              <span className="font-bold text-xs text-slate-200 truncate">{tech.name}</span>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <span className={`text-[8px] px-1.5 py-0.2 rounded font-extrabold uppercase border ${
-                                tech.category === 'Passive Fähigkeiten'
-                                  ? 'bg-blue-950/70 border-blue-500/40 text-blue-300'
-                                  : tech.category === 'Ultimative Techniken'
-                                  ? 'bg-amber-950/70 border-amber-500/40 text-amber-300'
-                                  : tech.category === 'Waffenbeherrschung'
-                                  ? 'bg-red-950/70 border-red-500/40 text-red-300'
-                                  : tech.category === 'Alltagskompetenzen'
-                                  ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
-                                  : tech.category === 'Berufe'
-                                  ? 'bg-amber-950/70 border-amber-600/40 text-amber-200'
-                                  : 'bg-indigo-950/70 border-indigo-500/40 text-indigo-300'
-                              }`}>
-                                {tech.category}
-                              </span>
-                              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 font-bold">
-                                Lv. {tech.level || 1}
-                              </span>
+
+                              {cap.canUse ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const actionText = getCapabilityActionText(cap);
+                                    insertFormatting(actionText, '');
+                                    closeAllControlTabs();
+                                  }}
+                                  className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-all flex items-center gap-1 shadow-sm"
+                                  title={cap.category === 'profession' ? 'Berufliche Tätigkeit ausführen' : 'Im Spiel einsetzen'}
+                                >
+                                  <i className={`fa-solid ${cap.category === 'profession' ? 'fa-hammer' : 'fa-play'} text-[8px]`}></i>
+                                  <span>{cap.category === 'profession' ? 'Ausüben' : cap.category === 'competence' ? 'Anwenden' : 'Einsetzen'}</span>
+                                </button>
+                              ) : (
+                                <span className="text-[9px] text-blue-400/80 font-mono italic px-1">
+                                  Passiv aktiv
+                                </span>
+                              )}
                             </div>
                           </div>
-
-                          {tech.description && (
-                            <p className="text-[10px] text-slate-400 leading-tight line-clamp-2 italic">{tech.description}</p>
-                          )}
-
-                          <div className="flex items-center justify-end gap-1.5 pt-0.5 border-t border-slate-800/60">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const actionText = `*trainiert die Fertigkeit '${tech.name}' intensiv*`;
-                                insertFormatting(actionText, '');
-                                closeAllControlTabs();
-                              }}
-                              className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[10px] font-bold transition-all flex items-center gap-1 border border-slate-700"
-                              title="Übung & Training"
-                            >
-                              <i className="fa-solid fa-dumbbell text-[9px] text-indigo-400"></i>
-                              <span>Trainieren</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                let actionText = `*setzt ${tech.name} ein*`;
-                                if (tech.category === 'Passive Fähigkeiten') {
-                                  actionText = `*nutzt das passive Talent '${tech.name}'*`;
-                                } else if (tech.category === 'Ultimative Techniken') {
-                                  actionText = `*entfesselt die ultimative Technik: ${tech.name}!*`;
-                                } else if (tech.category === 'Alltagskompetenzen') {
-                                  actionText = `*wendet die Alltagskompetenz '${tech.name}' an*`;
-                                } else if (tech.category === 'Berufe') {
-                                  actionText = `*wendet die Berufsfähigkeit '${tech.name}' an*`;
-                                }
-                                insertFormatting(actionText, '');
-                                closeAllControlTabs();
-                              }}
-                              className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-all flex items-center gap-1 shadow-sm"
-                              title="Im Spiel einsetzen"
-                            >
-                              <i className="fa-solid fa-play text-[8px]"></i>
-                              <span>Einsetzen</span>
-                            </button>
-                          </div>
-                        </div>
-                      ));
+                        );
+                      });
                     })()}
                   </div>
                 </div>

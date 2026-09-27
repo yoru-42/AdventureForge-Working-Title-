@@ -1,9 +1,24 @@
 import React, { useState, useMemo } from 'react';
-import { Adventure, TechniqueItem, Character, BaseAbility } from '../types';
+import { Adventure, TechniqueItem, Character, ProfessionCompetency } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { CENTRAL_EVERYDAY_SKILLS } from './everydaySkillPresets';
-import { WEAPON_CATEGORIES, ALL_WEAPONS } from '../lib/weaponTypesData';
+import { ALL_WEAPONS } from '../lib/weaponTypesData';
 import { JOB_CATEGORIES } from './jobPresets';
+import {
+  CharacterCapabilityEntry,
+  CapabilityCategory,
+  getCharacterCapabilities,
+  trainCharacterCapability,
+  toggleFavoriteCapability,
+  getCapabilityActionText,
+  getCategoryLabels,
+  getCategoryStyles
+} from '../utils/capabilityAdapter';
+import {
+  parseEverydaySkills,
+  serializeEverydaySkills,
+  getSkillLabel
+} from './EverydaySkillsSelect';
 
 export type SkillCategoryTab =
   | 'all'
@@ -52,170 +67,45 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
   const [newSkillProgressionLogic, setNewSkillProgressionLogic] = useState<'ep' | 'training' | 'milestone' | 'static'>('training');
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
 
-  // Extract all learned skills & competencies from player
   const player = adventure.player;
+  const activeTransId = player?.appearance?.activeTransformationId || 'standard';
 
-  // Normalized skill list
-  const allSkills = useMemo(() => {
-    if (!player) return [];
-    const list: TechniqueItem[] = [];
-    const seenIds = new Set<string>();
+  // Zentrale, deduplizierte Liste aller 6 Bereiche aus der gemeinsamen Adapter-Quelle
+  const allSkills: CharacterCapabilityEntry[] = useMemo(() => {
+    return getCharacterCapabilities(player, activeTransId);
+  }, [player, activeTransId]);
 
-    // Helper to normalize and add
-    const addToList = (item: Partial<TechniqueItem>, fallbackCategory: string) => {
-      const id = item.id || `skill-${item.name}-${fallbackCategory}`.toLowerCase().replace(/\s+/g, '-');
-      if (seenIds.has(id)) return;
-      seenIds.add(id);
-
-      list.push({
-        id,
-        name: item.name || 'Unbenannte Fähigkeit',
-        category: (item.category as any) || fallbackCategory,
-        type: item.type || (fallbackCategory === 'Passive Fähigkeiten' ? 'Passiv' : 'Aktiv'),
-        subtype: item.subtype || '',
-        description: item.description || '',
-        level: typeof item.level === 'number' ? item.level : 1,
-        maxLevel: typeof item.maxLevel === 'number' ? item.maxLevel : 10,
-        xp: item.xp || 0,
-        xpNeeded: item.xpNeeded || 100,
-        trainingUnits: item.trainingUnits || item.trainingProgress || 0,
-        trainingProgress: item.trainingProgress || item.trainingUnits || 0,
-        trainingRequired: item.trainingRequired || 5,
-        progressionLogic: item.progressionLogic || 'training',
-        cost: item.cost || '',
-        effects: item.effects || [],
-        isFavorite: !!(item.isFavorite || (item as any).favorite),
-        weaponType: item.weaponType || '',
-        masteryLevel: item.masteryLevel || '',
-        tier: item.tier || ''
-      });
-    };
-
-    // 1. Existing techniqueList
-    if (Array.isArray(player.techniqueList)) {
-      player.techniqueList.forEach(t => {
-        let cat = t.category || 'Techniken';
-        if ((t as any).isUltimate || cat.toLowerCase().includes('ultimat')) cat = 'Ultimative Techniken';
-        else if (cat.toLowerCase().includes('passiv') || t.type === 'Passiv') cat = 'Passive Fähigkeiten';
-        else if (cat.toLowerCase().includes('waffe') || t.weaponType) cat = 'Waffenbeherrschung';
-        else if (cat.toLowerCase().includes('alltag') || cat.toLowerCase().includes('kompetenz')) cat = 'Alltagskompetenzen';
-        else if (cat.toLowerCase().includes('beruf')) cat = 'Berufe';
-        addToList(t, cat);
-      });
-    }
-
-    // 2. Base abilities if not already covered
-    if (Array.isArray(player.baseAbilities)) {
-      player.baseAbilities.forEach((ba: BaseAbility) => {
-        addToList({
-          id: ba.id,
-          name: ba.displayName || ba.name,
-          category: 'Techniken',
-          type: 'Grundfähigkeit',
-          description: ba.description,
-          level: ba.level || 1,
-          maxLevel: ba.maxLevel || 10,
-          cost: ba.cost,
-          isFavorite: (ba as any).isFavorite
-        }, 'Techniken');
-      });
-    }
-
-    // 3. Profession Competencies
-    if (Array.isArray(player.professionCompetencies)) {
-      player.professionCompetencies.forEach(pc => {
-        addToList({
-          id: pc.id,
-          name: pc.name,
-          category: 'Berufe',
-          type: 'Berufskompetenz',
-          description: pc.description,
-          level: Math.max(1, Math.ceil((pc.proficiency || 10) / 10)),
-          maxLevel: 10,
-          trainingUnits: pc.experiencePoints || 0,
-          trainingRequired: 100,
-          progressionLogic: 'ep'
-        }, 'Berufe');
-      });
-    }
-
-    // 4. Everyday skills from string or list if not present
-    if (typeof player.everydaySkills === 'string' && player.everydaySkills.trim()) {
-      player.everydaySkills.split(',').forEach((s, idx) => {
-        const trimmed = s.trim();
-        if (trimmed) {
-          addToList({
-            id: `everyday-preset-${idx}-${trimmed.toLowerCase().replace(/\s+/g, '-')}`,
-            name: trimmed,
-            category: 'Alltagskompetenzen',
-            type: 'Alltagskompetenz',
-            description: `Erworbene Alltagskompetenz: ${trimmed}`,
-            level: 1,
-            maxLevel: 5,
-            trainingUnits: 1,
-            trainingRequired: 3,
-            progressionLogic: 'training'
-          }, 'Alltagskompetenzen');
-        }
-      });
-    }
-
-    // 5. Weapon masteries if present in player.skills
-    if (typeof player.skills === 'string' && player.skills.trim()) {
-      player.skills.split(',').forEach((s, idx) => {
-        const trimmed = s.trim();
-        if (trimmed && (trimmed.toLowerCase().includes('schwert') || trimmed.toLowerCase().includes('kampf') || trimmed.toLowerCase().includes('bogen') || trimmed.toLowerCase().includes('lanze') || trimmed.toLowerCase().includes('schild'))) {
-          addToList({
-            id: `weapon-preset-${idx}-${trimmed.toLowerCase().replace(/\s+/g, '-')}`,
-            name: trimmed,
-            category: 'Waffenbeherrschung',
-            type: 'Waffenbeherrschung',
-            description: `Waffenbeherrschung und Kampftechnik: ${trimmed}`,
-            level: 1,
-            maxLevel: 10,
-            trainingUnits: 0,
-            trainingRequired: 5,
-            progressionLogic: 'training'
-          }, 'Waffenbeherrschung');
-        }
-      });
-    }
-
-    return list;
-  }, [player]);
-
-  // Filter and search
+  // Filter und Suche
   const filteredSkills = useMemo(() => {
     return allSkills.filter(skill => {
-      // Category match
-      if (activeTab === 'passive' && skill.category !== 'Passive Fähigkeiten') return false;
-      if (activeTab === 'technique' && skill.category !== 'Techniken') return false;
-      if (activeTab === 'ultimate' && skill.category !== 'Ultimative Techniken') return false;
-      if (activeTab === 'weapon' && skill.category !== 'Waffenbeherrschung') return false;
-      if (activeTab === 'competence' && skill.category !== 'Alltagskompetenzen') return false;
-      if (activeTab === 'profession' && skill.category !== 'Berufe') return false;
+      // Kategorie-Filter
+      if (activeTab === 'passive' && skill.category !== 'passive') return false;
+      if (activeTab === 'technique' && skill.category !== 'technique') return false;
+      if (activeTab === 'ultimate' && skill.category !== 'ultimate') return false;
+      if (activeTab === 'weapon' && skill.category !== 'weapon') return false;
+      if (activeTab === 'competence' && skill.category !== 'competence') return false;
+      if (activeTab === 'profession' && skill.category !== 'profession') return false;
 
-      // Filter modes
+      // Filter-Modi
       if (filterMode === 'favorites' && !skill.isFavorite) return false;
-      if (filterMode === 'training' && (skill.level || 1) >= (skill.maxLevel || 10)) return false;
-      if (filterMode === 'mastered' && (skill.level || 1) < (skill.maxLevel || 10)) return false;
+      if (filterMode === 'training' && !skill.canTrain) return false;
+      if (filterMode === 'mastered' && skill.canTrain) return false;
 
-      // Search match
+      // Textsuche
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const matchName = (skill.name || '').toLowerCase().includes(query);
         const matchDesc = (skill.description || '').toLowerCase().includes(query);
         const matchSub = (skill.subtype || '').toLowerCase().includes(query);
         const matchType = (skill.type || '').toLowerCase().includes(query);
-        const matchWeapon = (skill.weaponType || '').toLowerCase().includes(query);
-        if (!matchName && !matchDesc && !matchSub && !matchType && !matchWeapon) return false;
+        if (!matchName && !matchDesc && !matchSub && !matchType) return false;
       }
 
       return true;
     });
   }, [allSkills, activeTab, filterMode, searchQuery]);
 
-  // Category counts
+  // Zähler für die einzelnen Kategorien
   const categoryCounts = useMemo(() => {
     const counts = {
       all: allSkills.length,
@@ -228,58 +118,23 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
     };
 
     allSkills.forEach(s => {
-      if (s.category === 'Passive Fähigkeiten') counts.passive++;
-      else if (s.category === 'Techniken') counts.technique++;
-      else if (s.category === 'Ultimative Techniken') counts.ultimate++;
-      else if (s.category === 'Waffenbeherrschung') counts.weapon++;
-      else if (s.category === 'Alltagskompetenzen') counts.competence++;
-      else if (s.category === 'Berufe') counts.profession++;
+      if (s.category in counts) {
+        counts[s.category]++;
+      }
     });
 
     return counts;
   }, [allSkills]);
 
-  // Persist skill updates back to Adventure
-  const persistSkillsToAdventure = (updatedList: TechniqueItem[]) => {
-    const updatedPlayer: Character = {
-      ...player,
-      techniqueList: updatedList
-    };
-
-    const updatedAdventure: Adventure = {
-      ...adventure,
-      player: updatedPlayer
-    };
-
-    onUpdateAdventure(updatedAdventure);
+  // Favorit umschalten (auf den kanonischen Daten)
+  const handleToggleFavorite = (skill: CharacterCapabilityEntry) => {
+    const updated = toggleFavoriteCapability(adventure, skill);
+    onUpdateAdventure(updated);
   };
 
-  // Toggle Favorite
-  const handleToggleFavorite = (skillId: string) => {
-    const updated = allSkills.map(s => {
-      if (s.id === skillId) {
-        return { ...s, isFavorite: !s.isFavorite };
-      }
-      return s;
-    });
-    persistSkillsToAdventure(updated);
-  };
-
-  // Execute / Use action in chat
-  const handleUseSkill = (skill: TechniqueItem) => {
-    let actionText = `*setzt ${skill.name} ein*`;
-    if (skill.category === 'Passive Fähigkeiten') {
-      actionText = `*nutzt das passive Talent '${skill.name}'*`;
-    } else if (skill.category === 'Ultimative Techniken') {
-      actionText = `*entfesselt die ultimative Technik: ${skill.name}!*`;
-    } else if (skill.category === 'Waffenbeherrschung') {
-      actionText = `*führt ein Manöver mit ${skill.name} aus*`;
-    } else if (skill.category === 'Alltagskompetenzen') {
-      actionText = `*wendet die Alltagskompetenz '${skill.name}' an*`;
-    } else if (skill.category === 'Berufe') {
-      actionText = `*arbeitet mit der Berufsfähigkeit '${skill.name}'*`;
-    }
-
+  // Aktion im Spiel ausführen
+  const handleUseSkill = (skill: CharacterCapabilityEntry) => {
+    const actionText = getCapabilityActionText(skill);
     if (onSendChatMessage) {
       onSendChatMessage(actionText);
     } else if (onSetInputText) {
@@ -288,84 +143,220 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
     onClose();
   };
 
-  // Train / Practice action (with progress increment)
-  const handleTrainSkill = (skill: TechniqueItem) => {
-    const currentLevel = skill.level || 1;
-    const maxLevel = skill.maxLevel || 10;
-    const currentUnits = (skill.trainingUnits || skill.trainingProgress || 0) + 1;
-    const req = skill.trainingRequired || 5;
-
-    let newLevel = currentLevel;
-    let newUnits = currentUnits;
-    let levelUp = false;
-
-    if (currentLevel < maxLevel && newUnits >= req) {
-      newLevel = currentLevel + 1;
-      newUnits = 0;
-      levelUp = true;
-    }
-
-    const updated = allSkills.map(s => {
-      if (s.id === skill.id) {
-        return {
-          ...s,
-          level: newLevel,
-          trainingUnits: newUnits,
-          trainingProgress: newUnits
-        };
-      }
-      return s;
-    });
-
-    persistSkillsToAdventure(updated);
-
-    // Insert or send roleplay training message
-    let trainingMessage = `*trainiert die Fertigkeit '${skill.name}' intensiv*`;
-    if (levelUp) {
-      trainingMessage = `*trainiert die Fertigkeit '${skill.name}' erfolgreich und erreicht Stufe ${newLevel}!*`;
-    }
+  // Fertigkeit trainieren (unter Nutzung der globalen Progressionslogik)
+  const handleTrainSkill = (skill: CharacterCapabilityEntry) => {
+    const { updatedAdventure, roleplayText } = trainCharacterCapability(adventure, skill);
+    onUpdateAdventure(updatedAdventure);
 
     if (onSendChatMessage) {
-      onSendChatMessage(trainingMessage);
+      onSendChatMessage(roleplayText);
     } else if (onSetInputText) {
-      onSetInputText(trainingMessage);
+      onSetInputText(roleplayText);
     }
     onClose();
   };
 
-  // Level adjustment (+ / -)
-  const handleAdjustLevel = (skillId: string, delta: number) => {
-    const updated = allSkills.map(s => {
-      if (s.id === skillId) {
-        const cur = s.level || 1;
-        const max = s.maxLevel || 10;
-        const next = Math.max(1, Math.min(max, cur + delta));
-        return { ...s, level: next };
-      }
-      return s;
-    });
-    persistSkillsToAdventure(updated);
+  // Stufe anpassen (+ / -) auf den kanonischen Speicherorten
+  const handleAdjustLevel = (skill: CharacterCapabilityEntry, delta: number) => {
+    if (!player) return;
+
+    if (
+      skill.sourceType === 'technique' ||
+      skill.sourceType === 'passive' ||
+      skill.sourceType === 'weapon'
+    ) {
+      const targetId = skill.originalTechniqueId || skill.sourceId || skill.id;
+      const targetNameLower = (skill.originalTechniqueName || skill.name).trim().toLowerCase();
+
+      const updatedTechList = Array.isArray(player.techniqueList)
+        ? player.techniqueList.map(t => {
+            if (
+              (t.id && (t.id === targetId || t.id === skill.id)) ||
+              (t.name && t.name.trim().toLowerCase() === targetNameLower)
+            ) {
+              const cur = t.level ?? 1;
+              const maxL = t.maxLevel ?? 10;
+              const next = Math.max(1, Math.min(maxL, cur + delta));
+              return { ...t, level: next };
+            }
+            return t;
+          })
+        : [];
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          techniqueList: updatedTechList
+        }
+      });
+    } else if (skill.sourceType === 'everyday') {
+      const parsed = parseEverydaySkills(player.everydaySkills || '');
+      const targetNameLower = skill.name.trim().toLowerCase();
+
+      const updated = parsed.map(item => {
+        if (item.name.trim().toLowerCase() === targetNameLower) {
+          const cur = item.score || 0;
+          const nextScore = Math.max(0, Math.min(100, cur + delta * 20));
+          return {
+            ...item,
+            score: nextScore,
+            label: getSkillLabel(nextScore)
+          };
+        }
+        return item;
+      });
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          everydaySkills: serializeEverydaySkills(updated)
+        }
+      });
+    } else if (skill.sourceType === 'profession' && Array.isArray(player.professionCompetencies)) {
+      const updatedComps = player.professionCompetencies.map(c => {
+        if (c.id === skill.sourceId || c.name.trim().toLowerCase() === skill.name.trim().toLowerCase()) {
+          const cur = c.proficiency || 0;
+          const nextProf = Math.max(0, Math.min(100, cur + delta * 10));
+          return { ...c, proficiency: nextProf };
+        }
+        return c;
+      });
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          professionCompetencies: updatedComps
+        }
+      });
+    }
   };
 
-  // Delete skill
-  const handleDeleteSkill = (skillId: string) => {
-    const updated = allSkills.filter(s => s.id !== skillId);
-    persistSkillsToAdventure(updated);
+  // Fertigkeit aus dem kanonischen Speicher entfernen
+  const handleDeleteSkill = (skill: CharacterCapabilityEntry) => {
+    if (!player) return;
+
+    if (
+      skill.sourceType === 'technique' ||
+      skill.sourceType === 'passive' ||
+      skill.sourceType === 'weapon'
+    ) {
+      const targetId = skill.originalTechniqueId || skill.sourceId || skill.id;
+      const targetNameLower = (skill.originalTechniqueName || skill.name).trim().toLowerCase();
+
+      const updatedTechList = Array.isArray(player.techniqueList)
+        ? player.techniqueList.filter(
+            t => !(
+              (t.id && (t.id === targetId || t.id === skill.id)) ||
+              (t.name && t.name.trim().toLowerCase() === targetNameLower)
+            )
+          )
+        : [];
+
+      const updatedAbilities = Array.isArray(player.abilities)
+        ? player.abilities.map((ability: any) => {
+            if (!Array.isArray(ability.techniqueList)) return ability;
+            return {
+              ...ability,
+              techniqueList: ability.techniqueList.filter(
+                (t: any) => !(
+                  (t.id && (t.id === targetId || t.id === skill.id)) ||
+                  (t.name && t.name.trim().toLowerCase() === targetNameLower)
+                )
+              )
+            };
+          })
+        : player.abilities;
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          techniqueList: updatedTechList,
+          abilities: updatedAbilities
+        }
+      });
+    } else if (skill.sourceType === 'everyday') {
+      const parsed = parseEverydaySkills(player.everydaySkills || '');
+      const targetNameLower = skill.name.trim().toLowerCase();
+      const updated = parsed.filter(item => item.name.trim().toLowerCase() !== targetNameLower);
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          everydaySkills: serializeEverydaySkills(updated)
+        }
+      });
+    } else if (skill.sourceType === 'profession' && Array.isArray(player.professionCompetencies)) {
+      const updatedComps = player.professionCompetencies.filter(
+        c => !(c.id === skill.sourceId || c.name.trim().toLowerCase() === skill.name.trim().toLowerCase())
+      );
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          professionCompetencies: updatedComps
+        }
+      });
+    }
   };
 
-  // Update existing skill details
-  const handleUpdateSkillDetails = (skillId: string, updates: Partial<TechniqueItem>) => {
-    const updated = allSkills.map(s => {
-      if (s.id === skillId) {
-        return { ...s, ...updates };
-      }
-      return s;
-    });
-    persistSkillsToAdventure(updated);
+  // Beschreibung bearbeiten
+  const handleUpdateSkillDetails = (skill: CharacterCapabilityEntry, description: string) => {
+    if (!player) return;
+
+    if (
+      skill.sourceType === 'technique' ||
+      skill.sourceType === 'passive' ||
+      skill.sourceType === 'weapon'
+    ) {
+      const targetId = skill.originalTechniqueId || skill.sourceId || skill.id;
+      const targetNameLower = (skill.originalTechniqueName || skill.name).trim().toLowerCase();
+
+      const updatedTechList = Array.isArray(player.techniqueList)
+        ? player.techniqueList.map(t => {
+            if (
+              (t.id && (t.id === targetId || t.id === skill.id)) ||
+              (t.name && t.name.trim().toLowerCase() === targetNameLower)
+            ) {
+              return { ...t, description };
+            }
+            return t;
+          })
+        : [];
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          techniqueList: updatedTechList
+        }
+      });
+    } else if (skill.sourceType === 'profession' && Array.isArray(player.professionCompetencies)) {
+      const updatedComps = player.professionCompetencies.map(c => {
+        if (c.id === skill.sourceId || c.name.trim().toLowerCase() === skill.name.trim().toLowerCase()) {
+          return { ...c, description };
+        }
+        return c;
+      });
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          professionCompetencies: updatedComps
+        }
+      });
+    }
+
     setEditingSkillId(null);
   };
 
-  // Handle Preset selection for learning
+  // Katalog-Auswahl
   const handleSelectPreset = (presetId: string) => {
     setSelectedPresetId(presetId);
     if (!presetId) return;
@@ -389,7 +380,6 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
         setNewSkillCost('');
       }
     } else if (addCategory === 'profession') {
-      // Find job in JOB_CATEGORIES
       let foundJob = '';
       let foundCategory = '';
       for (const cat of JOB_CATEGORIES) {
@@ -402,46 +392,96 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
       if (foundJob) {
         setNewSkillName(foundJob);
         setNewSkillDescription(`Fachwissen und handwerkliche Praxis im Berufsfeld ${foundCategory}.`);
-        setNewSkillType('Beruf');
+        setNewSkillType('Berufskompetenz');
         setNewSkillSubtype(foundCategory);
         setNewSkillCost('');
       }
     }
   };
 
-  // Add newly learned skill
+  // Neue Fähigkeit in den entsprechenden kanonischen Speicherort eintragen
   const handleCreateNewSkill = () => {
-    if (!newSkillName.trim()) return;
+    if (!newSkillName.trim() || !player) return;
 
-    let targetCategory = 'Techniken';
-    if (addCategory === 'passive') targetCategory = 'Passive Fähigkeiten';
-    else if (addCategory === 'technique') targetCategory = 'Techniken';
-    else if (addCategory === 'ultimate') targetCategory = 'Ultimative Techniken';
-    else if (addCategory === 'weapon') targetCategory = 'Waffenbeherrschung';
-    else if (addCategory === 'competence') targetCategory = 'Alltagskompetenzen';
-    else if (addCategory === 'profession') targetCategory = 'Berufe';
+    const trimmedName = newSkillName.trim();
 
-    const newSkill: TechniqueItem = {
-      id: `skill-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      name: newSkillName.trim(),
-      category: targetCategory,
-      type: newSkillType || 'Aktiv',
-      subtype: newSkillSubtype || '',
-      description: newSkillDescription.trim(),
-      cost: newSkillCost.trim(),
-      level: newSkillLevel,
-      maxLevel: newSkillMaxLevel,
-      trainingUnits: 0,
-      trainingProgress: 0,
-      trainingRequired: 5,
-      progressionLogic: newSkillProgressionLogic,
-      isFavorite: true
-    };
+    if (addCategory === 'competence') {
+      const parsed = parseEverydaySkills(player.everydaySkills || '');
+      const existing = parsed.find(item => item.name.trim().toLowerCase() === trimmedName.toLowerCase());
 
-    const updatedList = [...allSkills, newSkill];
-    persistSkillsToAdventure(updatedList);
+      if (!existing) {
+        parsed.push({
+          name: trimmedName,
+          score: 15,
+          label: getSkillLabel(15),
+          xp: 0,
+          trainingUnits: 0,
+          points: 1,
+          note: newSkillDescription.trim() || undefined
+        });
+      }
 
-    // Reset creation form
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          everydaySkills: serializeEverydaySkills(parsed)
+        }
+      });
+    } else if (addCategory === 'profession') {
+      const comps = Array.isArray(player.professionCompetencies) ? [...player.professionCompetencies] : [];
+      const newComp: ProfessionCompetency = {
+        id: `comp_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: trimmedName,
+        category: 'Grundlage',
+        proficiency: 15,
+        experiencePoints: 0,
+        talent: 3,
+        description: newSkillDescription.trim() || `Fachwissen in ${trimmedName}`
+      };
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          professionCompetencies: [...comps, newComp]
+        }
+      });
+    } else {
+      // Techniken, Passive Fähigkeiten, Ultimative Techniken & Waffenbeherrschung
+      let targetCategory = 'Techniken';
+      if (addCategory === 'passive') targetCategory = 'Passive Fähigkeiten';
+      else if (addCategory === 'ultimate') targetCategory = 'Ultimative Techniken';
+      else if (addCategory === 'weapon') targetCategory = 'Waffenbeherrschung';
+
+      const newSkill: TechniqueItem = {
+        id: `tech_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: trimmedName,
+        category: targetCategory,
+        type: newSkillType || (addCategory === 'passive' ? 'Passiv' : 'Aktiv'),
+        subtype: newSkillSubtype || '',
+        description: newSkillDescription.trim(),
+        cost: newSkillCost.trim(),
+        level: newSkillLevel,
+        maxLevel: newSkillMaxLevel,
+        trainingUnits: 0,
+        trainingProgress: 0,
+        trainingRequired: 5,
+        progressionLogic: newSkillProgressionLogic,
+        isFavorite: true
+      };
+
+      const existingTechs = Array.isArray(player.techniqueList) ? player.techniqueList : [];
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          techniqueList: [...existingTechs, newSkill]
+        }
+      });
+    }
+
+    // Formular zurücksetzen
     setNewSkillName('');
     setNewSkillDescription('');
     setNewSkillCost('');
@@ -449,8 +489,11 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
     setSelectedPresetId('');
     setIsAddingNew(false);
 
-    // Announce learning in chat
-    const learnAnnouncement = `*beginnt mit dem Training der neuen Fertigkeit '${newSkill.name}' (${targetCategory})*`;
+    // Rollenspiel-Ankündigung
+    const { label: catLabel } = getCategoryLabels(
+      addCategory === 'all' ? 'technique' : (addCategory as CapabilityCategory)
+    );
+    const learnAnnouncement = `*beginnt mit dem Training der neuen Fertigkeit '${trimmedName}' (${catLabel})*`;
     if (onSendChatMessage) {
       onSendChatMessage(learnAnnouncement);
     } else if (onSetInputText) {
@@ -458,7 +501,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
     }
   };
 
-  // Submit free roleplay action
+  // Freie Rollenspiel-Handlung ausführen
   const handleSendFreeAction = () => {
     if (!freeActionText.trim()) return;
     const formatted = `*${freeActionText.trim().replace(/^\*+|\*+$/g, '')}*`;
@@ -485,13 +528,13 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold tracking-tight text-white flex items-center gap-2">
-                <span>Training & Erlernbare Fähigkeiten</span>
+                <span>Training & Erlernbare Fertigkeiten</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300 font-mono">
                   {allSkills.length} Erlernt
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                Verwalte deine Techniken, Meisterungen, Alltagskompetenzen und Berufe.
+                Zentrale Übersicht über Techniken, Meisterungen, Alltagskompetenzen und Berufe.
               </p>
             </div>
           </div>
@@ -581,7 +624,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
             >
               <span className="flex items-center gap-2">
                 <i className="fa-solid fa-border-all text-slate-400"></i>
-                <span>Alle Kategorien</span>
+                <span>Alle Bereiche</span>
               </span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 font-mono">
                 {categoryCounts.all}
@@ -820,7 +863,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                 {/* FORM FIELDS */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">Name der Fähigkeit / Technik:</label>
+                    <label className="text-xs font-bold text-slate-300">Name der Fertigkeit:</label>
                     <input
                       type="text"
                       value={newSkillName}
@@ -870,7 +913,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                     value={newSkillDescription}
                     onChange={e => setNewSkillDescription(e.target.value)}
                     minRows={3}
-                    placeholder="Beschreibe die Wirkung, Anwendung und Eigenheiten dieser Fähigkeit..."
+                    placeholder="Beschreibe die Wirkung, Anwendung und Eigenheiten dieser Fertigkeit..."
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-indigo-500 leading-relaxed"
                   />
                 </div>
@@ -890,7 +933,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                     className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white shadow-lg shadow-indigo-900/30 transition-all flex items-center gap-2"
                   >
                     <i className="fa-solid fa-check"></i>
-                    <span>Fähigkeit erlernen & speichern</span>
+                    <span>Fertigkeit erlernen & speichern</span>
                   </button>
                 </div>
               </div>
@@ -904,7 +947,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                       type="text"
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
-                      placeholder="Fähigkeiten, Techniken oder Berufe durchsuchen..."
+                      placeholder="Fertigkeiten, Techniken, Waffen oder Berufe durchsuchen..."
                       className="bg-transparent text-xs text-white outline-none w-full placeholder-slate-500"
                     />
                     {searchQuery && (
@@ -953,6 +996,17 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                     >
                       In Ausbildung
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode('mastered')}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                        filterMode === 'mastered'
+                          ? 'bg-slate-800 border border-slate-700 text-emerald-400'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Meisterschaft
+                    </button>
                   </div>
                 </div>
 
@@ -964,7 +1018,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                         <i className="fa-solid fa-book-open text-lg"></i>
                       </div>
                       <div className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                        Keine Fähigkeiten in dieser Kategorie gefunden. Lerne neue Fähigkeiten, Techniken, Waffenbeherrschung oder Berufe über die Schaltfläche &bdquo;Fähigkeit erlernen&ldquo;.
+                        Keine Fertigkeiten in diesem Bereich gefunden. Lerne neue Fähigkeiten, Techniken, Waffenbeherrschung oder Berufe über die Schaltfläche &bdquo;Fähigkeit erlernen&ldquo;.
                       </div>
                       <button
                         type="button"
@@ -975,17 +1029,16 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                         className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all shadow-md inline-flex items-center gap-2"
                       >
                         <i className="fa-solid fa-plus"></i>
-                        <span>Jetzt neue Fähigkeit erlernen</span>
+                        <span>Jetzt neue Fertigkeit erlernen</span>
                       </button>
                     </div>
                   ) : (
                     filteredSkills.map(skill => {
                       const isEditing = editingSkillId === skill.id;
+                      const styles = getCategoryStyles(skill.category);
                       const currentLvl = skill.level || 1;
                       const maxLvl = skill.maxLevel || 10;
-                      const units = skill.trainingUnits || skill.trainingProgress || 0;
-                      const reqUnits = skill.trainingRequired || 5;
-                      const progressPct = Math.min(100, Math.round((units / reqUnits) * 100));
+                      const progressPct = skill.progress !== undefined ? skill.progress : 0;
 
                       return (
                         <div
@@ -997,13 +1050,13 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                             <div className="flex items-start gap-3 min-w-0">
                               <button
                                 type="button"
-                                onClick={() => handleToggleFavorite(skill.id)}
+                                onClick={() => handleToggleFavorite(skill)}
                                 className={`p-1.5 rounded-lg border transition-all mt-0.5 ${
                                   skill.isFavorite
                                     ? 'bg-amber-950/60 border-amber-500/50 text-amber-400'
                                     : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
                                 }`}
-                                title={skill.isFavorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+                                title={skill.isFavorite ? 'Aus Favoriten entfernen' : 'Als Favorit markieren'}
                               >
                                 <i className="fa-solid fa-star text-xs"></i>
                               </button>
@@ -1013,20 +1066,8 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                                   <h4 className="font-bold text-sm text-white">{skill.name}</h4>
                                   
                                   {/* CATEGORY BADGE */}
-                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${
-                                    skill.category === 'Passive Fähigkeiten'
-                                      ? 'bg-blue-950/80 border-blue-500/40 text-blue-300'
-                                      : skill.category === 'Ultimative Techniken'
-                                      ? 'bg-amber-950/80 border-amber-500/40 text-amber-300'
-                                      : skill.category === 'Waffenbeherrschung'
-                                      ? 'bg-red-950/80 border-red-500/40 text-red-300'
-                                      : skill.category === 'Alltagskompetenzen'
-                                      ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
-                                      : skill.category === 'Berufe'
-                                      ? 'bg-amber-950/80 border-amber-600/40 text-amber-200'
-                                      : 'bg-indigo-950/80 border-indigo-500/40 text-indigo-300'
-                                  }`}>
-                                    {skill.category}
+                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${styles.badgeBg} ${styles.badgeBorder} ${styles.badgeText}`}>
+                                    {skill.categoryLabel}
                                   </span>
 
                                   {skill.type && (
@@ -1036,7 +1077,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                                   )}
 
                                   {skill.cost && (
-                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-cyan-400 font-mono">
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-950 border border-slate-800 text-cyan-400 font-mono">
                                       {skill.cost}
                                     </span>
                                   )}
@@ -1058,7 +1099,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={() => handleAdjustLevel(skill.id, -1)}
+                                  onClick={() => handleAdjustLevel(skill, -1)}
                                   disabled={currentLvl <= 1}
                                   className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white disabled:opacity-30 text-xs"
                                   title="Stufe verringern"
@@ -1067,7 +1108,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleAdjustLevel(skill.id, 1)}
+                                  onClick={() => handleAdjustLevel(skill, 1)}
                                   disabled={currentLvl >= maxLvl}
                                   className="w-5 h-5 rounded flex items-center justify-center text-slate-400 hover:text-white disabled:opacity-30 text-xs font-bold"
                                   title="Stufe erhöhen"
@@ -1087,7 +1128,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
 
                               <button
                                 type="button"
-                                onClick={() => handleDeleteSkill(skill.id)}
+                                onClick={() => handleDeleteSkill(skill)}
                                 className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-900 text-xs"
                                 title="Entfernen"
                               >
@@ -1102,7 +1143,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                               <label className="text-[10px] font-bold text-slate-400 uppercase">Beschreibung bearbeiten:</label>
                               <AutoExpandingTextarea
                                 value={skill.description || ''}
-                                onChange={e => handleUpdateSkillDetails(skill.id, { description: e.target.value })}
+                                onChange={e => handleUpdateSkillDetails(skill, e.target.value)}
                                 minRows={2}
                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white outline-none leading-relaxed"
                               />
@@ -1118,7 +1159,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                             </div>
                           ) : (
                             skill.description && (
-                              <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/40 p-2.5 rounded-xl border border-slate-850">
+                              <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/40 p-2.5 rounded-xl border border-slate-850 break-words">
                                 {skill.description}
                               </p>
                             )
@@ -1127,40 +1168,56 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
                           {/* TRAINING PROGRESS BAR */}
                           <div className="space-y-1">
                             <div className="flex justify-between items-center text-[10px] text-slate-400">
-                              <span className="font-semibold">Trainingsfortschritt:</span>
+                              <span className="font-semibold">Fortschritt:</span>
                               <span className="font-mono">
-                                {units} / {reqUnits} Übungseinheiten ({progressPct}%)
+                                {skill.category === 'competence'
+                                  ? `${progressPct}% Beherrschung (${getSkillLabel(progressPct)})`
+                                  : skill.category === 'profession'
+                                  ? `${progressPct}% Kompetenz (${skill.xp || 0} EP)`
+                                  : `${progressPct}% (${skill.progressionLogic === 'training' ? `${skill.trainingUnits || 0}/${skill.trainingRequired || 3} Übungen` : `${skill.xp || 0}/${skill.xpNeeded || 100} EP`})`}
                               </span>
                             </div>
                             <div className="w-full bg-slate-900 rounded-full h-1.5 border border-slate-800 overflow-hidden">
                               <div
                                 className="bg-indigo-500 h-full rounded-full transition-all duration-300"
-                                style={{ width: `${progressPct}%` }}
+                                style={{ width: `${Math.min(100, Math.max(5, progressPct))}%` }}
                               ></div>
                             </div>
                           </div>
 
                           {/* ACTION BUTTONS */}
                           <div className="flex items-center justify-end gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleTrainSkill(skill)}
-                              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 hover:border-indigo-500/50 text-xs font-bold transition-all flex items-center gap-1.5"
-                              title="Trainiert die Fähigkeit und sendet eine Handlungsbeschreibung"
-                            >
-                              <i className="fa-solid fa-dumbbell text-indigo-400 text-xs"></i>
-                              <span>Üben & Trainieren</span>
-                            </button>
+                            {skill.canTrain ? (
+                              <button
+                                type="button"
+                                onClick={() => handleTrainSkill(skill)}
+                                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 hover:border-indigo-500/50 text-xs font-bold transition-all flex items-center gap-1.5"
+                                title="Trainiert die Fertigkeit und sendet eine Handlungsbeschreibung"
+                              >
+                                <i className="fa-solid fa-dumbbell text-indigo-400 text-xs"></i>
+                                <span>Üben & Trainieren</span>
+                              </button>
+                            ) : (
+                              <span className="text-xs text-slate-500 font-mono italic px-2">
+                                Meisterschaft erreicht
+                              </span>
+                            )}
 
-                            <button
-                              type="button"
-                              onClick={() => handleUseSkill(skill)}
-                              className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-md text-xs font-bold transition-all flex items-center gap-1.5"
-                              title="Wendet die Fähigkeit direkt im Spiel an"
-                            >
-                              <i className="fa-solid fa-play text-xs"></i>
-                              <span>Einsetzen</span>
-                            </button>
+                            {skill.canUse ? (
+                              <button
+                                type="button"
+                                onClick={() => handleUseSkill(skill)}
+                                className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-md text-xs font-bold transition-all flex items-center gap-1.5"
+                                title="Wendet die Fertigkeit direkt im Spiel an"
+                              >
+                                <i className={`fa-solid ${skill.category === 'profession' ? 'fa-hammer' : 'fa-play'} text-xs`}></i>
+                                <span>{skill.category === 'profession' ? 'Ausüben' : skill.category === 'competence' ? 'Anwenden' : 'Einsetzen'}</span>
+                              </button>
+                            ) : (
+                              <span className="text-xs text-blue-400/80 font-mono italic px-2">
+                                Dauerhaft aktiv
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -1176,7 +1233,7 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <i className="fa-solid fa-circle-info text-slate-500"></i>
-            <span>Trainierte Fähigkeiten werden dauerhaft im Charakterprofil gespeichert.</span>
+            <span>Trainierte Fertigkeiten werden konsistent im Charakterprofil gespeichert.</span>
           </div>
           <button
             type="button"
@@ -1191,3 +1248,4 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
     </div>
   );
 };
+export default TrainingSkillsModal;
