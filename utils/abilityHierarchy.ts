@@ -718,21 +718,47 @@ export function extractProgressionState(item: any): ProgressionState | undefined
 }
 
 /**
+ * Erzeugt einen stabilen, deterministischen Slug-Bezeichner für IDs ohne Zufalls- oder Zeitstempelwerte.
+ */
+export function slugifyPowerId(text: string, prefix: string): string {
+  const slug = (text || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[äÄ]/g, 'ae')
+    .replace(/[öÖ]/g, 'oe')
+    .replace(/[üÜ]/g, 'ue')
+    .replace(/[ß]/g, 'ss')
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug ? `${prefix}_${slug}` : `${prefix}_default`;
+}
+
+/**
  * Wandelt eine Legacy-Kraftquelle in ein PowerSystem um.
  */
 export function powerSourceToPowerSystem(source: CharacterPowerSource, powerIds?: string[]): PowerSystem {
-  const pName = source.source || source.powerName || 'Unbekanntes Kraftsystem';
-  const sysId = source.id ? (source.id.startsWith('sys_') ? source.id : `sys_${source.id}`) : `sys_${Date.now()}`;
-  const powerId = source.id || `power_${Date.now()}`;
+  const rawSystemName = (source.source || source.powerName || 'Unbekanntes Kraftsystem').trim();
+  const sysSlug = slugifyPowerId(rawSystemName, 'sys');
+  const sysId = source.id && source.id.startsWith('sys_') 
+    ? source.id 
+    : (source.id ? `sys_${source.id.replace(/^ps_/, '')}` : sysSlug);
+
+  const rawPowerName = (source.powerName || source.source || 'Konkrete Kraft').trim();
+  const powerSlug = slugifyPowerId(rawPowerName, 'power');
+  const defaultPowerId = source.id && source.id.startsWith('power_') 
+    ? source.id 
+    : (source.id ? (source.id.startsWith('ps_') ? `power_${source.id.replace(/^ps_/, '')}` : `power_${source.id}`) : powerSlug);
+
+  const resolvedPowerIds = powerIds && powerIds.length > 0 ? powerIds : [defaultPowerId];
 
   return {
     id: sysId,
-    name: pName,
+    name: rawSystemName,
     description: source.powerDescription || undefined,
     systemType: source.source || 'Magie',
     origin: undefined,
     resourceName: source.cost || undefined,
-    powerIds: powerIds && powerIds.length > 0 ? powerIds : [powerId]
+    powerIds: resolvedPowerIds
   };
 }
 
@@ -745,14 +771,23 @@ export function powerSourceToCharacterPower(
   abilityIds?: string[],
   formIds?: string[]
 ): CharacterPower {
-  const powerId = source.id || `power_${Date.now()}`;
-  const resolvedSysId = systemId || (source.id ? (source.id.startsWith('sys_') ? source.id : `sys_${source.id}`) : `sys_${powerId}`);
+  const rawPowerName = (source.powerName || source.source || 'Konkrete Kraft').trim();
+  const rawSystemName = (source.source || source.powerName || 'Unbekanntes Kraftsystem').trim();
+  
+  const powerId = source.id && source.id.startsWith('power_') 
+    ? source.id 
+    : (source.id ? (source.id.startsWith('ps_') ? `power_${source.id.replace(/^ps_/, '')}` : (source.id.startsWith('sys_') ? slugifyPowerId(rawPowerName, 'power') : source.id)) : slugifyPowerId(rawPowerName, 'power'));
+
+  const resolvedSysId = systemId || (source.id && source.id.startsWith('sys_') 
+    ? source.id 
+    : (source.id ? `sys_${source.id.replace(/^ps_/, '')}` : slugifyPowerId(rawSystemName, 'sys')));
+
   const resolvedAbilityIds = abilityIds || (Array.isArray(source.baseAbilities) ? source.baseAbilities.map(ba => ba.id).filter(Boolean) : []);
 
   return {
     id: powerId,
     powerSystemId: resolvedSysId,
-    name: source.powerName || source.source || 'Konkrete Kraft',
+    name: rawPowerName,
     description: source.powerDescription || undefined,
     resourceName: source.cost || undefined,
     abilityIds: resolvedAbilityIds,
@@ -769,13 +804,14 @@ export function baseAbilityToCharacterAbility(
   powerId?: string,
   techniqueIds?: string[]
 ): CharacterAbility {
-  const resolvedPowerId = powerId || baseAbility.powerSourceId || 'power_default';
+  const abId = baseAbility.id || slugifyPowerId(baseAbility.displayName || baseAbility.name || 'ability', 'ab');
+  const resolvedPowerId = powerId || (baseAbility.powerSourceId ? (baseAbility.powerSourceId.startsWith('power_') ? baseAbility.powerSourceId : (baseAbility.powerSourceId.startsWith('ps_') ? `power_${baseAbility.powerSourceId.replace(/^ps_/, '')}` : baseAbility.powerSourceId)) : 'power_default');
   const resolvedTechIds = techniqueIds || baseAbility.techniqueIds || [];
 
   return {
-    id: baseAbility.id || `ab_${Date.now()}`,
+    id: abId,
     powerId: resolvedPowerId,
-    name: baseAbility.displayName || baseAbility.name || resolveKinesisName(baseAbility.element || 'Neutral', baseAbility.abilityType),
+    name: (baseAbility.displayName || baseAbility.name || resolveKinesisName(baseAbility.element || 'Neutral', baseAbility.abilityType)).trim(),
     description: baseAbility.description,
     abilityType: formatAbilityTypeLabel(baseAbility.abilityType),
     element: baseAbility.element || 'Neutral',
@@ -792,14 +828,16 @@ export function techniqueItemToCharacterTechnique(
   abilityId?: string,
   powerId?: string
 ): CharacterTechnique {
-  const resolvedAbilityId = abilityId || (Array.isArray(tech.baseAbilityIds) && tech.baseAbilityIds.length > 0 ? tech.baseAbilityIds[0] : undefined);
-  const resolvedPowerId = powerId || tech.powerSourceId;
+  const techId = tech.id || slugifyPowerId(tech.name || 'technique', 'tech');
+  const rawBaId = Array.isArray(tech.baseAbilityIds) && tech.baseAbilityIds.length > 0 ? tech.baseAbilityIds[0] : undefined;
+  const resolvedAbilityId = abilityId || rawBaId;
+  const resolvedPowerId = powerId || (tech.powerSourceId ? (tech.powerSourceId.startsWith('power_') ? tech.powerSourceId : (tech.powerSourceId.startsWith('ps_') ? `power_${tech.powerSourceId.replace(/^ps_/, '')}` : tech.powerSourceId)) : undefined);
 
   return {
-    id: tech.id || `tech_${Date.now()}`,
+    id: techId,
     abilityId: resolvedAbilityId,
     powerId: resolvedPowerId,
-    name: tech.name,
+    name: (tech.name || '').trim(),
     description: tech.description,
     techniqueType: tech.type || (tech.category === 'Passive Fähigkeiten' ? 'Passiv' : (tech.category === 'Ultimative Techniken' ? 'Ultimativ' : 'Angriff')),
     mode: tech.mode,
@@ -823,7 +861,8 @@ export function techniqueItemToCharacterPowerForm(
   tech: TechniqueItem,
   powerId?: string
 ): CharacterPowerForm {
-  const resolvedPowerId = powerId || tech.powerSourceId;
+  const formId = tech.id || slugifyPowerId(tech.transformName || tech.name || 'form', 'form');
+  const resolvedPowerId = powerId || (tech.powerSourceId ? (tech.powerSourceId.startsWith('power_') ? tech.powerSourceId : (tech.powerSourceId.startsWith('ps_') ? `power_${tech.powerSourceId.replace(/^ps_/, '')}` : tech.powerSourceId)) : undefined);
   const modifiers: Record<string, number | string> = {};
 
   if (Array.isArray(tech.transformationModifiers)) {
@@ -841,9 +880,9 @@ export function techniqueItemToCharacterPowerForm(
   }
 
   return {
-    id: tech.id || `form_${Date.now()}`,
+    id: formId,
     powerId: resolvedPowerId,
-    name: tech.transformName || tech.name,
+    name: (tech.transformName || tech.name || 'Transformation').trim(),
     description: tech.description,
     formType: tech.subtype || 'Transformation',
     abilityIds: tech.baseAbilityIds || [],
@@ -995,33 +1034,62 @@ export function convertLegacyToPowerHierarchy(char: any): {
   forms: CharacterPowerForm[];
 } {
   const normalized = normalizeAbilityHierarchy(char);
-  const powerSystems: PowerSystem[] = [];
+  const powerSystemsMap = new Map<string, PowerSystem>();
   const powers: CharacterPower[] = [];
   const abilities: CharacterAbility[] = [];
   const techniques: CharacterTechnique[] = [];
   const forms: CharacterPowerForm[] = [];
 
+  const legacyPsToPowerIdMap = new Map<string, { powerId: string; sysId: string }>();
+
   normalized.powerSources.forEach(ps => {
     const power = powerSourceToCharacterPower(ps);
     const system = powerSourceToPowerSystem(ps, [power.id]);
-    powerSystems.push(system);
+
+    legacyPsToPowerIdMap.set(ps.id, { powerId: power.id, sysId: system.id });
+
+    if (powerSystemsMap.has(system.id)) {
+      const existingSys = powerSystemsMap.get(system.id)!;
+      if (!existingSys.powerIds?.includes(power.id)) {
+        existingSys.powerIds = [...(existingSys.powerIds || []), power.id];
+      }
+    } else {
+      powerSystemsMap.set(system.id, system);
+    }
     powers.push(power);
   });
 
   normalized.baseAbilities.forEach(ba => {
-    const ability = baseAbilityToCharacterAbility(ba);
+    const mapped = ba.powerSourceId ? legacyPsToPowerIdMap.get(ba.powerSourceId) : undefined;
+    const powerId = mapped?.powerId || (powers[0]?.id || 'power_default');
+    const ability = baseAbilityToCharacterAbility(ba, powerId);
     abilities.push(ability);
   });
 
   normalized.techniques.forEach(t => {
+    // Waffenbeherrschung, Berufe und Alltagskompetenzen NICHT in CharacterTechnique pressen!
+    if (
+      t.category === 'Waffenbeherrschung' || 
+      t.category === 'Berufe' || 
+      t.category === 'Alltagskompetenzen' || 
+      t.category === 'Talente'
+    ) {
+      return;
+    }
+
+    const mapped = t.powerSourceId ? legacyPsToPowerIdMap.get(t.powerSourceId) : undefined;
+    const powerId = mapped?.powerId || (powers[0]?.id || 'power_default');
+
     if (t.category === 'Transformationen' || t.type === 'Transformation') {
-      const form = techniqueItemToCharacterPowerForm(t);
+      const form = techniqueItemToCharacterPowerForm(t, powerId);
       forms.push(form);
     } else {
-      const tech = techniqueItemToCharacterTechnique(t);
+      const tech = techniqueItemToCharacterTechnique(t, undefined, powerId);
       techniques.push(tech);
     }
   });
+
+  const powerSystems = Array.from(powerSystemsMap.values());
 
   // Verknüpfungen konsistent halten
   powers.forEach(p => {
@@ -1050,6 +1118,87 @@ export function convertLegacyToPowerHierarchy(char: any): {
     techniques,
     forms
   };
+}
+
+/**
+ * Hauptfunktion zum Aufbau der neuen Power-Hierarchie aus einem Charakter-Objekt.
+ * Priorisiert bereits vorhandene neue Daten (char.powers / char.powerSystems) und
+ * greift nur bei Fehlen auf die verlustfreie Legacy-Migration zurück.
+ */
+export function buildCharacterPowerHierarchy(char: any): {
+  powerSystems: PowerSystem[];
+  powers: CharacterPower[];
+  abilities: CharacterAbility[];
+  techniques: CharacterTechnique[];
+  forms: CharacterPowerForm[];
+} {
+  if (!char) {
+    return {
+      powerSystems: [],
+      powers: [],
+      abilities: [],
+      techniques: [],
+      forms: []
+    };
+  }
+
+  // 1. Prüfen, ob bereits neue strukturierte Daten vorhanden sind (Höchste Priorität)
+  const hasNewPowers = Array.isArray(char.powers) && char.powers.length > 0;
+  const hasNewSystems = Array.isArray(char.powerSystems) && char.powerSystems.length > 0;
+  const hasNewAbilities = Array.isArray(char.characterAbilities) && char.characterAbilities.length > 0;
+  const hasNewTechniques = Array.isArray(char.characterTechniques) && char.characterTechniques.length > 0;
+  const hasNewForms = Array.isArray(char.powerForms) && char.powerForms.length > 0;
+
+  if (hasNewPowers || hasNewSystems) {
+    const powerSystems: PowerSystem[] = Array.isArray(char.powerSystems) ? [...char.powerSystems] : [];
+    const powers: CharacterPower[] = Array.isArray(char.powers) ? [...char.powers] : [];
+    const abilities: CharacterAbility[] = Array.isArray(char.characterAbilities) ? [...char.characterAbilities] : [];
+    const techniques: CharacterTechnique[] = Array.isArray(char.characterTechniques) ? [...char.characterTechniques] : [];
+    const forms: CharacterPowerForm[] = Array.isArray(char.powerForms) ? [...char.powerForms] : [];
+
+    // System-Referenzen sicherstellen
+    if (powerSystems.length === 0 && powers.length > 0) {
+      powers.forEach(p => {
+        const sysId = p.powerSystemId || `sys_${p.id}`;
+        if (!powerSystems.some(s => s.id === sysId)) {
+          powerSystems.push({
+            id: sysId,
+            name: p.subtype || p.name || 'Kraftsystem',
+            systemType: p.subtype || 'Magie',
+            powerIds: [p.id]
+          });
+        }
+      });
+    }
+
+    powerSystems.forEach(sys => {
+      const matchingPowers = powers.filter(p => p.powerSystemId === sys.id || (!p.powerSystemId && powerSystems.length === 1));
+      sys.powerIds = Array.from(new Set([...(sys.powerIds || []), ...matchingPowers.map(p => p.id)]));
+    });
+
+    powers.forEach(p => {
+      const matchingAbilities = abilities.filter(a => a.powerId === p.id);
+      const matchingForms = forms.filter(f => f.powerId === p.id);
+      p.abilityIds = Array.from(new Set([...(p.abilityIds || []), ...matchingAbilities.map(a => a.id)]));
+      p.formIds = Array.from(new Set([...(p.formIds || []), ...matchingForms.map(f => f.id)]));
+    });
+
+    abilities.forEach(a => {
+      const matchingTechs = techniques.filter(t => t.abilityId === a.id);
+      a.techniqueIds = Array.from(new Set([...(a.techniqueIds || []), ...matchingTechs.map(t => t.id)]));
+    });
+
+    return {
+      powerSystems,
+      powers,
+      abilities,
+      techniques,
+      forms
+    };
+  }
+
+  // 2. Fallback: Aus Legacy-Daten migrieren
+  return convertLegacyToPowerHierarchy(char);
 }
 
 /**

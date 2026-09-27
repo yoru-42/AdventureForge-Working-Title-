@@ -7,13 +7,19 @@ import {
   TechniqueItem, 
   AbilityType, 
   TechniqueTransformationModifier, 
-  TransformationModifierType 
+  TransformationModifierType,
+  PowerSystem,
+  CharacterPower,
+  CharacterAbility,
+  CharacterTechnique,
+  CharacterPowerForm
 } from '../types';
 import { 
   ADVENTURE_FORGE_ELEMENTS, 
   ABILITY_TYPES, 
   resolveKinesisName, 
-  formatAbilityTypeLabel 
+  formatAbilityTypeLabel,
+  buildCharacterPowerHierarchy
 } from '../utils/abilityHierarchy';
 import { 
   WEAPON_CATEGORIES, 
@@ -103,6 +109,20 @@ export interface TechniqueHierarchyTreeProps {
   onEverydaySkillsExperienceTextChange?: (val: string) => void;
   toolsAndEquipment?: string;
   onToolsAndEquipmentChange?: (val: string) => void;
+  // Neue hierarchische Datenmodell-Props (Schritt 2)
+  powerSystems?: PowerSystem[];
+  powers?: CharacterPower[];
+  abilities?: CharacterAbility[];
+  characterTechniques?: CharacterTechnique[];
+  forms?: CharacterPowerForm[];
+  character?: any;
+  onHierarchyChange?: (hierarchy: {
+    powerSystems: PowerSystem[];
+    powers: CharacterPower[];
+    abilities: CharacterAbility[];
+    techniques: CharacterTechnique[];
+    forms: CharacterPowerForm[];
+  }) => void;
 }
 
 export const CATEGORY_TABS = [
@@ -217,8 +237,43 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   everydaySkillsExperienceText = '',
   onEverydaySkillsExperienceTextChange,
   toolsAndEquipment = '',
-  onToolsAndEquipmentChange
+  onToolsAndEquipmentChange,
+  // Neue hierarchische Datenmodell-Props (Schritt 2)
+  powerSystems,
+  powers,
+  abilities,
+  characterTechniques,
+  forms,
+  character,
+  onHierarchyChange
 }) => {
+  // 0. Neue Hierarchie ermitteln (Schritt 2: Interne Anbindung)
+  const powerHierarchy = useMemo(() => {
+    if (powerSystems || powers || abilities || characterTechniques || forms) {
+      return {
+        powerSystems: powerSystems || [],
+        powers: powers || [],
+        abilities: abilities || [],
+        techniques: characterTechniques || [],
+        forms: forms || []
+      };
+    }
+    if (character) {
+      return buildCharacterPowerHierarchy(character);
+    }
+    return buildCharacterPowerHierarchy({
+      powerSources,
+      baseAbilities,
+      techniqueList: techniques
+    });
+  }, [powerSystems, powers, abilities, characterTechniques, forms, character, powerSources, baseAbilities, techniques]);
+
+  useEffect(() => {
+    if (onHierarchyChange && powerHierarchy) {
+      onHierarchyChange(powerHierarchy);
+    }
+  }, [powerHierarchy, onHierarchyChange]);
+
   // 1. Sichere Standard-Kraftquelle falls Liste leer
   const safePowerSources = useMemo(() => {
     if (powerSources && powerSources.length > 0) {

@@ -23,7 +23,8 @@ import {
   characterPowerFormToLegacyTransformation,
   convertLegacyToPowerHierarchy,
   convertPowerHierarchyToLegacy,
-  extractProgressionState
+  extractProgressionState,
+  buildCharacterPowerHierarchy
 } from '../utils/abilityHierarchy';
 
 console.log('=== TEST SUITE: POWER - ABILITY - TECHNIQUE - FORM DATA MODEL ===\n');
@@ -448,5 +449,201 @@ const emptyExtracted = extractProgressionState({ id: 'empty' });
 assert.strictEqual(emptyExtracted, undefined, 'Objekt ohne Progressionsfelder liefert undefined');
 
 console.log('[PASS] Test 5: extractProgressionState correctly extracts all progression attributes');
+
+// ----------------------------------------------------------------------------
+// Test 6: buildCharacterPowerHierarchy Priority (New Data > Legacy)
+// ----------------------------------------------------------------------------
+console.log('\n--- Test 6: buildCharacterPowerHierarchy Priority ---');
+
+const charWithNewAndOldData: Partial<Character> = {
+  id: 'char_hybrid_data',
+  name: 'Kaelin Schattenwind',
+  // Neue strukturierte Daten
+  powerSystems: [
+    {
+      id: 'sys_haki',
+      name: 'Haki',
+      systemType: 'Haki',
+      resourceName: 'Willenskraft',
+      powerIds: ['power_observation_haki']
+    }
+  ],
+  powers: [
+    {
+      id: 'power_observation_haki',
+      powerSystemId: 'sys_haki',
+      name: 'Kenbunshoku Haki',
+      subtype: 'Wahrnehmung',
+      resourceName: 'Willenskraft',
+      abilityIds: ['ab_aura_sense'],
+      formIds: []
+    }
+  ],
+  characterAbilities: [
+    {
+      id: 'ab_aura_sense',
+      powerId: 'power_observation_haki',
+      name: 'Aurenwahrnehmung',
+      abilityType: 'Wahrnehmung',
+      techniqueIds: ['tech_future_sight']
+    }
+  ],
+  characterTechniques: [
+    {
+      id: 'tech_future_sight',
+      abilityId: 'ab_aura_sense',
+      powerId: 'power_observation_haki',
+      name: 'Zukunftssicht',
+      techniqueType: 'Spezial'
+    }
+  ],
+  // Veraltete Legacy-Daten (sollten ignoriert werden, da neue Daten vorhanden sind)
+  powerSources: [
+    {
+      id: 'ps_old_magic',
+      source: 'Alte Magie',
+      powerName: 'Altes Mana'
+    }
+  ]
+};
+
+const builtFromNew = buildCharacterPowerHierarchy(charWithNewAndOldData);
+
+assert.strictEqual(builtFromNew.powerSystems.length, 1);
+assert.strictEqual(builtFromNew.powerSystems[0].name, 'Haki');
+assert.strictEqual(builtFromNew.powers.length, 1);
+assert.strictEqual(builtFromNew.powers[0].name, 'Kenbunshoku Haki');
+assert.strictEqual(builtFromNew.abilities.length, 1);
+assert.strictEqual(builtFromNew.abilities[0].name, 'Aurenwahrnehmung');
+assert.strictEqual(builtFromNew.techniques.length, 1);
+assert.strictEqual(builtFromNew.techniques[0].name, 'Zukunftssicht');
+console.log('[PASS] Test 6: buildCharacterPowerHierarchy prioritizes existing new data correctly');
+
+// ----------------------------------------------------------------------------
+// Test 7: Deterministic IDs & Idempotency
+// ----------------------------------------------------------------------------
+console.log('\n--- Test 7: Deterministic IDs & Idempotency ---');
+
+const legacyCharToTest: Partial<Character> = {
+  id: 'char_repeat',
+  name: 'Aron Feuerfaust',
+  powerSources: [
+    {
+      id: 'ps_fire_source',
+      source: 'Magie',
+      powerName: 'Pyromantie',
+      cost: 'Mana'
+    }
+  ],
+  baseAbilities: [
+    {
+      id: 'ba_pyro',
+      displayName: 'Pyrokinese',
+      element: 'Feuer',
+      abilityType: 'creation_manipulation'
+    }
+  ],
+  techniqueList: [
+    {
+      id: 'tech_fireball',
+      name: 'Feuerball',
+      category: 'Techniken',
+      baseAbilityIds: ['ba_pyro']
+    }
+  ]
+};
+
+const run1 = buildCharacterPowerHierarchy(legacyCharToTest);
+const run2 = buildCharacterPowerHierarchy(legacyCharToTest);
+
+assert.strictEqual(run1.powers[0].id, run2.powers[0].id, 'IDs müssen deterministisch und stabil bleiben');
+assert.strictEqual(run1.abilities[0].id, run2.abilities[0].id);
+assert.strictEqual(run1.techniques[0].id, run2.techniques[0].id);
+assert.strictEqual(run1.powers.length, 1, 'Keine Duplikate bei wiederholter Konvertierung');
+assert.strictEqual(run1.abilities.length, 1);
+assert.strictEqual(run1.techniques.length, 1);
+console.log('[PASS] Test 7: Deterministic stable IDs and idempotency verified');
+
+// ----------------------------------------------------------------------------
+// Test 8: Non-Power Domains (Waffenbeherrschung, Berufe) Excluded from CharacterTechnique
+// ----------------------------------------------------------------------------
+console.log('\n--- Test 8: Domain Separation (Weapons/Professions not in CharacterTechnique) ---');
+
+const mixedCharacter: Partial<Character> = {
+  id: 'char_mixed',
+  name: 'Gareth der Schmiedemeister',
+  powerSources: [
+    {
+      id: 'ps_earth',
+      source: 'Magie',
+      powerName: 'Erdmagie',
+      cost: 'Mana'
+    }
+  ],
+  baseAbilities: [
+    {
+      id: 'ba_geo',
+      displayName: 'Geokinese',
+      element: 'Erde',
+      abilityType: 'manipulation'
+    }
+  ],
+  techniqueList: [
+    {
+      id: 'tech_rock_throw',
+      name: 'Felswurf',
+      category: 'Techniken',
+      baseAbilityIds: ['ba_geo']
+    },
+    {
+      id: 'weapon_sword_mastery',
+      name: 'Einhandschwert-Meisterschaft',
+      category: 'Waffenbeherrschung',
+      weaponType: 'Schwert'
+    },
+    {
+      id: 'profession_smithing',
+      name: 'Meisterschmied',
+      category: 'Berufe'
+    },
+    {
+      id: 'everyday_cooking',
+      name: 'Lagerfeuer-Kochen',
+      category: 'Alltagskompetenzen'
+    }
+  ]
+};
+
+const hierarchyClean = buildCharacterPowerHierarchy(mixedCharacter);
+
+assert.strictEqual(hierarchyClean.techniques.length, 1, 'Nur magische/taktische Techniken in CharacterTechnique');
+assert.strictEqual(hierarchyClean.techniques[0].name, 'Felswurf');
+const hasWeapon = hierarchyClean.techniques.some(t => t.id === 'weapon_sword_mastery');
+const hasProf = hierarchyClean.techniques.some(t => t.id === 'profession_smithing');
+const hasEveryday = hierarchyClean.techniques.some(t => t.id === 'everyday_cooking');
+assert.strictEqual(hasWeapon, false, 'Waffenbeherrschung nicht in CharacterTechnique');
+assert.strictEqual(hasProf, false, 'Berufe nicht in CharacterTechnique');
+assert.strictEqual(hasEveryday, false, 'Alltagskompetenzen nicht in CharacterTechnique');
+console.log('[PASS] Test 8: Strict separation of power techniques vs weapons/professions verified');
+
+// ----------------------------------------------------------------------------
+// Test 9: Graph Relationship Integrity
+// ----------------------------------------------------------------------------
+console.log('\n--- Test 9: Complete Graph Relationship Integrity ---');
+
+const powerSys = hierarchyClean.powerSystems[0];
+const powerEntry = hierarchyClean.powers[0];
+const abilityEntry = hierarchyClean.abilities[0];
+const techEntry = hierarchyClean.techniques[0];
+
+assert.ok(powerSys.powerIds?.includes(powerEntry.id), 'PowerSystem -> CharacterPower');
+assert.strictEqual(powerEntry.powerSystemId, powerSys.id, 'CharacterPower -> PowerSystem');
+assert.ok(powerEntry.abilityIds?.includes(abilityEntry.id), 'CharacterPower -> CharacterAbility');
+assert.strictEqual(abilityEntry.powerId, powerEntry.id, 'CharacterAbility -> CharacterPower');
+assert.ok(abilityEntry.techniqueIds?.includes(techEntry.id), 'CharacterAbility -> CharacterTechnique');
+assert.strictEqual(techEntry.abilityId, abilityEntry.id, 'CharacterTechnique -> CharacterAbility');
+assert.strictEqual(techEntry.powerId, powerEntry.id, 'CharacterTechnique -> CharacterPower');
+
+console.log('[PASS] Test 9: Graph relationships in all directions verified');
 
 console.log('\n✨ ALL POWER-ABILITY-TECHNIQUE-FORM TESTS PASSED SUCCESSFULLY! ✨');
