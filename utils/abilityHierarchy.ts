@@ -217,7 +217,7 @@ export function normalizeAbilityHierarchy(char: any): {
       return existing.id;
     }
 
-    const canonicalId = candidate.id || `ba_${baseAbilitiesList.length + 1}_${Date.now()}`;
+    const canonicalId = candidate.id || slugifyPowerId(`${psId}_${displayName}`, 'ba');
     const newBa: BaseAbility = {
       id: canonicalId,
       powerSourceId: psId,
@@ -366,7 +366,7 @@ if (Array.isArray(char.standardAbilities)) {
       return;
     }
 
-    const techId = tech.id || `tech_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const techId = tech.id || slugifyPowerId(`${psId}_${category}_${techName}`, 'tech');
     const costResource = tech.costResourceName || ps?.cost || 'Mana';
     const costVal = tech.costValue !== undefined ? tech.costValue : (category === 'Passive Fähigkeiten' ? 0 : 10);
     const costStr = tech.cost || (category === 'Passive Fähigkeiten' ? 'Passiv' : `${costVal} ${costResource}`);
@@ -1201,38 +1201,59 @@ export function buildCharacterPowerHierarchy(char: any): {
       powers.forEach(p => {
         const sysId = p.powerSystemId || slugifyPowerId(p.subtype || p.name || 'sys_main', 'sys');
         p.powerSystemId = sysId;
-        if (!powerSystems.some(s => s.id === sysId)) {
-          powerSystems.push({
+        let existingSys = powerSystems.find(s => s.id === sysId);
+        if (!existingSys) {
+          existingSys = {
             id: sysId,
+            name: p.subtype || p.name || 'Kraftsystem',
+            systemType: p.subtype || 'Magie',
+            resourceName: p.resourceName,
+            powerIds: []
+          };
+          powerSystems.push(existingSys);
+        }
+      });
+    }
+
+    // Schritt A: Jede Power braucht ein gültiges PowerSystem
+    const validSystemIds = new Set(powerSystems.map(s => s.id));
+    powers.forEach(p => {
+      if (!p.powerSystemId || !validSystemIds.has(p.powerSystemId)) {
+        // 1. Zuordnung über ein System versuchen, das diese Power in powerIds gelistet hat
+        const referencingSys = powerSystems.find(s => s.powerIds?.includes(p.id));
+        if (referencingSys) {
+          p.powerSystemId = referencingSys.id;
+        } else if (powerSystems.length > 0) {
+          // 2. Zuordnung zu erstem vorhandenen System
+          p.powerSystemId = powerSystems[0].id;
+        } else {
+          // 3. System deterministisch erzeugen falls gar keins da war
+          const newSysId = slugifyPowerId(p.subtype || p.name || 'sys_main', 'sys');
+          p.powerSystemId = newSysId;
+          powerSystems.push({
+            id: newSysId,
             name: p.subtype || p.name || 'Kraftsystem',
             systemType: p.subtype || 'Magie',
             resourceName: p.resourceName,
             powerIds: [p.id]
           });
+          validSystemIds.add(newSysId);
         }
-      });
-    }
-
-    // Stellen sicher, dass jede Power ein gültiges System referenziert
-    powers.forEach(p => {
-      if (!p.powerSystemId || !powerSystems.some(s => s.id === p.powerSystemId)) {
-        p.powerSystemId = powerSystems[0]?.id || 'sys_default';
       }
     });
 
+    // Schritt B: System-Referenzen komplett neu aus den Powers aufbauen
+    powerSystems.forEach(system => {
+      system.powerIds = Array.from(new Set(
+        powers.filter(power => power.powerSystemId === system.id).map(power => power.id)
+      ));
+    });
+
     // Validierte ID-Sets (gegen Phantom-IDs!)
-    const validSystemIds = new Set(powerSystems.map(s => s.id));
     const validPowerIds = new Set(powers.map(p => p.id));
     const validAbilityIds = new Set(abilities.map(a => a.id));
     const validTechIds = new Set(techniques.map(t => t.id));
     const validFormIds = new Set(forms.map(f => f.id));
-
-    // 1. PowerSystems konsolidieren (nur valide Power-IDs & dedupliziert)
-    powerSystems.forEach(sys => {
-      const existingValidPowerIds = (sys.powerIds || []).filter(id => validPowerIds.has(id));
-      const linkedPowers = powers.filter(p => p.powerSystemId === sys.id).map(p => p.id);
-      sys.powerIds = Array.from(new Set([...existingValidPowerIds, ...linkedPowers]));
-    });
 
     // 2. CharacterPowers konsolidieren (nur valide Ability- & Form-IDs & dedupliziert)
     powers.forEach(p => {
