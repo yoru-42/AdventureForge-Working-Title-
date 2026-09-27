@@ -643,6 +643,17 @@ export interface CharacterTechnique {
   costResourceName?: string;
 
   /**
+   * Optional: Falls diese Technik nur in / über eine bestimmte Form freigeschaltet ist.
+   */
+  unlockedByTransformationId?: string;
+
+  unlockedByTransformationIds?: string[];
+
+  parentTransformationId?: string;
+
+  isTransformationOnly?: boolean;
+
+  /**
    * Gemeinsamer Progressionszustand.
    */
   progression?: ProgressionState;

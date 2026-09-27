@@ -6,37 +6,80 @@ import {
   CharacterPowerSource, 
   TechniqueItem, 
   AbilityType, 
-  TechniqueTransformationModifier, 
-  TransformationModifierType,
   PowerSystem,
   CharacterPower,
   CharacterAbility,
   CharacterTechnique,
-  CharacterPowerForm
+  CharacterPowerForm,
+  ProgressionState
 } from '../types';
 import { 
   ADVENTURE_FORGE_ELEMENTS, 
   ABILITY_TYPES, 
   resolveKinesisName, 
   formatAbilityTypeLabel,
-  buildCharacterPowerHierarchy
+  buildCharacterPowerHierarchy,
+  convertPowerHierarchyToLegacy,
+  slugifyPowerId,
+  characterTechniqueToLegacyTechnique,
+  characterPowerFormToLegacyTransformation
 } from '../utils/abilityHierarchy';
 import { 
-  WEAPON_CATEGORIES, 
   ALL_WEAPONS, 
   WEAPON_MASTERY_RANKS, 
-  WIELDING_STYLES, 
-  getWeaponById, 
-  findWeaponByName, 
-  getWeaponsByCategory,
-  WeaponTypeDefinition 
+  WIELDING_STYLES 
 } from '../lib/weaponTypesData';
 import { TechniqueSmartFillModal } from './TechniqueSmartFillModal';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { WeaponSkillTree } from './WeaponSkillTree';
 import { TechniqueCard, getTechniqueMasteryLabel } from './TechniqueCard';
-import EverydaySkillsSelect, { parseEverydaySkills } from './EverydaySkillsSelect';
-import CompetenceProfileEditor from './CompetenceProfileEditor';
+
+// Legacy Kompatibilitäts-Konstanten für externe Tests
+export const CATEGORY_TABS = [
+  'Training & Erlernbare Fertigkeiten',
+  'Passive Fähigkeiten',
+  'Techniken',
+  'Ultimative Techniken',
+  'Waffenbeherrschung'
+] as const;
+
+export type AbilityCategoryTab = typeof CATEGORY_TABS[number];
+
+export const CATEGORY_ADD_LABELS: Record<AbilityCategoryTab, string> = {
+  'Training & Erlernbare Fertigkeiten': 'Erlernbare Fertigkeit / Ausbildungsziel anlegen',
+  'Passive Fähigkeiten': 'Passive Fähigkeit hinzufügen',
+  'Techniken': 'Technik hinzufügen',
+  'Ultimative Techniken': 'Ultimative Technik hinzufügen',
+  'Waffenbeherrschung': 'Waffenbeherrschung hinzufügen'
+};
+
+export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
+  'Training & Erlernbare Fertigkeiten': 'Erstes Ausbildungsziel anlegen',
+  'Passive Fähigkeiten': 'Erste passive Fähigkeit erstellen',
+  'Techniken': 'Erste Technik erstellen',
+  'Ultimative Techniken': 'Erste ultimative Technik erstellen',
+  'Waffenbeherrschung': 'Erste Waffenbeherrschung erstellen'
+};
+
+export const TRANS_CATEGORY_TABS = [
+  'Passive Fähigkeiten',
+  'Techniken',
+  'Ultimative Techniken'
+] as const;
+
+export type TransCategoryTab = typeof TRANS_CATEGORY_TABS[number];
+
+export const TRANS_CATEGORY_ADD_LABELS: Record<TransCategoryTab, string> = {
+  'Passive Fähigkeiten': 'Passive Fähigkeit hinzufügen',
+  'Techniken': 'Technik hinzufügen',
+  'Ultimative Techniken': 'Ultimative Technik hinzufügen'
+};
+
+export const TRANS_CATEGORY_EMPTY_LABELS: Record<TransCategoryTab, string> = {
+  'Passive Fähigkeiten': 'Erste passive Fähigkeit für diese Gestalt erstellen',
+  'Techniken': 'Erste Technik für diese Gestalt erstellen',
+  'Ultimative Techniken': 'Erste ultimative Technik für diese Gestalt erstellen'
+};
 
 export interface TechniqueHierarchyTreeProps {
   powerSources: CharacterPowerSource[];
@@ -109,7 +152,7 @@ export interface TechniqueHierarchyTreeProps {
   onEverydaySkillsExperienceTextChange?: (val: string) => void;
   toolsAndEquipment?: string;
   onToolsAndEquipmentChange?: (val: string) => void;
-  // Neue hierarchische Datenmodell-Props (Schritt 2)
+  // Neue hierarchische Datenmodell-Props
   powerSystems?: PowerSystem[];
   powers?: CharacterPower[];
   abilities?: CharacterAbility[];
@@ -125,52 +168,6 @@ export interface TechniqueHierarchyTreeProps {
   }) => void;
 }
 
-export const CATEGORY_TABS = [
-  'Training & Erlernbare Fertigkeiten',
-  'Passive Fähigkeiten',
-  'Techniken',
-  'Ultimative Techniken',
-  'Waffenbeherrschung'
-] as const;
-
-export type AbilityCategoryTab = typeof CATEGORY_TABS[number];
-
-export const CATEGORY_ADD_LABELS: Record<AbilityCategoryTab, string> = {
-  'Training & Erlernbare Fertigkeiten': 'Erlernbare Fertigkeit / Ausbildungsziel anlegen',
-  'Passive Fähigkeiten': 'Passive Fähigkeit hinzufügen',
-  'Techniken': 'Technik hinzufügen',
-  'Ultimative Techniken': 'Ultimative Technik hinzufügen',
-  'Waffenbeherrschung': 'Waffenbeherrschung hinzufügen'
-};
-
-export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
-  'Training & Erlernbare Fertigkeiten': 'Erstes Ausbildungsziel anlegen',
-  'Passive Fähigkeiten': 'Erste passive Fähigkeit erstellen',
-  'Techniken': 'Erste Technik erstellen',
-  'Ultimative Techniken': 'Erste ultimative Technik erstellen',
-  'Waffenbeherrschung': 'Erste Waffenbeherrschung erstellen'
-};
-
-export const TRANS_CATEGORY_TABS = [
-  'Passive Fähigkeiten',
-  'Techniken',
-  'Ultimative Techniken'
-] as const;
-
-export type TransCategoryTab = typeof TRANS_CATEGORY_TABS[number];
-
-export const TRANS_CATEGORY_ADD_LABELS: Record<TransCategoryTab, string> = {
-  'Passive Fähigkeiten': 'Passive Fähigkeit hinzufügen',
-  'Techniken': 'Technik hinzufügen',
-  'Ultimative Techniken': 'Ultimative Technik hinzufügen'
-};
-
-export const TRANS_CATEGORY_EMPTY_LABELS: Record<TransCategoryTab, string> = {
-  'Passive Fähigkeiten': 'Erste passive Fähigkeit für diese Gestalt erstellen',
-  'Techniken': 'Erste Technik für diese Gestalt erstellen',
-  'Ultimative Techniken': 'Erste ultimative Technik für diese Gestalt erstellen'
-};
-
 export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   powerSources,
   baseAbilities,
@@ -181,81 +178,28 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   worldTitle,
   readOnly = false,
   progressionLogic = 'ep',
-  worldPowerSettings,
   costResources,
-  costPowerNames,
   world,
-  // Berufs- & Alltagskompetenz-Integration
-  profession = '',
-  onProfessionChange,
-  professionLevel = '',
-  onProfessionLevelChange,
-  professionField = '',
-  onProfessionFieldChange,
-  professionSpecialization = '',
-  onProfessionSpecializationChange,
-  professionRank = '',
-  onProfessionRankChange,
-  professionExperience,
-  onProfessionExperienceChange,
-  professionProficiencyScore = 0,
-  onProfessionProficiencyScoreChange,
-  professionExperiencePoints = 0,
-  onProfessionExperiencePointsChange,
-  professionExperienceText = '',
-  onProfessionExperienceTextChange,
-  professionPromotionConditions = '',
-  onProfessionPromotionConditionsChange,
-  professionProgress,
-  onProfessionProgressChange,
-  professionCompetencies = [],
-  onProfessionCompetenciesChange,
-  secondaryProfessions = [],
-  onSecondaryProfessionsChange,
-  socialTitles = [],
-  onSocialTitlesChange,
-  offices = [],
-  onOfficesChange,
-  positions = [],
-  onPositionsChange,
-  socialStatus = '',
-  onSocialStatusChange,
-  craftingSkills = '',
-  onCraftingSkillsChange,
-  jobTitle = '',
-  onJobTitleChange,
-  authorities = [],
-  onAuthoritiesChange,
-  professionDescription = '',
-  onProfessionDescriptionChange,
-  talents = '',
-  onTalentsChange,
-  everydaySkills = '',
-  onEverydaySkillsChange,
-  everydaySkillsProficiencyScore = 0,
-  onEverydaySkillsProficiencyScoreChange,
-  everydaySkillsExperienceText = '',
-  onEverydaySkillsExperienceTextChange,
-  toolsAndEquipment = '',
-  onToolsAndEquipmentChange,
-  // Neue hierarchische Datenmodell-Props (Schritt 2)
-  powerSystems,
-  powers,
-  abilities,
-  characterTechniques,
-  forms,
+  // Neue hierarchische Datenmodell-Props
+  powerSystems: initialPowerSystems,
+  powers: initialPowers,
+  abilities: initialAbilities,
+  characterTechniques: initialTechniques,
+  forms: initialForms,
   character,
   onHierarchyChange
 }) => {
-  // 0. Neue Hierarchie ermitteln (Schritt 2: Interne Anbindung)
+  // -------------------------------------------------------------
+  // 1. ZENTRALE DATENQUELLE: DIE NEUE POWER-HIERARCHIE
+  // -------------------------------------------------------------
   const powerHierarchy = useMemo(() => {
-    if (powerSystems || powers || abilities || characterTechniques || forms) {
+    if (initialPowerSystems || initialPowers || initialAbilities || initialTechniques || initialForms) {
       return buildCharacterPowerHierarchy({
-        powerSystems,
-        powers,
-        characterAbilities: abilities,
-        characterTechniques,
-        powerForms: forms
+        powerSystems: initialPowerSystems,
+        powers: initialPowers,
+        characterAbilities: initialAbilities,
+        characterTechniques: initialTechniques,
+        powerForms: initialForms
       });
     }
     if (character) {
@@ -266,111 +210,625 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       baseAbilities,
       techniques
     });
-  }, [powerSystems, powers, abilities, characterTechniques, forms, character, powerSources, baseAbilities, techniques]);
+  }, [
+    initialPowerSystems,
+    initialPowers,
+    initialAbilities,
+    initialTechniques,
+    initialForms,
+    character,
+    powerSources,
+    baseAbilities,
+    techniques
+  ]);
 
+  // Synchronisation mit übergeordnetem onHierarchyChange-Callback
   useEffect(() => {
     if (onHierarchyChange && powerHierarchy) {
       onHierarchyChange(powerHierarchy);
     }
   }, [powerHierarchy, onHierarchyChange]);
 
-  // 1. Sichere Standard-Kraftquelle falls Liste leer
-  const safePowerSources = useMemo(() => {
-    if (powerSources && powerSources.length > 0) {
-      return powerSources.map(ps => {
-        if (ps.powerName === 'Standard-Kraftquelle' || ps.source === 'Standard-Kraftquelle') {
-          return {
-            ...ps,
-            source: ps.source === 'Standard-Kraftquelle' ? '' : ps.source,
-            powerName: ps.powerName === 'Standard-Kraftquelle' ? '' : ps.powerName,
-            cost: ps.cost === 'Mana' ? '' : ps.cost
-          };
-        }
-        return ps;
-      });
-    }
-    if (readOnly) return [];
-    return [{
-      id: 'ps_default_main',
-      source: '',
-      powerName: '',
-      cost: '',
-      powerDescription: ''
-    }];
-  }, [powerSources, readOnly]);
-
-  // 2. Trennung zwischen Standard-Kampffähigkeiten und Transformationen
-  const standardTechniques = useMemo(() => {
-    return techniques.filter(t => 
-      t.type !== 'Transformation' && 
-      t.category !== 'Transformationen' && 
-      !t.isTransformationOnly && 
-      !t.unlockedByTransformationId &&
-      (!t.unlockedByTransformationIds || t.unlockedByTransformationIds.length === 0)
-    );
-  }, [techniques]);
-
-  const transformationItems = useMemo(() => {
-    return techniques.filter(t => t.type === 'Transformation' || t.category === 'Transformationen');
-  }, [techniques]);
-
-  // 3. Navigationszustände & Formauswahl (Normalform vs. Transformationen)
-  const [selectedFormId, setSelectedFormId] = useState<string>('normal');
-
-  const [activePowerSourceId, setActivePowerSourceId] = useState<string>(() => {
-    return safePowerSources[0]?.id || '';
-  });
-
-  const [activeBaseAbilityId, setActiveBaseAbilityId] = useState<string>('');
-  const [activeCategory, setActiveCategory] = useState<AbilityCategoryTab>('Training & Erlernbare Fertigkeiten');
+  // -------------------------------------------------------------
+  // 2. HAUPTNAVIGATION & EBENEN-ZUSTÄNDE
+  // -------------------------------------------------------------
+  const [mainView, setMainView] = useState<'powers' | 'weapons'>('powers');
+  const [activeSystemId, setActiveSystemId] = useState<string>('');
+  const [activePowerId, setActivePowerId] = useState<string>('');
+  const [powerSubTab, setPowerSubTab] = useState<'abilities' | 'forms'>('abilities');
+  const [activeAbilityId, setActiveAbilityId] = useState<string>('');
+  const [activeFormId, setActiveFormId] = useState<string>('');
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
-  // 4. Trainingsplan Filter & Such-Zustand
-  const [trainingSearchTerm, setTrainingSearchTerm] = useState<string>('');
-  const [trainingStatusFilter, setTrainingStatusFilter] = useState<'alle' | 'in_ausbildung' | 'erlernbar' | 'gemeistert' | 'gesperrt'>('alle');
-  const [trainingCategoryFilter, setTrainingCategoryFilter] = useState<string>('alle');
+  // Modal State für Smart Fill
+  const [smartFillModalState, setSmartFillModalState] = useState<{
+    isOpen: boolean;
+    powerId?: string;
+    abilityId?: string;
+  }>({ isOpen: false });
 
-  // Lokaler Fallback-Zustand für Alltagskompetenzen & Berufe falls von übergeordneter Komponente nicht gebunden
-  const [localEverydaySkills, setLocalEverydaySkills] = useState<string>(everydaySkills || '');
-  const [localProfession, setLocalProfession] = useState<string>(profession || '');
+  // -------------------------------------------------------------
+  // 3. AKTIVE ENTITÄTEN AUFLÖSEN (KRAFTSYSTEM -> KRAFT -> ABILITY / FORM)
+  // -------------------------------------------------------------
+  const systems = powerHierarchy.powerSystems || [];
+  const powers = powerHierarchy.powers || [];
+  const abilities = powerHierarchy.abilities || [];
+  const techniquesList = powerHierarchy.techniques || [];
+  const forms = powerHierarchy.forms || [];
 
-  // Synchronisation mit Props
+  // Aktives Kraftsystem
   useEffect(() => {
-    if (everydaySkills !== undefined) {
-      setLocalEverydaySkills(everydaySkills);
-    }
-  }, [everydaySkills]);
-
-  useEffect(() => {
-    if (profession !== undefined) {
-      setLocalProfession(profession);
-    }
-  }, [profession]);
-
-  // 5. Transformations-Zustand
-  const [selectedTransformationId, setSelectedTransformationId] = useState<string>('');
-  const [activeTransCategory, setActiveTransCategory] = useState<TransCategoryTab>('Techniken');
-  const [showTransModifiersInEditor, setShowTransModifiersInEditor] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (transformationItems.length > 0) {
-      if (!selectedTransformationId || !transformationItems.some(t => t.id === selectedTransformationId)) {
-        setSelectedTransformationId(transformationItems[0].id);
+    if (systems.length > 0) {
+      if (!activeSystemId || !systems.some(s => s.id === activeSystemId)) {
+        setActiveSystemId(systems[0].id);
       }
     } else {
-      setSelectedTransformationId('');
+      setActiveSystemId('');
     }
+  }, [systems, activeSystemId]);
 
-    if (selectedFormId !== 'normal' && !transformationItems.some(t => t.id === selectedFormId)) {
-      setSelectedFormId('normal');
+  const activeSystem = useMemo(() => {
+    if (!activeSystemId) return systems[0] || null;
+    return systems.find(s => s.id === activeSystemId) || systems[0] || null;
+  }, [systems, activeSystemId]);
+
+  // Kräfte des aktiven Kraftsystems
+  const currentPowers = useMemo(() => {
+    if (!activeSystem) return powers;
+    return powers.filter(p => p.powerSystemId === activeSystem.id);
+  }, [powers, activeSystem]);
+
+  // Aktive Kraft
+  useEffect(() => {
+    if (currentPowers.length > 0) {
+      if (!activePowerId || !currentPowers.some(p => p.id === activePowerId)) {
+        setActivePowerId(currentPowers[0].id);
+      }
+    } else {
+      setActivePowerId('');
     }
-  }, [transformationItems, selectedTransformationId, selectedFormId]);
+  }, [currentPowers, activePowerId]);
 
-  const selectedTransformation = useMemo(() => {
-    if (!selectedTransformationId) return transformationItems[0] || null;
-    return transformationItems.find(t => t.id === selectedTransformationId) || transformationItems[0] || null;
-  }, [transformationItems, selectedTransformationId]);
+  const activePower = useMemo(() => {
+    if (!activePowerId) return currentPowers[0] || null;
+    return currentPowers.find(p => p.id === activePowerId) || currentPowers[0] || null;
+  }, [currentPowers, activePowerId]);
 
+  // Fähigkeiten der aktiven Kraft
+  const currentAbilities = useMemo(() => {
+    if (!activePower) return [];
+    return abilities.filter(a => a.powerId === activePower.id);
+  }, [abilities, activePower]);
+
+  // Aktive Fähigkeit
+  useEffect(() => {
+    if (currentAbilities.length > 0) {
+      if (!activeAbilityId || !currentAbilities.some(a => a.id === activeAbilityId)) {
+        setActiveAbilityId(currentAbilities[0].id);
+      }
+    } else {
+      setActiveAbilityId('');
+    }
+  }, [currentAbilities, activeAbilityId]);
+
+  const activeAbility = useMemo(() => {
+    if (!activeAbilityId) return currentAbilities[0] || null;
+    return currentAbilities.find(a => a.id === activeAbilityId) || currentAbilities[0] || null;
+  }, [currentAbilities, activeAbilityId]);
+
+  // Formen der aktiven Kraft
+  const currentForms = useMemo(() => {
+    if (!activePower) return [];
+    return forms.filter(f => f.powerId === activePower.id);
+  }, [forms, activePower]);
+
+  // Aktive Form
+  useEffect(() => {
+    if (currentForms.length > 0) {
+      if (!activeFormId || !currentForms.some(f => f.id === activeFormId)) {
+        setActiveFormId(currentForms[0].id);
+      }
+    } else {
+      setActiveFormId('');
+    }
+  }, [currentForms, activeFormId]);
+
+  const activeForm = useMemo(() => {
+    if (!activeFormId) return currentForms[0] || null;
+    return currentForms.find(f => f.id === activeFormId) || currentForms[0] || null;
+  }, [currentForms, activeFormId]);
+
+  // Techniken der aktiven Fähigkeit
+  const currentAbilityTechniques = useMemo(() => {
+    if (!activeAbility) return [];
+    return techniquesList.filter(t => t.abilityId === activeAbility.id);
+  }, [techniquesList, activeAbility]);
+
+  // Techniken der aktiven Form
+  const currentFormTechniques = useMemo(() => {
+    if (!activeForm) return [];
+    return techniquesList.filter(t => 
+      t.unlockedByTransformationId === activeForm.id ||
+      (Array.isArray(t.unlockedByTransformationIds) && t.unlockedByTransformationIds.includes(activeForm.id)) ||
+      (t.parentTransformationId === activeForm.id) ||
+      (activeForm.techniqueIds && activeForm.techniqueIds.includes(t.id))
+    );
+  }, [techniquesList, activeForm]);
+
+  // Waffen-Techniken (bleiben außerhalb der Power-Hierarchie)
+  const weaponTechniques = useMemo(() => {
+    return techniques.filter(t => t.category === 'Waffenbeherrschung' || t.category === 'Talente');
+  }, [techniques]);
+
+  // -------------------------------------------------------------
+  // 4. ZENTRALE SYNCHRONISATION NACH ÄNDERUNGEN
+  // -------------------------------------------------------------
+  const applyHierarchyUpdate = (updatedHierarchy: {
+    powerSystems: PowerSystem[];
+    powers: CharacterPower[];
+    abilities: CharacterAbility[];
+    techniques: CharacterTechnique[];
+    forms: CharacterPowerForm[];
+  }) => {
+    if (onHierarchyChange) {
+      onHierarchyChange(updatedHierarchy);
+    }
+    const legacy = convertPowerHierarchyToLegacy(updatedHierarchy);
+    // Erhalte eventuelle separate Waffen-Techniken im Legacy-Array
+    const nonPowerLegacyTech = techniques.filter(
+      t => t.category === 'Waffenbeherrschung' || t.category === 'Berufe' || t.category === 'Alltagskompetenzen'
+    );
+    onChange(legacy.powerSources, legacy.baseAbilities, [...legacy.techniques, ...nonPowerLegacyTech]);
+  };
+
+  // -------------------------------------------------------------
+  // 5. HANDLERS: KRAFTSYSTEM (Ebene 1)
+  // -------------------------------------------------------------
+  const handleAddPowerSystem = () => {
+    const sysName = `Kraftsystem ${systems.length + 1}`;
+    const newSysId = slugifyPowerId(`sys_${systems.length + 1}_${Date.now()}`, 'sys');
+    const newPowerId = slugifyPowerId(`power_${newSysId}_hauptkraft`, 'power');
+
+    const newSys: PowerSystem = {
+      id: newSysId,
+      name: sysName,
+      systemType: 'Magie',
+      resourceName: 'Mana',
+      powerIds: [newPowerId]
+    };
+
+    const newPower: CharacterPower = {
+      id: newPowerId,
+      powerSystemId: newSysId,
+      name: `Konkrete Kraft`,
+      resourceName: 'Mana',
+      abilityIds: [],
+      formIds: []
+    };
+
+    const nextSystems = [...systems, newSys];
+    const nextPowers = [...powers, newPower];
+
+    applyHierarchyUpdate({
+      powerSystems: nextSystems,
+      powers: nextPowers,
+      abilities,
+      techniques: techniquesList,
+      forms
+    });
+
+    setActiveSystemId(newSysId);
+    setActivePowerId(newPowerId);
+  };
+
+  const handleUpdatePowerSystem = (sysId: string, updates: Partial<PowerSystem>) => {
+    const nextSystems = systems.map(s => (s.id === sysId ? { ...s, ...updates } : s));
+    applyHierarchyUpdate({
+      powerSystems: nextSystems,
+      powers,
+      abilities,
+      techniques: techniquesList,
+      forms
+    });
+  };
+
+  const handleDeletePowerSystem = (sysId: string) => {
+    const remainingSystems = systems.filter(s => s.id !== sysId);
+    const deletedPowerIds = new Set(powers.filter(p => p.powerSystemId === sysId).map(p => p.id));
+    const remainingPowers = powers.filter(p => p.powerSystemId !== sysId);
+    const deletedAbilityIds = new Set(abilities.filter(a => a.powerId && deletedPowerIds.has(a.powerId)).map(a => a.id));
+    const remainingAbilities = abilities.filter(a => !a.powerId || !deletedPowerIds.has(a.powerId));
+    const remainingTechniques = techniquesList.filter(t => !t.abilityId || !deletedAbilityIds.has(t.abilityId));
+    const remainingForms = forms.filter(f => !f.powerId || !deletedPowerIds.has(f.powerId));
+
+    applyHierarchyUpdate({
+      powerSystems: remainingSystems,
+      powers: remainingPowers,
+      abilities: remainingAbilities,
+      techniques: remainingTechniques,
+      forms: remainingForms
+    });
+  };
+
+  // -------------------------------------------------------------
+  // 6. HANDLERS: KRAFT / CHARACTERPOWER (Ebene 2)
+  // -------------------------------------------------------------
+  const handleAddPower = () => {
+    if (!activeSystem) return;
+    const powerName = `Neue Kraft ${currentPowers.length + 1}`;
+    const newPowerId = slugifyPowerId(`power_${activeSystem.id}_${currentPowers.length + 1}_${Date.now()}`, 'power');
+
+    const newPower: CharacterPower = {
+      id: newPowerId,
+      powerSystemId: activeSystem.id,
+      name: powerName,
+      resourceName: activeSystem.resourceName || 'Mana',
+      abilityIds: [],
+      formIds: []
+    };
+
+    const nextSystems = systems.map(s => {
+      if (s.id === activeSystem.id) {
+        return { ...s, powerIds: [...(s.powerIds || []), newPowerId] };
+      }
+      return s;
+    });
+
+    const nextPowers = [...powers, newPower];
+
+    applyHierarchyUpdate({
+      powerSystems: nextSystems,
+      powers: nextPowers,
+      abilities,
+      techniques: techniquesList,
+      forms
+    });
+
+    setActivePowerId(newPowerId);
+  };
+
+  const handleUpdatePower = (powerId: string, updates: Partial<CharacterPower>) => {
+    const nextPowers = powers.map(p => (p.id === powerId ? { ...p, ...updates } : p));
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers: nextPowers,
+      abilities,
+      techniques: techniquesList,
+      forms
+    });
+  };
+
+  const handleDeletePower = (powerId: string) => {
+    const remainingPowers = powers.filter(p => p.id !== powerId);
+    const nextSystems = systems.map(s => ({
+      ...s,
+      powerIds: (s.powerIds || []).filter(id => id !== powerId)
+    }));
+
+    const deletedAbilityIds = new Set(abilities.filter(a => a.powerId === powerId).map(a => a.id));
+    const remainingAbilities = abilities.filter(a => a.powerId !== powerId);
+    const remainingTechniques = techniquesList.filter(t => !t.abilityId || !deletedAbilityIds.has(t.abilityId));
+    const remainingForms = forms.filter(f => f.powerId !== powerId);
+
+    applyHierarchyUpdate({
+      powerSystems: nextSystems,
+      powers: remainingPowers,
+      abilities: remainingAbilities,
+      techniques: remainingTechniques,
+      forms: remainingForms
+    });
+  };
+
+  // -------------------------------------------------------------
+  // 7. HANDLERS: FÄHIGKEIT / CHARACTERABILITY (Ebene 3)
+  // -------------------------------------------------------------
+  const handleAddAbility = () => {
+    if (!activePower) return;
+    const defaultElement = ADVENTURE_FORGE_ELEMENTS[1] || 'Feuer';
+    const defaultType: AbilityType = 'creation_manipulation';
+    const initialName = resolveKinesisName(defaultElement, defaultType);
+    const newAbId = slugifyPowerId(`ab_${activePower.id}_${currentAbilities.length + 1}_${Date.now()}`, 'ab');
+
+    const newAbility: CharacterAbility = {
+      id: newAbId,
+      powerId: activePower.id,
+      name: initialName,
+      element: defaultElement,
+      abilityType: formatAbilityTypeLabel(defaultType),
+      description: '',
+      techniqueIds: []
+    };
+
+    const nextPowers = powers.map(p => {
+      if (p.id === activePower.id) {
+        return { ...p, abilityIds: [...(p.abilityIds || []), newAbId] };
+      }
+      return p;
+    });
+
+    const nextAbilities = [...abilities, newAbility];
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers: nextPowers,
+      abilities: nextAbilities,
+      techniques: techniquesList,
+      forms
+    });
+
+    setActiveAbilityId(newAbId);
+  };
+
+  const handleUpdateAbility = (abilityId: string, updates: Partial<CharacterAbility>) => {
+    const nextAbilities = abilities.map(a => {
+      if (a.id === abilityId) {
+        const next = { ...a, ...updates };
+        if ((updates.element || updates.abilityType) && !updates.name) {
+          const el = updates.element || a.element || 'Neutral';
+          const at = updates.abilityType || a.abilityType || 'creation_manipulation';
+          next.name = resolveKinesisName(el, at);
+        }
+        return next;
+      }
+      return a;
+    });
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers,
+      abilities: nextAbilities,
+      techniques: techniquesList,
+      forms
+    });
+  };
+
+  const handleDeleteAbility = (abilityId: string) => {
+    const remainingAbilities = abilities.filter(a => a.id !== abilityId);
+    const nextPowers = powers.map(p => ({
+      ...p,
+      abilityIds: (p.abilityIds || []).filter(id => id !== abilityId)
+    }));
+    const remainingTechniques = techniquesList.filter(t => t.abilityId !== abilityId);
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers: nextPowers,
+      abilities: remainingAbilities,
+      techniques: remainingTechniques,
+      forms
+    });
+  };
+
+  // -------------------------------------------------------------
+  // 8. HANDLERS: TECHNIK / CHARACTERTECHNIQUE (Ebene 4)
+  // -------------------------------------------------------------
+  const handleAddTechnique = (forFormId?: string) => {
+    if (!activePower) return;
+    const targetAbilityId = forFormId ? undefined : activeAbility?.id;
+    const newTechId = slugifyPowerId(`tech_${activePower.id}_${techniquesList.length + 1}_${Date.now()}`, 'tech');
+    const costRes = activePower.resourceName || activeSystem?.resourceName || 'Mana';
+
+    const newTech: CharacterTechnique = {
+      id: newTechId,
+      powerId: activePower.id,
+      abilityId: targetAbilityId,
+      name: 'Neue Technik',
+      techniqueType: 'Angriff',
+      mode: 'Normal',
+      element: activeAbility?.element || 'Neutral',
+      cost: `10 ${costRes}`,
+      costValue: 10,
+      costResourceName: costRes,
+      costFormula: 'absolut',
+      range: 'Nahkampf / Mittlere Distanz',
+      duration: 'Sofort',
+      description: '',
+      unlockedByTransformationId: forFormId,
+      progression: {
+        score: 0,
+        level: 1,
+        xp: 0,
+        isLearnable: true
+      }
+    };
+
+    const nextAbilities = abilities.map(a => {
+      if (targetAbilityId && a.id === targetAbilityId) {
+        return { ...a, techniqueIds: [...(a.techniqueIds || []), newTechId] };
+      }
+      return a;
+    });
+
+    const nextForms = forms.map(f => {
+      if (forFormId && f.id === forFormId) {
+        return { ...f, techniqueIds: [...(f.techniqueIds || []), newTechId] };
+      }
+      return f;
+    });
+
+    const nextTechniques = [...techniquesList, newTech];
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers,
+      abilities: nextAbilities,
+      techniques: nextTechniques,
+      forms: nextForms
+    });
+
+    setExpandedMap(prev => ({ ...prev, [newTechId]: true }));
+  };
+
+  const handleUpdateTechnique = (techId: string, updates: Partial<CharacterTechnique> | Partial<TechniqueItem>) => {
+    const nextTechniques = techniquesList.map(t => {
+      if (t.id === techId) {
+        const progUpdates = (updates as any).progression || {};
+        const scoreVal = (updates as any).score !== undefined ? (updates as any).score : progUpdates.score;
+        const xpVal = (updates as any).xp !== undefined ? (updates as any).xp : progUpdates.xp;
+        const lvlVal = (updates as any).level !== undefined ? (updates as any).level : progUpdates.level;
+
+        return {
+          ...t,
+          ...updates,
+          progression: {
+            ...(t.progression || {}),
+            ...progUpdates,
+            score: scoreVal !== undefined ? scoreVal : t.progression?.score,
+            xp: xpVal !== undefined ? xpVal : t.progression?.xp,
+            level: lvlVal !== undefined ? lvlVal : t.progression?.level
+          }
+        };
+      }
+      return t;
+    });
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers,
+      abilities,
+      techniques: nextTechniques,
+      forms
+    });
+  };
+
+  const handleDeleteTechnique = (techId: string) => {
+    const remainingTechniques = techniquesList.filter(t => t.id !== techId);
+    const nextAbilities = abilities.map(a => ({
+      ...a,
+      techniqueIds: (a.techniqueIds || []).filter(id => id !== techId)
+    }));
+    const nextForms = forms.map(f => ({
+      ...f,
+      techniqueIds: (f.techniqueIds || []).filter(id => id !== techId)
+    }));
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers,
+      abilities: nextAbilities,
+      techniques: remainingTechniques,
+      forms: nextForms
+    });
+  };
+
+  // -------------------------------------------------------------
+  // 9. HANDLERS: FORM / CHARACTERPOWERFORM (Ebene 3 Form)
+  // -------------------------------------------------------------
+  const handleAddForm = () => {
+    if (!activePower) return;
+    const formName = `Neue Gestalt ${currentForms.length + 1}`;
+    const newFormId = slugifyPowerId(`form_${activePower.id}_${currentForms.length + 1}_${Date.now()}`, 'form');
+
+    const newForm: CharacterPowerForm = {
+      id: newFormId,
+      powerId: activePower.id,
+      name: formName,
+      formType: 'Transformation',
+      description: '',
+      isTransformationOnly: true,
+      techniqueIds: [],
+      modifiers: {}
+    };
+
+    const nextPowers = powers.map(p => {
+      if (p.id === activePower.id) {
+        return { ...p, formIds: [...(p.formIds || []), newFormId] };
+      }
+      return p;
+    });
+
+    const nextForms = [...forms, newForm];
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers: nextPowers,
+      abilities,
+      techniques: techniquesList,
+      forms: nextForms
+    });
+
+    setActiveFormId(newFormId);
+    setPowerSubTab('forms');
+  };
+
+  const handleUpdateForm = (formId: string, updates: Partial<CharacterPowerForm>) => {
+    const nextForms = forms.map(f => (f.id === formId ? { ...f, ...updates } : f));
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers,
+      abilities,
+      techniques: techniquesList,
+      forms: nextForms
+    });
+  };
+
+  const handleDeleteForm = (formId: string) => {
+    const remainingForms = forms.filter(f => f.id !== formId);
+    const nextPowers = powers.map(p => ({
+      ...p,
+      formIds: (p.formIds || []).filter(id => id !== formId)
+    }));
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers: nextPowers,
+      abilities,
+      techniques: techniquesList,
+      forms: remainingForms
+    });
+  };
+
+  // -------------------------------------------------------------
+  // 10. SMART FILL ADAPTER
+  // -------------------------------------------------------------
+  const handleTechniqueCreatedViaSmartFill = (techItem: TechniqueItem) => {
+    if (!activePower) return;
+    const newTechId = techItem.id || slugifyPowerId(`tech_${activePower.id}_${techItem.name}_${Date.now()}`, 'tech');
+    const targetAbilityId = activeAbility?.id;
+
+    const newTech: CharacterTechnique = {
+      id: newTechId,
+      powerId: activePower.id,
+      abilityId: targetAbilityId,
+      name: techItem.name,
+      description: techItem.description,
+      techniqueType: techItem.type || 'Angriff',
+      mode: techItem.mode || 'Normal',
+      element: techItem.element || activeAbility?.element || 'Neutral',
+      cost: techItem.cost || '10 Mana',
+      costValue: techItem.costValue !== undefined ? techItem.costValue : 10,
+      costResourceName: techItem.costResourceName || activePower.resourceName || 'Mana',
+      range: techItem.range || 'Nahkampf',
+      duration: techItem.duration || 'Sofort',
+      effects: techItem.effects || [],
+      progression: techItem.progression || {
+        score: techItem.score || 0,
+        level: techItem.level || 1,
+        xp: techItem.xp || 0
+      }
+    };
+
+    const nextAbilities = abilities.map(a => {
+      if (targetAbilityId && a.id === targetAbilityId) {
+        return { ...a, techniqueIds: [...(a.techniqueIds || []), newTechId] };
+      }
+      return a;
+    });
+
+    const nextTechniques = [...techniquesList, newTech];
+
+    applyHierarchyUpdate({
+      powerSystems: systems,
+      powers,
+      abilities: nextAbilities,
+      techniques: nextTechniques,
+      forms
+    });
+
+    setExpandedMap(prev => ({ ...prev, [newTechId]: true }));
+  };
+
+  // Helper für UI Expand / Collapse
   const toggleCardExpanded = (id: string, defaultExpanded: boolean) => {
     setExpandedMap(prev => {
       const current = prev[id] !== undefined ? prev[id] : defaultExpanded;
@@ -378,1639 +836,800 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     });
   };
 
-  const handleToggleAll = (expand: boolean, entriesToToggle: TechniqueItem[]) => {
-    const next: Record<string, boolean> = {};
-    entriesToToggle.forEach(e => {
-      next[e.id] = expand;
-    });
-    setExpandedMap(next);
+  // Legacy-Adapter für TechniqueCard (vollständig kompatibel)
+  const adaptTechniqueForCard = (t: CharacterTechnique): TechniqueItem => {
+    return characterTechniqueToLegacyTechnique(t, activeAbility || undefined, activePower || undefined);
   };
 
-  // Modal State für Smart Fill
-  const [smartFillModalState, setSmartFillModalState] = useState<{
-    isOpen: boolean;
-    powerSourceId?: string;
-    baseAbilityId?: string;
-  }>({ isOpen: false });
-
-  // Gültige Kraftquelle ermitteln
-  const activePowerSource = useMemo(() => {
-    const found = safePowerSources.find(ps => ps.id === activePowerSourceId);
-    return found || safePowerSources[0] || null;
-  }, [safePowerSources, activePowerSourceId]);
-
-  // Kosten-Ressourcen aus Kampagneneinstellungen
-  const registeredCostResources = useMemo(() => {
-    const list: string[] = [];
-    const resList = costResources || world?.costResources;
-    if (Array.isArray(resList)) {
-      resList.forEach((r: any) => {
-        const name = typeof r === 'string' ? r.trim() : (r && r.name ? String(r.name).trim() : '');
-        if (name && !list.includes(name)) {
-          list.push(name);
-        }
-      });
-    }
-    return list;
-  }, [costResources, world?.costResources]);
-
-  useEffect(() => {
-    if (safePowerSources.length > 0 && !safePowerSources.some(ps => ps.id === activePowerSourceId)) {
-      setActivePowerSourceId(safePowerSources[0].id);
-    }
-  }, [safePowerSources, activePowerSourceId]);
-
-  // Grundfähigkeiten für die aktuell ausgewählte Kraftquelle
-  const currentBaseAbilities = useMemo(() => {
-    if (!activePowerSource) return [];
-    return baseAbilities.filter(ba => {
-      if (ba.powerSourceId) return ba.powerSourceId === activePowerSource.id;
-      return activePowerSource.id === safePowerSources[0]?.id;
-    });
-  }, [baseAbilities, activePowerSource, safePowerSources]);
-
-  useEffect(() => {
-    if (currentBaseAbilities.length > 0) {
-      const existsInCurrent = currentBaseAbilities.some(ba => ba.id === activeBaseAbilityId);
-      if (!existsInCurrent) {
-        setActiveBaseAbilityId(currentBaseAbilities[0].id);
-      }
-    } else {
-      if (activeBaseAbilityId !== '') {
-        setActiveBaseAbilityId('');
-      }
-    }
-  }, [currentBaseAbilities, activeBaseAbilityId]);
-
-  const activeBaseAbility = useMemo(() => {
-    if (!activeBaseAbilityId) return null;
-    return currentBaseAbilities.find(ba => ba.id === activeBaseAbilityId) || null;
-  }, [currentBaseAbilities, activeBaseAbilityId]);
-
-  // Kategorie-Helfer
-  const getTechniqueCategory = (tech: TechniqueItem): AbilityCategoryTab => {
-    if (tech.category === 'Talente') return 'Waffenbeherrschung';
-    if (tech.category && (CATEGORY_TABS as readonly string[]).includes(tech.category)) {
-      return tech.category as AbilityCategoryTab;
-    }
-    if (tech.tier === 'Tier 4' || tech.tier === 'Ultimativ') return 'Ultimative Techniken';
-    return 'Techniken';
+  const adaptFormForCard = (f: CharacterPowerForm): TechniqueItem => {
+    return characterPowerFormToLegacyTransformation(f, activePower || undefined);
   };
 
-  const categoryCounts = useMemo(() => {
-    const counts: Record<AbilityCategoryTab, number> = {
-      'Training & Erlernbare Fertigkeiten': 0,
-      'Passive Fähigkeiten': 0,
-      'Techniken': 0,
-      'Ultimative Techniken': 0,
-      'Waffenbeherrschung': 0
-    };
+  const availableTransformationsForCard = useMemo(() => {
+    return forms.map(f => ({
+      id: f.id,
+      name: f.name,
+      transformName: f.name
+    }));
+  }, [forms]);
 
-    standardTechniques.forEach(tech => {
-      const belongs = activeBaseAbility
-        ? Boolean(tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id))
-        : Boolean(activePowerSource && (tech.powerSourceId === activePowerSource.id || !tech.powerSourceId));
+  const legacyBaseAbilitiesForCard: BaseAbility[] = useMemo(() => {
+    return abilities.map(a => ({
+      id: a.id,
+      displayName: a.name,
+      name: a.name,
+      element: a.element || 'Neutral',
+      abilityType: a.abilityType || 'creation_manipulation',
+      description: a.description
+    }));
+  }, [abilities]);
 
-      if (belongs) {
-        const cat = getTechniqueCategory(tech);
-        if (cat in counts) {
-          counts[cat] = (counts[cat] || 0) + 1;
-        }
-      }
-
-      // Alle erlernbaren Techniken zählen für den Trainings-Tab
-      if (tech.isLearnable !== false) {
-        counts['Training & Erlernbare Fertigkeiten']++;
-      }
-    });
-
-    return counts;
-  }, [standardTechniques, activeBaseAbility, activePowerSource]);
-
-  // Einträge der ausgewählten Kategorie
-  const activeEntries = useMemo(() => {
-    return standardTechniques.filter(tech => {
-      const belongs = activeBaseAbility
-        ? Boolean(tech.baseAbilityIds && tech.baseAbilityIds.includes(activeBaseAbility.id))
-        : Boolean(activePowerSource && (tech.powerSourceId === activePowerSource.id || !tech.powerSourceId));
-
-      if (!belongs) return false;
-      return getTechniqueCategory(tech) === activeCategory;
-    });
-  }, [standardTechniques, activeBaseAbility, activePowerSource, activeCategory]);
-
-  // Alle Fertigkeiten im Trainings- & Lernplan
-  const trainingEntries = useMemo(() => {
-    return standardTechniques.filter(tech => {
-      // Prüfe Suchbegriff
-      if (trainingSearchTerm.trim()) {
-        const term = trainingSearchTerm.toLowerCase();
-        const matchesName = tech.name.toLowerCase().includes(term);
-        const matchesDesc = (tech.description || '').toLowerCase().includes(term);
-        const matchesReq = (tech.learningRequirements || tech.requiredAttribute || '').toLowerCase().includes(term);
-        const matchesTeacher = (tech.requiredTeacherOrScroll || '').toLowerCase().includes(term);
-        if (!matchesName && !matchesDesc && !matchesReq && !matchesTeacher) {
-          return false;
-        }
-      }
-
-      // Prüfe Kategorie-Filter
-      if (trainingCategoryFilter !== 'alle') {
-        const cat = getTechniqueCategory(tech);
-        if (cat !== trainingCategoryFilter) return false;
-      }
-
-      // Status ermitteln
-      const currentScore = tech.score !== undefined ? tech.score : (tech.trainingProgress || 0);
-      const status = tech.learningStatus || (currentScore >= 95 ? 'gemeistert' : currentScore > 0 ? 'in_ausbildung' : 'erlernbar');
-
-      // Prüfe Status-Filter
-      if (trainingStatusFilter !== 'alle') {
-        if (trainingStatusFilter === 'gemeistert' && status !== 'gemeistert' && currentScore < 95) return false;
-        if (trainingStatusFilter === 'in_ausbildung' && status !== 'in_ausbildung') return false;
-        if (trainingStatusFilter === 'erlernbar' && status !== 'erlernbar') return false;
-        if (trainingStatusFilter === 'gesperrt' && status !== 'gesperrt') return false;
-      }
-
-      return true;
-    });
-  }, [standardTechniques, trainingSearchTerm, trainingCategoryFilter, trainingStatusFilter]);
-
-  // Trainings-Statistiken
-  const trainingStats = useMemo(() => {
-    let inAusbildung = 0;
-    let gemeistert = 0;
-    let erlernbar = 0;
-    let gesperrt = 0;
-
-    standardTechniques.forEach(t => {
-      const score = t.score !== undefined ? t.score : (t.trainingProgress || 0);
-      const st = t.learningStatus || (score >= 95 ? 'gemeistert' : score > 0 ? 'in_ausbildung' : 'erlernbar');
-      if (st === 'gemeistert' || score >= 95) gemeistert++;
-      else if (st === 'in_ausbildung') inAusbildung++;
-      else if (st === 'gesperrt') gesperrt++;
-      else erlernbar++;
-    });
-
+  const legacyPowerSourceForCard: CharacterPowerSource | null = useMemo(() => {
+    if (!activePower) return null;
     return {
-      total: standardTechniques.length,
-      inAusbildung,
-      gemeistert,
-      erlernbar,
-      gesperrt
+      id: activePower.id,
+      powerName: activePower.name,
+      source: activeSystem?.name || 'Kraftsystem',
+      cost: activePower.resourceName || 'Mana'
     };
-  }, [standardTechniques]);
-
-  const availableTransformations = useMemo(() => {
-    return transformationItems.map(t => ({
-      id: t.id,
-      name: t.transformName || t.name,
-      transformName: t.transformName
-    }));
-  }, [transformationItems]);
-
-  // Transformationseigene Fähigkeiten
-  const currentTransTechniques = useMemo(() => {
-    if (!selectedTransformation) return [];
-    return techniques.filter(t => 
-      t.unlockedByTransformationId === selectedTransformation.id ||
-      (Array.isArray(t.unlockedByTransformationIds) && t.unlockedByTransformationIds.includes(selectedTransformation.id)) ||
-      (t.parentTransformationId === selectedTransformation.id && t.type !== 'Transformation' && t.category !== 'Transformationen')
-    );
-  }, [techniques, selectedTransformation]);
-
-  const transCategoryCounts = useMemo(() => {
-    const counts: Record<TransCategoryTab, number> = {
-      'Passive Fähigkeiten': 0,
-      'Techniken': 0,
-      'Ultimative Techniken': 0
-    };
-    currentTransTechniques.forEach(t => {
-      if (t.category === 'Passive Fähigkeiten') {
-        counts['Passive Fähigkeiten']++;
-      } else if (t.category === 'Ultimative Techniken' || t.tier === 'Tier 4') {
-        counts['Ultimative Techniken']++;
-      } else {
-        counts['Techniken']++;
-      }
-    });
-    return counts;
-  }, [currentTransTechniques]);
-
-  const activeTransEntries = useMemo(() => {
-    return currentTransTechniques.filter(t => {
-      if (activeTransCategory === 'Passive Fähigkeiten') {
-        return t.category === 'Passive Fähigkeiten';
-      }
-      if (activeTransCategory === 'Ultimative Techniken') {
-        return t.category === 'Ultimative Techniken' || t.tier === 'Tier 4';
-      }
-      return t.category !== 'Passive Fähigkeiten' && t.category !== 'Ultimative Techniken' && t.tier !== 'Tier 4';
-    });
-  }, [currentTransTechniques, activeTransCategory]);
-
-  // -------------------------------------------------------------
-  // HANDLERS: Kraftquellen
-  // -------------------------------------------------------------
-  const handleAddPowerSource = () => {
-    const newId = `ps_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const newPs: CharacterPowerSource = {
-      id: newId,
-      source: '',
-      powerName: '',
-      cost: '',
-      powerDescription: ''
-    };
-    const updatedPs = [...safePowerSources, newPs];
-
-    onChange(updatedPs, baseAbilities, techniques);
-    setActivePowerSourceId(newId);
-    setActiveBaseAbilityId('');
-  };
-
-  const handleUpdatePowerSource = (psId: string, updates: Partial<CharacterPowerSource>) => {
-    const updatedPs = safePowerSources.map(ps => {
-      if (ps.id === psId) {
-        return {
-          ...ps,
-          ...updates
-        };
-      }
-      return ps;
-    });
-
-    const targetPs = updatedPs.find(p => p.id === psId);
-    const newPowerName = targetPs?.powerName || targetPs?.source;
-    const updatedBa = baseAbilities.map(ba => {
-      if (ba.powerSourceId === psId && newPowerName !== undefined) {
-        return { ...ba, powerSourceName: newPowerName };
-      }
-      return ba;
-    });
-
-    const updatedTech = techniques.map(tech => {
-      if (tech.powerSourceId === psId && newPowerName !== undefined) {
-        return { ...tech, powerSourceName: newPowerName };
-      }
-      return tech;
-    });
-
-    onChange(updatedPs, updatedBa, updatedTech);
-  };
-
-  const handleDeletePowerSource = (psId: string) => {
-    const deletedBaIds = baseAbilities.filter(ba => ba.powerSourceId === psId).map(ba => ba.id);
-    const remainingPs = safePowerSources.filter(ps => ps.id !== psId);
-    const remainingBa = baseAbilities.filter(ba => ba.powerSourceId !== psId);
-
-    const remainingTech: TechniqueItem[] = [];
-
-    techniques.forEach(tech => {
-      if (tech.baseAbilityIds && tech.baseAbilityIds.length > 0) {
-        const newBaseAbilityIds = tech.baseAbilityIds.filter(id => !deletedBaIds.includes(id));
-        if (newBaseAbilityIds.length > 0) {
-          const newBaseAbilityNames = newBaseAbilityIds.map(id => {
-            const ba = remainingBa.find(b => b.id === id);
-            return ba ? (ba.displayName || ba.name) : '';
-          }).filter(Boolean);
-
-          const remappedPsId = tech.powerSourceId === psId
-            ? (remainingBa.find(b => b.id === newBaseAbilityIds[0])?.powerSourceId || remainingPs[0]?.id || '')
-            : (tech.powerSourceId || remainingPs[0]?.id || '');
-
-          const remappedPs = remainingPs.find(p => p.id === remappedPsId) || remainingPs[0];
-
-          remainingTech.push({
-            ...tech,
-            powerSourceId: remappedPs?.id,
-            powerSourceName: remappedPs?.powerName || remappedPs?.source,
-            baseAbilityIds: newBaseAbilityIds,
-            baseAbilityNames: newBaseAbilityNames
-          });
-        }
-      } else if (tech.powerSourceId !== psId) {
-        remainingTech.push(tech);
-      }
-    });
-
-    onChange(remainingPs, remainingBa, remainingTech);
-
-    if (remainingPs.length > 0) {
-      setActivePowerSourceId(remainingPs[0].id);
-    } else {
-      setActivePowerSourceId('');
-    }
-  };
-
-  // -------------------------------------------------------------
-  // HANDLERS: Grundfähigkeiten
-  // -------------------------------------------------------------
-  const handleAddBaseAbility = () => {
-    if (!activePowerSource) return;
-
-    const newBaId = `ba_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const defaultElement = ADVENTURE_FORGE_ELEMENTS[0] || 'Feuer';
-    const defaultAbilityType: AbilityType = 'creation_manipulation';
-    const initialName = resolveKinesisName(defaultElement, defaultAbilityType);
-
-    const newBa: BaseAbility = {
-      id: newBaId,
-      powerSourceId: activePowerSource.id,
-      powerSourceName: activePowerSource.powerName || activePowerSource.source,
-      displayName: initialName,
-      name: initialName,
-      element: defaultElement,
-      abilityType: defaultAbilityType,
-      description: '',
-      techniqueIds: []
-    };
-
-    const updatedBa = [...baseAbilities, newBa];
-    onChange(safePowerSources, updatedBa, techniques);
-    setActiveBaseAbilityId(newBaId);
-  };
-
-  const handleUpdateBaseAbility = (baId: string, updates: Partial<BaseAbility>) => {
-    const updatedBa = baseAbilities.map(ba => {
-      if (ba.id === baId) {
-        const next = { ...ba, ...updates };
-        if (updates.element || updates.abilityType) {
-          const el = updates.element || ba.element;
-          const at = updates.abilityType || ba.abilityType;
-          if (!updates.displayName && !updates.name) {
-            next.displayName = resolveKinesisName(el, at);
-            next.name = next.displayName;
-          }
-        }
-        return next;
-      }
-      return ba;
-    });
-
-    const target = updatedBa.find(b => b.id === baId);
-    let updatedTech = techniques;
-    if (target) {
-      const name = target.displayName || target.name;
-      updatedTech = techniques.map(tech => {
-        if (tech.baseAbilityIds?.includes(baId)) {
-          const idx = tech.baseAbilityIds.indexOf(baId);
-          const newNames = [...(tech.baseAbilityNames || [])];
-          newNames[idx] = name;
-          return {
-            ...tech,
-            baseAbilityNames: newNames,
-            element: tech.baseAbilityIds[0] === baId ? target.element : tech.element,
-            abilityType: tech.baseAbilityIds[0] === baId ? target.abilityType : tech.abilityType
-          };
-        }
-        return tech;
-      });
-    }
-
-    onChange(safePowerSources, updatedBa, updatedTech);
-  };
-
-  const handleDeleteBaseAbility = (baId: string) => {
-    const remainingBa = baseAbilities.filter(ba => ba.id !== baId);
-    const updatedTech: TechniqueItem[] = [];
-
-    techniques.forEach(tech => {
-      if (tech.baseAbilityIds && tech.baseAbilityIds.includes(baId)) {
-        const newIds = tech.baseAbilityIds.filter(id => id !== baId);
-        if (newIds.length > 0) {
-          const newNames = newIds.map(id => {
-            const ba = remainingBa.find(b => b.id === id);
-            return ba ? (ba.displayName || ba.name) : '';
-          }).filter(Boolean);
-
-          updatedTech.push({
-            ...tech,
-            baseAbilityIds: newIds,
-            baseAbilityNames: newNames
-          });
-        }
-      } else {
-        updatedTech.push(tech);
-      }
-    });
-
-    onChange(safePowerSources, remainingBa, updatedTech);
-
-    const nextAvailable = remainingBa.filter(ba => activePowerSource && ba.powerSourceId === activePowerSource.id);
-    if (nextAvailable.length > 0) {
-      setActiveBaseAbilityId(nextAvailable[0].id);
-    } else {
-      setActiveBaseAbilityId('');
-    }
-  };
-
-  // -------------------------------------------------------------
-  // HANDLERS: Standard-Einträge & Training
-  // -------------------------------------------------------------
-  const handleAddEntry = (targetCategory?: AbilityCategoryTab) => {
-    if (!activePowerSource) return;
-
-    const chosenCat = targetCategory || activeCategory;
-    const newId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const costResource = activePowerSource.cost || 'Mana';
-
-    let defaultName = 'Neue Technik';
-    let defaultType = 'Angriff';
-    let defaultTier = 'Tier 1';
-    let defaultCostVal = 10;
-    let defaultCostStr = `10 ${costResource}`;
-    let defaultMode = 'Normal';
-    let targetCatString: string = chosenCat;
-
-    if (chosenCat === 'Training & Erlernbare Fertigkeiten') {
-      defaultName = 'Neue erlernbare Fertigkeit';
-      defaultType = 'Angriff';
-      defaultTier = 'Tier 1';
-      defaultCostVal = 10;
-      defaultCostStr = `10 ${costResource}`;
-      targetCatString = 'Techniken';
-    } else if (chosenCat === 'Passive Fähigkeiten') {
-      defaultName = 'Neue passive Fähigkeit';
-      defaultType = 'Support';
-      defaultTier = 'Tier 1';
-      defaultCostVal = 0;
-      defaultCostStr = 'Passiv';
-    } else if (chosenCat === 'Ultimative Techniken') {
-      defaultName = 'Neue ultimative Technik';
-      defaultTier = 'Tier 4';
-      defaultCostVal = 50;
-      defaultCostStr = `50 ${costResource}`;
-    } else if (chosenCat === 'Waffenbeherrschung' || (chosenCat as string) === 'Talente') {
-      const defaultWeapon = ALL_WEAPONS[1] || ALL_WEAPONS[0];
-      defaultName = `Waffenbeherrschung: ${defaultWeapon.name}`;
-      defaultType = 'Spezial';
-      defaultTier = 'Rang 1: Novize / Grundausbildung';
-      defaultCostVal = 0;
-      defaultCostStr = 'Rang 1';
-    }
-
-    const isWpnMastery = chosenCat === 'Waffenbeherrschung';
-    const defaultWeapon = isWpnMastery ? (ALL_WEAPONS[1] || ALL_WEAPONS[0]) : null;
-
-    const baseAbilityIds = activeBaseAbility ? [activeBaseAbility.id] : [];
-    const baseAbilityNames = activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name] : [];
-    const element = activeBaseAbility ? activeBaseAbility.element : 'Neutral';
-    const abilityType = activeBaseAbility ? activeBaseAbility.abilityType : 'creation_manipulation';
-
-    const newEntry: TechniqueItem = {
-      id: newId,
-      name: defaultName,
-      description: isWpnMastery && defaultWeapon ? defaultWeapon.description : '',
-      category: targetCatString,
-      type: defaultType,
-      subtype: isWpnMastery && defaultWeapon ? defaultWeapon.categoryName : '',
-      mode: defaultMode,
-      tier: defaultTier,
-      baseAbilityIds,
-      baseAbilityNames,
-      powerSourceId: activePowerSource.id,
-      powerSourceName: activePowerSource.powerName || activePowerSource.source,
-      element,
-      abilityType,
-      targetType: isWpnMastery ? 'Einzelziel / Nahkampf' : 'Selbst / Verbündete / Feinde',
-      effects: isWpnMastery && defaultWeapon ? [...defaultWeapon.damageTypes] : [],
-      costResourceName: costResource,
-      costValue: defaultCostVal,
-      costFormula: 'absolut',
-      cost: defaultCostStr,
-      range: isWpnMastery && defaultWeapon ? (defaultWeapon.rangeCategory === 'Fernkampf' ? 'Fernkampf' : defaultWeapon.rangeCategory === 'Stangenreichweite' ? 'Stangenreichweite' : 'Nahkampf') : 'Nahkampf / Mittlere Distanz',
-      duration: isWpnMastery ? 'Permanent / Haltung' : 'Sofort',
-      level: 1,
-      maxLevel: 10,
-      xp: 0,
-      xpNeeded: 100,
-      trainingProgress: 0,
-      score: 0,
-      trainingHours: 0,
-      targetTrainingHours: 20,
-      isLearnable: true,
-      learningStatus: 'erlernbar',
-      learningRequirements: 'Grundstufe erforderlich',
-      weaponType: isWpnMastery && defaultWeapon ? defaultWeapon.name : undefined,
-      weaponCategory: isWpnMastery && defaultWeapon ? defaultWeapon.categoryName : undefined,
-      masteryLevel: isWpnMastery ? 'Rang 1: Novize / Grundausbildung' : undefined,
-      wieldingStyle: isWpnMastery && defaultWeapon ? defaultWeapon.wieldingStyles[0] : undefined,
-      weaponManeuver: isWpnMastery && defaultWeapon && defaultWeapon.maneuvers.length > 0 ? defaultWeapon.maneuvers[0] : undefined
-    };
-
-    const updatedTech = [...techniques, newEntry];
-
-    const updatedBa = activeBaseAbility
-      ? baseAbilities.map(ba => {
-          if (ba.id === activeBaseAbility.id) {
-            return {
-              ...ba,
-              techniqueIds: [...(ba.techniqueIds || []), newId]
-            };
-          }
-          return ba;
-        })
-      : baseAbilities;
-
-    setExpandedMap(prev => ({ ...prev, [newId]: true }));
-    onChange(safePowerSources, updatedBa, updatedTech);
-  };
-
-  const handleUpdateEntry = (entryId: string, updates: Partial<TechniqueItem>) => {
-    const updatedTech = techniques.map(tech => {
-      if (tech.id === entryId) {
-        const next = { ...tech, ...updates };
-        if (updates.costValue !== undefined || updates.costResourceName !== undefined) {
-          const val = updates.costValue !== undefined ? updates.costValue : (tech.costValue || 0);
-          const res = updates.costResourceName !== undefined ? updates.costResourceName : (tech.costResourceName || activePowerSource?.cost || 'Mana');
-          if (next.category === 'Passive Fähigkeiten' && val === 0) {
-            next.cost = 'Passiv';
-          } else {
-            next.cost = `${val} ${res}`;
-          }
-        }
-        return next;
-      }
-      return tech;
-    });
-
-    onChange(safePowerSources, baseAbilities, updatedTech);
-  };
-
-  const handleDeleteEntry = (entryId: string) => {
-    const updatedTech = techniques.filter(tech => tech.id !== entryId);
-    const updatedBa = baseAbilities.map(ba => ({
-      ...ba,
-      techniqueIds: (ba.techniqueIds || []).filter(id => id !== entryId)
-    }));
-
-    onChange(safePowerSources, updatedBa, updatedTech);
-  };
-
-  const handleToggleLinkedBaseAbility = (techId: string, baId: string) => {
-    const target = techniques.find(t => t.id === techId);
-    if (!target) return;
-
-    const currentIds = target.baseAbilityIds || [];
-    let nextIds: string[] = [];
-
-    if (currentIds.includes(baId)) {
-      if (currentIds.length <= 1) return;
-      nextIds = currentIds.filter(id => id !== baId);
-    } else {
-      nextIds = [...currentIds, baId];
-    }
-
-    const nextNames = nextIds.map(id => {
-      const ba = baseAbilities.find(b => b.id === id);
-      return ba ? (ba.displayName || ba.name) : '';
-    }).filter(Boolean);
-
-    const primaryBa = baseAbilities.find(b => b.id === nextIds[0]);
-
-    handleUpdateEntry(techId, {
-      baseAbilityIds: nextIds,
-      baseAbilityNames: nextNames,
-      element: primaryBa ? primaryBa.element : target.element,
-      abilityType: primaryBa ? primaryBa.abilityType : target.abilityType
-    });
-  };
-
-  // Schnelle Trainings-Steigerungen
-  const handleQuickTrainProgress = (tech: TechniqueItem, deltaProgress: number) => {
-    const curProgress = tech.score !== undefined ? tech.score : (tech.trainingProgress || 0);
-    const newProgress = Math.min(100, Math.max(0, curProgress + deltaProgress));
-    const newStatus = newProgress >= 95 ? 'gemeistert' : (newProgress > 0 ? 'in_ausbildung' : 'erlernbar');
-    const newHours = (tech.trainingHours || 0) + (deltaProgress > 10 ? 2 : 1);
-    
-    handleUpdateEntry(tech.id, {
-      score: newProgress,
-      trainingProgress: newProgress,
-      trainingUnits: Math.min(4, Math.floor(newProgress / 25)),
-      trainingHours: newHours,
-      learningStatus: newStatus,
-      masteryLevel: `${getTechniqueMasteryLabel(newProgress)} (${newProgress}%)`
-    });
-  };
-
-  const handleQuickMastery = (tech: TechniqueItem) => {
-    handleUpdateEntry(tech.id, {
-      score: 100,
-      trainingProgress: 100,
-      trainingUnits: 4,
-      learningStatus: 'gemeistert',
-      tier: tech.category === 'Ultimative Techniken' ? 'Tier 4' : 'Tier 3',
-      masteryLevel: 'Meisterhaft (100%)'
-    });
-  };
-
-  // Transformationen verwalten
-  const handleAddTransformation = () => {
-    const newId = `trans_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const newTrans: TechniqueItem = {
-      id: newId,
-      name: 'Neue Verwandlungsstufe',
-      transformName: 'Neue Gestalt',
-      type: 'Transformation',
-      category: 'Transformationen',
-      tier: 'Tier 1',
-      description: 'Optische und körperliche Verwandlung mit speziellen Modifikatoren.',
-      cost: '20 Mana',
-      costValue: 20,
-      costResourceName: activePowerSource?.cost || 'Mana',
-      range: 'Selbst',
-      duration: '5 Runden',
-      isTransformationOnly: false,
-      chibiForm: {
-        enabled: false,
-        bodyScale: 0.6,
-        visualAge: 'Kindlich',
-        chibiOnPowerOverload: {
-          enabled: false,
-          activationThreshold: 100,
-          recoveryThreshold: 80,
-          durationGameMinutes: 30,
-          autoRevert: true
-        }
-      }
-    };
-
-    const updatedTech = [...techniques, newTrans];
-    onChange(safePowerSources, baseAbilities, updatedTech);
-    setSelectedTransformationId(newId);
-  };
-
-  const handleTechniqueCreatedViaSmartFill = (newTech: Partial<TechniqueItem>) => {
-    if (!activePowerSource) return;
-
-    const newId = newTech.id || `entry_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const costResource = newTech.costResourceName || activePowerSource.cost || 'Mana';
-
-    const baseAbilityIds = newTech.baseAbilityIds || (activeBaseAbility ? [activeBaseAbility.id] : []);
-    const baseAbilityNames = newTech.baseAbilityNames || (activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name] : []);
-    const element = newTech.element || (activeBaseAbility ? activeBaseAbility.element : 'Neutral');
-    const abilityType = newTech.abilityType || (activeBaseAbility ? activeBaseAbility.abilityType : 'creation_manipulation');
-
-    const entryToAdd: TechniqueItem = {
-      id: newId,
-      name: newTech.name || 'Neue Technik',
-      description: newTech.description || '',
-      category: newTech.category || activeCategory,
-      type: newTech.type || 'Angriff',
-      subtype: newTech.subtype || '',
-      mode: newTech.mode || 'Normal',
-      tier: newTech.tier || 'Tier 1',
-      baseAbilityIds,
-      baseAbilityNames,
-      powerSourceId: activePowerSource.id,
-      powerSourceName: activePowerSource.powerName || activePowerSource.source,
-      element,
-      abilityType,
-      targetType: newTech.targetType || 'Selbst / Verbündete / Feinde',
-      effects: newTech.effects || [],
-      costResourceName: costResource,
-      costValue: newTech.costValue !== undefined ? newTech.costValue : 10,
-      costFormula: 'absolut',
-      cost: newTech.cost || `${newTech.costValue || 10} ${costResource}`,
-      range: newTech.range || 'Nahkampf / Mittlere Distanz',
-      duration: newTech.duration || 'Sofort',
-      level: 1,
-      maxLevel: 10,
-      xp: 0,
-      xpNeeded: 100,
-      isLearnable: true,
-      learningStatus: 'erlernbar',
-      ...newTech
-    };
-
-    const updatedTech = [...techniques, entryToAdd];
-
-    const updatedBa = activeBaseAbility
-      ? baseAbilities.map(ba => {
-          if (ba.id === activeBaseAbility.id) {
-            return {
-              ...ba,
-              techniqueIds: [...(ba.techniqueIds || []), newId]
-            };
-          }
-          return ba;
-        })
-      : baseAbilities;
-
-    setExpandedMap(prev => ({ ...prev, [newId]: true }));
-    onChange(safePowerSources, updatedBa, updatedTech);
-  };
+  }, [activePower, activeSystem]);
 
   return (
-    <div className="flex flex-col gap-4 font-sans">
+    <div className="flex flex-col gap-4 font-sans text-slate-200">
       {/* ============================================================ */}
-      {/* 1. KRAFTQUELLEN-SELEKTOR & MANAGEMENT                         */}
+      {/* 0. OBERSTE ANSICHTSAUSWAHL: KRAFT-SYSTEME vs. WAFFEN         */}
       {/* ============================================================ */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
-          <div className="flex items-center gap-2">
-            <LucideIcons.Zap className="w-4 h-4 text-amber-400" />
-            <span className="text-xs font-black uppercase tracking-wider text-white">
-              Kraftquellen ({safePowerSources.length})
+      <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl p-2 shadow-sm">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMainView('powers')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+              mainView === 'powers'
+                ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
+                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+            }`}
+          >
+            <LucideIcons.Sparkles className="w-3.5 h-3.5" />
+            <span>Kraft-Systeme &amp; Fähigkeiten</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900/50 font-mono">
+              {powers.length}
             </span>
-          </div>
+          </button>
 
-          <div className="flex items-center gap-2">
-            {/* Form-Umschalter: Normalform vs. Transformationen */}
-            <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
-              <button
-                type="button"
-                onClick={() => setSelectedFormId('normal')}
-                className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                  selectedFormId === 'normal'
-                    ? 'bg-amber-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Normalform
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedFormId(selectedTransformationId || 'trans_main')}
-                className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                  selectedFormId !== 'normal'
-                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <span>Transformationen</span>
-                {transformationItems.length > 0 && (
-                  <span className="text-[10px] px-1 bg-slate-900/50 rounded font-bold">
-                    {transformationItems.length}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={handleAddPowerSource}
-                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1 cursor-pointer"
-              >
-                <LucideIcons.Plus className="w-3.5 h-3.5 text-amber-400" />
-                <span>Kraftquelle hinzufügen</span>
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => setMainView('weapons')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+              mainView === 'weapons'
+                ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
+                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+            }`}
+          >
+            <LucideIcons.Shield className="w-3.5 h-3.5" />
+            <span>Waffenbeherrschung</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900/50 font-mono">
+              {weaponTechniques.length}
+            </span>
+          </button>
         </div>
-
-        {/* Kraftquellen-Tabs */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {safePowerSources.map((ps, psIdx) => {
-            const isSelected = activePowerSourceId === ps.id;
-            const powerTitle = ps.powerName || ps.source || `Kraft ${psIdx + 1}`;
-            const systemTitle = ps.source && ps.powerName && ps.source !== ps.powerName ? ps.source : null;
-            return (
-              <button
-                key={`ps-tab-${ps.id || psIdx}`}
-                type="button"
-                onClick={() => setActivePowerSourceId(ps.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                  isSelected
-                    ? 'bg-slate-800 text-amber-400 border-amber-500/60 shadow-sm'
-                    : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
-                }`}
-              >
-                <LucideIcons.Flame className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
-                <span>{powerTitle}</span>
-                {systemTitle && (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-slate-900 rounded text-amber-300/90 font-normal border border-slate-800">
-                    {systemTitle}
-                  </span>
-                )}
-                {ps.cost && (
-                  <span className="text-[10px] px-1.5 py-0.2 bg-slate-900 rounded text-slate-400 font-mono">
-                    {ps.cost}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Aktive Kraftquelle Editor */}
-        {activePowerSource && (
-          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                  Kraftsystem (Quelle / Ursprung)
-                </label>
-                <input
-                  type="text"
-                  disabled={readOnly}
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                  placeholder="z.B. Teufelsfrucht, Magie, Ki..."
-                  value={activePowerSource.source || ''}
-                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { source: e.target.value })}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                  Konkrete Kraft
-                </label>
-                <input
-                  type="text"
-                  disabled={readOnly}
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                  placeholder="z.B. Mystische Zoan – Eis-Kitsune, Mana-Manipulation..."
-                  value={activePowerSource.powerName || ''}
-                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { powerName: e.target.value })}
-                />
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                  Kostenressource
-                </label>
-                <input
-                  type="text"
-                  disabled={readOnly}
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                  placeholder="z.B. Mana, Ausdauer, Willenskraft..."
-                  value={activePowerSource.cost || ''}
-                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { cost: e.target.value })}
-                />
-              </div>
-
-              <div className="flex flex-col justify-end">
-                {!readOnly && safePowerSources.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeletePowerSource(activePowerSource.id)}
-                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 transition flex items-center justify-center gap-1.5 h-[30px] cursor-pointer"
-                  >
-                    <LucideIcons.Trash2 className="w-3.5 h-3.5" />
-                    <span>Kraftquelle entfernen</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                Beschreibung der Kraftquelle &amp; Herkunft
-              </label>
-              <AutoExpandingTextarea
-                disabled={readOnly}
-                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 min-h-[44px] leading-relaxed"
-                placeholder="Ursprung, Schwingungsmuster oder Natur dieser Kraft..."
-                value={activePowerSource.powerDescription || ''}
-                onChange={e => handleUpdatePowerSource(activePowerSource.id, { powerDescription: e.target.value })}
-              />
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ============================================================ */}
-      {/* 2. HAUPTNAVIGATION: DIE 7 BEREICHE                            */}
-      {/* ============================================================ */}
-      {selectedFormId === 'normal' ? (
-        <>
-          {/* GRUNDFÄHIGKEITEN (KINESEN & MANIPULATIONEN) */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+      {mainView === 'weapons' ? (
+        /* ============================================================ */
+        /* WAFFENBEHERRSCHUNG (SEPARATER BEREICH AUSSERHALB DER POWER)  */
+        /* ============================================================ */
+        <WeaponSkillTree
+          techniques={techniques}
+          activeBaseAbility={null}
+          baseAbilities={baseAbilities}
+          activePowerSource={legacyPowerSourceForCard}
+          progressionLogic={progressionLogic}
+          onUpdateEntry={(techId, updates) => {
+            const updated = techniques.map(t => (t.id === techId ? { ...t, ...updates } : t));
+            onChange(powerSources, baseAbilities, updated);
+          }}
+          onAddEntry={(newEntry) => {
+            if (newEntry) {
+              const entryToAdd: TechniqueItem = {
+                id: newEntry.id || slugifyPowerId(`wpn_${Date.now()}`, 'tech'),
+                name: newEntry.name || 'Waffenbeherrschung (Rang 1)',
+                category: 'Waffenbeherrschung',
+                ...newEntry
+              };
+              onChange(powerSources, baseAbilities, [...techniques, entryToAdd]);
+            }
+          }}
+          onDeleteEntry={(techId) => {
+            const remaining = techniques.filter(t => t.id !== techId);
+            onChange(powerSources, baseAbilities, remaining);
+          }}
+          readOnly={readOnly}
+          onOpenSmartFill={() => {
+            setSmartFillModalState({
+              isOpen: true,
+              powerId: activePower?.id,
+              abilityId: activeAbility?.id
+            });
+          }}
+        />
+      ) : (
+        /* ============================================================ */
+        /* KRAFT-SYSTEME & HIERARCHIE-BAUM                              */
+        /* ============================================================ */
+        <div className="flex flex-col gap-4">
+          {/* ------------------------------------------------------------ */}
+          {/* EBENE 1: KRAFTSYSTEM (PowerSystem)                           */}
+          {/* ------------------------------------------------------------ */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2">
-                <LucideIcons.Sparkles className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                  Grundfähigkeiten / Elementare Disziplinen
+                <LucideIcons.Layers className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-black uppercase tracking-wider text-white">
+                  1. Kraftsystem / Ursprung ({systems.length})
                 </span>
               </div>
 
-              {!readOnly && activePowerSource && (
+              {!readOnly && (
                 <button
                   type="button"
-                  onClick={handleAddBaseAbility}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                  onClick={handleAddPowerSystem}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1 cursor-pointer"
                 >
-                  <LucideIcons.Plus className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Grundfähigkeit hinzufügen</span>
+                  <LucideIcons.Plus className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Kraftsystem hinzufügen</span>
                 </button>
               )}
             </div>
 
-            {/* Grundfähigkeiten Tabs */}
+            {/* System Tabs */}
             <div className="flex flex-wrap items-center gap-1.5">
-              {currentBaseAbilities.length === 0 ? (
-                <div className="text-xs text-slate-400 italic py-1">
-                  Keine Grundfähigkeiten für diese Kraftquelle definiert (Techniken werden direkt zugeordnet).
-                </div>
-              ) : (
-                currentBaseAbilities.map((ba, baIdx) => {
-                  const isSelected = activeBaseAbilityId === ba.id;
-                  const displayName = ba.displayName || ba.name || `Grundfähigkeit ${baIdx + 1}`;
-                  return (
-                    <button
-                      key={`ba-tab-${ba.id || baIdx}`}
-                      type="button"
-                      onClick={() => setActiveBaseAbilityId(ba.id)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
-                        isSelected
-                          ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500 shadow-sm'
-                          : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <span>{displayName}</span>
-                      {ba.element && (
-                        <span className="text-[10px] px-1 bg-slate-900 text-slate-300 rounded">
-                          {ba.element}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })
-              )}
+              {systems.map((sys, sysIdx) => {
+                const isSelected = activeSystem?.id === sys.id;
+                return (
+                  <button
+                    key={`sys-tab-${sys.id || sysIdx}`}
+                    type="button"
+                    onClick={() => setActiveSystemId(sys.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                      isSelected
+                        ? 'bg-slate-800 text-amber-400 border-amber-500/60 shadow-sm'
+                        : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    <LucideIcons.Flame className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
+                    <span>{sys.name || `System ${sysIdx + 1}`}</span>
+                    {sys.resourceName && (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-slate-900 rounded text-slate-400 font-mono">
+                        {sys.resourceName}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Aktive Grundfähigkeit Konfiguration */}
-            {activeBaseAbility && (
-              <div className="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                    Element
-                  </label>
-                  <select
-                    disabled={readOnly}
-                    className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                    value={activeBaseAbility.element || 'Feuer'}
-                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { element: e.target.value })}
-                  >
-                    {ADVENTURE_FORGE_ELEMENTS.map(el => (
-                      <option key={`el-opt-${el}`} value={el}>{el}</option>
-                    ))}
-                  </select>
-                </div>
+            {/* Aktives Kraftsystem Editor */}
+            {activeSystem && (
+              <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                      System-Name
+                    </label>
+                    <input
+                      type="text"
+                      disabled={readOnly}
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                      placeholder="z.B. Magie, Teufelsfrucht, Ki, Quirk..."
+                      value={activeSystem.name || ''}
+                      onChange={e => handleUpdatePowerSystem(activeSystem.id, { name: e.target.value })}
+                    />
+                  </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                    Ausprägung / Kinese
-                  </label>
-                  <select
-                    disabled={readOnly}
-                    className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                    value={activeBaseAbility.abilityType || 'creation_manipulation'}
-                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { abilityType: e.target.value as AbilityType })}
-                  >
-                    {ABILITY_TYPES.map(at => (
-                      <option key={`at-opt-${at.id}`} value={at.id}>{at.label}</option>
-                    ))}
-                  </select>
-                </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                      System-Typ / Kategorie
+                    </label>
+                    <input
+                      type="text"
+                      disabled={readOnly}
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                      placeholder="z.B. Magie, Biologisch, Göttlich..."
+                      value={activeSystem.systemType || ''}
+                      onChange={e => handleUpdatePowerSystem(activeSystem.id, { systemType: e.target.value })}
+                    />
+                  </div>
 
-                <div className="flex items-end justify-end">
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 border border-slate-800 hover:border-rose-800/50 transition flex items-center gap-1.5 h-[30px] cursor-pointer"
-                    >
-                      <LucideIcons.Trash2 className="w-3.5 h-3.5" />
-                      <span>Entfernen</span>
-                    </button>
-                  )}
+                  <div className="flex flex-col justify-end">
+                    {!readOnly && systems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePowerSystem(activeSystem.id)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 transition flex items-center justify-center gap-1.5 h-[30px] cursor-pointer"
+                      >
+                        <LucideIcons.Trash2 className="w-3.5 h-3.5" />
+                        <span>System entfernen</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* TAB-LEISTE: DIE 7 SYSTEM-BEREICHE */}
-          <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-2.5 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-                System-Bereiche &amp; Fertigkeitsbäume
-              </span>
-              <span className="text-[10px] text-slate-400">
-                Aktiv: {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : (activePowerSource ? (activePowerSource.powerName || activePowerSource.source || 'Kraftquelle') : 'Gesamtsystem')}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
-              {CATEGORY_TABS.map((tab, tabIdx) => {
-                const isTabActive = activeCategory === tab;
-                const count = categoryCounts[tab] || 0;
-                return (
-                  <button
-                    key={`cat-tab-${tab}-${tabIdx}`}
-                    type="button"
-                    onClick={() => setActiveCategory(tab)}
-                    className={`px-2.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1.5 cursor-pointer border min-w-0 ${
-                      isTabActive
-                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
-                        : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-left leading-tight break-words text-xs">{tab}</span>
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
-                      isTabActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800/80 text-slate-400'
-                    }`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* ============================================================ */}
-          {/* BEREICH 1: TRAINING & ERLERNBARE FERTIGKEITEN               */}
-          {/* ============================================================ */}
-          {activeCategory === 'Training & Erlernbare Fertigkeiten' && (
-            <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-4">
-              {/* Header & Statistiken */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                    Erlernbar Gesamt
+          {/* ------------------------------------------------------------ */}
+          {/* EBENE 2: KONKRETE KRAFT (CharacterPower)                     */}
+          {/* ------------------------------------------------------------ */}
+          {activeSystem && (
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-2">
+                  <LucideIcons.Zap className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                    2. Konkrete Kraft in {activeSystem.name} ({currentPowers.length})
                   </span>
-                  <span className="text-base sm:text-lg font-black text-amber-400">
-                    {trainingStats.total}
-                  </span>
-                  <span className="text-[10px] text-slate-400">Im Ausbildungsplan</span>
-                </div>
-
-                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-wide">
-                    In Ausbildung
-                  </span>
-                  <span className="text-base sm:text-lg font-black text-cyan-400">
-                    {trainingStats.inAusbildung}
-                  </span>
-                  <span className="text-[10px] text-slate-400">Aktives Training</span>
-                </div>
-
-                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-wide">
-                    Gemeistert
-                  </span>
-                  <span className="text-base sm:text-lg font-black text-emerald-400">
-                    {trainingStats.gemeistert}
-                  </span>
-                  <span className="text-[10px] text-slate-400">Vollständig erlernt</span>
-                </div>
-
-                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-0.5">
-                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                    Bereit / Gesperrt
-                  </span>
-                  <span className="text-base sm:text-lg font-black text-slate-200">
-                    {trainingStats.erlernbar} / {trainingStats.gesperrt}
-                  </span>
-                  <span className="text-[10px] text-slate-400">Voraussetzungen</span>
-                </div>
-              </div>
-
-              {/* Filter- & Suchleiste */}
-              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2.5">
-                <div className="flex items-center gap-2 flex-1 min-w-[220px]">
-                  <LucideIcons.Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <input
-                    type="text"
-                    className="w-full bg-transparent border-none text-xs text-white placeholder-slate-400 outline-none"
-                    placeholder="Fertigkeit, Lehrmeister, Attribut oder Voraussetzung suchen..."
-                    value={trainingSearchTerm}
-                    onChange={e => setTrainingSearchTerm(e.target.value)}
-                  />
-                  {trainingSearchTerm && (
-                    <button
-                      type="button"
-                      onClick={() => setTrainingSearchTerm('')}
-                      className="text-slate-400 hover:text-white text-xs cursor-pointer"
-                    >
-                      <LucideIcons.X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Statusfilter */}
-                <div className="flex flex-wrap items-center gap-1">
-                  {(['alle', 'in_ausbildung', 'erlernbar', 'gemeistert', 'gesperrt'] as const).map(st => {
-                    const isStActive = trainingStatusFilter === st;
-                    const label = st === 'alle' ? 'Alle Status' : st === 'in_ausbildung' ? 'In Ausbildung' : st === 'erlernbar' ? 'Erlernbar' : st === 'gemeistert' ? 'Gemeistert' : 'Gesperrt';
-                    return (
-                      <button
-                        key={`train-st-${st}`}
-                        type="button"
-                        onClick={() => setTrainingStatusFilter(st)}
-                        className={`px-2 py-1 rounded text-[11px] font-semibold transition cursor-pointer border ${
-                          isStActive
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
-                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
                 </div>
 
                 {!readOnly && (
                   <button
                     type="button"
-                    onClick={() => handleAddEntry('Training & Erlernbare Fertigkeiten')}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition flex items-center gap-1.5 cursor-pointer shadow-sm ml-auto"
+                    onClick={handleAddPower}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition flex items-center gap-1 cursor-pointer"
                   >
-                    <LucideIcons.Plus className="w-3.5 h-3.5" />
-                    <span>Ausbildungsziel anlegen</span>
+                    <LucideIcons.Plus className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Kraft hinzufügen</span>
                   </button>
                 )}
               </div>
 
-              {/* Liste aller erlernbaren Fertigkeiten */}
-              {trainingEntries.length === 0 ? (
-                <div className="text-center py-10 text-slate-400 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-                  <LucideIcons.GraduationCap className="w-8 h-8 text-slate-400 opacity-60" />
-                  <p>Keine erlernbaren Fertigkeiten für diesen Filter gefunden.</p>
+              {/* Power Tabs */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {currentPowers.map((pow, powIdx) => {
+                  const isSelected = activePower?.id === pow.id;
+                  return (
+                    <button
+                      key={`pow-tab-${pow.id || powIdx}`}
+                      type="button"
+                      onClick={() => setActivePowerId(pow.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                        isSelected
+                          ? 'bg-slate-800 text-cyan-400 border-cyan-500/60 shadow-sm'
+                          : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                      }`}
+                    >
+                      <LucideIcons.Zap className={`w-3.5 h-3.5 ${isSelected ? 'text-cyan-400' : 'text-slate-500'}`} />
+                      <span>{pow.name || `Kraft ${powIdx + 1}`}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Aktive Kraft Editor */}
+              {activePower && (
+                <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                        Name der Kraft
+                      </label>
+                      <input
+                        type="text"
+                        disabled={readOnly}
+                        className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-cyan-500 h-[30px]"
+                        placeholder="z.B. Feuerzauber, Mystische Zoan – Eis-Kitsune..."
+                        value={activePower.name || ''}
+                        onChange={e => handleUpdatePower(activePower.id, { name: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                        Kostenressource
+                      </label>
+                      <input
+                        type="text"
+                        disabled={readOnly}
+                        className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-cyan-500 h-[30px]"
+                        placeholder="z.B. Mana, Ausdauer, Fokus..."
+                        value={activePower.resourceName || ''}
+                        onChange={e => handleUpdatePower(activePower.id, { resourceName: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="flex flex-col justify-end">
+                      {!readOnly && currentPowers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePower(activePower.id)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 transition flex items-center justify-center gap-1.5 h-[30px] cursor-pointer"
+                        >
+                          <LucideIcons.Trash2 className="w-3.5 h-3.5" />
+                          <span>Kraft entfernen</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                      Beschreibung &amp; Natur dieser Kraft
+                    </label>
+                    <AutoExpandingTextarea
+                      disabled={readOnly}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-cyan-500 min-h-[44px] leading-relaxed"
+                      placeholder="Ursprung, Schwingungsmuster oder Natur dieser Kraft..."
+                      value={activePower.description || ''}
+                      onChange={e => handleUpdatePower(activePower.id, { description: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ------------------------------------------------------------ */}
+          {/* EBENE 3: UNTER-NAVIGATION FÜR DIE AKTIVE KRAFT               */}
+          {/* [ Fähigkeiten (X) ] | [ Formen & Transformationen (Y) ]      */}
+          {/* ------------------------------------------------------------ */}
+          {activePower && (
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+              <button
+                type="button"
+                onClick={() => setPowerSubTab('abilities')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                  powerSubTab === 'abilities'
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:text-white'
+                }`}
+              >
+                <LucideIcons.Sparkles className="w-3.5 h-3.5" />
+                <span>Fähigkeiten ({currentAbilities.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPowerSubTab('forms')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                  powerSubTab === 'forms'
+                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-black shadow-sm'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:text-white'
+                }`}
+              >
+                <LucideIcons.Shield className="w-3.5 h-3.5" />
+                <span>Formen &amp; Transformationen ({currentForms.length})</span>
+              </button>
+            </div>
+          )}
+
+          {/* ------------------------------------------------------------ */}
+          {/* ANSICHT: FÄHIGKEITEN & TECHNIKEN                             */}
+          {/* ------------------------------------------------------------ */}
+          {activePower && powerSubTab === 'abilities' && (
+            <div className="flex flex-col gap-4">
+              {/* Fähigkeiten-Liste der aktiven Kraft */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <LucideIcons.Sparkles className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs font-black uppercase tracking-wider text-white">
+                      3. Fähigkeiten in {activePower.name} ({currentAbilities.length})
+                    </span>
+                  </div>
+
                   {!readOnly && (
                     <button
                       type="button"
-                      onClick={() => handleAddEntry('Training & Erlernbare Fertigkeiten')}
-                      className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition flex items-center gap-1.5 cursor-pointer"
+                      onClick={handleAddAbility}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition flex items-center gap-1 cursor-pointer"
                     >
-                      <LucideIcons.Plus className="w-3.5 h-3.5" />
-                      <span>Erstes Ausbildungsziel anlegen</span>
+                      <LucideIcons.Plus className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Fähigkeit hinzufügen</span>
                     </button>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {trainingEntries.map((entry, idx) => {
-                    const currentScore = entry.score !== undefined ? entry.score : (entry.trainingProgress || 0);
-                    const status = entry.learningStatus || (currentScore >= 95 ? 'gemeistert' : currentScore > 0 ? 'in_ausbildung' : 'erlernbar');
-                    const masteryLabel = getTechniqueMasteryLabel(currentScore);
-                    const isExpanded = expandedMap[entry.id] || false;
 
-                    return (
-                      <div
-                        key={`train-item-${entry.id || idx}`}
-                        className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-col gap-3 transition-all"
-                      >
-                        {/* Kopfzeile */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-850 pb-2">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-sm text-white">{entry.name}</span>
-                            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-slate-400 font-semibold">
-                              {entry.category || 'Techniken'}
+                {/* Fähigkeiten-Tabs / Cards */}
+                {currentAbilities.length === 0 ? (
+                  <div className="text-center py-6 text-slate-400 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800">
+                    Noch keine Fähigkeiten für diese Kraft angelegt. Klicke auf &bdquo;Fähigkeit hinzufügen&ldquo;.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {currentAbilities.map((ab, abIdx) => {
+                      const isSelected = activeAbility?.id === ab.id;
+                      const isPassive = ab.abilityType === 'Passiv' || (ab.name && ab.name.toLowerCase().includes('passiv'));
+                      const techCount = (ab.techniqueIds || []).length;
+
+                      return (
+                        <button
+                          key={`ab-tab-${ab.id || abIdx}`}
+                          type="button"
+                          onClick={() => setActiveAbilityId(ab.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                            isSelected
+                              ? 'bg-amber-950/70 text-amber-300 border-amber-500 shadow-sm'
+                              : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                          }`}
+                        >
+                          <span>{ab.name || `Fähigkeit ${abIdx + 1}`}</span>
+                          {ab.element && (
+                            <span className="text-[10px] px-1.5 py-0.2 bg-slate-900 rounded text-slate-300">
+                              {ab.element}
                             </span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                              status === 'gemeistert'
-                                ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
-                                : status === 'in_ausbildung'
-                                ? 'bg-cyan-950/60 border-cyan-800 text-cyan-300'
-                                : status === 'gesperrt'
-                                ? 'bg-rose-950/60 border-rose-800 text-rose-300'
-                                : 'bg-amber-950/60 border-amber-800 text-amber-300'
-                            }`}>
-                              {status === 'gemeistert' ? 'Gemeistert' : status === 'in_ausbildung' ? 'In Ausbildung' : status === 'gesperrt' ? 'Gesperrt' : 'Erlernbar'}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-amber-400 font-bold">
-                              {masteryLabel} ({currentScore}%)
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => toggleCardExpanded(entry.id, false)}
-                              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium transition cursor-pointer"
-                            >
-                              {isExpanded ? 'Details verbergen' : 'Details bearbeiten'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Trainingsfortschritt & Schnell-Aktionen */}
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center justify-between text-xs text-slate-400">
-                            <div className="flex items-center gap-1.5">
-                              <LucideIcons.Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Trainingsaufwand: {entry.trainingHours || 0} / {entry.targetTrainingHours || 20} Std.</span>
-                            </div>
-                            <span>Fortschritt: {currentScore}%</span>
-                          </div>
-
-                          <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
-                            <div
-                              className="bg-amber-500 h-full transition-all duration-300 rounded-full"
-                              style={{ width: `${Math.min(100, currentScore)}%` }}
-                            />
-                          </div>
-
-                          {!readOnly && (
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickTrainProgress(entry, 10)}
-                                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium cursor-pointer"
-                                >
-                                  +1 Praxis-Übung
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickTrainProgress(entry, 25)}
-                                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium cursor-pointer"
-                                >
-                                  +1 Übungseinheit (+25%)
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickMastery(entry)}
-                                  className="px-2.5 py-1 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-xs font-bold cursor-pointer"
-                                >
-                                  Meisterung abschließen
-                                </button>
-                              </div>
-
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  disabled={readOnly}
-                                  value={status}
-                                  onChange={e => handleUpdateEntry(entry.id, { learningStatus: e.target.value })}
-                                  className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
-                                >
-                                  <option value="erlernbar">Status: Erlernbar</option>
-                                  <option value="in_ausbildung">Status: In Ausbildung</option>
-                                  <option value="gemeistert">Status: Gemeistert</option>
-                                  <option value="gesperrt">Status: Gesperrt</option>
-                                </select>
-                              </div>
-                            </div>
                           )}
-                        </div>
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                            isPassive ? 'bg-indigo-950 text-indigo-300 border border-indigo-800/60' : 'bg-slate-900 text-slate-400'
+                          }`}>
+                            {isPassive ? 'Passiv' : `${techCount} Techniken`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
-                        {/* Voraussetzungen & Quellen */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 border border-slate-850 rounded-lg p-2 text-xs">
-                          <div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                              Lehrmeister / Quelle:
-                            </span>
-                            <span className="text-slate-200">
-                              {entry.requiredTeacherOrScroll || 'Freies Selbststudium'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                              Voraussetzungen:
-                            </span>
-                            <span className="text-slate-200">
-                              {entry.requiredAttribute || entry.learningRequirements || 'Keine Vorbedingungen'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                              Vorstufen-Techniken:
-                            </span>
-                            <span className="text-slate-200">
-                              {entry.prerequisiteTechniques || 'Keine'}
-                            </span>
-                          </div>
-                        </div>
+                {/* Aktive Fähigkeit Konfiguration */}
+                {activeAbility && (
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                          Name der Fähigkeit
+                        </label>
+                        <input
+                          type="text"
+                          disabled={readOnly}
+                          className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                          placeholder="z.B. Feuer-Manipulation, Feuerresistenz..."
+                          value={activeAbility.name || ''}
+                          onChange={e => handleUpdateAbility(activeAbility.id, { name: e.target.value })}
+                        />
+                      </div>
 
-                        {/* Aufklappbare Detail-Ansicht (Vollständige TechniqueCard) */}
-                        {isExpanded && (
-                          <div className="pt-2 border-t border-slate-800">
-                            <TechniqueCard
-                              entry={entry}
-                              category={entry.category || 'Techniken'}
-                              readOnly={readOnly}
-                              isExpanded={true}
-                              onToggleExpanded={() => toggleCardExpanded(entry.id, false)}
-                              onUpdate={updates => handleUpdateEntry(entry.id, updates)}
-                              onDelete={() => handleDeleteEntry(entry.id)}
-                              activePowerSource={activePowerSource}
-                              baseAbilities={baseAbilities}
-                              onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
-                              progressionLogic={progressionLogic}
-                              availableTransformations={availableTransformations}
-                            />
-                          </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                          Element / Aspekt
+                        </label>
+                        <select
+                          disabled={readOnly}
+                          className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
+                          value={activeAbility.element || 'Feuer'}
+                          onChange={e => handleUpdateAbility(activeAbility.id, { element: e.target.value })}
+                        >
+                          {ADVENTURE_FORGE_ELEMENTS.map(el => (
+                            <option key={`el-opt-${el}`} value={el}>{el}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                          Ausprägung / Typ
+                        </label>
+                        <select
+                          disabled={readOnly}
+                          className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
+                          value={activeAbility.abilityType || 'Erschaffung + Manipulation'}
+                          onChange={e => handleUpdateAbility(activeAbility.id, { abilityType: e.target.value })}
+                        >
+                          {ABILITY_TYPES.map(at => (
+                            <option key={`at-opt-${at.id}`} value={at.label}>{at.label}</option>
+                          ))}
+                          <option value="Passiv">Passiv</option>
+                          <option value="Körperverstärkung">Körperverstärkung</option>
+                          <option value="Wahrnehmung">Wahrnehmung</option>
+                          <option value="Spezial">Spezial</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col justify-end">
+                        {!readOnly && currentAbilities.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAbility(activeAbility.id)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 transition flex items-center justify-center gap-1.5 h-[30px] cursor-pointer"
+                          >
+                            <LucideIcons.Trash2 className="w-3.5 h-3.5" />
+                            <span>Fähigkeit entfernen</span>
+                          </button>
                         )}
                       </div>
-                    );
-                  })}
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                        Beschreibung der Fähigkeit
+                      </label>
+                      <AutoExpandingTextarea
+                        disabled={readOnly}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 min-h-[44px] leading-relaxed"
+                        placeholder="Wirkung, Reichweite oder Mechanik dieser Fähigkeit..."
+                        value={activeAbility.description || ''}
+                        onChange={e => handleUpdateAbility(activeAbility.id, { description: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* EBENE 4: TECHNIKEN UNTER DIESER FÄHIGKEIT */}
+              {activeAbility && (
+                <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-400">
+                        {activeAbility.name}
+                      </span>
+                      <span className="text-slate-600">→</span>
+                      <span className="text-xs font-extrabold text-amber-400">
+                        Techniken ({currentAbilityTechniques.length})
+                      </span>
+                    </div>
+
+                    {!readOnly && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSmartFillModalState({
+                              isOpen: true,
+                              powerId: activePower.id,
+                              abilityId: activeAbility.id
+                            });
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          title="KI-gestützte Erstellung"
+                        >
+                          <LucideIcons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>Smart Fill</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAddTechnique()}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        >
+                          <LucideIcons.Plus className="w-3.5 h-3.5" />
+                          <span>Technik hinzufügen</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Techniken Liste */}
+                  {currentAbilityTechniques.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
+                      <p>Keine konkreten Techniken für &bdquo;{activeAbility.name}&ldquo; vorhanden.</p>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => handleAddTechnique()}
+                          className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <LucideIcons.Plus className="w-3.5 h-3.5" />
+                          <span>Erste Technik für diese Fähigkeit erstellen</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {currentAbilityTechniques.map((tech, idx) => {
+                        const defaultExpanded = currentAbilityTechniques.length <= 4;
+                        const isExpanded = expandedMap[tech.id] !== undefined ? expandedMap[tech.id] : defaultExpanded;
+                        const adaptedItem = adaptTechniqueForCard(tech);
+
+                        return (
+                          <TechniqueCard
+                            key={`tech-card-${tech.id || idx}`}
+                            entry={adaptedItem}
+                            category="Techniken"
+                            readOnly={readOnly}
+                            isExpanded={isExpanded}
+                            onToggleExpanded={() => toggleCardExpanded(tech.id, defaultExpanded)}
+                            onUpdate={updates => handleUpdateTechnique(tech.id, updates)}
+                            onDelete={() => handleDeleteTechnique(tech.id)}
+                            activePowerSource={legacyPowerSourceForCard}
+                            baseAbilities={legacyBaseAbilitiesForCard}
+                            onToggleLinkedBaseAbility={() => {}}
+                            progressionLogic={progressionLogic}
+                            availableTransformations={availableTransformationsForCard}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          {/* ============================================================ */}
-          {/* BEREICH 5: WAFFENBEHERRSCHUNG                                 */}
-          {/* ============================================================ */}
-          {activeCategory === 'Waffenbeherrschung' && (
-            <WeaponSkillTree
-              techniques={techniques}
-              activeBaseAbility={activeBaseAbility}
-              baseAbilities={baseAbilities}
-              activePowerSource={activePowerSource}
-              progressionLogic={progressionLogic}
-              onUpdateEntry={handleUpdateEntry}
-              onAddEntry={(newEntry) => {
-                if (newEntry) {
-                  const entryToAdd: TechniqueItem = {
-                    id: newEntry.id || `tech_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                    name: newEntry.name || 'Waffenbeherrschung (Rang 1)',
-                    category: 'Waffenbeherrschung',
-                    powerSourceId: activePowerSource?.id,
-                    baseAbilityIds: activeBaseAbility ? [activeBaseAbility.id] : [],
-                    baseAbilityNames: activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name || ''] : [],
-                    ...newEntry
-                  };
-                  const updatedBa = baseAbilities.map(ba => {
-                    if (activeBaseAbility && ba.id === activeBaseAbility.id) {
-                      return {
-                        ...ba,
-                        techniqueIds: [...(ba.techniqueIds || []), entryToAdd.id]
-                      };
-                    }
-                    return ba;
-                  });
-                  onChange(powerSources, updatedBa, [...techniques, entryToAdd]);
-                } else {
-                  handleAddEntry('Waffenbeherrschung');
-                }
-              }}
-              onDeleteEntry={handleDeleteEntry}
-              readOnly={readOnly}
-              onOpenSmartFill={() => {
-                setSmartFillModalState({
-                  isOpen: true,
-                  powerSourceId: activePowerSource?.id,
-                  baseAbilityId: activeBaseAbility?.id
-                });
-              }}
-            />
-          )}
-
-          {/* ============================================================ */}
-          {/* BEREICHE 2-4: PASSIVE, TECHNIKEN & ULTIMATIVE                */}
-          {/* ============================================================ */}
-          {(activeCategory === 'Passive Fähigkeiten' || activeCategory === 'Techniken' || activeCategory === 'Ultimative Techniken') && (
-            <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/70 pb-3">
+          {/* ------------------------------------------------------------ */}
+          {/* ANSICHT: FORMEN & TRANSFORMATIONEN (CharacterPowerForm)      */}
+          {/* ------------------------------------------------------------ */}
+          {activePower && powerSubTab === 'forms' && (
+            <div className="bg-slate-950/70 border border-cyan-900/50 rounded-xl p-4 sm:p-5 flex flex-col gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-900/40 pb-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-400">
-                    {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : (activePowerSource ? (activePowerSource.powerName || activePowerSource.source || 'Kraftquelle') : 'Keine Kraftquelle')}
-                  </span>
-                  <span className="text-slate-600">→</span>
-                  <span className="text-xs font-extrabold text-amber-400">
-                    {activeCategory} ({activeEntries.length})
+                  <LucideIcons.Shield className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-black uppercase tracking-wider text-white">
+                    Formen &amp; Transformationen in {activePower.name} ({currentForms.length})
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  {progressionLogic === 'ep' && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/60 text-[11px] text-amber-300 font-medium">
-                      <LucideIcons.Zap className="w-3.5 h-3.5 text-amber-400" />
-                      <span>EP-basiert (100 EP/Stufe)</span>
-                    </span>
-                  )}
-                  {progressionLogic === 'training' && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-800/60 text-[11px] text-emerald-300 font-medium">
-                      <LucideIcons.Dumbbell className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Training &amp; Übung (4 Einheiten)</span>
-                    </span>
-                  )}
-                  {progressionLogic === 'milestone' && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/60 border border-purple-800/60 text-[11px] text-purple-300 font-medium">
-                      <LucideIcons.Award className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Story-Meilensteine</span>
-                    </span>
-                  )}
-                  {progressionLogic === 'static' && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-[11px] text-slate-300 font-medium">
-                      <LucideIcons.Lock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Statische Talentpunkte</span>
-                    </span>
-                  )}
-
-                  {activeEntries.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const anyCollapsed = activeEntries.some(e => {
-                          const defExp = activeEntries.length <= 4;
-                          return expandedMap[e.id] !== undefined ? !expandedMap[e.id] : !defExp;
-                        });
-                        handleToggleAll(anyCollapsed, activeEntries);
-                      }}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
-                    >
-                      {activeEntries.some(e => {
-                        const defExp = activeEntries.length <= 4;
-                        return expandedMap[e.id] !== undefined ? !expandedMap[e.id] : !defExp;
-                      })
-                        ? 'Alle aufklappen'
-                        : 'Alle zuklappen'}
-                    </button>
-                  )}
-
-                  {!readOnly && activePowerSource && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSmartFillModalState({
-                            isOpen: true,
-                            powerSourceId: activePowerSource?.id,
-                            baseAbilityId: activeBaseAbility?.id
-                          });
-                        }}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                        title="KI-gestützte Erstellung"
-                      >
-                        <LucideIcons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>Smart Fill</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleAddEntry(activeCategory)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                      >
-                        <LucideIcons.Plus className="w-3.5 h-3.5" />
-                        <span>{CATEGORY_ADD_LABELS[activeCategory]}</span>
-                      </button>
-                    </>
-                  )}
-                </div>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={handleAddForm}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950/80 border border-cyan-700 text-cyan-300 hover:bg-cyan-900 transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <LucideIcons.Plus className="w-3.5 h-3.5" />
+                    <span>Form hinzufügen</span>
+                  </button>
+                )}
               </div>
 
-              {!activePowerSource ? (
+              {/* Form Tabs */}
+              {currentForms.length === 0 ? (
                 <div className="text-center py-8 text-slate-400 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-                  <p>Bitte erstelle oder wähle zuerst eine Kraftquelle aus.</p>
-                </div>
-              ) : activeEntries.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-                  <p>
-                    Keine Einträge für &bdquo;{activeCategory}&ldquo;{activeBaseAbility ? ` in ${activeBaseAbility.displayName || activeBaseAbility.name}` : ''} definiert.
-                  </p>
+                  <p>Keine Formen oder Transformationen für diese Kraft definiert.</p>
                   {!readOnly && (
                     <button
                       type="button"
-                      onClick={() => handleAddEntry(activeCategory)}
-                      className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
+                      onClick={handleAddForm}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-950 border border-cyan-800 text-cyan-300 hover:bg-cyan-900 transition flex items-center gap-1.5 cursor-pointer"
                     >
                       <LucideIcons.Plus className="w-3.5 h-3.5" />
-                      <span>{CATEGORY_EMPTY_LABELS[activeCategory]}</span>
+                      <span>Erste Gestalt / Form anlegen</span>
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {activeEntries.map((entry, idx) => {
-                    const defaultExpanded = activeEntries.length <= 4;
-                    const isExpanded = expandedMap[entry.id] !== undefined ? expandedMap[entry.id] : defaultExpanded;
+                <>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {currentForms.map((f, fIdx) => {
+                      const isSelected = activeForm?.id === f.id;
+                      return (
+                        <button
+                          key={`form-tab-${f.id || fIdx}`}
+                          type="button"
+                          onClick={() => setActiveFormId(f.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 cursor-pointer border ${
+                            isSelected
+                              ? 'bg-cyan-950 text-cyan-300 border-cyan-500 shadow-sm'
+                              : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <span>{f.name || `Form ${fIdx + 1}`}</span>
+                          {f.formType && (
+                            <span className="text-[10px] px-1.5 py-0.2 bg-slate-950 rounded text-slate-400">
+                              {f.formType}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                    return (
-                      <TechniqueCard
-                        key={`tech-card-${entry.id || idx}`}
-                        entry={entry}
-                        category={activeCategory}
-                        readOnly={readOnly}
-                        isExpanded={isExpanded}
-                        onToggleExpanded={() => toggleCardExpanded(entry.id, defaultExpanded)}
-                        onUpdate={updates => handleUpdateEntry(entry.id, updates)}
-                        onDelete={() => handleDeleteEntry(entry.id)}
-                        activePowerSource={activePowerSource}
-                        baseAbilities={baseAbilities}
-                        onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
-                        progressionLogic={progressionLogic}
-                        availableTransformations={availableTransformations}
-                      />
-                    );
-                  })}
-                </div>
+                  {/* Aktive Form Konfiguration */}
+                  {activeForm && (
+                    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-2.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                            Name der Form / Gestalt
+                          </label>
+                          <input
+                            type="text"
+                            disabled={readOnly}
+                            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-cyan-500 h-[30px]"
+                            placeholder="z.B. Flammenform, Kitsune-Gestalt..."
+                            value={activeForm.name || ''}
+                            onChange={e => handleUpdateForm(activeForm.id, { name: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                            Form-Typ
+                          </label>
+                          <input
+                            type="text"
+                            disabled={readOnly}
+                            className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-cyan-500 h-[30px]"
+                            placeholder="z.B. Transformation, Stufenform..."
+                            value={activeForm.formType || ''}
+                            onChange={e => handleUpdateForm(activeForm.id, { formType: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="flex flex-col justify-end">
+                          {!readOnly && currentForms.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteForm(activeForm.id)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 transition flex items-center justify-center gap-1.5 h-[30px] cursor-pointer"
+                            >
+                              <LucideIcons.Trash2 className="w-3.5 h-3.5" />
+                              <span>Form entfernen</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                          Beschreibung der Verwandlung
+                        </label>
+                        <AutoExpandingTextarea
+                          disabled={readOnly}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-cyan-500 min-h-[44px] leading-relaxed"
+                          placeholder="Optische Veränderung, Körpermodifikationen oder Aura..."
+                          value={activeForm.description || ''}
+                          onChange={e => handleUpdateForm(activeForm.id, { description: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Form-spezifische Techniken */}
+                  {activeForm && (
+                    <div className="flex flex-col gap-3 pt-2 border-t border-slate-800/80">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-cyan-300">
+                          Techniken der Form &bdquo;{activeForm.name}&ldquo; ({currentFormTechniques.length})
+                        </span>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => handleAddTechnique(activeForm.id)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950/80 border border-cyan-700 text-cyan-300 hover:bg-cyan-900 transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <LucideIcons.Plus className="w-3.5 h-3.5" />
+                            <span>Technik für diese Form anlegen</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        {currentFormTechniques.map((tech, idx) => (
+                          <TechniqueCard
+                            key={`form-tech-${tech.id || idx}`}
+                            entry={adaptTechniqueForCard(tech)}
+                            category="Transformationen"
+                            readOnly={readOnly}
+                            isExpanded={expandedMap[tech.id] || false}
+                            onToggleExpanded={() => toggleCardExpanded(tech.id, false)}
+                            onUpdate={updates => handleUpdateTechnique(tech.id, updates)}
+                            onDelete={() => handleDeleteTechnique(tech.id)}
+                            activePowerSource={legacyPowerSourceForCard}
+                            baseAbilities={legacyBaseAbilitiesForCard}
+                            onToggleLinkedBaseAbility={() => {}}
+                            progressionLogic={progressionLogic}
+                            availableTransformations={availableTransformationsForCard}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
-          )}
-        </>
-      ) : selectedTransformation ? (
-        /* ============================================================ */
-        /* TRANSFORMATIONEN-ANSICHT                                      */
-        /* ============================================================ */
-        <div className="bg-slate-950/70 border border-cyan-900/50 rounded-xl p-4 sm:p-5 flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-900/40 pb-3">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/50 text-cyan-300 text-[10px] font-black uppercase tracking-wider">
-                  Transformation
-                </span>
-                <h4 className="text-sm sm:text-base font-black text-white">
-                  {selectedTransformation.transformName || selectedTransformation.name}
-                </h4>
-                {selectedTransformation.tier && (
-                  <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-bold">
-                    {selectedTransformation.tier}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedTransformationId}
-                onChange={e => setSelectedTransformationId(e.target.value)}
-                className="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-cyan-300 outline-none focus:border-cyan-500 font-bold cursor-pointer"
-              >
-                {transformationItems.map(t => (
-                  <option key={`trans-sel-${t.id}`} value={t.id}>
-                    {t.transformName || t.name}
-                  </option>
-                ))}
-              </select>
-
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={handleAddTransformation}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950/80 border border-cyan-700 text-cyan-300 hover:bg-cyan-900 transition flex items-center gap-1 cursor-pointer"
-                >
-                  <LucideIcons.Plus className="w-3.5 h-3.5" />
-                  <span>Stufe hinzufügen</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Transformationseigene Techniken */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              {TRANS_CATEGORY_TABS.map(tab => (
-                <button
-                  key={`trans-tab-${tab}`}
-                  type="button"
-                  onClick={() => setActiveTransCategory(tab)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border cursor-pointer ${
-                    activeTransCategory === tab
-                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                  }`}
-                >
-                  <span>{tab}</span>
-                  <span className="ml-1 text-[10px] opacity-80">({transCategoryCounts[tab] || 0})</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-3">
-              {activeTransEntries.map((entry, idx) => (
-                <TechniqueCard
-                  key={`trans-tech-card-${entry.id || idx}`}
-                  entry={entry}
-                  category={activeTransCategory}
-                  readOnly={readOnly}
-                  isExpanded={expandedMap[entry.id] || false}
-                  onToggleExpanded={() => toggleCardExpanded(entry.id, false)}
-                  onUpdate={updates => handleUpdateEntry(entry.id, updates)}
-                  onDelete={() => handleDeleteEntry(entry.id)}
-                  activePowerSource={activePowerSource}
-                  baseAbilities={baseAbilities}
-                  onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
-                  progressionLogic={progressionLogic}
-                  availableTransformations={availableTransformations}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-6 text-center flex flex-col items-center gap-3">
-          <LucideIcons.Zap className="w-8 h-8 text-cyan-400 opacity-60" />
-          <p className="text-xs text-slate-300">
-            Keine Transformation ausgewählt oder noch keine Transformationen definiert.
-          </p>
-          {!readOnly && (
-            <button
-              type="button"
-              onClick={handleAddTransformation}
-              className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow"
-            >
-              <LucideIcons.Plus className="w-4 h-4" />
-              <span>Erste Transformation erstellen</span>
-            </button>
           )}
         </div>
       )}
 
       {/* ============================================================ */}
-      {/* 3. KI SMART FILL MODAL                                       */}
+      {/* 4. SMART FILL MODAL                                          */}
       {/* ============================================================ */}
       {smartFillModalState.isOpen && (
         <TechniqueSmartFillModal
           isOpen={smartFillModalState.isOpen}
           onClose={() => setSmartFillModalState({ isOpen: false })}
-          powerSources={safePowerSources}
+          powerSources={powerSources}
           baseAbilities={baseAbilities}
-          initialPowerSourceId={smartFillModalState.powerSourceId || activePowerSource?.id}
-          initialBaseAbilityId={smartFillModalState.baseAbilityId || activeBaseAbility?.id}
+          initialPowerSourceId={smartFillModalState.powerId || activePower?.id}
+          initialBaseAbilityId={smartFillModalState.abilityId || activeAbility?.id}
           characterName={characterName}
           characterRole={characterRole}
           worldTitle={worldTitle}
