@@ -13,7 +13,13 @@ import {
   Trash2, 
   ChevronDown, 
   ChevronUp, 
-  SlidersHorizontal 
+  SlidersHorizontal,
+  GraduationCap,
+  BookOpen,
+  Clock,
+  Target,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { TechniqueItem, BaseAbility, CharacterPowerSource, TechniqueTransformationModifier, TransformationModifierType } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
@@ -1325,7 +1331,139 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
           </div>
 
           {/* ============================================================ */}
-          {/* Sektion 3: Beschreibung & Wirkung                             */}
+          {/* Sektion 3: Training, Erlernbarkeit & Voraussetzungen          */}
+          {/* ============================================================ */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
+                <GraduationCap className="w-4 h-4 text-amber-400" />
+                <span>Training, Erlernbarkeit & Voraussetzungen</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-400 hover:text-slate-200">
+                  <input
+                    type="checkbox"
+                    disabled={readOnly}
+                    checked={entry.isLearnable ?? true}
+                    onChange={e => onUpdate({ isLearnable: e.target.checked })}
+                    className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-500/30 w-3.5 h-3.5"
+                  />
+                  <span>Im Trainingsplan verfügbar</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Lernstatus */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Lern- & Ausbildungsstatus
+                </label>
+                <select
+                  disabled={readOnly}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer disabled:opacity-50"
+                  value={entry.learningStatus || (currentScore >= 95 ? 'gemeistert' : currentScore > 0 ? 'in_ausbildung' : 'erlernbar')}
+                  onChange={e => onUpdate({ learningStatus: e.target.value })}
+                >
+                  <option value="erlernbar">Erlernbar (Voraussetzungen erfüllt)</option>
+                  <option value="in_ausbildung">In Ausbildung (Aktives Training)</option>
+                  <option value="gemeistert">Gemeistert (Vollständig erlernt)</option>
+                  <option value="gesperrt">Gesperrt (Voraussetzungen offen)</option>
+                </select>
+              </div>
+
+              {/* Benötigter Lehrmeister oder Schriftrolle */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Lehrmeister / Schriftrolle / Quelle
+                </label>
+                <input
+                  type="text"
+                  disabled={readOnly}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] disabled:opacity-50"
+                  placeholder="Name des Lehrers, Schule oder Fundort"
+                  value={entry.requiredTeacherOrScroll || ''}
+                  onChange={e => onUpdate({ requiredTeacherOrScroll: e.target.value })}
+                />
+              </div>
+
+              {/* Attribut- oder Vorstufenanforderung */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Attribut- & Stufenanforderung
+                </label>
+                <input
+                  type="text"
+                  disabled={readOnly}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] disabled:opacity-50"
+                  placeholder="z.B. Intelligenz 14, Basis-Schwertkampf"
+                  value={entry.requiredAttribute || entry.learningRequirements || ''}
+                  onChange={e => onUpdate({ requiredAttribute: e.target.value, learningRequirements: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Trainingszeit & Notizen */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Absolvierte Trainingsstunden
+                </label>
+                <input
+                  type="number"
+                  disabled={readOnly}
+                  min={0}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] disabled:opacity-50"
+                  value={entry.trainingHours !== undefined ? entry.trainingHours : 0}
+                  onChange={e => onUpdate({ trainingHours: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Ziel-Trainingsstunden
+                </label>
+                <input
+                  type="number"
+                  disabled={readOnly}
+                  min={1}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] disabled:opacity-50"
+                  value={entry.targetTrainingHours !== undefined ? entry.targetTrainingHours : 20}
+                  onChange={e => onUpdate({ targetTrainingHours: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                />
+              </div>
+
+              <div className="sm:col-span-2 flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Vorausgesetzte Vorstufen-Techniken
+                </label>
+                <input
+                  type="text"
+                  disabled={readOnly}
+                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] disabled:opacity-50"
+                  placeholder="z.B. Grundschlag, Windschritt"
+                  value={entry.prerequisiteTechniques || ''}
+                  onChange={e => onUpdate({ prerequisiteTechniques: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                Trainingsnotizen & Übungsmethoden
+              </label>
+              <AutoExpandingTextarea
+                disabled={readOnly}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 min-h-[44px] leading-relaxed disabled:opacity-50"
+                placeholder="Methodik, Meditationsübungen, Praxiskämpfe oder Lehrmeister-Anweisungen..."
+                value={entry.trainingNotes || ''}
+                onChange={e => onUpdate({ trainingNotes: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* ============================================================ */}
+          {/* Sektion 4: Beschreibung & Wirkung                             */}
           {/* ============================================================ */}
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">

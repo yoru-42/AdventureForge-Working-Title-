@@ -2823,6 +2823,67 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   characterName={editForm.title || ''}
                   characterRole={getDetail('role', '')}
                   worldTitle={worldTitle}
+                  profession={getDetail('profession', getDetail('role', ''))}
+                  onProfessionChange={(val, detectedField) => {
+                    updateMultipleDetails({
+                      profession: val,
+                      role: val,
+                      ...(detectedField ? { professionField: detectedField } : {})
+                    });
+                  }}
+                  professionLevel={getDetail('professionLevel', '')}
+                  onProfessionLevelChange={val => updateDetail('professionLevel', val)}
+                  professionField={getDetail('professionField', '')}
+                  onProfessionFieldChange={val => updateDetail('professionField', val)}
+                  professionSpecialization={getDetail('professionSpecialization', '')}
+                  onProfessionSpecializationChange={val => updateDetail('professionSpecialization', val)}
+                  professionRank={getDetail('professionRank', getDetail('professionLevel', ''))}
+                  onProfessionRankChange={val => {
+                    updateDetail('professionRank', val);
+                    updateDetail('professionLevel', val);
+                  }}
+                  professionExperience={getDetail('professionExperience', undefined)}
+                  onProfessionExperienceChange={val => updateDetail('professionExperience', val)}
+                  professionProficiencyScore={getDetail('professionProficiencyScore', 0)}
+                  onProfessionProficiencyScoreChange={val => updateDetail('professionProficiencyScore', val)}
+                  professionExperiencePoints={getDetail('professionExperiencePoints', 0)}
+                  onProfessionExperiencePointsChange={val => updateDetail('professionExperiencePoints', val)}
+                  professionExperienceText={getDetail('professionExperienceText', '')}
+                  onProfessionExperienceTextChange={val => updateDetail('professionExperienceText', val)}
+                  professionPromotionConditions={getDetail('professionPromotionConditions', '')}
+                  onProfessionPromotionConditionsChange={val => updateDetail('professionPromotionConditions', val)}
+                  professionProgress={getDetail('professionProgress', undefined)}
+                  onProfessionProgressChange={val => updateDetail('professionProgress', val)}
+                  professionCompetencies={getDetail('professionCompetencies', [])}
+                  onProfessionCompetenciesChange={val => updateDetail('professionCompetencies', val)}
+                  secondaryProfessions={getDetail<any[]>('secondaryProfessions', [])}
+                  onSecondaryProfessionsChange={val => updateDetail('secondaryProfessions', val)}
+                  socialTitles={getDetail<any[]>('socialTitles', [])}
+                  onSocialTitlesChange={val => updateDetail('socialTitles', val)}
+                  offices={getDetail<any[]>('offices', [])}
+                  onOfficesChange={val => updateDetail('offices', val)}
+                  positions={getDetail<any[]>('positions', [])}
+                  onPositionsChange={val => updateDetail('positions', val)}
+                  socialStatus={getDetail('socialStatus', '')}
+                  onSocialStatusChange={val => updateDetail('socialStatus', val)}
+                  craftingSkills={getDetail('craftingSkills', '')}
+                  onCraftingSkillsChange={val => updateDetail('craftingSkills', val)}
+                  jobTitle={getDetail('jobTitle', '')}
+                  onJobTitleChange={val => updateDetail('jobTitle', val)}
+                  authorities={getDetail<string[]>('authorities', [])}
+                  onAuthoritiesChange={val => updateDetail('authorities', val)}
+                  professionDescription={getDetail('professionDescription', '')}
+                  onProfessionDescriptionChange={val => updateDetail('professionDescription', val)}
+                  talents={getDetail('talents', '')}
+                  onTalentsChange={val => updateDetail('talents', val)}
+                  everydaySkills={getDetail('everydaySkills', '')}
+                  onEverydaySkillsChange={val => updateDetail('everydaySkills', val)}
+                  everydaySkillsProficiencyScore={getDetail('everydaySkillsProficiencyScore', 0)}
+                  onEverydaySkillsProficiencyScoreChange={val => updateDetail('everydaySkillsProficiencyScore', val)}
+                  everydaySkillsExperienceText={getDetail('everydaySkillsExperienceText', '')}
+                  onEverydaySkillsExperienceTextChange={val => updateDetail('everydaySkillsExperienceText', val)}
+                  toolsAndEquipment={getDetail('toolsAndEquipment', '')}
+                  onToolsAndEquipmentChange={val => updateDetail('toolsAndEquipment', val)}
                 />
               );
             })()}

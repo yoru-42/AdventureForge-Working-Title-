@@ -18,6 +18,7 @@ import { formatPersonalityTraitsAsPrompt } from './PersonalityTraitsEditor';
 import { WorkManagementModal } from './WorkManagementModal';
 import { NavigationModal } from './NavigationModal';
 import { TradeModal } from './TradeModal';
+import { TrainingSkillsModal, SkillCategoryTab } from './TrainingSkillsModal';
 import { isClothingPlaceholder, isClothingItemTitle, consolidateLoreOutfits } from '../App';
 import { spawnTacticalGroup } from '../utils/tacticalEngine';
 import { parseTacticalCommandsFromText, executeTacticalCommand } from '../utils/tacticalMovementEngine';
@@ -623,6 +624,8 @@ const GameView: React.FC<Props> = ({ adventure, onViewChange, onUpdateAdventure,
   const [emotionSearch, setEmotionSearch] = useState('');
   const [toneSearch, setToneSearch] = useState('');
   const [showFavoritesMenu, setShowFavoritesMenu] = useState(false);
+  const [showTrainingSkillsModal, setShowTrainingSkillsModal] = useState(false);
+  const [quickSkillTab, setQuickSkillTab] = useState<string>('all');
   const [showWorkMenu, setShowWorkMenu] = useState(false);
   const [showNavigationModal, setShowNavigationModal] = useState(false);
   const [showTradeModal, setShowTradeModal] = useState(false);
@@ -9328,29 +9331,45 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               </div>
             )}
 
-            {/* TECHNIKEN TAB PANEL */}
+            {/* TECHNIKEN & TRAINING TAB PANEL */}
             {isTechniquesOpen && (
-              <div id="techniques-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-md w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans">
+              <div id="techniques-control-menu" className="bg-slate-900/95 border-2 border-slate-800 rounded-2xl p-4 backdrop-blur-md shadow-2xl space-y-3.5 max-w-lg w-[calc(100vw-32px)] absolute bottom-full mb-1.5 left-4 animate-in slide-in-from-bottom duration-200 z-30 font-sans text-slate-100">
                 <div className="flex justify-between items-center border-b border-slate-800 pb-2">
                   <div className="flex items-center gap-2">
-                    <i className="fa-solid fa-star text-amber-500"></i>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Techniken & Fähigkeiten</span>
+                    <div className="w-6 h-6 rounded-lg bg-indigo-950/80 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+                      <i className="fa-solid fa-graduation-cap text-xs"></i>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Training & Fertigkeiten</span>
                   </div>
-                  <button type="button" onClick={closeAllControlTabs} className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1" title="Schließen">
-                    <i className="fa-solid fa-xmark"></i>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTrainingSkillsModal(true);
+                        closeAllControlTabs();
+                      }}
+                      className="px-2 py-0.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-indigo-300 text-[10px] font-bold transition-all flex items-center gap-1"
+                      title="Vollständiges Ausbildungs- & Fertigkeitenmenü öffnen"
+                    >
+                      <i className="fa-solid fa-up-right-from-square text-[9px]"></i>
+                      <span>Vollansicht</span>
+                    </button>
+                    <button type="button" onClick={closeAllControlTabs} className="text-slate-500 hover:text-slate-300 transition-colors text-xs p-1" title="Schließen">
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Quick format action for free roleplay action */}
-                <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-xl border border-slate-850">
-                  <span className="text-xs text-slate-400">Freie Handlung beschreiben:</span>
+                <div className="flex items-center justify-between bg-slate-950/60 p-2 rounded-xl border border-slate-850 gap-2">
+                  <span className="text-xs text-slate-400 shrink-0">Freie Handlung:</span>
                   <button
                     type="button"
                     onClick={() => {
                       insertFormatting('*', '*');
                       closeAllControlTabs();
                     }}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all flex items-center gap-1.5 border border-slate-700"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all flex items-center gap-1.5 border border-slate-700 shrink-0"
                     title="Fügt Sternchen *...* für Handlungen ein"
                   >
                     <i className="fa-solid fa-person-running text-xs text-amber-400"></i>
@@ -9358,49 +9377,225 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   </button>
                 </div>
 
+                {/* CATEGORY FILTER CHIPS */}
+                <div className="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar text-[10px]">
+                  {[
+                    { id: 'all', label: 'Alle' },
+                    { id: 'passive', label: 'Passiv' },
+                    { id: 'technique', label: 'Techniken' },
+                    { id: 'ultimate', label: 'Ultimativ' },
+                    { id: 'weapon', label: 'Waffen' },
+                    { id: 'competence', label: 'Alltag' },
+                    { id: 'profession', label: 'Berufe' }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setQuickSkillTab(tab.id)}
+                      className={`px-2 py-0.5 rounded-lg font-bold whitespace-nowrap transition-all ${
+                        quickSkillTab === tab.id
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'bg-slate-950/80 text-slate-400 hover:text-slate-200 border border-slate-850'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* SKILLS LIST IN QUICK DRAWER */}
                 <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Favorisierte Fähigkeiten:</span>
-                  <div className="max-h-56 overflow-y-auto pr-1 space-y-1 bg-slate-950/40 p-1.5 rounded-xl border border-slate-850 font-sans">
-                    {getFavoriteTechniques().length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-500 italic leading-relaxed">
-                        Keine Favoriten markiert.<br />
-                        Markiere Fähigkeiten und Techniken im Logbuch unter Künste mit dem Stern-Symbol für den Schnellzugriff.
-                      </div>
-                    ) : (
-                      getFavoriteTechniques().map((tech, i) => (
-                        <button
-                          key={tech.id ? `fav-tech-direct-${tech.id}-${i}` : `fav-tech-direct-${i}`}
-                          type="button"
-                          onClick={() => {
-                            const actionText = tech.category === 'Transformationen' || tech.isTransformation
-                              ? `*aktiviert ${tech.name}*`
-                              : `*setzt ${tech.name} ein*`;
-                            insertFormatting(actionText, '');
-                            closeAllControlTabs();
-                          }}
-                          className="w-full text-left p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-850/60 hover:border-amber-500/30 transition-all flex flex-col gap-1"
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      {quickSkillTab === 'all' ? 'Erworbene Fähigkeiten & Favoriten:' : `Kategorie: ${quickSkillTab}`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTrainingSkillsModal(true);
+                        closeAllControlTabs();
+                      }}
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold"
+                    >
+                      + Neu erlernen
+                    </button>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto pr-1 space-y-1.5 bg-slate-950/40 p-1.5 rounded-xl border border-slate-850 font-sans custom-scrollbar">
+                    {(() => {
+                      const allList: any[] = [];
+                      const seen = new Set<string>();
+
+                      const pushItem = (it: any, cat: string) => {
+                        if (!it || !it.name || !it.name.trim()) return;
+                        const key = it.name.trim().toLowerCase();
+                        if (seen.has(key)) return;
+                        seen.add(key);
+                        allList.push({
+                          ...it,
+                          id: it.id || key,
+                          name: it.name.trim(),
+                          category: it.category || cat,
+                          level: it.level || 1,
+                          cost: it.cost || '',
+                          isFavorite: !!(it.isFavorite || it.favorite)
+                        });
+                      };
+
+                      if (Array.isArray(adventure?.player?.techniqueList)) {
+                        adventure.player.techniqueList.forEach(t => {
+                          let cat = t.category || 'Techniken';
+                          if ((t as any).isUltimate || cat.toLowerCase().includes('ultimat')) cat = 'Ultimative Techniken';
+                          else if (cat.toLowerCase().includes('passiv') || t.type === 'Passiv') cat = 'Passive Fähigkeiten';
+                          else if (cat.toLowerCase().includes('waffe') || t.weaponType) cat = 'Waffenbeherrschung';
+                          else if (cat.toLowerCase().includes('alltag') || cat.toLowerCase().includes('kompetenz')) cat = 'Alltagskompetenzen';
+                          else if (cat.toLowerCase().includes('beruf')) cat = 'Berufe';
+                          pushItem(t, cat);
+                        });
+                      }
+
+                      getFavoriteTechniques().forEach(fav => pushItem(fav, fav.category || 'Techniken'));
+
+                      if (Array.isArray(adventure?.player?.professionCompetencies)) {
+                        adventure.player.professionCompetencies.forEach(pc => {
+                          pushItem({
+                            id: pc.id,
+                            name: pc.name,
+                            category: 'Berufe',
+                            level: Math.max(1, Math.ceil((pc.proficiency || 10) / 10)),
+                            description: pc.description
+                          }, 'Berufe');
+                        });
+                      }
+
+                      if (typeof adventure?.player?.everydaySkills === 'string' && adventure.player.everydaySkills.trim()) {
+                        adventure.player.everydaySkills.split(',').forEach((s, idx) => {
+                          const tr = s.trim();
+                          if (tr) {
+                            pushItem({
+                              id: `es-${idx}-${tr}`,
+                              name: tr,
+                              category: 'Alltagskompetenzen',
+                              level: 1,
+                              description: `Alltagskompetenz: ${tr}`
+                            }, 'Alltagskompetenzen');
+                          }
+                        });
+                      }
+
+                      const filtered = allList.filter(item => {
+                        if (quickSkillTab === 'passive') return item.category === 'Passive Fähigkeiten';
+                        if (quickSkillTab === 'technique') return item.category === 'Techniken';
+                        if (quickSkillTab === 'ultimate') return item.category === 'Ultimative Techniken';
+                        if (quickSkillTab === 'weapon') return item.category === 'Waffenbeherrschung';
+                        if (quickSkillTab === 'competence') return item.category === 'Alltagskompetenzen';
+                        if (quickSkillTab === 'profession') return item.category === 'Berufe';
+                        return true;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="p-4 text-center text-xs text-slate-500 italic leading-relaxed">
+                            Keine Fähigkeiten in dieser Kategorie gefunden.<br />
+                            Öffne das Trainingsmenü, um neue Fertigkeiten zu erlernen.
+                          </div>
+                        );
+                      }
+
+                      return filtered.map((tech, i) => (
+                        <div
+                          key={tech.id ? `quick-tech-${tech.id}-${i}` : `quick-tech-${i}`}
+                          className="w-full text-left p-2 rounded-xl bg-slate-900/80 hover:bg-slate-850 border border-slate-850 transition-all flex flex-col gap-1.5"
                         >
                           <div className="flex justify-between items-center w-full gap-1.5">
-                            <span className="font-bold text-xs text-slate-200 truncate">{tech.name}</span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {tech.category === 'Transformationen' || tech.isTransformation ? (
-                                <span className="text-[8px] px-1.5 py-0.2 rounded bg-purple-950/70 border border-purple-500/40 text-purple-300 font-extrabold uppercase">Form</span>
-                              ) : tech.category === 'Ultimative Techniken' || tech.isUltimate ? (
-                                <span className="text-[8px] px-1.5 py-0.2 rounded bg-amber-950/70 border border-amber-500/40 text-amber-300 font-extrabold uppercase">Ultimativ</span>
-                              ) : (
-                                <span className="text-[8px] px-1.5 py-0.2 rounded bg-indigo-950/70 border border-indigo-500/40 text-indigo-300 font-extrabold uppercase">Technik</span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {tech.isFavorite && (
+                                <i className="fa-solid fa-star text-amber-400 text-[10px] shrink-0"></i>
                               )}
-                              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 font-bold">Lv. {tech.level || 1}</span>
+                              <span className="font-bold text-xs text-slate-200 truncate">{tech.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className={`text-[8px] px-1.5 py-0.2 rounded font-extrabold uppercase border ${
+                                tech.category === 'Passive Fähigkeiten'
+                                  ? 'bg-blue-950/70 border-blue-500/40 text-blue-300'
+                                  : tech.category === 'Ultimative Techniken'
+                                  ? 'bg-amber-950/70 border-amber-500/40 text-amber-300'
+                                  : tech.category === 'Waffenbeherrschung'
+                                  ? 'bg-red-950/70 border-red-500/40 text-red-300'
+                                  : tech.category === 'Alltagskompetenzen'
+                                  ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
+                                  : tech.category === 'Berufe'
+                                  ? 'bg-amber-950/70 border-amber-600/40 text-amber-200'
+                                  : 'bg-indigo-950/70 border-indigo-500/40 text-indigo-300'
+                              }`}>
+                                {tech.category}
+                              </span>
+                              <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-950 border border-slate-800 text-slate-400 font-bold">
+                                Lv. {tech.level || 1}
+                              </span>
                             </div>
                           </div>
+
                           {tech.description && (
-                            <p className="text-[10px] text-slate-400 leading-tight line-clamp-2 italic leading-relaxed">{tech.description}</p>
+                            <p className="text-[10px] text-slate-400 leading-tight line-clamp-2 italic">{tech.description}</p>
                           )}
-                        </button>
-                      ))
-                    )}
+
+                          <div className="flex items-center justify-end gap-1.5 pt-0.5 border-t border-slate-800/60">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const actionText = `*trainiert die Fertigkeit '${tech.name}' intensiv*`;
+                                insertFormatting(actionText, '');
+                                closeAllControlTabs();
+                              }}
+                              className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[10px] font-bold transition-all flex items-center gap-1 border border-slate-700"
+                              title="Übung & Training"
+                            >
+                              <i className="fa-solid fa-dumbbell text-[9px] text-indigo-400"></i>
+                              <span>Trainieren</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                let actionText = `*setzt ${tech.name} ein*`;
+                                if (tech.category === 'Passive Fähigkeiten') {
+                                  actionText = `*nutzt das passive Talent '${tech.name}'*`;
+                                } else if (tech.category === 'Ultimative Techniken') {
+                                  actionText = `*entfesselt die ultimative Technik: ${tech.name}!*`;
+                                } else if (tech.category === 'Alltagskompetenzen') {
+                                  actionText = `*wendet die Alltagskompetenz '${tech.name}' an*`;
+                                } else if (tech.category === 'Berufe') {
+                                  actionText = `*wendet die Berufsfähigkeit '${tech.name}' an*`;
+                                }
+                                insertFormatting(actionText, '');
+                                closeAllControlTabs();
+                              }}
+                              className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold transition-all flex items-center gap-1 shadow-sm"
+                              title="Im Spiel einsetzen"
+                            >
+                              <i className="fa-solid fa-play text-[8px]"></i>
+                              <span>Einsetzen</span>
+                            </button>
+                          </div>
+                        </div>
+                      ));
+                    })()}
                   </div>
                 </div>
+
+                {/* BOTTOM BUTTON FOR FULL MODAL */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTrainingSkillsModal(true);
+                    closeAllControlTabs();
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-200 text-xs font-bold transition-all flex items-center justify-center gap-2"
+                >
+                  <i className="fa-solid fa-graduation-cap text-indigo-400"></i>
+                  <span>Ausbildungsmenü & Neue Fertigkeiten erlernen</span>
+                </button>
               </div>
             )}
 
@@ -9785,7 +9980,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 )}
               </button>
 
-              {/* TECHNIKEN TAB */}
+              {/* TECHNIKEN & TRAINING TAB */}
               <button
                 type="button"
                 id="techniques-toggle-btn"
@@ -9795,12 +9990,12 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     ? 'bg-slate-800 border border-slate-700 text-white'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
                 }`}
-                title="Techniken, Fähigkeiten & Handlung"
+                title="Training, erlernbare Fähigkeiten, Waffenbeherrschung & Berufe"
               >
-                <i className="fa-solid fa-star text-sm text-amber-500"></i>
-                <span className="truncate">Techniken</span>
+                <i className="fa-solid fa-graduation-cap text-sm text-indigo-400"></i>
+                <span className="truncate">Fähigkeiten</span>
                 {getFavoriteTechniques().length > 0 && (
-                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-amber-500 text-slate-955 font-extrabold">
+                  <span className="absolute -top-1 -right-1 flex min-w-[15px] h-[15px] px-1 items-center justify-center rounded-full text-[8.5px] font-bold shadow-md select-none font-mono leading-none border border-slate-950/20 bg-indigo-500 text-white font-extrabold">
                     {getFavoriteTechniques().length}
                   </span>
                 )}
@@ -12323,6 +12518,25 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         <NavigationModal
           isOpen={showNavigationModal}
           onClose={() => setShowNavigationModal(false)}
+          adventure={adventure}
+          onUpdateAdventure={onUpdateAdventure}
+          onSendChatMessage={(text: string) => {
+            if (isDialogueActive) {
+              handleSendDialogue(text);
+            } else {
+              handleSend(text);
+            }
+          }}
+          onSetInputText={(text: string) => {
+            setInputText(text);
+          }}
+        />
+      )}
+
+      {showTrainingSkillsModal && (
+        <TrainingSkillsModal
+          isOpen={showTrainingSkillsModal}
+          onClose={() => setShowTrainingSkillsModal(false)}
           adventure={adventure}
           onUpdateAdventure={onUpdateAdventure}
           onSendChatMessage={(text: string) => {

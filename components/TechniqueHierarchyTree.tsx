@@ -1,7 +1,14 @@
 // -*- coding: utf-8 -*-
 import React, { useState, useMemo, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
-import { BaseAbility, CharacterPowerSource, TechniqueItem, AbilityType, TechniqueTransformationModifier, TransformationModifierType } from '../types';
+import { 
+  BaseAbility, 
+  CharacterPowerSource, 
+  TechniqueItem, 
+  AbilityType, 
+  TechniqueTransformationModifier, 
+  TransformationModifierType 
+} from '../types';
 import { 
   ADVENTURE_FORGE_ELEMENTS, 
   ABILITY_TYPES, 
@@ -21,7 +28,9 @@ import {
 import { TechniqueSmartFillModal } from './TechniqueSmartFillModal';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { WeaponSkillTree } from './WeaponSkillTree';
-import { TechniqueCard } from './TechniqueCard';
+import { TechniqueCard, getTechniqueMasteryLabel } from './TechniqueCard';
+import EverydaySkillsSelect, { parseEverydaySkills } from './EverydaySkillsSelect';
+import CompetenceProfileEditor from './CompetenceProfileEditor';
 
 export interface TechniqueHierarchyTreeProps {
   powerSources: CharacterPowerSource[];
@@ -41,29 +50,91 @@ export interface TechniqueHierarchyTreeProps {
   costResources?: Array<{ id?: string; name: string }>;
   costPowerNames?: string[];
   world?: any;
+  // Optionale Props für direkte Berufs- & Alltagskompetenzintegration
+  profession?: string;
+  onProfessionChange?: (val: string, detectedField?: string) => void;
+  professionLevel?: string;
+  onProfessionLevelChange?: (val: string) => void;
+  professionField?: string;
+  onProfessionFieldChange?: (val: string) => void;
+  professionSpecialization?: string;
+  onProfessionSpecializationChange?: (val: string) => void;
+  professionRank?: string;
+  onProfessionRankChange?: (val: string) => void;
+  professionExperience?: any;
+  onProfessionExperienceChange?: (val: any) => void;
+  professionProficiencyScore?: number;
+  onProfessionProficiencyScoreChange?: (val: number) => void;
+  professionExperiencePoints?: number;
+  onProfessionExperiencePointsChange?: (val: number) => void;
+  professionExperienceText?: string;
+  onProfessionExperienceTextChange?: (val: string) => void;
+  professionPromotionConditions?: string;
+  onProfessionPromotionConditionsChange?: (val: string) => void;
+  professionProgress?: any;
+  onProfessionProgressChange?: (val: any) => void;
+  professionCompetencies?: any[];
+  onProfessionCompetenciesChange?: (val: any[]) => void;
+  secondaryProfessions?: any[];
+  onSecondaryProfessionsChange?: (val: any[]) => void;
+  socialTitles?: any[];
+  onSocialTitlesChange?: (val: any[]) => void;
+  offices?: any[];
+  onOfficesChange?: (val: any[]) => void;
+  positions?: any[];
+  onPositionsChange?: (val: any[]) => void;
+  socialStatus?: string;
+  onSocialStatusChange?: (val: string) => void;
+  craftingSkills?: string;
+  onCraftingSkillsChange?: (val: string) => void;
+  jobTitle?: string;
+  onJobTitleChange?: (val: string) => void;
+  authorities?: string[];
+  onAuthoritiesChange?: (val: string[]) => void;
+  professionDescription?: string;
+  onProfessionDescriptionChange?: (val: string) => void;
+  talents?: string;
+  onTalentsChange?: (val: string) => void;
+  everydaySkills?: string;
+  onEverydaySkillsChange?: (val: string) => void;
+  everydaySkillsProficiencyScore?: number;
+  onEverydaySkillsProficiencyScoreChange?: (val: number) => void;
+  everydaySkillsExperienceText?: string;
+  onEverydaySkillsExperienceTextChange?: (val: string) => void;
+  toolsAndEquipment?: string;
+  onToolsAndEquipmentChange?: (val: string) => void;
 }
 
 export const CATEGORY_TABS = [
+  'Training & Erlernbare Fertigkeiten',
   'Passive Fähigkeiten',
   'Techniken',
   'Ultimative Techniken',
-  'Waffenbeherrschung'
+  'Waffenbeherrschung',
+  'Alltagskompetenzen',
+  'Berufe'
 ] as const;
 
 export type AbilityCategoryTab = typeof CATEGORY_TABS[number];
 
 export const CATEGORY_ADD_LABELS: Record<AbilityCategoryTab, string> = {
+  'Training & Erlernbare Fertigkeiten': 'Erlernbare Fertigkeit / Ausbildungsziel anlegen',
   'Passive Fähigkeiten': 'Passive Fähigkeit hinzufügen',
   'Techniken': 'Technik hinzufügen',
   'Ultimative Techniken': 'Ultimative Technik hinzufügen',
   'Waffenbeherrschung': 'Waffenbeherrschung hinzufügen',
+  'Alltagskompetenzen': 'Alltagskompetenz hinzufügen',
+  'Berufe': 'Beruf / Spezialisierung bearbeiten'
 };
 
 export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
+  'Training & Erlernbare Fertigkeiten': 'Erstes Ausbildungsziel anlegen',
   'Passive Fähigkeiten': 'Erste passive Fähigkeit erstellen',
   'Techniken': 'Erste Technik erstellen',
   'Ultimative Techniken': 'Erste ultimative Technik erstellen',
   'Waffenbeherrschung': 'Erste Waffenbeherrschung erstellen',
+  'Alltagskompetenzen': 'Erste Alltagskompetenz auswählen',
+  'Berufe': 'Berufsprofil konfigurieren'
 };
 
 export const TRANS_CATEGORY_TABS = [
@@ -99,7 +170,60 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   worldPowerSettings,
   costResources,
   costPowerNames,
-  world
+  world,
+  // Berufs- & Alltagskompetenz-Integration
+  profession = '',
+  onProfessionChange,
+  professionLevel = '',
+  onProfessionLevelChange,
+  professionField = '',
+  onProfessionFieldChange,
+  professionSpecialization = '',
+  onProfessionSpecializationChange,
+  professionRank = '',
+  onProfessionRankChange,
+  professionExperience,
+  onProfessionExperienceChange,
+  professionProficiencyScore = 0,
+  onProfessionProficiencyScoreChange,
+  professionExperiencePoints = 0,
+  onProfessionExperiencePointsChange,
+  professionExperienceText = '',
+  onProfessionExperienceTextChange,
+  professionPromotionConditions = '',
+  onProfessionPromotionConditionsChange,
+  professionProgress,
+  onProfessionProgressChange,
+  professionCompetencies = [],
+  onProfessionCompetenciesChange,
+  secondaryProfessions = [],
+  onSecondaryProfessionsChange,
+  socialTitles = [],
+  onSocialTitlesChange,
+  offices = [],
+  onOfficesChange,
+  positions = [],
+  onPositionsChange,
+  socialStatus = '',
+  onSocialStatusChange,
+  craftingSkills = '',
+  onCraftingSkillsChange,
+  jobTitle = '',
+  onJobTitleChange,
+  authorities = [],
+  onAuthoritiesChange,
+  professionDescription = '',
+  onProfessionDescriptionChange,
+  talents = '',
+  onTalentsChange,
+  everydaySkills = '',
+  onEverydaySkillsChange,
+  everydaySkillsProficiencyScore = 0,
+  onEverydaySkillsProficiencyScoreChange,
+  everydaySkillsExperienceText = '',
+  onEverydaySkillsExperienceTextChange,
+  toolsAndEquipment = '',
+  onToolsAndEquipmentChange
 }) => {
   // 1. Sichere Standard-Kraftquelle falls Liste leer
   const safePowerSources = useMemo(() => {
@@ -149,15 +273,36 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   });
 
   const [activeBaseAbilityId, setActiveBaseAbilityId] = useState<string>('');
-  const [activeCategory, setActiveCategory] = useState<AbilityCategoryTab>('Techniken');
+  const [activeCategory, setActiveCategory] = useState<AbilityCategoryTab>('Training & Erlernbare Fertigkeiten');
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
 
-  // 4. Transformations-Zustand (Spezifische Transformation & Kategorien)
+  // 4. Trainingsplan Filter & Such-Zustand
+  const [trainingSearchTerm, setTrainingSearchTerm] = useState<string>('');
+  const [trainingStatusFilter, setTrainingStatusFilter] = useState<'alle' | 'in_ausbildung' | 'erlernbar' | 'gemeistert' | 'gesperrt'>('alle');
+  const [trainingCategoryFilter, setTrainingCategoryFilter] = useState<string>('alle');
+
+  // Lokaler Fallback-Zustand für Alltagskompetenzen & Berufe falls von übergeordneter Komponente nicht gebunden
+  const [localEverydaySkills, setLocalEverydaySkills] = useState<string>(everydaySkills || '');
+  const [localProfession, setLocalProfession] = useState<string>(profession || '');
+
+  // Synchronisation mit Props
+  useEffect(() => {
+    if (everydaySkills !== undefined) {
+      setLocalEverydaySkills(everydaySkills);
+    }
+  }, [everydaySkills]);
+
+  useEffect(() => {
+    if (profession !== undefined) {
+      setLocalProfession(profession);
+    }
+  }, [profession]);
+
+  // 5. Transformations-Zustand
   const [selectedTransformationId, setSelectedTransformationId] = useState<string>('');
   const [activeTransCategory, setActiveTransCategory] = useState<TransCategoryTab>('Techniken');
   const [showTransModifiersInEditor, setShowTransModifiersInEditor] = useState<boolean>(false);
 
-  // Synchronisation bei Löschen oder Laden von Transformationen
   useEffect(() => {
     if (transformationItems.length > 0) {
       if (!selectedTransformationId || !transformationItems.some(t => t.id === selectedTransformationId)) {
@@ -192,40 +337,20 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     setExpandedMap(next);
   };
 
-  // Modal State für KI Smart Fill
+  // Modal State für Smart Fill
   const [smartFillModalState, setSmartFillModalState] = useState<{
     isOpen: boolean;
     powerSourceId?: string;
     baseAbilityId?: string;
   }>({ isOpen: false });
 
-  // 5. Gültige Kraftquelle ermitteln
+  // Gültige Kraftquelle ermitteln
   const activePowerSource = useMemo(() => {
     const found = safePowerSources.find(ps => ps.id === activePowerSourceId);
     return found || safePowerSources[0] || null;
   }, [safePowerSources, activePowerSourceId]);
 
-  // Nur die in Schritt 3 von 9 registrierten Kraftquellen für Techniken
-  const registeredStep3PowerSources = useMemo(() => {
-    const list: { id: string; name: string; effect?: string; description?: string }[] = [];
-    if (world?.customResourceMappings && Array.isArray(world.customResourceMappings)) {
-      world.customResourceMappings.forEach((m: any) => {
-        if (m && typeof m.name === 'string' && m.name.trim().length > 0) {
-          list.push(m);
-        }
-      });
-    }
-    if (world?.campaignPowerSettings?.customResourceMappings && Array.isArray(world.campaignPowerSettings.customResourceMappings)) {
-      world.campaignPowerSettings.customResourceMappings.forEach((m: any) => {
-        if (m && typeof m.name === 'string' && m.name.trim().length > 0 && !list.some(existing => existing.id === m.id || existing.name === m.name)) {
-          list.push(m);
-        }
-      });
-    }
-    return list;
-  }, [world?.customResourceMappings, world?.campaignPowerSettings]);
-
-  // Nur die unter "Kosten-Ressourcen" eingetragenen Ressourcen anzeigen
+  // Kosten-Ressourcen aus Kampagneneinstellungen
   const registeredCostResources = useMemo(() => {
     const list: string[] = [];
     const resList = costResources || world?.costResources;
@@ -240,14 +365,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return list;
   }, [costResources, world?.costResources]);
 
-  // Wenn activePowerSourceId ungültig ist, auf erste Kraftquelle zurücksetzen
   useEffect(() => {
     if (safePowerSources.length > 0 && !safePowerSources.some(ps => ps.id === activePowerSourceId)) {
       setActivePowerSourceId(safePowerSources[0].id);
     }
   }, [safePowerSources, activePowerSourceId]);
 
-  // 6. Grundfähigkeiten für die aktuell ausgewählte Kraftquelle
+  // Grundfähigkeiten für die aktuell ausgewählte Kraftquelle
   const currentBaseAbilities = useMemo(() => {
     if (!activePowerSource) return [];
     return baseAbilities.filter(ba => {
@@ -256,7 +380,6 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     });
   }, [baseAbilities, activePowerSource, safePowerSources]);
 
-  // 7. Gültige Grundfähigkeit ermitteln und sauber halten
   useEffect(() => {
     if (currentBaseAbilities.length > 0) {
       const existsInCurrent = currentBaseAbilities.some(ba => ba.id === activeBaseAbilityId);
@@ -275,7 +398,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return currentBaseAbilities.find(ba => ba.id === activeBaseAbilityId) || null;
   }, [currentBaseAbilities, activeBaseAbilityId]);
 
-  // 8. Helfer: Prüfen, zu welcher Standard-Kategorie ein Eintrag gehört
+  // Kategorie-Helfer
   const getTechniqueCategory = (tech: TechniqueItem): AbilityCategoryTab => {
     if (tech.category === 'Talente') return 'Waffenbeherrschung';
     if (tech.category && (CATEGORY_TABS as readonly string[]).includes(tech.category)) {
@@ -285,13 +408,21 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return 'Techniken';
   };
 
-  // 9. Zähler für die Standard-Kategorien der aktiven Grundfähigkeit bzw. Kraftquelle
+  // Zähler für die 7 Kategorien
+  const parsedEverydaySkillsCount = useMemo(() => {
+    const list = parseEverydaySkills(localEverydaySkills);
+    return list.length;
+  }, [localEverydaySkills]);
+
   const categoryCounts = useMemo(() => {
     const counts: Record<AbilityCategoryTab, number> = {
+      'Training & Erlernbare Fertigkeiten': 0,
       'Passive Fähigkeiten': 0,
       'Techniken': 0,
       'Ultimative Techniken': 0,
-      'Waffenbeherrschung': 0
+      'Waffenbeherrschung': 0,
+      'Alltagskompetenzen': parsedEverydaySkillsCount,
+      'Berufe': (localProfession ? 1 : 0) + (secondaryProfessions?.length || 0)
     };
 
     standardTechniques.forEach(tech => {
@@ -301,14 +432,21 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
       if (belongs) {
         const cat = getTechniqueCategory(tech);
-        counts[cat] = (counts[cat] || 0) + 1;
+        if (cat in counts) {
+          counts[cat] = (counts[cat] || 0) + 1;
+        }
+      }
+
+      // Alle erlernbaren Techniken zählen für den Trainings-Tab
+      if (tech.isLearnable !== false) {
+        counts['Training & Erlernbare Fertigkeiten']++;
       }
     });
 
     return counts;
-  }, [standardTechniques, activeBaseAbility, activePowerSource]);
+  }, [standardTechniques, activeBaseAbility, activePowerSource, parsedEverydaySkillsCount, localProfession, secondaryProfessions]);
 
-  // 10. Einträge der aktuell ausgewählten Grundfähigkeit/Kraftquelle + aktuellen Standard-Kategorie
+  // Einträge der ausgewählten Kategorie
   const activeEntries = useMemo(() => {
     return standardTechniques.filter(tech => {
       const belongs = activeBaseAbility
@@ -320,6 +458,68 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     });
   }, [standardTechniques, activeBaseAbility, activePowerSource, activeCategory]);
 
+  // Alle Fertigkeiten im Trainings- & Lernplan
+  const trainingEntries = useMemo(() => {
+    return standardTechniques.filter(tech => {
+      // Prüfe Suchbegriff
+      if (trainingSearchTerm.trim()) {
+        const term = trainingSearchTerm.toLowerCase();
+        const matchesName = tech.name.toLowerCase().includes(term);
+        const matchesDesc = (tech.description || '').toLowerCase().includes(term);
+        const matchesReq = (tech.learningRequirements || tech.requiredAttribute || '').toLowerCase().includes(term);
+        const matchesTeacher = (tech.requiredTeacherOrScroll || '').toLowerCase().includes(term);
+        if (!matchesName && !matchesDesc && !matchesReq && !matchesTeacher) {
+          return false;
+        }
+      }
+
+      // Prüfe Kategorie-Filter
+      if (trainingCategoryFilter !== 'alle') {
+        const cat = getTechniqueCategory(tech);
+        if (cat !== trainingCategoryFilter) return false;
+      }
+
+      // Status ermitteln
+      const currentScore = tech.score !== undefined ? tech.score : (tech.trainingProgress || 0);
+      const status = tech.learningStatus || (currentScore >= 95 ? 'gemeistert' : currentScore > 0 ? 'in_ausbildung' : 'erlernbar');
+
+      // Prüfe Status-Filter
+      if (trainingStatusFilter !== 'alle') {
+        if (trainingStatusFilter === 'gemeistert' && status !== 'gemeistert' && currentScore < 95) return false;
+        if (trainingStatusFilter === 'in_ausbildung' && status !== 'in_ausbildung') return false;
+        if (trainingStatusFilter === 'erlernbar' && status !== 'erlernbar') return false;
+        if (trainingStatusFilter === 'gesperrt' && status !== 'gesperrt') return false;
+      }
+
+      return true;
+    });
+  }, [standardTechniques, trainingSearchTerm, trainingCategoryFilter, trainingStatusFilter]);
+
+  // Trainings-Statistiken
+  const trainingStats = useMemo(() => {
+    let inAusbildung = 0;
+    let gemeistert = 0;
+    let erlernbar = 0;
+    let gesperrt = 0;
+
+    standardTechniques.forEach(t => {
+      const score = t.score !== undefined ? t.score : (t.trainingProgress || 0);
+      const st = t.learningStatus || (score >= 95 ? 'gemeistert' : score > 0 ? 'in_ausbildung' : 'erlernbar');
+      if (st === 'gemeistert' || score >= 95) gemeistert++;
+      else if (st === 'in_ausbildung') inAusbildung++;
+      else if (st === 'gesperrt') gesperrt++;
+      else erlernbar++;
+    });
+
+    return {
+      total: standardTechniques.length,
+      inAusbildung,
+      gemeistert,
+      erlernbar,
+      gesperrt
+    };
+  }, [standardTechniques]);
+
   const availableTransformations = useMemo(() => {
     return transformationItems.map(t => ({
       id: t.id,
@@ -328,7 +528,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     }));
   }, [transformationItems]);
 
-  // 11. Transformationseigene Fähigkeiten & Techniken für die aktive Transformation
+  // Transformationseigene Fähigkeiten
   const currentTransTechniques = useMemo(() => {
     if (!selectedTransformation) return [];
     return techniques.filter(t => 
@@ -447,28 +647,18 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
             baseAbilityIds: newBaseAbilityIds,
             baseAbilityNames: newBaseAbilityNames
           });
-        } else {
-          if (tech.powerSourceId !== psId) {
-            remainingTech.push(tech);
-          }
         }
-      } else {
-        if (tech.powerSourceId !== psId) {
-          remainingTech.push(tech);
-        }
+      } else if (tech.powerSourceId !== psId) {
+        remainingTech.push(tech);
       }
     });
 
     onChange(remainingPs, remainingBa, remainingTech);
 
-    const nextPs = remainingPs[0];
-    if (nextPs) {
-      setActivePowerSourceId(nextPs.id);
-      const nextBa = remainingBa.find(ba => ba.powerSourceId === nextPs.id);
-      setActiveBaseAbilityId(nextBa ? nextBa.id : '');
+    if (remainingPs.length > 0) {
+      setActivePowerSourceId(remainingPs[0].id);
     } else {
       setActivePowerSourceId('');
-      setActiveBaseAbilityId('');
     }
   };
 
@@ -479,19 +669,19 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     if (!activePowerSource) return;
 
     const newBaId = `ba_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
-    const defElement = 'Neutral';
-    const defType: AbilityType = 'creation_manipulation';
-    const defName = resolveKinesisName(defElement, defType);
+    const defaultElement = ADVENTURE_FORGE_ELEMENTS[0] || 'Feuer';
+    const defaultAbilityType: AbilityType = 'creation_manipulation';
+    const initialName = resolveKinesisName(defaultElement, defaultAbilityType);
 
     const newBa: BaseAbility = {
       id: newBaId,
       powerSourceId: activePowerSource.id,
       powerSourceName: activePowerSource.powerName || activePowerSource.source,
-      name: defName,
-      displayName: defName,
-      element: defElement,
-      abilityType: defType,
-      description: `Erschaffung und Manipulation von ${defElement}.`,
+      displayName: initialName,
+      name: initialName,
+      element: defaultElement,
+      abilityType: defaultAbilityType,
+      description: '',
       techniqueIds: []
     };
 
@@ -575,11 +765,12 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   };
 
   // -------------------------------------------------------------
-  // HANDLERS: Standard-Einträge (Techniken, Passive etc.)
+  // HANDLERS: Standard-Einträge & Training
   // -------------------------------------------------------------
-  const handleAddEntry = () => {
+  const handleAddEntry = (targetCategory?: AbilityCategoryTab) => {
     if (!activePowerSource) return;
 
+    const chosenCat = targetCategory || activeCategory;
     const newId = `entry_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
     const costResource = activePowerSource.cost || 'Mana';
 
@@ -589,21 +780,27 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     let defaultCostVal = 10;
     let defaultCostStr = `10 ${costResource}`;
     let defaultMode = 'Normal';
-    let defaultSummonCount: number | undefined = undefined;
-    let defaultSummonCostVal: number | undefined = undefined;
+    let targetCatString: string = chosenCat;
 
-    if (activeCategory === 'Passive Fähigkeiten') {
+    if (chosenCat === 'Training & Erlernbare Fertigkeiten') {
+      defaultName = 'Neue erlernbare Fertigkeit';
+      defaultType = 'Angriff';
+      defaultTier = 'Tier 1';
+      defaultCostVal = 10;
+      defaultCostStr = `10 ${costResource}`;
+      targetCatString = 'Techniken';
+    } else if (chosenCat === 'Passive Fähigkeiten') {
       defaultName = 'Neue passive Fähigkeit';
       defaultType = 'Support';
       defaultTier = 'Tier 1';
       defaultCostVal = 0;
       defaultCostStr = 'Passiv';
-    } else if (activeCategory === 'Ultimative Techniken') {
+    } else if (chosenCat === 'Ultimative Techniken') {
       defaultName = 'Neue ultimative Technik';
       defaultTier = 'Tier 4';
       defaultCostVal = 50;
       defaultCostStr = `50 ${costResource}`;
-    } else if (activeCategory === 'Waffenbeherrschung' || (activeCategory as string) === 'Talente') {
+    } else if (chosenCat === 'Waffenbeherrschung' || (chosenCat as string) === 'Talente') {
       const defaultWeapon = ALL_WEAPONS[1] || ALL_WEAPONS[0];
       defaultName = `Waffenbeherrschung: ${defaultWeapon.name}`;
       defaultType = 'Spezial';
@@ -612,7 +809,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       defaultCostStr = 'Rang 1';
     }
 
-    const isWpnMastery = activeCategory === 'Waffenbeherrschung' || (activeCategory as string) === 'Talente';
+    const isWpnMastery = chosenCat === 'Waffenbeherrschung';
     const defaultWeapon = isWpnMastery ? (ALL_WEAPONS[1] || ALL_WEAPONS[0]) : null;
 
     const baseAbilityIds = activeBaseAbility ? [activeBaseAbility.id] : [];
@@ -624,7 +821,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       id: newId,
       name: defaultName,
       description: isWpnMastery && defaultWeapon ? defaultWeapon.description : '',
-      category: isWpnMastery ? 'Waffenbeherrschung' : activeCategory,
+      category: targetCatString,
       type: defaultType,
       subtype: isWpnMastery && defaultWeapon ? defaultWeapon.categoryName : '',
       mode: defaultMode,
@@ -643,12 +840,17 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       cost: defaultCostStr,
       range: isWpnMastery && defaultWeapon ? (defaultWeapon.rangeCategory === 'Fernkampf' ? 'Fernkampf' : defaultWeapon.rangeCategory === 'Stangenreichweite' ? 'Stangenreichweite' : 'Nahkampf') : 'Nahkampf / Mittlere Distanz',
       duration: isWpnMastery ? 'Permanent / Haltung' : 'Sofort',
-      summonCount: defaultSummonCount,
-      summonCostValue: defaultSummonCostVal,
       level: 1,
       maxLevel: 10,
       xp: 0,
       xpNeeded: 100,
+      trainingProgress: 0,
+      score: 0,
+      trainingHours: 0,
+      targetTrainingHours: 20,
+      isLearnable: true,
+      learningStatus: 'erlernbar',
+      learningRequirements: 'Grundstufe erforderlich',
       weaponType: isWpnMastery && defaultWeapon ? defaultWeapon.name : undefined,
       weaponCategory: isWpnMastery && defaultWeapon ? defaultWeapon.categoryName : undefined,
       masteryLevel: isWpnMastery ? 'Rang 1: Novize / Grundausbildung' : undefined,
@@ -705,12 +907,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     onChange(safePowerSources, updatedBa, updatedTech);
   };
 
-  const handleToggleLinkedBaseAbility = (entryId: string, baId: string) => {
-    const tech = techniques.find(t => t.id === entryId);
-    if (!tech) return;
+  const handleToggleLinkedBaseAbility = (techId: string, baId: string) => {
+    const target = techniques.find(t => t.id === techId);
+    if (!target) return;
 
-    const currentIds = tech.baseAbilityIds || [];
-    let nextIds: string[];
+    const currentIds = target.baseAbilityIds || [];
+    let nextIds: string[] = [];
+
     if (currentIds.includes(baId)) {
       if (currentIds.length <= 1) return;
       nextIds = currentIds.filter(id => id !== baId);
@@ -723,1233 +926,1140 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       return ba ? (ba.displayName || ba.name) : '';
     }).filter(Boolean);
 
-    handleUpdateEntry(entryId, {
+    const primaryBa = baseAbilities.find(b => b.id === nextIds[0]);
+
+    handleUpdateEntry(techId, {
       baseAbilityIds: nextIds,
-      baseAbilityNames: nextNames
+      baseAbilityNames: nextNames,
+      element: primaryBa ? primaryBa.element : target.element,
+      abilityType: primaryBa ? primaryBa.abilityType : target.abilityType
     });
   };
 
-  const handleTechniqueCreatedViaSmartFill = (newTech: TechniqueItem, targetBaId: string) => {
-    newTech.category = activeCategory;
-    if (activeCategory === 'Waffenbeherrschung') {
-      const matchedWeapon = findWeaponByName(newTech.name) || findWeaponByName(newTech.description || '') || ALL_WEAPONS[1];
-      newTech.weaponType = newTech.weaponType || matchedWeapon.name;
-      newTech.weaponCategory = newTech.weaponCategory || matchedWeapon.categoryName;
-      newTech.masteryLevel = newTech.masteryLevel || 'Rang 1: Novize / Grundausbildung';
-      newTech.wieldingStyle = newTech.wieldingStyle || matchedWeapon.wieldingStyles[0];
-      newTech.weaponManeuver = newTech.weaponManeuver || (matchedWeapon.maneuvers.length > 0 ? matchedWeapon.maneuvers[0] : undefined);
-      if (!newTech.range) {
-        newTech.range = matchedWeapon.rangeCategory === 'Fernkampf' ? 'Fernkampf' : (matchedWeapon.rangeCategory === 'Stangenreichweite' ? 'Stangenreichweite' : 'Nahkampf');
-      }
-      if (!newTech.effects || newTech.effects.length === 0) {
-        newTech.effects = [...matchedWeapon.damageTypes];
-      }
-    }
-    const updatedTech = [...techniques, newTech];
-    const updatedBa = baseAbilities.map(ba => {
-      if (ba.id === targetBaId) {
-        return {
-          ...ba,
-          techniqueIds: [...(ba.techniqueIds || []), newTech.id]
-        };
-      }
-      return ba;
+  // Schnelle Trainings-Steigerungen
+  const handleQuickTrainProgress = (tech: TechniqueItem, deltaProgress: number) => {
+    const curProgress = tech.score !== undefined ? tech.score : (tech.trainingProgress || 0);
+    const newProgress = Math.min(100, Math.max(0, curProgress + deltaProgress));
+    const newStatus = newProgress >= 95 ? 'gemeistert' : (newProgress > 0 ? 'in_ausbildung' : 'erlernbar');
+    const newHours = (tech.trainingHours || 0) + (deltaProgress > 10 ? 2 : 1);
+    
+    handleUpdateEntry(tech.id, {
+      score: newProgress,
+      trainingProgress: newProgress,
+      trainingUnits: Math.min(4, Math.floor(newProgress / 25)),
+      trainingHours: newHours,
+      learningStatus: newStatus,
+      masteryLevel: `${getTechniqueMasteryLabel(newProgress)} (${newProgress}%)`
     });
-
-    onChange(safePowerSources, updatedBa, updatedTech);
   };
 
-  // -------------------------------------------------------------
-  // HANDLERS: Transformationen (Eigener Erstellungsweg & Verwaltung)
-  // -------------------------------------------------------------
+  const handleQuickMastery = (tech: TechniqueItem) => {
+    handleUpdateEntry(tech.id, {
+      score: 100,
+      trainingProgress: 100,
+      trainingUnits: 4,
+      learningStatus: 'gemeistert',
+      tier: tech.category === 'Ultimative Techniken' ? 'Tier 4' : 'Tier 3',
+      masteryLevel: 'Meisterhaft (100%)'
+    });
+  };
+
+  // Transformationen verwalten
   const handleAddTransformation = () => {
     const newId = `trans_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const costResource = activePowerSource?.cost || 'Mana';
-    const defaultTransName = `Transformation ${transformationItems.length + 1}`;
-
     const newTrans: TechniqueItem = {
       id: newId,
-      name: defaultTransName,
-      transformName: defaultTransName,
-      description: 'Transformierte Gestalt mit erweiterten Kräften, veränderter Statur und modifiziertem Moveset.',
-      category: 'Transformationen',
+      name: 'Neue Verwandlungsstufe',
+      transformName: 'Neue Gestalt',
       type: 'Transformation',
-      mode: 'Dauerhaft',
-      tier: 'Tier 3',
-      baseAbilityIds: [],
-      baseAbilityNames: [],
-      powerSourceId: activePowerSource?.id || safePowerSources[0]?.id,
-      powerSourceName: activePowerSource?.powerName || activePowerSource?.source || safePowerSources[0]?.powerName || safePowerSources[0]?.source,
-      element: 'Neutral',
-      abilityType: 'creation_manipulation',
-      targetType: 'Selbst (Gestaltwandlung)',
-      effects: ['Körperliche Transformation', 'Veränderte Attribute', 'Moveset-Modifikation'],
-      costResourceName: costResource,
-      costValue: 25,
-      costFormula: 'absolut',
-      cost: `25 ${costResource}`,
+      category: 'Transformationen',
+      tier: 'Tier 1',
+      description: 'Optische und körperliche Verwandlung mit speziellen Modifikatoren.',
+      cost: '20 Mana',
+      costValue: 20,
+      costResourceName: activePowerSource?.cost || 'Mana',
       range: 'Selbst',
-      duration: 'Aufrechterhalten / Temporär',
-      level: 1,
-      maxLevel: 10,
-      xp: 0,
-      xpNeeded: 100,
-      metamorphosisInfluence: 100,
-      parentTransformationId: transformationItems.length > 0 ? transformationItems[transformationItems.length - 1].id : 'standard',
+      duration: '5 Runden',
+      isTransformationOnly: false,
       chibiForm: {
         enabled: false,
-        bodyScale: 0.65,
-        heightScale: 0.70,
-        visualAge: 'kindlich dargestellt',
-        physicalChanges: ['verkleinerte Körperproportionen', 'größere Kopfproportion', 'kürzere Gliedmaßen'],
-        movementModifier: 'flink',
-        equipmentRule: 'angepasst',
-        visualOnly: true
-      },
-      chibiOnPowerOverload: {
-        enabled: true,
-        activationThreshold: 100,
-        recoveryThreshold: 80,
-        autoRevert: true
+        bodyScale: 0.6,
+        visualAge: 'Kindlich',
+        chibiOnPowerOverload: {
+          enabled: false,
+          activationThreshold: 100,
+          recoveryThreshold: 80,
+          durationGameMinutes: 30,
+          autoRevert: true
+        }
       }
     };
 
     const updatedTech = [...techniques, newTrans];
     onChange(safePowerSources, baseAbilities, updatedTech);
     setSelectedTransformationId(newId);
-    setSelectedFormId(newId);
   };
 
-  const handleAddTransAbility = (targetCategory: TransCategoryTab = 'Techniken') => {
-    if (!selectedTransformation) return;
-    const transId = selectedTransformation.id;
-    const transName = selectedTransformation.transformName || selectedTransformation.name;
-    const newId = `tech_trans_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const costResource = activePowerSource?.cost || 'Mana';
+  const handleTechniqueCreatedViaSmartFill = (newTech: Partial<TechniqueItem>) => {
+    if (!activePowerSource) return;
 
-    let defaultName = `Neue Technik (${transName})`;
-    let defaultType = 'Angriff';
-    let defaultTier = 'Tier 2';
-    let defaultCostVal = 15;
-    let defaultCostStr = `15 ${costResource}`;
+    const newId = newTech.id || `entry_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const costResource = newTech.costResourceName || activePowerSource.cost || 'Mana';
 
-    if (targetCategory === 'Passive Fähigkeiten') {
-      defaultName = `Neue passive Fähigkeit (${transName})`;
-      defaultType = 'Support';
-      defaultTier = 'Tier 1';
-      defaultCostVal = 0;
-      defaultCostStr = 'Passiv';
-    } else if (targetCategory === 'Ultimative Techniken') {
-      defaultName = `Neue ultimative Technik (${transName})`;
-      defaultType = 'Angriff';
-      defaultTier = 'Tier 4';
-      defaultCostVal = 50;
-      defaultCostStr = `50 ${costResource}`;
-    }
+    const baseAbilityIds = newTech.baseAbilityIds || (activeBaseAbility ? [activeBaseAbility.id] : []);
+    const baseAbilityNames = newTech.baseAbilityNames || (activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name] : []);
+    const element = newTech.element || (activeBaseAbility ? activeBaseAbility.element : 'Neutral');
+    const abilityType = newTech.abilityType || (activeBaseAbility ? activeBaseAbility.abilityType : 'creation_manipulation');
 
-    const newTech: TechniqueItem = {
+    const entryToAdd: TechniqueItem = {
       id: newId,
-      name: defaultName,
-      description: `In der Gestalt ${transName} aktive Fähigkeit.`,
-      category: targetCategory,
-      type: defaultType,
-      mode: 'Normal',
-      tier: defaultTier,
-      baseAbilityIds: [],
-      baseAbilityNames: [],
-      powerSourceId: selectedTransformation.powerSourceId || activePowerSource?.id || safePowerSources[0]?.id,
-      powerSourceName: selectedTransformation.powerSourceName || activePowerSource?.powerName || activePowerSource?.source,
+      name: newTech.name || 'Neue Technik',
+      description: newTech.description || '',
+      category: newTech.category || activeCategory,
+      type: newTech.type || 'Angriff',
+      subtype: newTech.subtype || '',
+      mode: newTech.mode || 'Normal',
+      tier: newTech.tier || 'Tier 1',
+      baseAbilityIds,
+      baseAbilityNames,
+      powerSourceId: activePowerSource.id,
+      powerSourceName: activePowerSource.powerName || activePowerSource.source,
+      element,
+      abilityType,
+      targetType: newTech.targetType || 'Selbst / Verbündete / Feinde',
+      effects: newTech.effects || [],
       costResourceName: costResource,
-      costValue: defaultCostVal,
+      costValue: newTech.costValue !== undefined ? newTech.costValue : 10,
       costFormula: 'absolut',
-      cost: defaultCostStr,
-      range: targetCategory === 'Passive Fähigkeiten' ? 'Selbst / Aura' : 'Nahkampf / Mittlere Distanz',
-      duration: targetCategory === 'Passive Fähigkeiten' ? 'Permanent' : 'Sofort',
-      unlockedByTransformationId: transId,
-      isTransformationOnly: true,
+      cost: newTech.cost || `${newTech.costValue || 10} ${costResource}`,
+      range: newTech.range || 'Nahkampf / Mittlere Distanz',
+      duration: newTech.duration || 'Sofort',
       level: 1,
       maxLevel: 10,
       xp: 0,
-      xpNeeded: 100
+      xpNeeded: 100,
+      isLearnable: true,
+      learningStatus: 'erlernbar',
+      ...newTech
     };
 
-    const updatedTech = [...techniques, newTech];
-    onChange(safePowerSources, baseAbilities, updatedTech);
+    const updatedTech = [...techniques, entryToAdd];
+
+    const updatedBa = activeBaseAbility
+      ? baseAbilities.map(ba => {
+          if (ba.id === activeBaseAbility.id) {
+            return {
+              ...ba,
+              techniqueIds: [...(ba.techniqueIds || []), newId]
+            };
+          }
+          return ba;
+        })
+      : baseAbilities;
+
     setExpandedMap(prev => ({ ...prev, [newId]: true }));
-  };
-
-  const handleAddUnlockedTechniqueForTrans = (_transId: string) => {
-    handleAddTransAbility('Techniken');
-  };
-
-  const handleDeleteTransformation = (transId: string) => {
-    handleDeleteEntry(transId);
-    if (selectedFormId === transId) {
-      setSelectedFormId('normal');
-    }
-    if (selectedTransformationId === transId) {
-      setSelectedTransformationId('');
-    }
-  };
-
-  // Helper für die Hierarchiekette einer Transformation
-  const getTransformationBreadcrumbs = (trans: TechniqueItem): string[] => {
-    const chain: string[] = [trans.transformName || trans.name];
-    let parentId = trans.parentTransformationId;
-    const visited = new Set<string>([trans.id]);
-
-    while (parentId && parentId !== 'standard' && !visited.has(parentId)) {
-      visited.add(parentId);
-      const parent = transformationItems.find(t => t.id === parentId);
-      if (parent) {
-        chain.unshift(parent.transformName || parent.name);
-        parentId = parent.parentTransformationId;
-      } else {
-        break;
-      }
-    }
-    chain.unshift('Normalform');
-    return chain;
+    onChange(safePowerSources, updatedBa, updatedTech);
   };
 
   return (
-    <div className="flex flex-col gap-6 text-slate-100">
+    <div className="flex flex-col gap-4 font-sans">
       {/* ============================================================ */}
-      {/* HAUPTCONTAINER: STANDARD-KAMPFFÄHIGKEITEN & TRANSFORMATIONEN  */}
+      {/* 1. KRAFTQUELLEN-SELEKTOR & MANAGEMENT                         */}
       {/* ============================================================ */}
-      <div className="flex flex-col gap-4 bg-slate-900/40 p-4 sm:p-5 rounded-2xl border border-slate-800/80 shadow-sm">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <LucideIcons.Swords className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-100">
-                Standard-Kampffähigkeiten
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Grundlegendes Moveset in Normalgestalt &amp; Gestaltstufen (Passive Fähigkeiten, Techniken, Ultimative Techniken, Waffenbeherrschung &amp; Transformationen)
-              </p>
-            </div>
-          </div>
+      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
-              {standardTechniques.length} Standardfähigkeiten
-            </span>
-            {transformationItems.length > 0 && (
-              <span className="text-[10px] font-mono text-cyan-300 bg-slate-950 px-2.5 py-1 rounded-lg border border-cyan-900/50">
-                {transformationItems.length} Transformation{transformationItems.length === 1 ? '' : 'en'}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* FORMEN & TRANSFORMATIONEN TAG-LEISTE */}
-        <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-              <LucideIcons.Zap className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Transformationen &amp; Gestaltstufen</span>
-            </span>
-            <span className="text-[10px] text-slate-500 font-medium">
-              {selectedFormId === 'normal'
-                ? 'Normalform aktiv'
-                : `Transformation: ${selectedTransformation?.transformName || selectedTransformation?.name || ''}`}
+            <LucideIcons.Zap className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-black uppercase tracking-wider text-white">
+              Kraftquellen ({safePowerSources.length})
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Normalform / Basisform Pill */}
-            <button
-              type="button"
-              onClick={() => setSelectedFormId('normal')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                selectedFormId === 'normal'
-                  ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-md'
-                  : 'bg-slate-950/90 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-              }`}
-            >
-              <LucideIcons.Swords className="w-3.5 h-3.5" />
-              <span>Normalform</span>
-              <span className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono ${
-                selectedFormId === 'normal' ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'
-              }`}>
-                {standardTechniques.length}
-              </span>
-            </button>
-
-            {/* Erstellte Transformationen Pills */}
-            {transformationItems.map((trans, transIdx) => {
-              const isSelected = selectedFormId === trans.id;
-              const hasChibi = !!trans.chibiForm?.enabled;
-              return (
-                <button
-                  key={`trans-pill-${trans.id || transIdx}`}
-                  type="button"
-                  onClick={() => {
-                    setSelectedFormId(trans.id);
-                    setSelectedTransformationId(trans.id);
-                  }}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
-                    isSelected
-                      ? 'bg-cyan-600 text-white border-cyan-400 shadow-md font-black'
-                      : 'bg-slate-950/90 text-cyan-200 border-cyan-900/50 hover:border-cyan-700/80 hover:text-white'
-                  }`}
-                >
-                  <LucideIcons.Zap className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-cyan-400'}`} />
-                  <span>{trans.transformName || trans.name}</span>
-                  {trans.metamorphosisInfluence !== undefined && (
-                    <span className={`text-[9.5px] px-1.5 py-0.5 rounded font-mono ${
-                      isSelected ? 'bg-cyan-950/60 text-cyan-200' : 'bg-slate-900 text-cyan-400'
-                    }`}>
-                      {trans.metamorphosisInfluence}%
-                    </span>
-                  )}
-                  {hasChibi && (
-                    <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Chibi-Form aktiv" />
-                  )}
-                </button>
-              );
-            })}
-
-            {/* Transformation erstellen Button Tag */}
-            {!readOnly && (
+          <div className="flex items-center gap-2">
+            {/* Form-Umschalter: Normalform vs. Transformationen */}
+            <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
               <button
                 type="button"
-                onClick={handleAddTransformation}
-                className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-950 border border-dashed border-cyan-700/70 hover:border-cyan-400 text-cyan-300 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                title="Neue Transformation anlegen"
+                onClick={() => setSelectedFormId('normal')}
+                className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                  selectedFormId === 'normal'
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
               >
-                <LucideIcons.Plus className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Transformation erstellen</span>
+                Normalform
               </button>
-            )}
-          </div>
-        </div>
-
-        {/* ABSCHNITT-INHALT JE NACH FORMAUSWAHL */}
-        {selectedFormId === 'normal' ? (
-        <>
-
-        {/* 1.1 KRAFTQUELLE TAG-LEISTE */}
-        <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Kraftquelle
-            </span>
-            <span className="text-[10px] text-slate-500 font-medium">
-              {safePowerSources.length} vorhanden
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            {safePowerSources.map((ps, psIdx) => {
-              const isActive = activePowerSource && ps.id === activePowerSource.id;
-              return (
-                <button
-                  key={`ps-${ps.id || 'ps'}-${psIdx}`}
-                  type="button"
-                  onClick={() => {
-                    setActivePowerSourceId(ps.id);
-                    const nextBa = baseAbilities.find(b => b.powerSourceId === ps.id);
-                    setActiveBaseAbilityId(nextBa ? nextBa.id : '');
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
-                    isActive
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm font-black'
-                      : 'bg-slate-950/80 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-                  }`}
-                >
-                  <span>{ps.powerName || ps.source || 'Kraftquelle'}</span>
-                  {ps.cost && (
-                    <span className={`text-[10px] px-1 py-0.2 rounded font-semibold ${
-                      isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
-                    }`}>
-                      {ps.cost}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+              <button
+                type="button"
+                onClick={() => setSelectedFormId(selectedTransformationId || 'trans_main')}
+                className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  selectedFormId !== 'normal'
+                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>Transformationen</span>
+                {transformationItems.length > 0 && (
+                  <span className="text-[10px] px-1 bg-slate-900/50 rounded font-bold">
+                    {transformationItems.length}
+                  </span>
+                )}
+              </button>
+            </div>
 
             {!readOnly && (
               <button
                 type="button"
                 onClick={handleAddPowerSource}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-950 border border-dashed border-slate-700 hover:border-amber-500/70 text-slate-400 hover:text-amber-400 transition-all flex items-center gap-1 cursor-pointer"
-                title="Neue Kraftquelle anlegen"
+                className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1 cursor-pointer"
               >
-                <LucideIcons.Plus className="w-3.5 h-3.5" />
-                <span>Kraftquelle</span>
+                <LucideIcons.Plus className="w-3.5 h-3.5 text-amber-400" />
+                <span>Kraftquelle hinzufügen</span>
               </button>
             )}
           </div>
+        </div>
 
-          {/* Inline-Konfiguration der aktiven Kraftquelle */}
-          {!readOnly && activePowerSource && (
-            <div className="mt-1 pt-2.5 border-t border-slate-800/60 flex flex-col gap-2">
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
-                <div className="sm:col-span-5 flex flex-col gap-1">
-                  <label className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
-                    Name der Kraftquelle
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white text-xs font-semibold outline-none focus:border-amber-500 h-[34px] placeholder:text-slate-600 transition-colors"
-                    placeholder="Name der Kraftquelle eingeben..."
-                    value={activePowerSource.powerName || activePowerSource.source || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      handleUpdatePowerSource(activePowerSource.id, { 
-                        powerName: val,
-                        source: val
-                      });
-                    }}
-                  />
-                </div>
+        {/* Kraftquellen-Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {safePowerSources.map((ps, psIdx) => {
+            const isSelected = activePowerSourceId === ps.id;
+            const displayName = ps.powerName || ps.source || `Kraftquelle ${psIdx + 1}`;
+            return (
+              <button
+                key={`ps-tab-${ps.id || psIdx}`}
+                type="button"
+                onClick={() => setActivePowerSourceId(ps.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+                  isSelected
+                    ? 'bg-slate-800 text-amber-400 border-amber-500/60 shadow-sm'
+                    : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                <LucideIcons.Flame className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
+                <span>{displayName}</span>
+                {ps.cost && (
+                  <span className="text-[10px] px-1.5 py-0.2 bg-slate-900 rounded text-slate-400 font-mono">
+                    {ps.cost}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-                <div className="sm:col-span-4 flex flex-col gap-1">
-                  <label className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
-                    Kraftquellen
-                  </label>
-                  <select
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[34px] cursor-pointer"
-                    value={
-                      registeredStep3PowerSources.some(m => m.name === (activePowerSource.powerName || activePowerSource.source))
-                        ? (activePowerSource.powerName || activePowerSource.source)
-                        : ''
-                    }
-                    onChange={e => {
-                      const chosen = e.target.value;
-                      if (chosen) {
-                        const mapping = registeredStep3PowerSources.find(m => m.name === chosen);
-                        handleUpdatePowerSource(activePowerSource.id, { 
-                          powerName: chosen,
-                          source: chosen,
-                          powerDescription: mapping?.description || activePowerSource.powerDescription || ''
-                        });
-                      } else {
-                        handleUpdatePowerSource(activePowerSource.id, {
-                          powerName: '',
-                          source: ''
-                        });
-                      }
-                    }}
-                  >
-                    <option value="">-- Kraftquelle wählen --</option>
-                    {registeredStep3PowerSources.length > 0 ? (
-                      registeredStep3PowerSources.map(mapping => (
-                        <option key={mapping.id} value={mapping.name} className="bg-slate-950 text-white">
-                          {mapping.name}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="" disabled className="bg-slate-950 text-slate-500">
-                        Keine Kraftquellen vorhanden
-                      </option>
-                    )}
-                  </select>
-                </div>
+        {/* Aktive Kraftquelle Editor */}
+        {activePowerSource && (
+          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Name der Kraftquelle
+                </label>
+                <input
+                  type="text"
+                  disabled={readOnly}
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                  placeholder="z.B. Äther-Mana, Ki, Chakra..."
+                  value={activePowerSource.powerName || activePowerSource.source || ''}
+                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { powerName: e.target.value, source: e.target.value })}
+                />
+              </div>
 
-                <div className="sm:col-span-2 flex flex-col gap-1">
-                  <label className="text-[10px] font-extrabold text-slate-300 uppercase tracking-wider">
-                    Ressource / Kosten
-                  </label>
-                  <select
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs outline-none focus:border-amber-500 h-[34px] cursor-pointer"
-                    value={activePowerSource.cost || ''}
-                    onChange={e => handleUpdatePowerSource(activePowerSource.id, { cost: e.target.value })}
-                  >
-                    <option value="">-- Ressource wählen --</option>
-                    {registeredCostResources.map(cRes => (
-                      <option key={cRes} value={cRes} className="bg-slate-950 text-white">
-                        {cRes}
-                      </option>
-                    ))}
-                    {activePowerSource.cost && !registeredCostResources.includes(activePowerSource.cost) && (
-                      <option value={activePowerSource.cost} className="bg-slate-950 text-white">
-                        {activePowerSource.cost}
-                      </option>
-                    )}
-                    {registeredCostResources.length === 0 && !activePowerSource.cost && (
-                      <option value="" disabled className="bg-slate-950 text-slate-500">
-                        Keine Kosten-Ressourcen definiert
-                      </option>
-                    )}
-                  </select>
-                </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Kostenressource
+                </label>
+                <input
+                  type="text"
+                  disabled={readOnly}
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                  placeholder="z.B. MP, Ausdauer, Fokus..."
+                  value={activePowerSource.cost || ''}
+                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { cost: e.target.value })}
+                />
+              </div>
 
-                <div className="sm:col-span-1 flex items-end justify-end">
+              <div className="flex flex-col justify-end">
+                {!readOnly && safePowerSources.length > 1 && (
                   <button
                     type="button"
                     onClick={() => handleDeletePowerSource(activePowerSource.id)}
-                    className="w-full px-2 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[34px] flex items-center justify-center gap-1 cursor-pointer"
-                    title="Diese Kraftquelle löschen"
+                    className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 transition flex items-center justify-center gap-1.5 h-[30px] cursor-pointer"
                   >
                     <LucideIcons.Trash2 className="w-3.5 h-3.5" />
-                    <span className="sm:hidden">Löschen</span>
+                    <span>Kraftquelle entfernen</span>
                   </button>
-                </div>
+                )}
               </div>
             </div>
-          )}
-        </div>
 
-        {/* 1.2 GRUNDFÄHIGKEIT TAG-LEISTE */}
-        <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Grundfähigkeit ({activePowerSource ? (activePowerSource.powerName || activePowerSource.source) : 'Keine Kraftquelle'})
-            </span>
-            <span className="text-[10px] text-slate-500 font-medium">
-              {currentBaseAbilities.length} vorhanden
-            </span>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                Beschreibung der Kraftquelle & Herkunft
+              </label>
+              <AutoExpandingTextarea
+                disabled={readOnly}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-white text-xs outline-none focus:border-amber-500 min-h-[44px] leading-relaxed"
+                placeholder="Ursprung, Schwingungsmuster oder Natur dieser Kraft..."
+                value={activePowerSource.powerDescription || ''}
+                onChange={e => handleUpdatePowerSource(activePowerSource.id, { powerDescription: e.target.value })}
+              />
+            </div>
           </div>
+        )}
+      </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            {currentBaseAbilities.length === 0 ? (
-              <div className="text-xs text-slate-500 italic py-1">
-                Keine Grundfähigkeiten für diese Kraftquelle vorhanden.
+      {/* ============================================================ */}
+      {/* 2. HAUPTNAVIGATION: DIE 7 BEREICHE                            */}
+      {/* ============================================================ */}
+      {selectedFormId === 'normal' ? (
+        <>
+          {/* GRUNDFÄHIGKEITEN (KINESEN & MANIPULATIONEN) */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-col gap-2.5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+              <div className="flex items-center gap-2">
+                <LucideIcons.Sparkles className="w-4 h-4 text-cyan-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                  Grundfähigkeiten / Elementare Disziplinen
+                </span>
               </div>
-            ) : (
-              currentBaseAbilities.map((ba, baIdx) => {
-                const isActive = activeBaseAbility && ba.id === activeBaseAbility.id;
-                return (
-                  <button
-                    key={`ba-${ba.id || 'ba'}-${baIdx}`}
-                    type="button"
-                    onClick={() => setActiveBaseAbilityId(ba.id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
-                      isActive
-                        ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm font-black'
-                        : 'bg-slate-950/80 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-                    }`}
-                  >
-                    <span>{ba.displayName || ba.name || 'Grundfähigkeit'}</span>
-                    {ba.element && (
-                      <span className={`text-[10px] px-1 py-0.2 rounded font-semibold ${
-                        isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-400'
-                      }`}>
-                        {ba.element}
-                      </span>
-                    )}
-                  </button>
-                );
-              })
-            )}
 
-            {!readOnly && activePowerSource && (
-              <button
-                type="button"
-                onClick={handleAddBaseAbility}
-                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-950 border border-dashed border-slate-700 hover:border-amber-500/70 text-slate-400 hover:text-amber-400 transition-all flex items-center gap-1 cursor-pointer"
-                title="Neue Grundfähigkeit anlegen"
-              >
-                <LucideIcons.Plus className="w-3.5 h-3.5" />
-                <span>Grundfähigkeit</span>
-              </button>
-            )}
-          </div>
+              {!readOnly && activePowerSource && (
+                <button
+                  type="button"
+                  onClick={handleAddBaseAbility}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                >
+                  <LucideIcons.Plus className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Grundfähigkeit hinzufügen</span>
+                </button>
+              )}
+            </div>
 
-          {activeBaseAbility && !readOnly && (
-            <div className="mt-1 pt-2 border-t border-slate-800/60 flex flex-col gap-2">
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
-                <div className="flex flex-col gap-1 sm:col-span-2">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">
-                    Kinese / Bezeichner
-                  </label>
-                  <input
-                    type="text"
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                    value={activeBaseAbility.displayName || activeBaseAbility.name || ''}
-                    placeholder="Bezeichnung der Grundfähigkeit eingeben..."
-                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { displayName: e.target.value, name: e.target.value })}
-                  />
+            {/* Grundfähigkeiten Tabs */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {currentBaseAbilities.length === 0 ? (
+                <div className="text-xs text-slate-400 italic py-1">
+                  Keine Grundfähigkeiten für diese Kraftquelle definiert (Techniken werden direkt zugeordnet).
                 </div>
+              ) : (
+                currentBaseAbilities.map((ba, baIdx) => {
+                  const isSelected = activeBaseAbilityId === ba.id;
+                  const displayName = ba.displayName || ba.name || `Grundfähigkeit ${baIdx + 1}`;
+                  return (
+                    <button
+                      key={`ba-tab-${ba.id || baIdx}`}
+                      type="button"
+                      onClick={() => setActiveBaseAbilityId(ba.id)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                        isSelected
+                          ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500 shadow-sm'
+                          : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <span>{displayName}</span>
+                      {ba.element && (
+                        <span className="text-[10px] px-1 bg-slate-900 text-slate-300 rounded">
+                          {ba.element}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
 
+            {/* Aktive Grundfähigkeit Konfiguration */}
+            {activeBaseAbility && (
+              <div className="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
                 <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">
+                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
                     Element
                   </label>
                   <select
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
-                    value={activeBaseAbility.element || 'Neutral'}
+                    disabled={readOnly}
+                    className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
+                    value={activeBaseAbility.element || 'Feuer'}
                     onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { element: e.target.value })}
                   >
-                    {ADVENTURE_FORGE_ELEMENTS.map((el, elIdx) => (
-                      <option key={`el-${el}-${elIdx}`} value={el}>{el}</option>
+                    {ADVENTURE_FORGE_ELEMENTS.map(el => (
+                      <option key={`el-opt-${el}`} value={el}>{el}</option>
                     ))}
                   </select>
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">
-                    Fähigkeitsart
+                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                    Ausprägung / Kinese
                   </label>
                   <select
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
+                    disabled={readOnly}
+                    className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px] cursor-pointer"
                     value={activeBaseAbility.abilityType || 'creation_manipulation'}
                     onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { abilityType: e.target.value as AbilityType })}
                   >
-                    {ABILITY_TYPES.map((at, atIdx) => (
-                      <option key={`at-${at.id}-${atIdx}`} value={at.id}>{at.label}</option>
+                    {ABILITY_TYPES.map(at => (
+                      <option key={`at-opt-${at.id}`} value={at.id}>{at.label}</option>
                     ))}
                   </select>
                 </div>
 
                 <div className="flex items-end justify-end">
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-rose-950/60 text-slate-400 hover:text-rose-300 border border-slate-800 hover:border-rose-800/50 transition flex items-center gap-1.5 h-[30px] cursor-pointer"
+                    >
+                      <LucideIcons.Trash2 className="w-3.5 h-3.5" />
+                      <span>Entfernen</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* TAB-LEISTE: DIE 7 SYSTEM-BEREICHE */}
+          <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-2.5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                System-Bereiche &amp; Fertigkeitsbäume
+              </span>
+              <span className="text-[10px] text-slate-400">
+                Aktiv: {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : (activePowerSource ? (activePowerSource.powerName || activePowerSource.source || 'Kraftquelle') : 'Gesamtsystem')}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
+              {CATEGORY_TABS.map((tab, tabIdx) => {
+                const isTabActive = activeCategory === tab;
+                const count = categoryCounts[tab] || 0;
+                return (
                   <button
+                    key={`cat-tab-${tab}-${tabIdx}`}
                     type="button"
-                    onClick={() => handleDeleteBaseAbility(activeBaseAbility.id)}
-                    className="px-2.5 py-1 rounded-lg text-xs text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors h-[30px] flex items-center gap-1 cursor-pointer"
-                    title="Diese Grundfähigkeit löschen"
+                    onClick={() => setActiveCategory(tab)}
+                    className={`px-2.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1 cursor-pointer border min-w-0 ${
+                      isTabActive
+                        ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
+                        : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+                    }`}
                   >
-                    <LucideIcons.Trash2 className="w-3 h-3" />
-                    <span>Löschen</span>
+                    <span className="text-left leading-tight break-words truncate">{tab}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
+                      isTabActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800/80 text-slate-400'
+                    }`}>
+                      {count}
+                    </span>
                   </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ============================================================ */}
+          {/* BEREICH 1: TRAINING & ERLERNBARE FERTIGKEITEN               */}
+          {/* ============================================================ */}
+          {activeCategory === 'Training & Erlernbare Fertigkeiten' && (
+            <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-4">
+              {/* Header & Statistiken */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                    Erlernbar Gesamt
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-amber-400">
+                    {trainingStats.total}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Im Ausbildungsplan</span>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-wide">
+                    In Ausbildung
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-cyan-400">
+                    {trainingStats.inAusbildung}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Aktives Training</span>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-wide">
+                    Gemeistert
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-emerald-400">
+                    {trainingStats.gemeistert}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Vollständig erlernt</span>
+                </div>
+
+                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 flex flex-col gap-0.5">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                    Bereit / Gesperrt
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-slate-200">
+                    {trainingStats.erlernbar} / {trainingStats.gesperrt}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Voraussetzungen</span>
                 </div>
               </div>
 
-              {/* Zusatzzeile für Beschreibung, Stufe & Kosten */}
-              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 pt-1 border-t border-slate-850/60">
-                <div className="sm:col-span-6 flex flex-col gap-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">
-                    Beschreibung der Grundfähigkeit
-                  </label>
+              {/* Filter- & Suchleiste */}
+              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2 flex-1 min-w-[220px]">
+                  <LucideIcons.Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <input
                     type="text"
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                    value={activeBaseAbility.description || ''}
-                    placeholder="Wirkungsbereich und Funktionsweise beschreiben..."
-                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { description: e.target.value })}
+                    className="w-full bg-transparent border-none text-xs text-white placeholder-slate-400 outline-none"
+                    placeholder="Fertigkeit, Lehrmeister, Attribut oder Voraussetzung suchen..."
+                    value={trainingSearchTerm}
+                    onChange={e => setTrainingSearchTerm(e.target.value)}
+                  />
+                  {trainingSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setTrainingSearchTerm('')}
+                      className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                    >
+                      <LucideIcons.X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Statusfilter */}
+                <div className="flex flex-wrap items-center gap-1">
+                  {(['alle', 'in_ausbildung', 'erlernbar', 'gemeistert', 'gesperrt'] as const).map(st => {
+                    const isStActive = trainingStatusFilter === st;
+                    const label = st === 'alle' ? 'Alle Status' : st === 'in_ausbildung' ? 'In Ausbildung' : st === 'erlernbar' ? 'Erlernbar' : st === 'gemeistert' ? 'Gemeistert' : 'Gesperrt';
+                    return (
+                      <button
+                        key={`train-st-${st}`}
+                        type="button"
+                        onClick={() => setTrainingStatusFilter(st)}
+                        className={`px-2 py-1 rounded text-[11px] font-semibold transition cursor-pointer border ${
+                          isStActive
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleAddEntry('Training & Erlernbare Fertigkeiten')}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition flex items-center gap-1.5 cursor-pointer shadow-sm ml-auto"
+                  >
+                    <LucideIcons.Plus className="w-3.5 h-3.5" />
+                    <span>Ausbildungsziel anlegen</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Liste aller erlernbaren Fertigkeiten */}
+              {trainingEntries.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
+                  <LucideIcons.GraduationCap className="w-8 h-8 text-slate-400 opacity-60" />
+                  <p>Keine erlernbaren Fertigkeiten für diesen Filter gefunden.</p>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => handleAddEntry('Training & Erlernbare Fertigkeiten')}
+                      className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <LucideIcons.Plus className="w-3.5 h-3.5" />
+                      <span>Erstes Ausbildungsziel anlegen</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {trainingEntries.map((entry, idx) => {
+                    const currentScore = entry.score !== undefined ? entry.score : (entry.trainingProgress || 0);
+                    const status = entry.learningStatus || (currentScore >= 95 ? 'gemeistert' : currentScore > 0 ? 'in_ausbildung' : 'erlernbar');
+                    const masteryLabel = getTechniqueMasteryLabel(currentScore);
+                    const isExpanded = expandedMap[entry.id] || false;
+
+                    return (
+                      <div
+                        key={`train-item-${entry.id || idx}`}
+                        className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-col gap-3 transition-all"
+                      >
+                        {/* Kopfzeile */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-850 pb-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-sm text-white">{entry.name}</span>
+                            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] text-slate-400 font-semibold">
+                              {entry.category || 'Techniken'}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                              status === 'gemeistert'
+                                ? 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                                : status === 'in_ausbildung'
+                                ? 'bg-cyan-950/60 border-cyan-800 text-cyan-300'
+                                : status === 'gesperrt'
+                                ? 'bg-rose-950/60 border-rose-800 text-rose-300'
+                                : 'bg-amber-950/60 border-amber-800 text-amber-300'
+                            }`}>
+                              {status === 'gemeistert' ? 'Gemeistert' : status === 'in_ausbildung' ? 'In Ausbildung' : status === 'gesperrt' ? 'Gesperrt' : 'Erlernbar'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-amber-400 font-bold">
+                              {masteryLabel} ({currentScore}%)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleCardExpanded(entry.id, false)}
+                              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium transition cursor-pointer"
+                            >
+                              {isExpanded ? 'Details verbergen' : 'Details bearbeiten'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Trainingsfortschritt & Schnell-Aktionen */}
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between text-xs text-slate-400">
+                            <div className="flex items-center gap-1.5">
+                              <LucideIcons.Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Trainingsaufwand: {entry.trainingHours || 0} / {entry.targetTrainingHours || 20} Std.</span>
+                            </div>
+                            <span>Fortschritt: {currentScore}%</span>
+                          </div>
+
+                          <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+                            <div
+                              className="bg-amber-500 h-full transition-all duration-300 rounded-full"
+                              style={{ width: `${Math.min(100, currentScore)}%` }}
+                            />
+                          </div>
+
+                          {!readOnly && (
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickTrainProgress(entry, 10)}
+                                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium cursor-pointer"
+                                >
+                                  +1 Praxis-Übung
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickTrainProgress(entry, 25)}
+                                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-medium cursor-pointer"
+                                >
+                                  +1 Übungseinheit (+25%)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickMastery(entry)}
+                                  className="px-2.5 py-1 rounded bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-xs font-bold cursor-pointer"
+                                >
+                                  Meisterung abschließen
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  disabled={readOnly}
+                                  value={status}
+                                  onChange={e => handleUpdateEntry(entry.id, { learningStatus: e.target.value })}
+                                  className="bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
+                                >
+                                  <option value="erlernbar">Status: Erlernbar</option>
+                                  <option value="in_ausbildung">Status: In Ausbildung</option>
+                                  <option value="gemeistert">Status: Gemeistert</option>
+                                  <option value="gesperrt">Status: Gesperrt</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Voraussetzungen & Quellen */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 border border-slate-850 rounded-lg p-2 text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                              Lehrmeister / Quelle:
+                            </span>
+                            <span className="text-slate-200">
+                              {entry.requiredTeacherOrScroll || 'Freies Selbststudium'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                              Voraussetzungen:
+                            </span>
+                            <span className="text-slate-200">
+                              {entry.requiredAttribute || entry.learningRequirements || 'Keine Vorbedingungen'}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                              Vorstufen-Techniken:
+                            </span>
+                            <span className="text-slate-200">
+                              {entry.prerequisiteTechniques || 'Keine'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Aufklappbare Detail-Ansicht (Vollständige TechniqueCard) */}
+                        {isExpanded && (
+                          <div className="pt-2 border-t border-slate-800">
+                            <TechniqueCard
+                              entry={entry}
+                              category={entry.category || 'Techniken'}
+                              readOnly={readOnly}
+                              isExpanded={true}
+                              onToggleExpanded={() => toggleCardExpanded(entry.id, false)}
+                              onUpdate={updates => handleUpdateEntry(entry.id, updates)}
+                              onDelete={() => handleDeleteEntry(entry.id)}
+                              activePowerSource={activePowerSource}
+                              baseAbilities={baseAbilities}
+                              onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
+                              progressionLogic={progressionLogic}
+                              availableTransformations={availableTransformations}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ============================================================ */}
+          {/* BEREICH 5: WAFFENBEHERRSCHUNG                                 */}
+          {/* ============================================================ */}
+          {activeCategory === 'Waffenbeherrschung' && (
+            <WeaponSkillTree
+              techniques={techniques}
+              activeBaseAbility={activeBaseAbility}
+              baseAbilities={baseAbilities}
+              activePowerSource={activePowerSource}
+              progressionLogic={progressionLogic}
+              onUpdateEntry={handleUpdateEntry}
+              onAddEntry={(newEntry) => {
+                if (newEntry) {
+                  const entryToAdd: TechniqueItem = {
+                    id: newEntry.id || `tech_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                    name: newEntry.name || 'Waffenbeherrschung (Rang 1)',
+                    category: 'Waffenbeherrschung',
+                    powerSourceId: activePowerSource?.id,
+                    baseAbilityIds: activeBaseAbility ? [activeBaseAbility.id] : [],
+                    baseAbilityNames: activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name || ''] : [],
+                    ...newEntry
+                  };
+                  const updatedBa = baseAbilities.map(ba => {
+                    if (activeBaseAbility && ba.id === activeBaseAbility.id) {
+                      return {
+                        ...ba,
+                        techniqueIds: [...(ba.techniqueIds || []), entryToAdd.id]
+                      };
+                    }
+                    return ba;
+                  });
+                  onChange(powerSources, updatedBa, [...techniques, entryToAdd]);
+                } else {
+                  handleAddEntry('Waffenbeherrschung');
+                }
+              }}
+              onDeleteEntry={handleDeleteEntry}
+              readOnly={readOnly}
+              onOpenSmartFill={() => {
+                setSmartFillModalState({
+                  isOpen: true,
+                  powerSourceId: activePowerSource?.id,
+                  baseAbilityId: activeBaseAbility?.id
+                });
+              }}
+            />
+          )}
+
+          {/* ============================================================ */}
+          {/* BEREICH 6: ALLTAGSKOMPETENZEN                                 */}
+          {/* ============================================================ */}
+          {activeCategory === 'Alltagskompetenzen' && (
+            <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-4">
+              <div className="border-b border-slate-800 pb-2">
+                <h4 className="text-sm font-bold text-slate-300">Alltagskompetenzen &amp; Lebenspraktische Fertigkeiten</h4>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Praktische Alltagskompetenzen, Hobbys, Talente und Handwerksfähigkeiten deines Charakters.
+                </p>
+              </div>
+
+              <EverydaySkillsSelect
+                value={localEverydaySkills}
+                onChange={val => {
+                  setLocalEverydaySkills(val);
+                  if (onEverydaySkillsChange) onEverydaySkillsChange(val);
+                }}
+                progressionLogic={progressionLogic}
+                placeholder="Alltagskompetenzen und praktische Fertigkeiten im Alltag"
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                    Praktische Erfahrung &amp; Anwendungsnotizen
+                  </label>
+                  <AutoExpandingTextarea
+                    disabled={readOnly}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 min-h-[50px] leading-relaxed"
+                    placeholder="Konkrete Erfahrungen, erprobte Rezepte oder Überlebenswissen..."
+                    value={everydaySkillsExperienceText}
+                    onChange={e => onEverydaySkillsExperienceTextChange && onEverydaySkillsExperienceTextChange(e.target.value)}
                   />
                 </div>
 
-                <div className="sm:col-span-3 flex flex-col gap-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">
-                    Stufe / Level
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                    Werkzeuge &amp; Handwerksausrüstung
                   </label>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min={1}
-                      max={activeBaseAbility.maxLevel || 10}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                      value={activeBaseAbility.level !== undefined ? activeBaseAbility.level : 1}
-                      onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { level: parseInt(e.target.value, 10) || 1 })}
-                    />
-                    <span className="text-[10px] text-slate-500 whitespace-nowrap">/ {activeBaseAbility.maxLevel || 10}</span>
-                  </div>
-                </div>
-
-                <div className="sm:col-span-3 flex flex-col gap-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">
-                    Grundkosten / Ressource
-                  </label>
-                  <input
-                    type="text"
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                    value={activeBaseAbility.cost || ''}
-                    placeholder="Kostenwert oder Passiv eingeben..."
-                    onChange={e => handleUpdateBaseAbility(activeBaseAbility.id, { cost: e.target.value })}
+                  <AutoExpandingTextarea
+                    disabled={readOnly}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 min-h-[50px] leading-relaxed"
+                    placeholder="Feinmechanik-Set, Kräuterbeutel, Schmiedehammer, Kochgeschirr..."
+                    value={toolsAndEquipment}
+                    onChange={e => onToolsAndEquipmentChange && onToolsAndEquipmentChange(e.target.value)}
                   />
                 </div>
               </div>
             </div>
           )}
-        </div>
 
-        {/* 1.3 STANDARD-KATEGORIEN (Passive, Techniken, Ultimative, Waffenbeherrschung) */}
-        <div className="bg-slate-900/90 border border-slate-800/90 rounded-xl p-2.5 shadow-sm">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-              Kategorien
-            </span>
-            <span className="text-[10px] text-slate-500">
-              Gilt für: {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : (activePowerSource ? (activePowerSource.powerName || activePowerSource.source || 'Kraftquelle') : 'Keine Kraftquelle')}
-            </span>
-          </div>
+          {/* ============================================================ */}
+          {/* BEREICH 7: BERUFE                                             */}
+          {/* ============================================================ */}
+          {activeCategory === 'Berufe' && (
+            <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-4">
+              <CompetenceProfileEditor
+                progressionLogic={progressionLogic}
+                profession={localProfession || profession}
+                onProfessionChange={(val, detectedField) => {
+                  setLocalProfession(val);
+                  if (onProfessionChange) onProfessionChange(val, detectedField);
+                }}
+                professionLevel={professionLevel}
+                onProfessionLevelChange={onProfessionLevelChange || (() => {})}
+                professionField={professionField}
+                onProfessionFieldChange={onProfessionFieldChange || (() => {})}
+                professionSpecialization={professionSpecialization}
+                onProfessionSpecializationChange={onProfessionSpecializationChange || (() => {})}
+                professionRank={professionRank}
+                onProfessionRankChange={onProfessionRankChange || (() => {})}
+                professionExperience={professionExperience}
+                onExperienceChange={onProfessionExperienceChange}
+                professionProficiencyScore={professionProficiencyScore}
+                onProfessionProficiencyScoreChange={onProfessionProficiencyScoreChange || (() => {})}
+                professionExperiencePoints={professionExperiencePoints}
+                onProfessionExperiencePointsChange={onProfessionExperiencePointsChange || (() => {})}
+                professionExperienceText={professionExperienceText}
+                onProfessionExperienceTextChange={onProfessionExperienceTextChange || (() => {})}
+                professionPromotionConditions={professionPromotionConditions}
+                onProfessionPromotionConditionsChange={onProfessionPromotionConditionsChange || (() => {})}
+                professionProgress={professionProgress}
+                onProfessionProgressChange={onProfessionProgressChange || (() => {})}
+                professionCompetencies={professionCompetencies}
+                onProfessionCompetenciesChange={onProfessionCompetenciesChange || (() => {})}
+                socialTitles={socialTitles}
+                onSocialTitlesChange={onSocialTitlesChange || (() => {})}
+                offices={offices}
+                onOfficesChange={onOfficesChange || (() => {})}
+                positions={positions}
+                onPositionsChange={onPositionsChange || (() => {})}
+                socialStatus={socialStatus}
+                onSocialStatusChange={onSocialStatusChange || (() => {})}
+                craftingSkills={craftingSkills}
+                onCraftingSkillsChange={onCraftingSkillsChange || (() => {})}
+                jobTitle={jobTitle}
+                onJobTitleChange={onJobTitleChange || (() => {})}
+                authorities={authorities}
+                onAuthoritiesChange={onAuthoritiesChange || (() => {})}
+                professionDescription={professionDescription}
+                onProfessionDescriptionChange={onProfessionDescriptionChange || (() => {})}
+                secondaryProfessions={secondaryProfessions}
+                onSecondaryProfessionsChange={onSecondaryProfessionsChange || (() => {})}
+                talents={talents}
+                onTalentsChange={onTalentsChange || (() => {})}
+                everydaySkills={localEverydaySkills}
+                onEverydaySkillsChange={val => {
+                  setLocalEverydaySkills(val);
+                  if (onEverydaySkillsChange) onEverydaySkillsChange(val);
+                }}
+                everydaySkillsProficiencyScore={everydaySkillsProficiencyScore}
+                onEverydaySkillsProficiencyScoreChange={onEverydaySkillsProficiencyScoreChange || (() => {})}
+                everydaySkillsExperienceText={everydaySkillsExperienceText}
+                onEverydaySkillsExperienceTextChange={onEverydaySkillsExperienceTextChange || (() => {})}
+                toolsAndEquipment={toolsAndEquipment}
+                onToolsAndEquipmentChange={onToolsAndEquipmentChange || (() => {})}
+              />
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {CATEGORY_TABS.map((tab, tabIdx) => {
-              const isTabActive = activeCategory === tab;
-              const count = categoryCounts[tab] || 0;
-              return (
-                <button
-                  key={`cat-tab-${tab}-${tabIdx}`}
-                  type="button"
-                  onClick={() => setActiveCategory(tab)}
-                  className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1.5 cursor-pointer border min-w-0 ${
-                    isTabActive
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
-                      : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-                  }`}
-                >
-                  <span className="text-left leading-tight break-words">{tab}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
-                    isTabActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800/80 text-slate-400'
-                  }`}>
-                    {count}
+          {/* ============================================================ */}
+          {/* BEREICHE 2-4: PASSIVE, TECHNIKEN & ULTIMATIVE                */}
+          {/* ============================================================ */}
+          {(activeCategory === 'Passive Fähigkeiten' || activeCategory === 'Techniken' || activeCategory === 'Ultimative Techniken') && (
+            <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/70 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-400">
+                    {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : (activePowerSource ? (activePowerSource.powerName || activePowerSource.source || 'Kraftquelle') : 'Keine Kraftquelle')}
                   </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 1.4 INHALT DER AUSGEWÄHLTEN STANDARD-KATEGORIE */}
-        {activeCategory === 'Waffenbeherrschung' ? (
-          <WeaponSkillTree
-            techniques={techniques}
-            activeBaseAbility={activeBaseAbility}
-            baseAbilities={baseAbilities}
-            activePowerSource={activePowerSource}
-            progressionLogic={progressionLogic}
-            onUpdateEntry={handleUpdateEntry}
-            onAddEntry={(newEntry) => {
-              if (newEntry) {
-                const entryToAdd: TechniqueItem = {
-                  id: newEntry.id || `tech_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                  name: newEntry.name || 'Waffenbeherrschung (Rang 1)',
-                  category: 'Waffenbeherrschung',
-                  powerSourceId: activePowerSource?.id,
-                  baseAbilityIds: activeBaseAbility ? [activeBaseAbility.id] : [],
-                  baseAbilityNames: activeBaseAbility ? [activeBaseAbility.displayName || activeBaseAbility.name || ''] : [],
-                  ...newEntry
-                };
-                const updatedBa = baseAbilities.map(ba => {
-                  if (activeBaseAbility && ba.id === activeBaseAbility.id) {
-                    return {
-                      ...ba,
-                      techniqueIds: [...(ba.techniqueIds || []), entryToAdd.id]
-                    };
-                  }
-                  return ba;
-                });
-                onChange(powerSources, updatedBa, [...techniques, entryToAdd]);
-              } else {
-                handleAddEntry();
-              }
-            }}
-            onDeleteEntry={handleDeleteEntry}
-            readOnly={readOnly}
-            onOpenSmartFill={() => {
-              setSmartFillModalState({
-                isOpen: true,
-                powerSourceId: activePowerSource?.id,
-                baseAbilityId: activeBaseAbility?.id
-              });
-            }}
-          />
-        ) : (
-          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/70 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-400">
-                  {activeBaseAbility ? (activeBaseAbility.displayName || activeBaseAbility.name) : (activePowerSource ? (activePowerSource.powerName || activePowerSource.source || 'Kraftquelle') : 'Keine Kraftquelle')}
-                </span>
-                <span className="text-slate-600">→</span>
-                <span className="text-xs font-extrabold text-amber-400">
-                  {activeCategory} ({activeEntries.length})
-                </span>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                {progressionLogic === 'ep' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/60 text-[11px] text-amber-300 font-medium">
-                    <LucideIcons.Zap className="w-3.5 h-3.5 text-amber-400" />
-                    <span>EP-basiert (100 EP/Stufe)</span>
+                  <span className="text-slate-600">→</span>
+                  <span className="text-xs font-extrabold text-amber-400">
+                    {activeCategory} ({activeEntries.length})
                   </span>
-                )}
-                {progressionLogic === 'training' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-800/60 text-[11px] text-emerald-300 font-medium">
-                    <LucideIcons.Dumbbell className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Training &amp; Übung (4 Einheiten)</span>
-                  </span>
-                )}
-                {progressionLogic === 'milestone' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/60 border border-purple-800/60 text-[11px] text-purple-300 font-medium">
-                    <LucideIcons.Award className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Story-Meilensteine</span>
-                  </span>
-                )}
-                {progressionLogic === 'static' && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-[11px] text-slate-300 font-medium">
-                    <LucideIcons.Lock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Statische Talentpunkte</span>
-                  </span>
-                )}
+                </div>
 
-                {activeEntries.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const anyCollapsed = activeEntries.some(e => {
-                        const defExp = activeEntries.length <= 4;
-                        return expandedMap[e.id] !== undefined ? !expandedMap[e.id] : !defExp;
-                      });
-                      handleToggleAll(anyCollapsed, activeEntries);
-                    }}
-                    className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
-                  >
-                    {activeEntries.some(e => {
-                      const defExp = activeEntries.length <= 4;
-                      return expandedMap[e.id] !== undefined ? !expandedMap[e.id] : !defExp;
-                    })
-                      ? 'Alle aufklappen'
-                      : 'Alle zuklappen'}
-                  </button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {progressionLogic === 'ep' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-950/60 border border-amber-800/60 text-[11px] text-amber-300 font-medium">
+                      <LucideIcons.Zap className="w-3.5 h-3.5 text-amber-400" />
+                      <span>EP-basiert (100 EP/Stufe)</span>
+                    </span>
+                  )}
+                  {progressionLogic === 'training' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-800/60 text-[11px] text-emerald-300 font-medium">
+                      <LucideIcons.Dumbbell className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Training &amp; Übung (4 Einheiten)</span>
+                    </span>
+                  )}
+                  {progressionLogic === 'milestone' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-950/60 border border-purple-800/60 text-[11px] text-purple-300 font-medium">
+                      <LucideIcons.Award className="w-3.5 h-3.5 text-purple-400" />
+                      <span>Story-Meilensteine</span>
+                    </span>
+                  )}
+                  {progressionLogic === 'static' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-[11px] text-slate-300 font-medium">
+                      <LucideIcons.Lock className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Statische Talentpunkte</span>
+                    </span>
+                  )}
 
-                {!readOnly && activePowerSource && (
-                  <>
+                  {activeEntries.length > 1 && (
                     <button
                       type="button"
                       onClick={() => {
-                        setSmartFillModalState({
-                          isOpen: true,
-                          powerSourceId: activePowerSource?.id,
-                          baseAbilityId: activeBaseAbility?.id
+                        const anyCollapsed = activeEntries.some(e => {
+                          const defExp = activeEntries.length <= 4;
+                          return expandedMap[e.id] !== undefined ? !expandedMap[e.id] : !defExp;
                         });
+                        handleToggleAll(anyCollapsed, activeEntries);
                       }}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                      title="KI-gestützte Erstellung"
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white border border-slate-700 transition cursor-pointer"
                     >
-                      <LucideIcons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Smart Fill</span>
+                      {activeEntries.some(e => {
+                        const defExp = activeEntries.length <= 4;
+                        return expandedMap[e.id] !== undefined ? !expandedMap[e.id] : !defExp;
+                      })
+                        ? 'Alle aufklappen'
+                        : 'Alle zuklappen'}
                     </button>
+                  )}
 
-                    <button
-                      type="button"
-                      onClick={handleAddEntry}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                    >
-                      <LucideIcons.Plus className="w-3.5 h-3.5" />
-                      <span>{CATEGORY_ADD_LABELS[activeCategory]}</span>
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+                  {!readOnly && activePowerSource && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSmartFillModalState({
+                            isOpen: true,
+                            powerSourceId: activePowerSource?.id,
+                            baseAbilityId: activeBaseAbility?.id
+                          });
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/60 border border-indigo-800/60 text-indigo-300 hover:bg-indigo-900/60 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                        title="KI-gestützte Erstellung"
+                      >
+                        <LucideIcons.Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Smart Fill</span>
+                      </button>
 
-            {!activePowerSource ? (
-              <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-                <p>Bitte erstelle oder wähle zuerst eine Kraftquelle aus.</p>
-              </div>
-            ) : activeEntries.length === 0 ? (
-              <div className="text-center py-8 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
-                <p>
-                  Keine Einträge für &bdquo;{activeCategory}&ldquo;{activeBaseAbility ? ` in ${activeBaseAbility.displayName || activeBaseAbility.name}` : ''} definiert.
-                </p>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={handleAddEntry}
-                    className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <LucideIcons.Plus className="w-3.5 h-3.5" />
-                    <span>{CATEGORY_EMPTY_LABELS[activeCategory]}</span>
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {activeEntries.map((entry, idx) => {
-                  const defaultExpanded = activeEntries.length <= 4;
-                  const isExpanded = expandedMap[entry.id] !== undefined ? expandedMap[entry.id] : defaultExpanded;
-
-                  return (
-                    <TechniqueCard
-                      key={`tech-card-${entry.id || idx}`}
-                      entry={entry}
-                      category={activeCategory}
-                      readOnly={readOnly}
-                      isExpanded={isExpanded}
-                      onToggleExpanded={() => toggleCardExpanded(entry.id, defaultExpanded)}
-                      onUpdate={updates => handleUpdateEntry(entry.id, updates)}
-                      onDelete={() => handleDeleteEntry(entry.id)}
-                      activePowerSource={activePowerSource}
-                      baseAbilities={baseAbilities}
-                      onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
-                      progressionLogic={progressionLogic}
-                      availableTransformations={availableTransformations}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </>
-      ) : selectedTransformation ? (
-          <div className="bg-slate-950/70 border border-cyan-900/50 rounded-xl p-4 sm:p-5 flex flex-col gap-4">
-            {/* Header der ausgewählten Transformation */}
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-900/40 pb-3">
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/50 text-cyan-300 text-[10px] font-black uppercase tracking-wider">
-                    Transformation
-                  </span>
-                  <h4 className="text-sm sm:text-base font-black text-white">
-                    {selectedTransformation.transformName || selectedTransformation.name}
-                  </h4>
-                  {selectedTransformation.tier && (
-                    <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-bold">
-                      {selectedTransformation.tier}
-                    </span>
+                      <button
+                        type="button"
+                        onClick={() => handleAddEntry(activeCategory)}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <LucideIcons.Plus className="w-3.5 h-3.5" />
+                        <span>{CATEGORY_ADD_LABELS[activeCategory]}</span>
+                      </button>
+                    </>
                   )}
                 </div>
+              </div>
 
-                {/* Abstammungskette / Breadcrumbs */}
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">
-                  <span className="font-semibold text-slate-500">Stufen-Pfad:</span>
-                  {getTransformationBreadcrumbs(selectedTransformation).map((stepName, stepIdx, arr) => (
-                    <React.Fragment key={`crumb-${stepIdx}`}>
-                      <span className={stepIdx === arr.length - 1 ? 'font-bold text-cyan-300' : 'text-slate-400'}>
-                        {stepName}
-                      </span>
-                      {stepIdx < arr.length - 1 && <span className="text-slate-600">→</span>}
-                    </React.Fragment>
-                  ))}
+              {!activePowerSource ? (
+                <div className="text-center py-8 text-slate-400 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
+                  <p>Bitte erstelle oder wähle zuerst eine Kraftquelle aus.</p>
                 </div>
-              </div>
-
-              {!readOnly && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteTransformation(selectedTransformation.id)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 transition-colors flex items-center gap-1.5 cursor-pointer"
-                    title="Transformation löschen"
-                  >
-                    <LucideIcons.Trash2 className="w-3.5 h-3.5" />
-                    <span>Transformation löschen</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Hierarchische Vorgänger-Auswahl (Mehrstufige Transformationen) */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
-              <div className="sm:col-span-6 flex flex-col gap-1">
-                <label className="text-[10px] font-extrabold text-cyan-400 uppercase tracking-wide">
-                  Vorgänger-Transformation / Basisstufe
-                </label>
-                <select
-                  disabled={readOnly}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs font-semibold outline-none focus:border-cyan-500 h-[34px] cursor-pointer disabled:opacity-50"
-                  value={selectedTransformation.parentTransformationId || 'standard'}
-                  onChange={e => handleUpdateEntry(selectedTransformation.id, { parentTransformationId: e.target.value })}
-                >
-                  <option value="standard">Normalform (Standardgestalt)</option>
-                  {transformationItems
-                    .filter(t => t.id !== selectedTransformation.id)
-                    .map(t => (
-                      <option key={`parent-opt-${t.id}`} value={t.id}>
-                        {t.transformName || t.name}
-                      </option>
-                    ))}
-                </select>
-                <span className="text-[9.5px] text-slate-500 mt-0.5">
-                  Ermöglicht mehrstufige Verwandlungen (z.B. Normalform → Esper → Erwachte Esper).
-                </span>
-              </div>
-
-              <div className="sm:col-span-6 flex flex-col gap-1">
-                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                  Metamorphose-Einfluss / Wandlungsgrad
-                </label>
-                <select
-                  disabled={readOnly}
-                  className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs font-semibold outline-none focus:border-cyan-500 h-[34px] cursor-pointer disabled:opacity-50"
-                  value={selectedTransformation.metamorphosisInfluence !== undefined ? selectedTransformation.metamorphosisInfluence : 100}
-                  onChange={e => handleUpdateEntry(selectedTransformation.id, { metamorphosisInfluence: parseInt(e.target.value, 10) || 100 })}
-                >
-                  <option value={100}>100% (Vollständige Wandlung)</option>
-                  <option value={75}>75% (Große Gestaltanpassung)</option>
-                  <option value={50}>50% (Teil-Transformation)</option>
-                  <option value={25}>25% (Geringe körperliche Mutation)</option>
-                </select>
-                <span className="text-[9.5px] text-slate-500 mt-0.5">
-                  Bestimmt die physische Ausprägung auf Aussehen und Statur.
-                </span>
-              </div>
-            </div>
-
-            {/* Verwende die mächtige TechniqueCard für vollständige Konsistenz */}
-            <div className="space-y-3">
-              <TechniqueCard
-                entry={selectedTransformation}
-                category="Transformationen"
-                readOnly={readOnly}
-                isExpanded={true}
-                onToggleExpanded={() => {}}
-                onUpdate={updates => handleUpdateEntry(selectedTransformation.id, updates)}
-                onDelete={() => handleDeleteTransformation(selectedTransformation.id)}
-                activePowerSource={activePowerSource}
-                baseAbilities={baseAbilities}
-                onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(selectedTransformation.id, baId)}
-                progressionLogic={progressionLogic}
-                availableTransformations={availableTransformations}
-              />
-            </div>
-
-            {/* 2.3 TRANSFORMATIONSEIGENE FÄHIGKEITEN & TECHNIKEN */}
-            <div className="mt-2 bg-slate-900/60 border border-cyan-950/80 rounded-xl p-4 flex flex-col gap-3">
-              <div className="flex items-center justify-between border-b border-cyan-950/60 pb-2 flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <LucideIcons.Unlock className="w-4 h-4 text-cyan-400" />
-                  <span className="text-xs font-extrabold uppercase text-cyan-300 tracking-wider">
-                    Transformationseigene Fähigkeiten in &bdquo;{selectedTransformation.transformName || selectedTransformation.name}&ldquo;
-                  </span>
-                </div>
-
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => handleAddTransAbility(activeTransCategory)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <LucideIcons.Plus className="w-3.5 h-3.5" />
-                    <span>{TRANS_CATEGORY_ADD_LABELS[activeTransCategory]}</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Kategorie-Tabs für diese Transformation */}
-              <div className="grid grid-cols-3 gap-2">
-                {TRANS_CATEGORY_TABS.map(tab => {
-                  const isTabActive = activeTransCategory === tab;
-                  const count = transCategoryCounts[tab] || 0;
-                  return (
-                    <button
-                      key={`trans-cat-${tab}`}
-                      type="button"
-                      onClick={() => setActiveTransCategory(tab)}
-                      className={`px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1.5 cursor-pointer border min-w-0 ${
-                        isTabActive
-                          ? 'bg-cyan-600 text-white border-cyan-400 font-black shadow-sm'
-                          : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
-                      }`}
-                    >
-                      <span className="text-left leading-tight break-words">{tab}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
-                        isTabActive ? 'bg-cyan-950 text-cyan-200' : 'bg-slate-800 text-slate-400'
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Aktive Einträge der ausgewählten Kategorie für die Transformation */}
-              {activeTransEntries.length === 0 ? (
-                <div className="text-center py-6 text-slate-500 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
+              ) : activeEntries.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs italic bg-slate-950/40 rounded-xl border border-dashed border-slate-800 flex flex-col items-center gap-2">
                   <p>
-                    Keine Einträge für &bdquo;{activeTransCategory}&ldquo; in dieser Gestalt definiert.
+                    Keine Einträge für &bdquo;{activeCategory}&ldquo;{activeBaseAbility ? ` in ${activeBaseAbility.displayName || activeBaseAbility.name}` : ''} definiert.
                   </p>
                   {!readOnly && (
                     <button
                       type="button"
-                      onClick={() => handleAddTransAbility(activeTransCategory)}
-                      className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-cyan-400 hover:border-cyan-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => handleAddEntry(activeCategory)}
+                      className="mt-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <LucideIcons.Plus className="w-3.5 h-3.5" />
-                      <span>{TRANS_CATEGORY_EMPTY_LABELS[activeTransCategory]}</span>
+                      <span>{CATEGORY_EMPTY_LABELS[activeCategory]}</span>
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="space-y-3 pt-1">
-                  {activeTransEntries.map((tech, idx) => (
-                    <TechniqueCard
-                      key={`trans-tech-${tech.id || idx}`}
-                      entry={tech}
-                      category={tech.category || activeTransCategory}
-                      readOnly={readOnly}
-                      isExpanded={expandedMap[tech.id] !== undefined ? expandedMap[tech.id] : true}
-                      onToggleExpanded={() => toggleCardExpanded(tech.id, true)}
-                      onUpdate={updates => handleUpdateEntry(tech.id, updates)}
-                      onDelete={() => handleDeleteEntry(tech.id)}
-                      activePowerSource={activePowerSource}
-                      baseAbilities={baseAbilities}
-                      onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(tech.id, baId)}
-                      progressionLogic={progressionLogic}
-                      availableTransformations={availableTransformations}
-                    />
-                  ))}
+                <div className="space-y-3">
+                  {activeEntries.map((entry, idx) => {
+                    const defaultExpanded = activeEntries.length <= 4;
+                    const isExpanded = expandedMap[entry.id] !== undefined ? expandedMap[entry.id] : defaultExpanded;
+
+                    return (
+                      <TechniqueCard
+                        key={`tech-card-${entry.id || idx}`}
+                        entry={entry}
+                        category={activeCategory}
+                        readOnly={readOnly}
+                        isExpanded={isExpanded}
+                        onToggleExpanded={() => toggleCardExpanded(entry.id, defaultExpanded)}
+                        onUpdate={updates => handleUpdateEntry(entry.id, updates)}
+                        onDelete={() => handleDeleteEntry(entry.id)}
+                        activePowerSource={activePowerSource}
+                        baseAbilities={baseAbilities}
+                        onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
+                        progressionLogic={progressionLogic}
+                        availableTransformations={availableTransformations}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
-
-            {/* 2.4 OPTIONALE MOVESET-MODIFIKATOREN FÜR STANDARD-FÄHIGKEITEN */}
-            {standardTechniques.length > 0 && (
-              <div className="mt-2 bg-slate-900/40 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    onClick={() => setShowTransModifiersInEditor(!showTransModifiersInEditor)}
-                    className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                  >
-                    <LucideIcons.SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Modifikatoren für Standard-Fähigkeiten (Optional)</span>
-                    {showTransModifiersInEditor ? (
-                      <LucideIcons.ChevronUp className="w-3.5 h-3.5 ml-1 text-slate-500" />
-                    ) : (
-                      <LucideIcons.ChevronDown className="w-3.5 h-3.5 ml-1 text-slate-500" />
-                    )}
-                  </button>
-                </div>
-
-                {showTransModifiersInEditor && (
-                  <div className="space-y-3 pt-2 border-t border-slate-800/60">
-                    <p className="text-[11px] text-slate-400">
-                      Standardfähigkeiten bei Aktivierung von &bdquo;{selectedTransformation.transformName || selectedTransformation.name}&ldquo; anpassen (Weiterentwicklung, Verstärkung, Modifikation, Ersetzung oder Deaktivierung).
-                    </p>
-
-                    <div className="space-y-2.5">
-                      {standardTechniques.map(tech => {
-                        const existingMod = (tech.transformationModifiers || []).find(
-                          m => m.transformationId === selectedTransformation.id
-                        );
-                        const modType = existingMod?.modifierType || 'unverändert';
-
-                        const handleUpdateTechMod = (updates: Partial<TechniqueTransformationModifier>) => {
-                          const currentMods = [...(tech.transformationModifiers || [])];
-                          const idx = currentMods.findIndex(m => m.transformationId === selectedTransformation.id);
-                          if (idx >= 0) {
-                            currentMods[idx] = { ...currentMods[idx], ...updates };
-                          } else {
-                            currentMods.push({
-                              transformationId: selectedTransformation.id,
-                              transformationName: selectedTransformation.transformName || selectedTransformation.name,
-                              modifierType: 'weiterentwicklung',
-                              ...updates
-                            });
-                          }
-                          handleUpdateEntry(tech.id, { transformationModifiers: currentMods });
-                        };
-
-                        const handleRemoveTechMod = () => {
-                          const filtered = (tech.transformationModifiers || []).filter(
-                            m => m.transformationId !== selectedTransformation.id
-                          );
-                          handleUpdateEntry(tech.id, { transformationModifiers: filtered });
-                        };
-
-                        return (
-                          <div
-                            key={`trans-editor-mod-${tech.id}`}
-                            className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-slate-200">
-                                  {tech.name}
-                                </span>
-                                <span className="text-[10px] text-slate-500 font-medium">
-                                  [{tech.category || 'Techniken'}]
-                                </span>
-                              </div>
-
-                              <select
-                                disabled={readOnly}
-                                value={modType}
-                                onChange={e => {
-                                  const val = e.target.value as TransformationModifierType;
-                                  if (val === 'unverändert') {
-                                    handleRemoveTechMod();
-                                  } else {
-                                    handleUpdateTechMod({
-                                      modifierType: val,
-                                      disabled: val === 'deaktiviert'
-                                    });
-                                  }
-                                }}
-                                className="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-slate-200 outline-none focus:border-cyan-500 font-semibold cursor-pointer"
-                              >
-                                <option value="unverändert">Unverändert (Basis beibehalten)</option>
-                                <option value="weiterentwicklung">Weiterentwickeln (Evolve)</option>
-                                <option value="verstärkung">Verstärken (Enhance)</option>
-                                <option value="veränderung">Verändern (Modify)</option>
-                                <option value="ersetzung">Ersetzen (Replace)</option>
-                                <option value="deaktiviert">Deaktivieren (Sperren)</option>
-                              </select>
-                            </div>
-
-                            {modType !== 'unverändert' && modType !== 'deaktiviert' && (
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-850">
-                                <div>
-                                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
-                                    Modifizierter Name in dieser Form
-                                  </label>
-                                  <input
-                                    type="text"
-                                    disabled={readOnly}
-                                    placeholder={tech.name}
-                                    value={existingMod?.overrideName || ''}
-                                    onChange={e => handleUpdateTechMod({ overrideName: e.target.value })}
-                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-cyan-500 font-bold"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
-                                    Modifizierte Kosten in dieser Form
-                                  </label>
-                                  <input
-                                    type="text"
-                                    disabled={readOnly}
-                                    placeholder={tech.cost || 'Kostenwert eingeben...'}
-                                    value={existingMod?.overrideCost || ''}
-                                    onChange={e => handleUpdateTechMod({ overrideCost: e.target.value })}
-                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-cyan-500"
-                                  />
-                                </div>
-
-                                <div className="sm:col-span-2">
-                                  <label className="text-[9px] font-bold text-slate-400 uppercase block mb-0.5">
-                                    Modifizierte Beschreibung
-                                  </label>
-                                  <AutoExpandingTextarea
-                                    disabled={readOnly}
-                                    placeholder="Wirkung und Veränderung dieser Technik in der Gestalt beschreiben..."
-                                    value={existingMod?.overrideDescription || ''}
-                                    onChange={e => handleUpdateTechMod({ overrideDescription: e.target.value })}
-                                    className="w-full bg-slate-900 border border-slate-750 rounded p-1.5 text-xs text-white outline-none focus:border-cyan-500 min-h-[44px]"
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+          )}
+        </>
+      ) : selectedTransformation ? (
+        /* ============================================================ */
+        /* TRANSFORMATIONEN-ANSICHT                                      */
+        /* ============================================================ */
+        <div className="bg-slate-950/70 border border-cyan-900/50 rounded-xl p-4 sm:p-5 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-900/40 pb-3">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded bg-cyan-950 border border-cyan-500/50 text-cyan-300 text-[10px] font-black uppercase tracking-wider">
+                  Transformation
+                </span>
+                <h4 className="text-sm sm:text-base font-black text-white">
+                  {selectedTransformation.transformName || selectedTransformation.name}
+                </h4>
+                {selectedTransformation.tier && (
+                  <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-bold">
+                    {selectedTransformation.tier}
+                  </span>
                 )}
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-6 text-center flex flex-col items-center gap-3">
-            <LucideIcons.Zap className="w-8 h-8 text-cyan-400 opacity-60" />
-            <p className="text-xs text-slate-300">
-              Keine Transformation ausgewählt oder noch keine Transformationen definiert.
-            </p>
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={handleAddTransformation}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-all flex items-center gap-1.5 cursor-pointer shadow"
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedTransformationId}
+                onChange={e => setSelectedTransformationId(e.target.value)}
+                className="bg-slate-900 border border-slate-700 text-xs rounded-lg px-2.5 py-1 text-cyan-300 outline-none focus:border-cyan-500 font-bold cursor-pointer"
               >
-                <LucideIcons.Plus className="w-4 h-4" />
-                <span>+ Erste Transformation erstellen</span>
-              </button>
-            )}
+                {transformationItems.map(t => (
+                  <option key={`trans-sel-${t.id}`} value={t.id}>
+                    {t.transformName || t.name}
+                  </option>
+                ))}
+              </select>
+
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={handleAddTransformation}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950/80 border border-cyan-700 text-cyan-300 hover:bg-cyan-900 transition flex items-center gap-1 cursor-pointer"
+                >
+                  <LucideIcons.Plus className="w-3.5 h-3.5" />
+                  <span>Stufe hinzufügen</span>
+                </button>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Transformationseigene Techniken */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              {TRANS_CATEGORY_TABS.map(tab => (
+                <button
+                  key={`trans-tab-${tab}`}
+                  type="button"
+                  onClick={() => setActiveTransCategory(tab)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border cursor-pointer ${
+                    activeTransCategory === tab
+                      ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
+                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                  }`}
+                >
+                  <span>{tab}</span>
+                  <span className="ml-1 text-[10px] opacity-80">({transCategoryCounts[tab] || 0})</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              {activeTransEntries.map((entry, idx) => (
+                <TechniqueCard
+                  key={`trans-tech-card-${entry.id || idx}`}
+                  entry={entry}
+                  category={activeTransCategory}
+                  readOnly={readOnly}
+                  isExpanded={expandedMap[entry.id] || false}
+                  onToggleExpanded={() => toggleCardExpanded(entry.id, false)}
+                  onUpdate={updates => handleUpdateEntry(entry.id, updates)}
+                  onDelete={() => handleDeleteEntry(entry.id)}
+                  activePowerSource={activePowerSource}
+                  baseAbilities={baseAbilities}
+                  onToggleLinkedBaseAbility={baId => handleToggleLinkedBaseAbility(entry.id, baId)}
+                  progressionLogic={progressionLogic}
+                  availableTransformations={availableTransformations}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-6 text-center flex flex-col items-center gap-3">
+          <LucideIcons.Zap className="w-8 h-8 text-cyan-400 opacity-60" />
+          <p className="text-xs text-slate-300">
+            Keine Transformation ausgewählt oder noch keine Transformationen definiert.
+          </p>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleAddTransformation}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition flex items-center gap-1.5 cursor-pointer shadow"
+            >
+              <LucideIcons.Plus className="w-4 h-4" />
+              <span>Erste Transformation erstellen</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* 3. KI SMART FILL MODAL                                       */}

@@ -5068,6 +5068,60 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                         characterName={player.name}
                         characterRole={player.role}
                         worldTitle={world.title}
+                        profession={player.profession || player.role || ''}
+                        onProfessionChange={val => {
+                          setPlayer(prev => ({ ...prev, profession: val }));
+                        }}
+                        professionLevel={player.professionLevel}
+                        onProfessionLevelChange={val => setPlayer(prev => ({ ...prev, professionLevel: val }))}
+                        professionField={player.professionField}
+                        onProfessionFieldChange={val => setPlayer(prev => ({ ...prev, professionField: val }))}
+                        professionSpecialization={player.professionSpecialization}
+                        onProfessionSpecializationChange={val => setPlayer(prev => ({ ...prev, professionSpecialization: val }))}
+                        professionRank={player.professionRank || player.professionLevel}
+                        onProfessionRankChange={val => setPlayer(prev => ({ ...prev, professionRank: val, professionLevel: val }))}
+                        professionExperience={player.professionExperience}
+                        onProfessionExperienceChange={val => setPlayer(prev => ({ ...prev, professionExperience: val }))}
+                        professionProficiencyScore={player.professionProficiencyScore}
+                        onProfessionProficiencyScoreChange={val => setPlayer(prev => ({ ...prev, professionProficiencyScore: val }))}
+                        professionExperiencePoints={player.professionExperiencePoints}
+                        onProfessionExperiencePointsChange={val => setPlayer(prev => ({ ...prev, professionExperiencePoints: val }))}
+                        professionExperienceText={player.professionExperienceText}
+                        onProfessionExperienceTextChange={val => setPlayer(prev => ({ ...prev, professionExperienceText: val }))}
+                        professionPromotionConditions={player.professionPromotionConditions}
+                        onProfessionPromotionConditionsChange={val => setPlayer(prev => ({ ...prev, professionPromotionConditions: val }))}
+                        professionProgress={player.professionProgress}
+                        onProfessionProgressChange={val => setPlayer(prev => ({ ...prev, professionProgress: val }))}
+                        professionCompetencies={player.professionCompetencies}
+                        onProfessionCompetenciesChange={val => setPlayer(prev => ({ ...prev, professionCompetencies: val }))}
+                        secondaryProfessions={player.secondaryProfessions}
+                        onSecondaryProfessionsChange={val => setPlayer(prev => ({ ...prev, secondaryProfessions: val }))}
+                        socialTitles={player.socialTitles}
+                        onSocialTitlesChange={val => setPlayer(prev => ({ ...prev, socialTitles: val }))}
+                        offices={player.offices}
+                        onOfficesChange={val => setPlayer(prev => ({ ...prev, offices: val }))}
+                        positions={player.positions}
+                        onPositionsChange={val => setPlayer(prev => ({ ...prev, positions: val }))}
+                        socialStatus={player.socialStatus}
+                        onSocialStatusChange={val => setPlayer(prev => ({ ...prev, socialStatus: val }))}
+                        craftingSkills={player.craftingSkills}
+                        onCraftingSkillsChange={val => setPlayer(prev => ({ ...prev, craftingSkills: val }))}
+                        jobTitle={player.jobTitle}
+                        onJobTitleChange={val => setPlayer(prev => ({ ...prev, jobTitle: val }))}
+                        authorities={player.authorities}
+                        onAuthoritiesChange={val => setPlayer(prev => ({ ...prev, authorities: val }))}
+                        professionDescription={player.professionDescription}
+                        onProfessionDescriptionChange={val => setPlayer(prev => ({ ...prev, professionDescription: val }))}
+                        talents={player.talents}
+                        onTalentsChange={val => setPlayer(prev => ({ ...prev, talents: val }))}
+                        everydaySkills={player.everydaySkills}
+                        onEverydaySkillsChange={val => setPlayer(prev => ({ ...prev, everydaySkills: val }))}
+                        everydaySkillsProficiencyScore={player.everydaySkillsProficiencyScore}
+                        onEverydaySkillsProficiencyScoreChange={val => setPlayer(prev => ({ ...prev, everydaySkillsProficiencyScore: val }))}
+                        everydaySkillsExperienceText={player.everydaySkillsExperienceText}
+                        onEverydaySkillsExperienceTextChange={val => setPlayer(prev => ({ ...prev, everydaySkillsExperienceText: val }))}
+                        toolsAndEquipment={player.toolsAndEquipment}
+                        onToolsAndEquipmentChange={val => setPlayer(prev => ({ ...prev, toolsAndEquipment: val }))}
                       />
                     );
                   })()}

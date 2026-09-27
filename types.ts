@@ -456,6 +456,16 @@ export interface TechniqueItem {
   summonCount?: number;
   summonCostValue?: number;
   summonCostFormula?: string;
+  // Optionale Zusatzfelder für Training & Erlernbare Fertigkeiten
+  isLearnable?: boolean;
+  learningStatus?: 'erlernbar' | 'in_ausbildung' | 'gemeistert' | 'gesperrt' | string;
+  learningRequirements?: string;
+  requiredTeacherOrScroll?: string;
+  prerequisiteTechniques?: string;
+  requiredAttribute?: string;
+  trainingHours?: number;
+  targetTrainingHours?: number;
+  trainingNotes?: string;
   // Optionale Zusatzfelder für Transformationen / Bedingungen
   activationCondition?: string;
   transformName?: string;

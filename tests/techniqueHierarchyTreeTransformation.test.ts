@@ -22,14 +22,17 @@ function assert(condition: boolean, message: string) {
 export function runTechniqueHierarchyTreeTransformationTests() {
   console.log('\n--- Starte TechniqueHierarchyTree & Transformation-Trennung Tests ---');
 
-  // Test 1: CATEGORY_TABS darf keine "Transformationen" mehr enthalten
+  // Test 1: CATEGORY_TABS darf keine "Transformationen" mehr enthalten und enthält die 7 integrierten Bereiche
   console.log('\n--- Test 1: CATEGORY_TABS Überprüfung ---');
   assert(!((CATEGORY_TABS as readonly string[]).includes('Transformationen')), 'Test 1a: CATEGORY_TABS enthält NICHT "Transformationen"');
-  assert((CATEGORY_TABS as readonly string[]).includes('Passive Fähigkeiten'), 'Test 1b: Enthält "Passive Fähigkeiten"');
-  assert((CATEGORY_TABS as readonly string[]).includes('Techniken'), 'Test 1c: Enthält "Techniken"');
-  assert((CATEGORY_TABS as readonly string[]).includes('Ultimative Techniken'), 'Test 1d: Enthält "Ultimative Techniken"');
-  assert((CATEGORY_TABS as readonly string[]).includes('Waffenbeherrschung'), 'Test 1e: Enthält "Waffenbeherrschung"');
-  assert(CATEGORY_TABS.length === 4, 'Test 1f: Genau 4 Standard-Kategorien definiert');
+  assert((CATEGORY_TABS as readonly string[]).includes('Training & Erlernbare Fertigkeiten'), 'Test 1b: Enthält "Training & Erlernbare Fertigkeiten"');
+  assert((CATEGORY_TABS as readonly string[]).includes('Passive Fähigkeiten'), 'Test 1c: Enthält "Passive Fähigkeiten"');
+  assert((CATEGORY_TABS as readonly string[]).includes('Techniken'), 'Test 1d: Enthält "Techniken"');
+  assert((CATEGORY_TABS as readonly string[]).includes('Ultimative Techniken'), 'Test 1e: Enthält "Ultimative Techniken"');
+  assert((CATEGORY_TABS as readonly string[]).includes('Waffenbeherrschung'), 'Test 1f: Enthält "Waffenbeherrschung"');
+  assert((CATEGORY_TABS as readonly string[]).includes('Alltagskompetenzen'), 'Test 1g: Enthält "Alltagskompetenzen"');
+  assert((CATEGORY_TABS as readonly string[]).includes('Berufe'), 'Test 1h: Enthält "Berufe"');
+  assert(CATEGORY_TABS.length === 7, 'Test 1i: Genau 7 integrierte System-Kategorien definiert');
 
   // Test 2: CATEGORY_ADD_LABELS & EMPTY_LABELS
   console.log('\n--- Test 2: Labels Überprüfung ---');
