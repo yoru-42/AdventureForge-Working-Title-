@@ -22,7 +22,7 @@ function assert(condition: boolean, message: string) {
 export function runTechniqueHierarchyTreeTransformationTests() {
   console.log('\n--- Starte TechniqueHierarchyTree & Transformation-Trennung Tests ---');
 
-  // Test 1: CATEGORY_TABS darf keine "Transformationen" mehr enthalten und enthält die 7 integrierten Bereiche
+  // Test 1: CATEGORY_TABS enthält die 5 System-Bereiche (ohne Transformationen, Alltagskompetenzen & Berufe)
   console.log('\n--- Test 1: CATEGORY_TABS Überprüfung ---');
   assert(!((CATEGORY_TABS as readonly string[]).includes('Transformationen')), 'Test 1a: CATEGORY_TABS enthält NICHT "Transformationen"');
   assert((CATEGORY_TABS as readonly string[]).includes('Training & Erlernbare Fertigkeiten'), 'Test 1b: Enthält "Training & Erlernbare Fertigkeiten"');
@@ -30,9 +30,9 @@ export function runTechniqueHierarchyTreeTransformationTests() {
   assert((CATEGORY_TABS as readonly string[]).includes('Techniken'), 'Test 1d: Enthält "Techniken"');
   assert((CATEGORY_TABS as readonly string[]).includes('Ultimative Techniken'), 'Test 1e: Enthält "Ultimative Techniken"');
   assert((CATEGORY_TABS as readonly string[]).includes('Waffenbeherrschung'), 'Test 1f: Enthält "Waffenbeherrschung"');
-  assert((CATEGORY_TABS as readonly string[]).includes('Alltagskompetenzen'), 'Test 1g: Enthält "Alltagskompetenzen"');
-  assert((CATEGORY_TABS as readonly string[]).includes('Berufe'), 'Test 1h: Enthält "Berufe"');
-  assert(CATEGORY_TABS.length === 7, 'Test 1i: Genau 7 integrierte System-Kategorien definiert');
+  assert(!((CATEGORY_TABS as readonly string[]).includes('Alltagskompetenzen')), 'Test 1g: Enthält NICHT mehr "Alltagskompetenzen"');
+  assert(!((CATEGORY_TABS as readonly string[]).includes('Berufe')), 'Test 1h: Enthält NICHT mehr "Berufe"');
+  assert(CATEGORY_TABS.length === 5, 'Test 1i: Genau 5 integrierte System-Kategorien definiert');
 
   // Test 2: CATEGORY_ADD_LABELS & EMPTY_LABELS
   console.log('\n--- Test 2: Labels Überprüfung ---');

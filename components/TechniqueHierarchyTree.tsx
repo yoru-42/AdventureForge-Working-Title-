@@ -110,9 +110,7 @@ export const CATEGORY_TABS = [
   'Passive Fähigkeiten',
   'Techniken',
   'Ultimative Techniken',
-  'Waffenbeherrschung',
-  'Alltagskompetenzen',
-  'Berufe'
+  'Waffenbeherrschung'
 ] as const;
 
 export type AbilityCategoryTab = typeof CATEGORY_TABS[number];
@@ -122,9 +120,7 @@ export const CATEGORY_ADD_LABELS: Record<AbilityCategoryTab, string> = {
   'Passive Fähigkeiten': 'Passive Fähigkeit hinzufügen',
   'Techniken': 'Technik hinzufügen',
   'Ultimative Techniken': 'Ultimative Technik hinzufügen',
-  'Waffenbeherrschung': 'Waffenbeherrschung hinzufügen',
-  'Alltagskompetenzen': 'Alltagskompetenz hinzufügen',
-  'Berufe': 'Beruf / Spezialisierung bearbeiten'
+  'Waffenbeherrschung': 'Waffenbeherrschung hinzufügen'
 };
 
 export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
@@ -132,9 +128,7 @@ export const CATEGORY_EMPTY_LABELS: Record<AbilityCategoryTab, string> = {
   'Passive Fähigkeiten': 'Erste passive Fähigkeit erstellen',
   'Techniken': 'Erste Technik erstellen',
   'Ultimative Techniken': 'Erste ultimative Technik erstellen',
-  'Waffenbeherrschung': 'Erste Waffenbeherrschung erstellen',
-  'Alltagskompetenzen': 'Erste Alltagskompetenz auswählen',
-  'Berufe': 'Berufsprofil konfigurieren'
+  'Waffenbeherrschung': 'Erste Waffenbeherrschung erstellen'
 };
 
 export const TRANS_CATEGORY_TABS = [
@@ -408,21 +402,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     return 'Techniken';
   };
 
-  // Zähler für die 7 Kategorien
-  const parsedEverydaySkillsCount = useMemo(() => {
-    const list = parseEverydaySkills(localEverydaySkills);
-    return list.length;
-  }, [localEverydaySkills]);
-
   const categoryCounts = useMemo(() => {
     const counts: Record<AbilityCategoryTab, number> = {
       'Training & Erlernbare Fertigkeiten': 0,
       'Passive Fähigkeiten': 0,
       'Techniken': 0,
       'Ultimative Techniken': 0,
-      'Waffenbeherrschung': 0,
-      'Alltagskompetenzen': parsedEverydaySkillsCount,
-      'Berufe': (localProfession ? 1 : 0) + (secondaryProfessions?.length || 0)
+      'Waffenbeherrschung': 0
     };
 
     standardTechniques.forEach(tech => {
@@ -444,7 +430,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     });
 
     return counts;
-  }, [standardTechniques, activeBaseAbility, activePowerSource, parsedEverydaySkillsCount, localProfession, secondaryProfessions]);
+  }, [standardTechniques, activeBaseAbility, activePowerSource]);
 
   // Einträge der ausgewählten Kategorie
   const activeEntries = useMemo(() => {
@@ -1332,7 +1318,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5">
               {CATEGORY_TABS.map((tab, tabIdx) => {
                 const isTabActive = activeCategory === tab;
                 const count = categoryCounts[tab] || 0;
@@ -1341,13 +1327,13 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                     key={`cat-tab-${tab}-${tabIdx}`}
                     type="button"
                     onClick={() => setActiveCategory(tab)}
-                    className={`px-2.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1 cursor-pointer border min-w-0 ${
+                    className={`px-2.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between gap-1.5 cursor-pointer border min-w-0 ${
                       isTabActive
                         ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-sm'
                         : 'bg-slate-950/70 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
                     }`}
                   >
-                    <span className="text-left leading-tight break-words truncate">{tab}</span>
+                    <span className="text-left leading-tight break-words text-xs">{tab}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
                       isTabActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800/80 text-slate-400'
                     }`}>
@@ -1687,127 +1673,6 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 });
               }}
             />
-          )}
-
-          {/* ============================================================ */}
-          {/* BEREICH 6: ALLTAGSKOMPETENZEN                                 */}
-          {/* ============================================================ */}
-          {activeCategory === 'Alltagskompetenzen' && (
-            <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-4">
-              <div className="border-b border-slate-800 pb-2">
-                <h4 className="text-sm font-bold text-slate-300">Alltagskompetenzen &amp; Lebenspraktische Fertigkeiten</h4>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Praktische Alltagskompetenzen, Hobbys, Talente und Handwerksfähigkeiten deines Charakters.
-                </p>
-              </div>
-
-              <EverydaySkillsSelect
-                value={localEverydaySkills}
-                onChange={val => {
-                  setLocalEverydaySkills(val);
-                  if (onEverydaySkillsChange) onEverydaySkillsChange(val);
-                }}
-                progressionLogic={progressionLogic}
-                placeholder="Alltagskompetenzen und praktische Fertigkeiten im Alltag"
-              />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                    Praktische Erfahrung &amp; Anwendungsnotizen
-                  </label>
-                  <AutoExpandingTextarea
-                    disabled={readOnly}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 min-h-[50px] leading-relaxed"
-                    placeholder="Konkrete Erfahrungen, erprobte Rezepte oder Überlebenswissen..."
-                    value={everydaySkillsExperienceText}
-                    onChange={e => onEverydaySkillsExperienceTextChange && onEverydaySkillsExperienceTextChange(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                    Werkzeuge &amp; Handwerksausrüstung
-                  </label>
-                  <AutoExpandingTextarea
-                    disabled={readOnly}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 min-h-[50px] leading-relaxed"
-                    placeholder="Feinmechanik-Set, Kräuterbeutel, Schmiedehammer, Kochgeschirr..."
-                    value={toolsAndEquipment}
-                    onChange={e => onToolsAndEquipmentChange && onToolsAndEquipmentChange(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ============================================================ */}
-          {/* BEREICH 7: BERUFE                                             */}
-          {/* ============================================================ */}
-          {activeCategory === 'Berufe' && (
-            <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 sm:p-4 flex flex-col gap-4">
-              <CompetenceProfileEditor
-                progressionLogic={progressionLogic}
-                profession={localProfession || profession}
-                onProfessionChange={(val, detectedField) => {
-                  setLocalProfession(val);
-                  if (onProfessionChange) onProfessionChange(val, detectedField);
-                }}
-                professionLevel={professionLevel}
-                onProfessionLevelChange={onProfessionLevelChange || (() => {})}
-                professionField={professionField}
-                onProfessionFieldChange={onProfessionFieldChange || (() => {})}
-                professionSpecialization={professionSpecialization}
-                onProfessionSpecializationChange={onProfessionSpecializationChange || (() => {})}
-                professionRank={professionRank}
-                onProfessionRankChange={onProfessionRankChange || (() => {})}
-                professionExperience={professionExperience}
-                onExperienceChange={onProfessionExperienceChange}
-                professionProficiencyScore={professionProficiencyScore}
-                onProfessionProficiencyScoreChange={onProfessionProficiencyScoreChange || (() => {})}
-                professionExperiencePoints={professionExperiencePoints}
-                onProfessionExperiencePointsChange={onProfessionExperiencePointsChange || (() => {})}
-                professionExperienceText={professionExperienceText}
-                onProfessionExperienceTextChange={onProfessionExperienceTextChange || (() => {})}
-                professionPromotionConditions={professionPromotionConditions}
-                onProfessionPromotionConditionsChange={onProfessionPromotionConditionsChange || (() => {})}
-                professionProgress={professionProgress}
-                onProfessionProgressChange={onProfessionProgressChange || (() => {})}
-                professionCompetencies={professionCompetencies}
-                onProfessionCompetenciesChange={onProfessionCompetenciesChange || (() => {})}
-                socialTitles={socialTitles}
-                onSocialTitlesChange={onSocialTitlesChange || (() => {})}
-                offices={offices}
-                onOfficesChange={onOfficesChange || (() => {})}
-                positions={positions}
-                onPositionsChange={onPositionsChange || (() => {})}
-                socialStatus={socialStatus}
-                onSocialStatusChange={onSocialStatusChange || (() => {})}
-                craftingSkills={craftingSkills}
-                onCraftingSkillsChange={onCraftingSkillsChange || (() => {})}
-                jobTitle={jobTitle}
-                onJobTitleChange={onJobTitleChange || (() => {})}
-                authorities={authorities}
-                onAuthoritiesChange={onAuthoritiesChange || (() => {})}
-                professionDescription={professionDescription}
-                onProfessionDescriptionChange={onProfessionDescriptionChange || (() => {})}
-                secondaryProfessions={secondaryProfessions}
-                onSecondaryProfessionsChange={onSecondaryProfessionsChange || (() => {})}
-                talents={talents}
-                onTalentsChange={onTalentsChange || (() => {})}
-                everydaySkills={localEverydaySkills}
-                onEverydaySkillsChange={val => {
-                  setLocalEverydaySkills(val);
-                  if (onEverydaySkillsChange) onEverydaySkillsChange(val);
-                }}
-                everydaySkillsProficiencyScore={everydaySkillsProficiencyScore}
-                onEverydaySkillsProficiencyScoreChange={onEverydaySkillsProficiencyScoreChange || (() => {})}
-                everydaySkillsExperienceText={everydaySkillsExperienceText}
-                onEverydaySkillsExperienceTextChange={onEverydaySkillsExperienceTextChange || (() => {})}
-                toolsAndEquipment={toolsAndEquipment}
-                onToolsAndEquipmentChange={onToolsAndEquipmentChange || (() => {})}
-              />
-            </div>
           )}
 
           {/* ============================================================ */}
