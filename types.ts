@@ -377,6 +377,312 @@ export interface UserProfile {
   };
 }
 
+// ============================================================================
+// PROGRESSION & POWER ARCHITECTURE (KRAFT - FÄHIGKEIT - TECHNIK - FORM)
+// ============================================================================
+
+/**
+ * Gemeinsamer, zentraler Progressionszustand für alle entwickelbaren Entitäten
+ * (Kräfte, Fähigkeiten, Techniken, Formen, Waffenbeherrschung, Berufe etc.).
+ * Die konkrete Berechnung erfolgt im globalen Progressionssystem.
+ */
+export interface ProgressionState {
+  level?: number;
+  xp?: number;
+  maxLevel?: number;
+  xpNeeded?: number;
+
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static' | string;
+
+  xpGainPerUse?: number;
+
+  trainingRequired?: number;
+  trainingUnits?: number;
+  trainingProgress?: number;
+
+  score?: number;
+
+  milestoneRequirement?: string;
+  milestoneNote?: string;
+
+  points?: number;
+
+  isUnlocked?: boolean;
+  isLearnable?: boolean;
+}
+
+/**
+ * Übergeordnetes Kraftsystem / Ursprung der Kraft (z.B. Magie, Quirk, Teufelsfrucht, Ki, Haki, Runen).
+ */
+export interface PowerSystem {
+  id: string;
+  name: string;
+  description?: string;
+
+  /**
+   * Beispiele:
+   * Magie
+   * Quirk
+   * Teufelsfrucht
+   * Ki
+   * Haki
+   * Runen
+   */
+  systemType?: string;
+
+  /**
+   * Optionaler Hinweis auf die Herkunft der Kraft.
+   */
+  origin?: string;
+
+  /**
+   * Verfügbare Ressource der Kraft.
+   * Beispiel: Mana, Ki, Ausdauer, keine.
+   */
+  resourceName?: string;
+
+  /**
+   * Verweis auf die konkrete Kraft(en),
+   * die zu diesem System gehören.
+   */
+  powerIds?: string[];
+}
+
+/**
+ * Konkrete Kraft (z.B. Mana-Manipulation, Fliegen, Mystische Zoan – Eis-Kitsune).
+ */
+export interface CharacterPower {
+  id: string;
+
+  /**
+   * Verweis auf das übergeordnete Kraftsystem.
+   */
+  powerSystemId?: string;
+
+  /**
+   * Beispiel:
+   * Mana-Manipulation
+   * Fliegen
+   * Mystische Zoan – Eis-Kitsune
+   */
+  name: string;
+
+  description?: string;
+
+  /**
+   * Optionale genauere Bezeichnung.
+   */
+  subtype?: string;
+
+  /**
+   * Element / Affinität, falls vorhanden.
+   */
+  element?: string;
+
+  /**
+   * Ressource, die diese konkrete Kraft verwendet.
+   */
+  resourceName?: string;
+
+  /**
+   * Fähigkeiten, die zu dieser Kraft gehören.
+   */
+  abilityIds?: string[];
+
+  /**
+   * Formen / Transformationen dieser Kraft.
+   */
+  formIds?: string[];
+
+  /**
+   * Globales Progressionssystem.
+   *
+   * Die konkrete Berechnung erfolgt NICHT hier.
+   */
+  progression?: ProgressionState;
+}
+
+/**
+ * Fähigkeit als Aspekt / Komponente einer konkreten Kraft
+ * (z.B. Mana wahrnehmen, Mana formen, Eis erzeugen, Fuchssinne, Illusionen).
+ */
+export interface CharacterAbility {
+  id: string;
+
+  /**
+   * Zugehörige konkrete Kraft.
+   */
+  powerId?: string;
+
+  /**
+   * Name der Fähigkeit.
+   *
+   * Beispiele:
+   * Mana wahrnehmen
+   * Mana formen
+   * Eis erzeugen
+   * Fuchssinne
+   * Illusionen
+   */
+  name: string;
+
+  description?: string;
+
+  /**
+   * Art der Fähigkeit.
+   *
+   * Beispiele:
+   * Wahrnehmung
+   * Manipulation
+   * Erzeugung
+   * Bewegung
+   * Transformation
+   * Passiv
+   * Unterstützung
+   *
+   * Keine harte, abschließende Enum-Liste erzwingen.
+   */
+  abilityType?: string;
+
+  /**
+   * Element / Affinität.
+   */
+  element?: string;
+
+  /**
+   * Zugehörige Techniken / Anwendungen.
+   */
+  techniqueIds?: string[];
+
+  /**
+   * Optional: direkte Freischaltbedingungen.
+   */
+  prerequisites?: string[];
+
+  /**
+   * Gemeinsamer Progressionszustand.
+   */
+  progression?: ProgressionState;
+}
+
+/**
+ * Technik als konkrete Anwendung einer Fähigkeit
+ * (z.B. Eisprojektil, Eiswand, Frostpfote, Eissturm).
+ */
+export interface CharacterTechnique {
+  id: string;
+
+  /**
+   * Zugehörige Fähigkeit.
+   */
+  abilityId?: string;
+
+  /**
+   * Zugehörige konkrete Kraft.
+   * Optional als direkte Referenz für schnelle Abfragen.
+   */
+  powerId?: string;
+
+  name: string;
+  description?: string;
+
+  /**
+   * Was für eine Anwendung ist es?
+   *
+   * Beispiele:
+   * Angriff
+   * Verteidigung
+   * Bewegung
+   * Support
+   * Heilung
+   * Kontrolle
+   * Beschwörung
+   * Spezial
+   */
+  techniqueType?: string;
+
+  /**
+   * Ausführungsart.
+   */
+  mode?: string;
+
+  /**
+   * Element / Affinität.
+   */
+  element?: string;
+
+  /**
+   * Zielart.
+   */
+  targetType?: string;
+
+  /**
+   * Wirkungen.
+   */
+  effects?: string[];
+
+  /**
+   * Reichweite.
+   */
+  range?: string;
+
+  /**
+   * Dauer.
+   */
+  duration?: string;
+
+  /**
+   * Kosten.
+   */
+  cost?: string;
+
+  costValue?: number;
+
+  costFormula?: 'absolut' | 'proz.' | string;
+
+  costResourceName?: string;
+
+  /**
+   * Gemeinsamer Progressionszustand.
+   */
+  progression?: ProgressionState;
+}
+
+/**
+ * Form / Transformation als eigenständige Entität einer Kraft.
+ */
+export interface CharacterPowerForm {
+  id: string;
+
+  powerId?: string;
+
+  name: string;
+
+  description?: string;
+
+  formType?: string;
+
+  /**
+   * Fähigkeiten, die diese Form besitzt oder freischaltet.
+   */
+  abilityIds?: string[];
+
+  /**
+   * Techniken, die nur in dieser Form verfügbar sind.
+   */
+  techniqueIds?: string[];
+
+  /**
+   * Veränderungen an Attributen / Eigenschaften.
+   */
+  modifiers?: Record<string, number | string>;
+
+  /**
+   * Globale Progression, falls Formen selbst entwickelt werden.
+   */
+  progression?: ProgressionState;
+}
+
 export type AbilityType = 'creation' | 'manipulation' | 'creation_manipulation' | string;
 
 export interface BaseAbility {
@@ -1095,6 +1401,11 @@ export interface Character {
   techniques?: string;
   techniqueList?: TechniqueItem[];
   abilities?: PowerAbility[];
+  powerSystems?: PowerSystem[];
+  powers?: CharacterPower[];
+  characterAbilities?: CharacterAbility[];
+  characterTechniques?: CharacterTechnique[];
+  powerForms?: CharacterPowerForm[];
   campaignPowerLevels?: Record<string, { value: number; potentialMax: number; xp?: number }>;
   relationship?: string;
   conduct?: string;

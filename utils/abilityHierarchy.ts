@@ -1,5 +1,18 @@
 // -*- coding: utf-8 -*-
-import { BaseAbility, AbilityType, TechniqueItem, CharacterPowerSource, Character, PowerAbility } from '../types';
+import {
+  BaseAbility,
+  AbilityType,
+  TechniqueItem,
+  CharacterPowerSource,
+  Character,
+  PowerAbility,
+  PowerSystem,
+  CharacterPower,
+  CharacterAbility,
+  CharacterTechnique,
+  CharacterPowerForm,
+  ProgressionState
+} from '../types';
 
 /**
  * Zentrales Verzeichnis aller 19 AdventureForge-Elemente / Aspekte.
@@ -651,4 +664,453 @@ export function buildTechniqueTree(
       baseAbilities: baseAbilityNodes
     };
   });
+}
+
+// ============================================================================
+// MIGRATION & MAPPING UTILITIES: POWER - ABILITY - TECHNIQUE - FORM ARCHITECTURE
+// ============================================================================
+
+/**
+ * Extrahiert den gemeinsamen ProgressionState aus einem beliebigen Objekt.
+ */
+export function extractProgressionState(item: any): ProgressionState | undefined {
+  if (!item || typeof item !== 'object') return undefined;
+  if (item.progression && typeof item.progression === 'object') {
+    return { ...item.progression };
+  }
+
+  const hasProgression =
+    item.level !== undefined ||
+    item.xp !== undefined ||
+    item.maxLevel !== undefined ||
+    item.xpNeeded !== undefined ||
+    item.progressionLogic !== undefined ||
+    item.xpGainPerUse !== undefined ||
+    item.trainingRequired !== undefined ||
+    item.trainingUnits !== undefined ||
+    item.trainingProgress !== undefined ||
+    item.score !== undefined ||
+    item.milestoneRequirement !== undefined ||
+    item.milestoneNote !== undefined ||
+    item.points !== undefined ||
+    item.isUnlocked !== undefined ||
+    item.isLearnable !== undefined;
+
+  if (!hasProgression) return undefined;
+
+  return {
+    level: item.level,
+    xp: item.xp,
+    maxLevel: item.maxLevel,
+    xpNeeded: item.xpNeeded,
+    progressionLogic: item.progressionLogic,
+    xpGainPerUse: item.xpGainPerUse,
+    trainingRequired: item.trainingRequired,
+    trainingUnits: item.trainingUnits,
+    trainingProgress: item.trainingProgress,
+    score: item.score,
+    milestoneRequirement: item.milestoneRequirement,
+    milestoneNote: item.milestoneNote,
+    points: item.points,
+    isUnlocked: item.isUnlocked,
+    isLearnable: item.isLearnable
+  };
+}
+
+/**
+ * Wandelt eine Legacy-Kraftquelle in ein PowerSystem um.
+ */
+export function powerSourceToPowerSystem(source: CharacterPowerSource, powerIds?: string[]): PowerSystem {
+  const pName = source.source || source.powerName || 'Unbekanntes Kraftsystem';
+  const sysId = source.id ? (source.id.startsWith('sys_') ? source.id : `sys_${source.id}`) : `sys_${Date.now()}`;
+  const powerId = source.id || `power_${Date.now()}`;
+
+  return {
+    id: sysId,
+    name: pName,
+    description: source.powerDescription || undefined,
+    systemType: source.source || 'Magie',
+    origin: undefined,
+    resourceName: source.cost || undefined,
+    powerIds: powerIds && powerIds.length > 0 ? powerIds : [powerId]
+  };
+}
+
+/**
+ * Wandelt eine Legacy-Kraftquelle in eine konkrete CharacterPower um.
+ */
+export function powerSourceToCharacterPower(
+  source: CharacterPowerSource,
+  systemId?: string,
+  abilityIds?: string[],
+  formIds?: string[]
+): CharacterPower {
+  const powerId = source.id || `power_${Date.now()}`;
+  const resolvedSysId = systemId || (source.id ? (source.id.startsWith('sys_') ? source.id : `sys_${source.id}`) : `sys_${powerId}`);
+  const resolvedAbilityIds = abilityIds || (Array.isArray(source.baseAbilities) ? source.baseAbilities.map(ba => ba.id).filter(Boolean) : []);
+
+  return {
+    id: powerId,
+    powerSystemId: resolvedSysId,
+    name: source.powerName || source.source || 'Konkrete Kraft',
+    description: source.powerDescription || undefined,
+    resourceName: source.cost || undefined,
+    abilityIds: resolvedAbilityIds,
+    formIds: formIds || [],
+    progression: extractProgressionState(source)
+  };
+}
+
+/**
+ * Wandelt eine Legacy-BaseAbility in eine CharacterAbility um.
+ */
+export function baseAbilityToCharacterAbility(
+  baseAbility: BaseAbility,
+  powerId?: string,
+  techniqueIds?: string[]
+): CharacterAbility {
+  const resolvedPowerId = powerId || baseAbility.powerSourceId || 'power_default';
+  const resolvedTechIds = techniqueIds || baseAbility.techniqueIds || [];
+
+  return {
+    id: baseAbility.id || `ab_${Date.now()}`,
+    powerId: resolvedPowerId,
+    name: baseAbility.displayName || baseAbility.name || resolveKinesisName(baseAbility.element || 'Neutral', baseAbility.abilityType),
+    description: baseAbility.description,
+    abilityType: formatAbilityTypeLabel(baseAbility.abilityType),
+    element: baseAbility.element || 'Neutral',
+    techniqueIds: resolvedTechIds,
+    progression: extractProgressionState(baseAbility)
+  };
+}
+
+/**
+ * Wandelt ein Legacy-TechniqueItem in eine CharacterTechnique um.
+ */
+export function techniqueItemToCharacterTechnique(
+  tech: TechniqueItem,
+  abilityId?: string,
+  powerId?: string
+): CharacterTechnique {
+  const resolvedAbilityId = abilityId || (Array.isArray(tech.baseAbilityIds) && tech.baseAbilityIds.length > 0 ? tech.baseAbilityIds[0] : undefined);
+  const resolvedPowerId = powerId || tech.powerSourceId;
+
+  return {
+    id: tech.id || `tech_${Date.now()}`,
+    abilityId: resolvedAbilityId,
+    powerId: resolvedPowerId,
+    name: tech.name,
+    description: tech.description,
+    techniqueType: tech.type || (tech.category === 'Passive Fähigkeiten' ? 'Passiv' : (tech.category === 'Ultimative Techniken' ? 'Ultimativ' : 'Angriff')),
+    mode: tech.mode,
+    element: tech.element,
+    targetType: tech.targetType,
+    effects: tech.effects || (tech.applications ? tech.applications : undefined),
+    range: tech.range,
+    duration: tech.duration,
+    cost: tech.cost,
+    costValue: tech.costValue,
+    costFormula: tech.costFormula,
+    costResourceName: tech.costResourceName,
+    progression: extractProgressionState(tech)
+  };
+}
+
+/**
+ * Wandelt ein Transformations-TechniqueItem in eine CharacterPowerForm um.
+ */
+export function techniqueItemToCharacterPowerForm(
+  tech: TechniqueItem,
+  powerId?: string
+): CharacterPowerForm {
+  const resolvedPowerId = powerId || tech.powerSourceId;
+  const modifiers: Record<string, number | string> = {};
+
+  if (Array.isArray(tech.transformationModifiers)) {
+    tech.transformationModifiers.forEach((mod: any, idx: number) => {
+      if (mod.targetStat) {
+        modifiers[mod.targetStat] = mod.value ?? mod.targetStat;
+      } else if (mod.overrideName) {
+        modifiers[`override_name_${mod.transformationId || idx}`] = mod.overrideName;
+      } else if (mod.notes) {
+        modifiers[`notes_${idx}`] = mod.notes;
+      } else if (mod.description) {
+        modifiers[`modifier_${idx}`] = mod.description;
+      }
+    });
+  }
+
+  return {
+    id: tech.id || `form_${Date.now()}`,
+    powerId: resolvedPowerId,
+    name: tech.transformName || tech.name,
+    description: tech.description,
+    formType: tech.subtype || 'Transformation',
+    abilityIds: tech.baseAbilityIds || [],
+    techniqueIds: [],
+    modifiers: Object.keys(modifiers).length > 0 ? modifiers : undefined,
+    progression: extractProgressionState(tech)
+  };
+}
+
+/**
+ * Konvertiert eine CharacterPower zurück in eine Legacy-CharacterPowerSource.
+ */
+export function characterPowerToLegacyPower(
+  power: CharacterPower,
+  system?: PowerSystem,
+  baseAbilities?: BaseAbility[]
+): CharacterPowerSource {
+  return {
+    id: power.id,
+    source: system?.systemType || system?.name || power.name,
+    powerName: power.name,
+    powerDescription: power.description,
+    cost: power.resourceName || system?.resourceName || 'Mana',
+    baseAbilities: baseAbilities
+  };
+}
+
+/**
+ * Konvertiert eine CharacterAbility zurück in eine Legacy-BaseAbility.
+ */
+export function characterAbilityToLegacyBaseAbility(
+  ability: CharacterAbility,
+  power?: CharacterPower
+): BaseAbility {
+  const element = ability.element || 'Neutral';
+  const abilityType = normalizeAbilityTypeId(ability.abilityType);
+
+  return {
+    id: ability.id,
+    powerSourceId: ability.powerId || power?.id || 'ps_default',
+    powerSourceName: power?.name,
+    name: ability.name,
+    displayName: ability.name,
+    element,
+    abilityType,
+    description: ability.description,
+    techniqueIds: ability.techniqueIds || [],
+    level: ability.progression?.level,
+    xp: ability.progression?.xp,
+    maxLevel: ability.progression?.maxLevel,
+    xpNeeded: ability.progression?.xpNeeded,
+    progressionLogic: ability.progression?.progressionLogic,
+    xpGainPerUse: ability.progression?.xpGainPerUse,
+    trainingRequired: ability.progression?.trainingRequired,
+    trainingUnits: ability.progression?.trainingUnits,
+    trainingProgress: ability.progression?.trainingProgress,
+    score: ability.progression?.score,
+    milestoneRequirement: ability.progression?.milestoneRequirement,
+    milestoneNote: ability.progression?.milestoneNote,
+    points: ability.progression?.points,
+    costResourceName: power?.resourceName
+  };
+}
+
+/**
+ * Konvertiert eine CharacterTechnique zurück in ein Legacy-TechniqueItem.
+ */
+export function characterTechniqueToLegacyTechnique(
+  tech: CharacterTechnique,
+  ability?: CharacterAbility,
+  power?: CharacterPower
+): TechniqueItem {
+  const isPassive = tech.techniqueType === 'Passiv' || (tech.effects && tech.effects.includes('Passiv'));
+  const isUlt = tech.techniqueType === 'Ultimativ';
+  const category = isPassive ? 'Passive Fähigkeiten' : (isUlt ? 'Ultimative Techniken' : 'Techniken');
+
+  return {
+    id: tech.id,
+    name: tech.name,
+    description: tech.description,
+    type: tech.techniqueType || (isPassive ? 'Support' : 'Angriff'),
+    mode: tech.mode || 'Normal',
+    category,
+    tier: isUlt ? 'Tier 4' : 'Tier 1',
+    baseAbilityIds: tech.abilityId ? [tech.abilityId] : (ability ? [ability.id] : []),
+    baseAbilityNames: ability ? [ability.name] : [],
+    powerSourceId: tech.powerId || power?.id || ability?.powerId,
+    powerSourceName: power?.name,
+    element: tech.element || ability?.element || 'Neutral',
+    targetType: tech.targetType,
+    effects: tech.effects,
+    range: tech.range,
+    duration: tech.duration,
+    cost: tech.cost,
+    costValue: tech.costValue,
+    costFormula: tech.costFormula as any,
+    costResourceName: tech.costResourceName || power?.resourceName,
+    level: tech.progression?.level,
+    xp: tech.progression?.xp,
+    maxLevel: tech.progression?.maxLevel,
+    xpNeeded: tech.progression?.xpNeeded,
+    progressionLogic: tech.progression?.progressionLogic as any,
+    xpGainPerUse: tech.progression?.xpGainPerUse,
+    trainingRequired: tech.progression?.trainingRequired,
+    trainingUnits: tech.progression?.trainingUnits,
+    trainingProgress: tech.progression?.trainingProgress,
+    score: tech.progression?.score,
+    milestoneRequirement: tech.progression?.milestoneRequirement,
+    milestoneNote: tech.progression?.milestoneNote,
+    points: tech.progression?.points,
+    isLearnable: tech.progression?.isLearnable
+  };
+}
+
+/**
+ * Konvertiert eine CharacterPowerForm zurück in ein Transformations-TechniqueItem.
+ */
+export function characterPowerFormToLegacyTransformation(
+  form: CharacterPowerForm,
+  power?: CharacterPower
+): TechniqueItem {
+  return {
+    id: form.id,
+    name: form.name,
+    transformName: form.name,
+    description: form.description,
+    type: 'Transformation',
+    category: 'Transformationen',
+    powerSourceId: form.powerId || power?.id,
+    powerSourceName: power?.name,
+    baseAbilityIds: form.abilityIds || [],
+    level: form.progression?.level,
+    xp: form.progression?.xp,
+    maxLevel: form.progression?.maxLevel,
+    xpNeeded: form.progression?.xpNeeded,
+    progressionLogic: form.progression?.progressionLogic as any
+  };
+}
+
+/**
+ * Überführt die Legacy-Fähigkeitenstruktur eines Charakters vollständig in das neue
+ * hierarchische Modell (PowerSystem -> CharacterPower -> CharacterAbility -> CharacterTechnique / CharacterPowerForm).
+ */
+export function convertLegacyToPowerHierarchy(char: any): {
+  powerSystems: PowerSystem[];
+  powers: CharacterPower[];
+  abilities: CharacterAbility[];
+  techniques: CharacterTechnique[];
+  forms: CharacterPowerForm[];
+} {
+  const normalized = normalizeAbilityHierarchy(char);
+  const powerSystems: PowerSystem[] = [];
+  const powers: CharacterPower[] = [];
+  const abilities: CharacterAbility[] = [];
+  const techniques: CharacterTechnique[] = [];
+  const forms: CharacterPowerForm[] = [];
+
+  normalized.powerSources.forEach(ps => {
+    const power = powerSourceToCharacterPower(ps);
+    const system = powerSourceToPowerSystem(ps, [power.id]);
+    powerSystems.push(system);
+    powers.push(power);
+  });
+
+  normalized.baseAbilities.forEach(ba => {
+    const ability = baseAbilityToCharacterAbility(ba);
+    abilities.push(ability);
+  });
+
+  normalized.techniques.forEach(t => {
+    if (t.category === 'Transformationen' || t.type === 'Transformation') {
+      const form = techniqueItemToCharacterPowerForm(t);
+      forms.push(form);
+    } else {
+      const tech = techniqueItemToCharacterTechnique(t);
+      techniques.push(tech);
+    }
+  });
+
+  // Verknüpfungen konsistent halten
+  powers.forEach(p => {
+    const matchingAbilities = abilities.filter(a => a.powerId === p.id);
+    const matchingForms = forms.filter(f => f.powerId === p.id);
+    p.abilityIds = matchingAbilities.map(a => a.id);
+    p.formIds = matchingForms.map(f => f.id);
+  });
+
+  abilities.forEach(a => {
+    const matchingTechs = techniques.filter(t => t.abilityId === a.id);
+    a.techniqueIds = matchingTechs.map(t => t.id);
+  });
+
+  forms.forEach(f => {
+    const matchingTechs = normalized.techniques.filter(
+      t => t.unlockedByTransformationId === f.id || t.parentTransformationId === f.id
+    );
+    f.techniqueIds = matchingTechs.map(t => t.id);
+  });
+
+  return {
+    powerSystems,
+    powers,
+    abilities,
+    techniques,
+    forms
+  };
+}
+
+/**
+ * Konvertiert ein neues hierarchisches Datenmodell zurück in die Legacy-Formate.
+ */
+export function convertPowerHierarchyToLegacy(hierarchy: {
+  powerSystems?: PowerSystem[];
+  powers?: CharacterPower[];
+  abilities?: CharacterAbility[];
+  techniques?: CharacterTechnique[];
+  forms?: CharacterPowerForm[];
+}): {
+  powerSources: CharacterPowerSource[];
+  baseAbilities: BaseAbility[];
+  techniques: TechniqueItem[];
+} {
+  const powerSources: CharacterPowerSource[] = [];
+  const baseAbilities: BaseAbility[] = [];
+  const techniques: TechniqueItem[] = [];
+
+  const powers = hierarchy.powers || [];
+  const systems = hierarchy.powerSystems || [];
+  const rawAbilities = hierarchy.abilities || [];
+  const rawTechniques = hierarchy.techniques || [];
+  const forms = hierarchy.forms || [];
+
+  powers.forEach(p => {
+    const sys = systems.find(s => s.id === p.powerSystemId);
+    powerSources.push(characterPowerToLegacyPower(p, sys));
+  });
+
+  if (powerSources.length === 0 && systems.length > 0) {
+    systems.forEach(s => {
+      powerSources.push({
+        id: s.id,
+        source: s.name,
+        powerName: s.name,
+        cost: s.resourceName || 'Mana'
+      });
+    });
+  }
+
+  rawAbilities.forEach(a => {
+    const p = powers.find(pow => pow.id === a.powerId);
+    baseAbilities.push(characterAbilityToLegacyBaseAbility(a, p));
+  });
+
+  rawTechniques.forEach(t => {
+    const a = rawAbilities.find(ab => ab.id === t.abilityId);
+    const p = powers.find(pow => pow.id === t.powerId || pow.id === a?.powerId);
+    techniques.push(characterTechniqueToLegacyTechnique(t, a, p));
+  });
+
+  forms.forEach(f => {
+    const p = powers.find(pow => pow.id === f.powerId);
+    techniques.push(characterPowerFormToLegacyTransformation(f, p));
+  });
+
+  return {
+    powerSources,
+    baseAbilities,
+    techniques
+  };
 }
