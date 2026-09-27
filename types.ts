@@ -1,4 +1,19 @@
 
+export type SmartFillSection =
+  | 'profile'
+  | 'relationships'
+  | 'abilities'
+  | 'professions'
+  | 'inventory'
+  | 'full_character';
+
+export interface SmartFillContext {
+  section: SmartFillSection;
+  targetId?: string;
+  mode?: 'supplement' | 'replace';
+  instruction?: string;
+}
+
 export interface CharacterAttribute {
   name: string;
   value: number;
