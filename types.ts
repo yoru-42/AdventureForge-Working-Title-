@@ -642,6 +642,78 @@ export interface CharacterTechnique {
 
   costResourceName?: string;
 
+  type?: string;
+
+  subtype?: string;
+
+  tier?: string;
+
+  scaling?: string;
+
+  summonCount?: number;
+
+  summonCostValue?: number;
+
+  summonCostFormula?: string;
+
+  applications?: string[];
+
+  baseAbilityIds?: string[];
+
+  baseAbilityNames?: string[];
+
+  powerSourceId?: string;
+
+  powerSourceName?: string;
+
+  isLearnable?: boolean;
+
+  learningStatus?: string;
+
+  learningRequirements?: string;
+
+  requiredTeacherOrScroll?: string;
+
+  prerequisiteTechniques?: string;
+
+  requiredAttribute?: string;
+
+  trainingHours?: number;
+
+  targetTrainingHours?: number;
+
+  trainingNotes?: string;
+
+  activationCondition?: string;
+
+  transformName?: string;
+
+  transformationModifiers?: TechniqueTransformationModifier[];
+
+  score?: number;
+
+  trainingProgress?: number;
+
+  xp?: number;
+
+  level?: number;
+
+  trainingUnits?: number;
+
+  points?: number;
+
+  metamorphosisInfluence?: number;
+
+  chibiForm?: any;
+
+  chibiOnPowerOverload?: any;
+
+  xpGainPerUse?: number;
+
+  milestoneRequirement?: string;
+
+  milestoneNote?: string;
+
   /**
    * Optional: Falls diese Technik nur in / über eine bestimmte Form freigeschaltet ist.
    */

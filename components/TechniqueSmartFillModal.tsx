@@ -1,84 +1,142 @@
 // -*- coding: utf-8 -*-
 import React, { useState, useEffect } from 'react';
 import * as LucideIcons from 'lucide-react';
-import { BaseAbility, CharacterPowerSource, TechniqueItem } from '../types';
-import { formatAbilityTypeLabel, resolveKinesisName } from '../utils/abilityHierarchy';
+import { 
+  BaseAbility, 
+  CharacterPowerSource, 
+  TechniqueItem,
+  CharacterPower,
+  CharacterAbility,
+  CharacterTechnique,
+  PowerSystem
+} from '../types';
+import { 
+  formatAbilityTypeLabel, 
+  resolveKinesisName,
+  generateCharacterTechniqueId
+} from '../utils/abilityHierarchy';
 import { smartFillTechnique } from '../services/geminiService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 
-interface TechniqueSmartFillModalProps {
+export interface TechniqueSmartFillModalProps {
   isOpen: boolean;
   onClose: () => void;
-  powerSources: CharacterPowerSource[];
-  baseAbilities: BaseAbility[];
-  onTechniqueCreated: (technique: TechniqueItem, primaryBaseAbilityId: string) => void;
+  // Neue Hierarchie-Props (bevorzugt)
+  powerSystems?: PowerSystem[];
+  powers?: CharacterPower[];
+  abilities?: CharacterAbility[];
+  activePowerId?: string;
+  activeAbilityId?: string;
+  onTechniqueCreated: (technique: CharacterTechnique | TechniqueItem, primaryAbilityId: string) => void;
+  // Legacy-Kompatibilitätsprops
+  powerSources?: CharacterPowerSource[];
+  baseAbilities?: BaseAbility[];
+  initialPowerSourceId?: string;
+  initialBaseAbilityId?: string;
   characterName?: string;
   characterRole?: string;
   worldTitle?: string;
-  initialPowerSourceId?: string;
-  initialBaseAbilityId?: string;
 }
 
 export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = ({
   isOpen,
   onClose,
-  powerSources,
-  baseAbilities,
+  powerSystems = [],
+  powers = [],
+  abilities = [],
+  activePowerId,
+  activeAbilityId,
   onTechniqueCreated,
+  powerSources = [],
+  baseAbilities = [],
+  initialPowerSourceId,
+  initialBaseAbilityId,
   characterName,
   characterRole,
-  worldTitle,
-  initialPowerSourceId,
-  initialBaseAbilityId
+  worldTitle
 }) => {
   if (!isOpen) return null;
 
-  // 1. Initialer Kraftquellen-Zustand
-  const [selectedPowerSourceId, setSelectedPowerSourceId] = useState<string>(() => {
-    if (initialPowerSourceId && powerSources.some(p => p.id === initialPowerSourceId)) {
-      return initialPowerSourceId;
+  // 1. Vereinheitlichte Liste der Kräfte ermitteln (bevorzugt aus powers, Fallback aus powerSources)
+  const normalizedPowers = powers.length > 0
+    ? powers.map(p => ({
+        id: p.id,
+        name: p.name || 'Kraft',
+        resourceName: p.resourceName || 'Mana'
+      }))
+    : powerSources.map(ps => ({
+        id: ps.id,
+        name: ps.powerName || ps.source || 'Kraftquelle',
+        resourceName: ps.cost || 'Mana'
+      }));
+
+  // 2. Vereinheitlichte Liste der Fähigkeiten ermitteln (bevorzugt aus abilities, Fallback aus baseAbilities)
+  const normalizedAbilities = abilities.length > 0
+    ? abilities.map(a => ({
+        id: a.id,
+        powerId: a.powerId,
+        name: a.name || 'Fähigkeit',
+        element: a.element || 'Neutral',
+        abilityType: a.abilityType || 'creation_manipulation'
+      }))
+    : baseAbilities.map(ba => ({
+        id: ba.id,
+        powerId: ba.powerSourceId,
+        name: ba.displayName || ba.name || resolveKinesisName(ba.element, ba.abilityType),
+        element: ba.element || 'Neutral',
+        abilityType: ba.abilityType || 'creation_manipulation'
+      }));
+
+  // 3. Ausgewählte Kraft
+  const [selectedPowerId, setSelectedPowerId] = useState<string>(() => {
+    const initId = activePowerId || initialPowerSourceId;
+    if (initId && normalizedPowers.some(p => p.id === initId)) {
+      return initId;
     }
-    return powerSources[0]?.id || '';
+    return normalizedPowers[0]?.id || '';
   });
 
-  // 2. Verfügbare Grundfähigkeiten filtern
-  const availableBaseAbilities = baseAbilities.filter(
-    ba => !selectedPowerSourceId || ba.powerSourceId === selectedPowerSourceId
+  // 4. Verfügbare Fähigkeiten für ausgewählte Kraft
+  const availableAbilities = normalizedAbilities.filter(
+    a => !selectedPowerId || !a.powerId || a.powerId === selectedPowerId || normalizedPowers.length === 1
   );
 
-  // 3. Initialer Grundfähigkeits-Zustand
-  const [selectedBaseAbilityId, setSelectedBaseAbilityId] = useState<string>(() => {
-    if (initialBaseAbilityId && availableBaseAbilities.some(ba => ba.id === initialBaseAbilityId)) {
-      return initialBaseAbilityId;
+  // 5. Ausgewählte Hauptfähigkeit
+  const [selectedAbilityId, setSelectedAbilityId] = useState<string>(() => {
+    const initId = activeAbilityId || initialBaseAbilityId;
+    if (initId && availableAbilities.some(a => a.id === initId)) {
+      return initId;
     }
-    return availableBaseAbilities[0]?.id || baseAbilities[0]?.id || '';
+    return availableAbilities[0]?.id || normalizedAbilities[0]?.id || '';
   });
 
-  // 4. Zusätzliche Grundfähigkeiten (Mehrfachauswahl für Kombinationen)
-  const [additionalBaseAbilityIds, setAdditionalBaseAbilityIds] = useState<string[]>([]);
+  // 6. Zusätzliche Fähigkeiten für Kombinationszauber
+  const [additionalAbilityIds, setAdditionalAbilityIds] = useState<string[]>([]);
   const [showMultiAbilityToggle, setShowMultiAbilityToggle] = useState<boolean>(false);
 
-  // 5. Technikbeschreibung & Status
+  // 7. Beschreibung & Generierungsstatus
   const [description, setDescription] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Aktualisiere ausgewählte Grundfähigkeit, falls sich die Kraftquelle ändert
+  // Aktualisiere ausgewählte Fähigkeit, falls sich die Kraft ändert
   useEffect(() => {
-    if (selectedPowerSourceId) {
-      const filtered = baseAbilities.filter(ba => ba.powerSourceId === selectedPowerSourceId);
-      if (filtered.length > 0 && !filtered.some(ba => ba.id === selectedBaseAbilityId)) {
-        setSelectedBaseAbilityId(filtered[0].id);
+    if (selectedPowerId) {
+      const filtered = normalizedAbilities.filter(
+        a => !a.powerId || a.powerId === selectedPowerId || normalizedPowers.length === 1
+      );
+      if (filtered.length > 0 && !filtered.some(a => a.id === selectedAbilityId)) {
+        setSelectedAbilityId(filtered[0].id);
       }
     }
-  }, [selectedPowerSourceId, baseAbilities]);
+  }, [selectedPowerId, normalizedAbilities, normalizedPowers.length]);
 
-  const activePowerSource = powerSources.find(p => p.id === selectedPowerSourceId) || powerSources[0];
-  const activeBaseAbility = baseAbilities.find(ba => ba.id === selectedBaseAbilityId) || availableBaseAbilities[0] || baseAbilities[0];
+  const activePower = normalizedPowers.find(p => p.id === selectedPowerId) || normalizedPowers[0];
+  const activeAbility = normalizedAbilities.find(a => a.id === selectedAbilityId) || availableAbilities[0] || normalizedAbilities[0];
 
   const handleGenerate = async () => {
-    if (!activeBaseAbility) {
-      setErrorMessage('Bitte wähle eine gültige Grundfähigkeit aus.');
+    if (!activeAbility) {
+      setErrorMessage('Bitte wähle eine gültige Fähigkeit aus.');
       return;
     }
     if (!description.trim()) {
@@ -90,23 +148,23 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
     setErrorMessage(null);
 
     try {
-      const additionalAbilities = additionalBaseAbilityIds
-        .map(id => baseAbilities.find(ba => ba.id === id))
-        .filter((ba): ba is BaseAbility => !!ba)
-        .map(ba => ({
-          id: ba.id,
-          name: ba.displayName || ba.name || resolveKinesisName(ba.element, ba.abilityType),
-          element: ba.element,
-          abilityType: formatAbilityTypeLabel(ba.abilityType)
+      const additionalAbilities = additionalAbilityIds
+        .map(id => normalizedAbilities.find(a => a.id === id))
+        .filter((a): a is typeof normalizedAbilities[0] => !!a)
+        .map(a => ({
+          id: a.id,
+          name: a.name,
+          element: a.element,
+          abilityType: formatAbilityTypeLabel(a.abilityType)
         }));
 
       const generated = await smartFillTechnique({
-        powerSourceId: activePowerSource?.id,
-        powerSourceName: activePowerSource?.powerName || activePowerSource?.source || 'Kraftquelle',
-        baseAbilityId: activeBaseAbility.id,
-        baseAbilityName: activeBaseAbility.displayName || activeBaseAbility.name || resolveKinesisName(activeBaseAbility.element, activeBaseAbility.abilityType),
-        element: activeBaseAbility.element,
-        abilityType: formatAbilityTypeLabel(activeBaseAbility.abilityType),
+        powerSourceId: activePower?.id,
+        powerSourceName: activePower?.name || 'Kraft',
+        baseAbilityId: activeAbility.id,
+        baseAbilityName: activeAbility.name,
+        element: activeAbility.element,
+        abilityType: formatAbilityTypeLabel(activeAbility.abilityType),
         additionalBaseAbilities: additionalAbilities,
         description: description.trim(),
         characterName,
@@ -114,44 +172,35 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
         worldTitle
       });
 
-      const linkedIds = [activeBaseAbility.id, ...additionalBaseAbilityIds];
-      const linkedNames = [
-        activeBaseAbility.displayName || activeBaseAbility.name || resolveKinesisName(activeBaseAbility.element, activeBaseAbility.abilityType),
-        ...additionalAbilities.map(a => a.name)
-      ];
+      // Erzeuge deterministische, stabile ID
+      const newTechId = generateCharacterTechniqueId(activeAbility.id, generated.name);
 
-      const newTechnique: TechniqueItem = {
-        id: `tech_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      const newTechnique: CharacterTechnique = {
+        id: newTechId,
+        powerId: activePower?.id,
+        abilityId: activeAbility.id,
         name: generated.name,
         description: generated.description,
-        type: generated.type,
-        subtype: generated.subtype,
+        techniqueType: generated.type || 'Angriff',
         mode: generated.mode || 'Normal',
-        tier: generated.tier,
-        baseAbilityIds: linkedIds,
-        baseAbilityNames: linkedNames,
-        powerSourceId: activePowerSource?.id,
-        powerSourceName: activePowerSource?.powerName || activePowerSource?.source,
-        element: activeBaseAbility.element,
-        abilityType: activeBaseAbility.abilityType,
+        element: activeAbility.element || 'Neutral',
+        cost: generated.cost || `${generated.costValue || 10} ${generated.costResourceName || activePower?.resourceName || 'Mana'}`,
+        costValue: generated.costValue !== undefined ? generated.costValue : 10,
+        costResourceName: generated.costResourceName || activePower?.resourceName || 'Mana',
+        costFormula: 'absolut',
+        range: generated.range || 'Nahkampf',
+        duration: generated.duration || 'Sofort',
         targetType: generated.targetType,
-        effects: generated.effects,
-        applications: generated.effects,
-        costResourceName: generated.costResourceName,
-        costValue: generated.costValue,
-        cost: generated.cost,
-        range: generated.range,
-        duration: generated.duration,
-        summonCount: generated.summonCount,
-        summonCostValue: generated.summonCostValue,
-        summonCostFormula: generated.summonCostFormula,
-        level: 1,
-        maxLevel: 10,
-        xp: 0,
-        xpNeeded: 100
+        effects: generated.effects || [],
+        progression: {
+          score: 0,
+          level: 1,
+          xp: 0,
+          isLearnable: true
+        }
       };
 
-      onTechniqueCreated(newTechnique, activeBaseAbility.id);
+      onTechniqueCreated(newTechnique, activeAbility.id);
       onClose();
     } catch (err: any) {
       console.error('Technique Smart Fill error:', err);
@@ -178,14 +227,14 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
                 Smart Fill – Technik
               </h3>
               <p className="text-[11px] text-slate-400">
-                Erzeuge eine balancierte Kampf-Technik aus Kraftquelle und Grundfähigkeit
+                Erzeuge eine balancierte Technik aus Kraft und Fähigkeit
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <LucideIcons.X className="w-5 h-5" />
           </button>
@@ -193,104 +242,85 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
 
         {/* Body */}
         <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
-          {/* 1. Kraftquelle Auswahl */}
+          {/* 1. Kraft Auswahl */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-              Kraftquelle
+              Kraft
             </label>
-            <select
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500 font-semibold h-[38px]"
-              value={selectedPowerSourceId}
-              onChange={e => setSelectedPowerSourceId(e.target.value)}
-            >
-              {powerSources.map(ps => (
-                <option key={ps.id} value={ps.id} className="bg-slate-900 text-white">
-                  {ps.powerName || ps.source || 'Kraftquelle'}{ps.cost ? ` (${ps.cost})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 2. Grundfähigkeit Auswahl */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-              Grundfähigkeit
-            </label>
-            {availableBaseAbilities.length === 0 ? (
-              <div className="p-2.5 bg-slate-950/60 border border-slate-800/80 rounded-xl text-xs text-slate-400 italic">
-                Keine Grundfähigkeiten für diese Kraftquelle vorhanden.
+            {normalizedPowers.length <= 1 ? (
+              <div className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-white flex items-center justify-between">
+                <span>{activePower?.name || 'Standard-Kraft'}</span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {activePower?.resourceName || 'Mana'}
+                </span>
               </div>
             ) : (
               <select
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-amber-500 font-semibold h-[38px]"
-                value={selectedBaseAbilityId}
-                onChange={e => setSelectedBaseAbilityId(e.target.value)}
+                value={selectedPowerId}
+                onChange={e => setSelectedPowerId(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
               >
-                {availableBaseAbilities.map(ba => (
-                  <option key={ba.id} value={ba.id} className="bg-slate-900 text-white">
-                    {ba.displayName || ba.name || resolveKinesisName(ba.element, ba.abilityType)} ({ba.element})
+                {normalizedPowers.map(p => (
+                  <option key={`sf-pow-${p.id}`} value={p.id}>
+                    {p.name} ({p.resourceName})
                   </option>
                 ))}
               </select>
             )}
           </div>
 
-          {/* 3. Element & Fähigkeitsart (Automatisch abgeleitete Datenanzeige) */}
-          {activeBaseAbility && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl">
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider">
-                  Element / Aspekt
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-200">
-                    {activeBaseAbility.element || 'Neutral'}
-                  </span>
-                </div>
+          {/* 2. Haupt-Fähigkeit Auswahl */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+              Haupt-Fähigkeit (Fokus der Technik)
+            </label>
+            {availableAbilities.length === 0 ? (
+              <div className="text-xs text-amber-400/90 italic bg-amber-950/30 border border-amber-900/50 rounded-xl p-3">
+                Keine Fähigkeiten für diese Kraft vorhanden.
               </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] font-extrabold text-slate-500 uppercase tracking-wider">
-                  Fähigkeitsart
-                </span>
-                <span className="text-xs font-bold text-amber-400">
-                  {formatAbilityTypeLabel(activeBaseAbility.abilityType)}
-                </span>
-              </div>
-            </div>
-          )}
+            ) : (
+              <select
+                value={selectedAbilityId}
+                onChange={e => setSelectedAbilityId(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-amber-500 cursor-pointer"
+              >
+                {availableAbilities.map(a => (
+                  <option key={`sf-ab-${a.id}`} value={a.id}>
+                    {a.name} [{a.element}] ({formatAbilityTypeLabel(a.abilityType)})
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
 
-          {/* Optional: Kombination mehrerer Grundfähigkeiten Toggle */}
-          {baseAbilities.length > 1 && (
-            <div className="pt-1">
+          {/* 3. Optionale Kombinations-Fähigkeiten */}
+          {normalizedAbilities.length > 1 && (
+            <div className="space-y-2 pt-1 border-t border-slate-800/80">
               <button
                 type="button"
                 onClick={() => setShowMultiAbilityToggle(!showMultiAbilityToggle)}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1.5 transition-colors"
+                className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1.5 font-semibold cursor-pointer"
               >
-                <LucideIcons.Layers className="w-3.5 h-3.5" />
-                <span>
-                  {showMultiAbilityToggle 
-                    ? 'Zusätzliche Grundfähigkeiten verbergen' 
-                    : 'Mehrere Grundfähigkeiten kombinieren (+)'}
-                </span>
+                <LucideIcons.Plus className="w-3.5 h-3.5" />
+                <span>Kombinations-Fähigkeiten hinzufügen ({additionalAbilityIds.length})</span>
               </button>
 
               {showMultiAbilityToggle && (
-                <div className="mt-2.5 p-3 bg-slate-950/90 border border-slate-800 rounded-xl space-y-2">
-                  <span className="text-[10px] font-bold text-slate-400 block">
-                    Wähle weitere Grundfähigkeiten, die in diese Technik einfließen:
-                  </span>
+                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2">
+                  <p className="text-[11px] text-slate-400">
+                    Wähle weitere Fähigkeiten aus, um Synergien oder Kombinations-Effekte zu erzeugen:
+                  </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {baseAbilities
-                      .filter(ba => ba.id !== activeBaseAbility?.id)
-                      .map(ba => {
-                        const isChecked = additionalBaseAbilityIds.includes(ba.id);
+                    {normalizedAbilities
+                      .filter(a => a.id !== selectedAbilityId)
+                      .map(a => {
+                        const isChecked = additionalAbilityIds.includes(a.id);
                         return (
                           <label
-                            key={ba.id}
-                            className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-all ${
+                            key={`sf-combo-${a.id}`}
+                            className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
                               isChecked
-                                ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold'
+                                ? 'bg-amber-950/40 border-amber-500/50 text-amber-200'
                                 : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850'
                             }`}
                           >
@@ -299,16 +329,14 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
                               checked={isChecked}
                               onChange={e => {
                                 if (e.target.checked) {
-                                  setAdditionalBaseAbilityIds([...additionalBaseAbilityIds, ba.id]);
+                                  setAdditionalAbilityIds([...additionalAbilityIds, a.id]);
                                 } else {
-                                  setAdditionalBaseAbilityIds(additionalBaseAbilityIds.filter(id => id !== ba.id));
+                                  setAdditionalAbilityIds(additionalAbilityIds.filter(id => id !== a.id));
                                 }
                               }}
-                              className="rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-0"
+                              className="rounded border-slate-700 text-amber-500 focus:ring-0"
                             />
-                            <span className="break-words">
-                              {ba.displayName || ba.name} ({ba.element})
-                            </span>
+                            <span className="truncate">{a.name} ({a.element})</span>
                           </label>
                         );
                       })}
@@ -318,52 +346,54 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
             </div>
           )}
 
-          <div className="border-t border-slate-800/80 pt-3">
-            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-1.5">
-              Technikbeschreibung
+          {/* 4. Technik-Idee / Beschreibung */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+              Technik-Idee oder gewünschte Wirkung *
             </label>
             <AutoExpandingTextarea
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500 min-h-[90px] leading-relaxed"
-              placeholder="Kurze Beschreibung der gewünschten Technik oder Wirkungsweise eingeben..."
               value={description}
               onChange={e => setDescription(e.target.value)}
-              disabled={isLoading}
+              placeholder="z.B. Ein fliegender Eisspeer, der das Ziel verlangsamt und beim Aufprall in Splitter explodiert..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-xs outline-none focus:border-amber-500 min-h-[80px]"
             />
           </div>
 
+          {/* Fehlermeldung */}
           {errorMessage && (
-            <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-xl text-xs text-red-300 flex items-start gap-2">
-              <LucideIcons.AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <div className="bg-rose-950/60 border border-rose-800/80 rounded-xl p-3 text-rose-300 text-xs flex items-center gap-2">
+              <LucideIcons.AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMessage}</span>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 sm:p-5 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-3 shrink-0">
+        <div className="p-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors"
+            className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             Abbrechen
           </button>
+
           <button
             type="button"
             onClick={handleGenerate}
-            disabled={isLoading || !description.trim() || !activeBaseAbility}
-            className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            disabled={isLoading || !description.trim() || !activeAbility}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:pointer-events-none text-slate-950 transition flex items-center gap-2 cursor-pointer shadow-sm"
           >
             {isLoading ? (
               <>
-                <LucideIcons.Loader2 className="w-4 h-4 animate-spin" />
+                <LucideIcons.Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Generiere Technik...</span>
               </>
             ) : (
               <>
-                <LucideIcons.Sparkles className="w-4 h-4" />
-                <span>Technik erstellen</span>
+                <LucideIcons.Sparkles className="w-3.5 h-3.5" />
+                <span>Technik generieren</span>
               </>
             )}
           </button>
@@ -372,3 +402,5 @@ export const TechniqueSmartFillModal: React.FC<TechniqueSmartFillModalProps> = (
     </div>
   );
 };
+
+export default TechniqueSmartFillModal;

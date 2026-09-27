@@ -737,6 +737,47 @@ export function slugifyPowerId(text: string, prefix: string): string {
 }
 
 /**
+ * Erzeugt eine eindeutige deterministische ID basierend auf Prefix, Name und bestehenden IDs.
+ */
+export function generateUniqueSlugId(prefix: string, baseName: string, existingIds?: string[] | Set<string>): string {
+  const cleanPrefix = prefix.replace(/_+$/, '');
+  const cleanBase = slugifyPowerId(baseName || 'neu', cleanPrefix);
+  let candidate = cleanBase.startsWith(`${cleanPrefix}_`) ? cleanBase : `${cleanPrefix}_${cleanBase}`;
+  if (!existingIds) return candidate;
+  const set = existingIds instanceof Set ? existingIds : new Set(existingIds);
+  if (!set.has(candidate)) return candidate;
+  let counter = 2;
+  while (set.has(`${candidate}_${counter}`)) {
+    counter++;
+  }
+  return `${candidate}_${counter}`;
+}
+
+export function generatePowerSystemId(name: string, existingIds?: string[] | Set<string>): string {
+  return generateUniqueSlugId('sys', name || 'system', existingIds);
+}
+
+export function generateCharacterPowerId(powerSystemId: string, name: string, existingIds?: string[] | Set<string>): string {
+  const cleanSys = (powerSystemId || 'sys').replace(/^sys_/, '');
+  return generateUniqueSlugId(`power_${cleanSys}`, name || 'kraft', existingIds);
+}
+
+export function generateCharacterAbilityId(powerId: string, name: string, existingIds?: string[] | Set<string>): string {
+  const cleanPow = (powerId || 'power').replace(/^power_/, '');
+  return generateUniqueSlugId(`ab_${cleanPow}`, name || 'faehigkeit', existingIds);
+}
+
+export function generateCharacterTechniqueId(abilityOrPowerId: string, name: string, existingIds?: string[] | Set<string>): string {
+  const cleanParent = (abilityOrPowerId || 'parent').replace(/^(ab|power|form)_/, '');
+  return generateUniqueSlugId(`tech_${cleanParent}`, name || 'technik', existingIds);
+}
+
+export function generateCharacterPowerFormId(powerId: string, name: string, existingIds?: string[] | Set<string>): string {
+  const cleanPow = (powerId || 'power').replace(/^power_/, '');
+  return generateUniqueSlugId(`form_${cleanPow}`, name || 'gestalt', existingIds);
+}
+
+/**
  * Wandelt eine Legacy-Kraftquelle in ein PowerSystem um.
  */
 export function powerSourceToPowerSystem(source: CharacterPowerSource, powerIds?: string[]): PowerSystem {

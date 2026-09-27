@@ -21,20 +21,27 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { TechniqueItem, BaseAbility, CharacterPowerSource, TechniqueTransformationModifier, TransformationModifierType } from '../types';
+import { 
+  TechniqueItem, 
+  CharacterTechnique, 
+  BaseAbility, 
+  CharacterPowerSource, 
+  TechniqueTransformationModifier, 
+  TransformationModifierType 
+} from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 
 export interface TechniqueCardProps {
-  entry: TechniqueItem;
-  category: 'Passive Fähigkeiten' | 'Techniken' | 'Ultimative Techniken' | 'Transformationen' | string;
+  entry: CharacterTechnique | TechniqueItem;
+  category?: 'Passive Fähigkeiten' | 'Techniken' | 'Ultimative Techniken' | 'Transformationen' | string;
   readOnly?: boolean;
   isExpanded: boolean;
   onToggleExpanded: () => void;
-  onUpdate: (updates: Partial<TechniqueItem>) => void;
+  onUpdate: (updates: Partial<CharacterTechnique> | Partial<TechniqueItem>) => void;
   onDelete: () => void;
-  activePowerSource: CharacterPowerSource | null;
-  baseAbilities: BaseAbility[];
-  onToggleLinkedBaseAbility: (baId: string) => void;
+  activePowerSource?: CharacterPowerSource | null;
+  baseAbilities?: BaseAbility[];
+  onToggleLinkedBaseAbility?: (baId: string) => void;
   progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
   availableTransformations?: Array<{ id: string; name: string; transformName?: string }>;
 }

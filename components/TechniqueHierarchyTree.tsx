@@ -21,6 +21,11 @@ import {
   buildCharacterPowerHierarchy,
   convertPowerHierarchyToLegacy,
   slugifyPowerId,
+  generatePowerSystemId,
+  generateCharacterPowerId,
+  generateCharacterAbilityId,
+  generateCharacterTechniqueId,
+  generateCharacterPowerFormId,
   characterTechniqueToLegacyTechnique,
   characterPowerFormToLegacyTransformation
 } from '../utils/abilityHierarchy';
@@ -386,8 +391,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   // -------------------------------------------------------------
   const handleAddPowerSystem = () => {
     const sysName = `Kraftsystem ${systems.length + 1}`;
-    const newSysId = slugifyPowerId(`sys_${systems.length + 1}_${Date.now()}`, 'sys');
-    const newPowerId = slugifyPowerId(`power_${newSysId}_hauptkraft`, 'power');
+    const newSysId = generatePowerSystemId(sysName, systems.map(s => s.id));
+    const newPowerId = generateCharacterPowerId(newSysId, 'Konkrete Kraft', powers.map(p => p.id));
 
     const newSys: PowerSystem = {
       id: newSysId,
@@ -456,7 +461,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   const handleAddPower = () => {
     if (!activeSystem) return;
     const powerName = `Neue Kraft ${currentPowers.length + 1}`;
-    const newPowerId = slugifyPowerId(`power_${activeSystem.id}_${currentPowers.length + 1}_${Date.now()}`, 'power');
+    const newPowerId = generateCharacterPowerId(activeSystem.id, powerName, powers.map(p => p.id));
 
     const newPower: CharacterPower = {
       id: newPowerId,
@@ -527,7 +532,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
     const defaultElement = ADVENTURE_FORGE_ELEMENTS[1] || 'Feuer';
     const defaultType: AbilityType = 'creation_manipulation';
     const initialName = resolveKinesisName(defaultElement, defaultType);
-    const newAbId = slugifyPowerId(`ab_${activePower.id}_${currentAbilities.length + 1}_${Date.now()}`, 'ab');
+    const newAbId = generateCharacterAbilityId(activePower.id, initialName, abilities.map(a => a.id));
 
     const newAbility: CharacterAbility = {
       id: newAbId,
@@ -605,7 +610,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   const handleAddTechnique = (forFormId?: string) => {
     if (!activePower) return;
     const targetAbilityId = forFormId ? undefined : activeAbility?.id;
-    const newTechId = slugifyPowerId(`tech_${activePower.id}_${techniquesList.length + 1}_${Date.now()}`, 'tech');
+    const parentContextId = forFormId || activeAbility?.id || activePower.id;
+    const newTechId = generateCharacterTechniqueId(parentContextId, 'Neue Technik', techniquesList.map(t => t.id));
     const costRes = activePower.resourceName || activeSystem?.resourceName || 'Mana';
 
     const newTech: CharacterTechnique = {
@@ -717,7 +723,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   const handleAddForm = () => {
     if (!activePower) return;
     const formName = `Neue Gestalt ${currentForms.length + 1}`;
-    const newFormId = slugifyPowerId(`form_${activePower.id}_${currentForms.length + 1}_${Date.now()}`, 'form');
+    const newFormId = generateCharacterPowerFormId(activePower.id, formName, forms.map(f => f.id));
 
     const newForm: CharacterPowerForm = {
       id: newFormId,
@@ -779,12 +785,16 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
   };
 
   // -------------------------------------------------------------
-  // 10. SMART FILL ADAPTER
+  // 10. SMART FILL HANDLER
   // -------------------------------------------------------------
-  const handleTechniqueCreatedViaSmartFill = (techItem: TechniqueItem) => {
+  const handleTechniqueCreatedViaSmartFill = (
+    techItem: CharacterTechnique | TechniqueItem,
+    primaryAbilityId?: string
+  ) => {
     if (!activePower) return;
-    const newTechId = techItem.id || slugifyPowerId(`tech_${activePower.id}_${techItem.name}_${Date.now()}`, 'tech');
-    const targetAbilityId = activeAbility?.id;
+    const targetAbilityId = primaryAbilityId || (techItem as CharacterTechnique).abilityId || activeAbility?.id;
+    const parentId = targetAbilityId || activePower.id;
+    const newTechId = techItem.id || generateCharacterTechniqueId(parentId, techItem.name, techniquesList.map(t => t.id));
 
     const newTech: CharacterTechnique = {
       id: newTechId,
@@ -792,7 +802,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       abilityId: targetAbilityId,
       name: techItem.name,
       description: techItem.description,
-      techniqueType: techItem.type || 'Angriff',
+      techniqueType: (techItem as CharacterTechnique).techniqueType || (techItem as TechniqueItem).type || 'Angriff',
       mode: techItem.mode || 'Normal',
       element: techItem.element || activeAbility?.element || 'Neutral',
       cost: techItem.cost || '10 Mana',
@@ -802,9 +812,9 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       duration: techItem.duration || 'Sofort',
       effects: techItem.effects || [],
       progression: techItem.progression || {
-        score: techItem.score || 0,
-        level: techItem.level || 1,
-        xp: techItem.xp || 0
+        score: (techItem as TechniqueItem).score || 0,
+        level: (techItem as TechniqueItem).level || 1,
+        xp: (techItem as TechniqueItem).xp || 0
       }
     };
 
@@ -932,7 +942,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
           onAddEntry={(newEntry) => {
             if (newEntry) {
               const entryToAdd: TechniqueItem = {
-                id: newEntry.id || slugifyPowerId(`wpn_${Date.now()}`, 'tech'),
+                id: newEntry.id || generateCharacterTechniqueId('wpn', newEntry.name || 'Waffenbeherrschung', techniques.map(t => t.id)),
                 name: newEntry.name || 'Waffenbeherrschung (Rang 1)',
                 category: 'Waffenbeherrschung',
                 ...newEntry
@@ -1417,12 +1427,11 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                       {currentAbilityTechniques.map((tech, idx) => {
                         const defaultExpanded = currentAbilityTechniques.length <= 4;
                         const isExpanded = expandedMap[tech.id] !== undefined ? expandedMap[tech.id] : defaultExpanded;
-                        const adaptedItem = adaptTechniqueForCard(tech);
 
                         return (
                           <TechniqueCard
                             key={`tech-card-${tech.id || idx}`}
-                            entry={adaptedItem}
+                            entry={tech}
                             category="Techniken"
                             readOnly={readOnly}
                             isExpanded={isExpanded}
@@ -1595,7 +1604,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                         {currentFormTechniques.map((tech, idx) => (
                           <TechniqueCard
                             key={`form-tech-${tech.id || idx}`}
-                            entry={adaptTechniqueForCard(tech)}
+                            entry={tech}
                             category="Transformationen"
                             readOnly={readOnly}
                             isExpanded={expandedMap[tech.id] || false}
@@ -1626,14 +1635,17 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         <TechniqueSmartFillModal
           isOpen={smartFillModalState.isOpen}
           onClose={() => setSmartFillModalState({ isOpen: false })}
+          powerSystems={systems}
+          powers={powers}
+          abilities={abilities}
+          activePowerId={smartFillModalState.powerId || activePower?.id}
+          activeAbilityId={smartFillModalState.abilityId || activeAbility?.id}
           powerSources={powerSources}
           baseAbilities={baseAbilities}
-          initialPowerSourceId={smartFillModalState.powerId || activePower?.id}
-          initialBaseAbilityId={smartFillModalState.abilityId || activeAbility?.id}
           characterName={characterName}
           characterRole={characterRole}
           worldTitle={worldTitle}
-          onTechniqueCreated={handleTechniqueCreatedViaSmartFill}
+          onTechniqueCreated={(created, primaryAbId) => handleTechniqueCreatedViaSmartFill(created, primaryAbId)}
         />
       )}
     </div>
