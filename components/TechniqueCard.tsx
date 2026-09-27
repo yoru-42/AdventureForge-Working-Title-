@@ -96,16 +96,27 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
   const isPassive = category === 'Passive Fähigkeiten';
 
   // Synchronisierter Score & Beherrschungsgrad
-  const currentScore = entry.score !== undefined 
-    ? entry.score 
-    : (entry.trainingProgress !== undefined ? entry.trainingProgress : 0);
+  const currentScore = entry.progression?.score !== undefined
+    ? entry.progression.score
+    : (entry.score !== undefined ? entry.score : (entry.trainingProgress !== undefined ? entry.trainingProgress : 0));
 
-  const currentXp = entry.xp !== undefined ? entry.xp : 0;
-  const currentLevel = entry.level || 1;
-  const currentUnits = entry.trainingUnits || 0;
-  const currentPoints = entry.points !== undefined 
-    ? entry.points 
-    : (currentScore === 0 ? 0 : currentScore <= 25 ? 1 : currentScore <= 55 ? 2 : currentScore <= 80 ? 3 : 4);
+  const currentXp = entry.progression?.xp !== undefined
+    ? entry.progression.xp
+    : (entry.xp !== undefined ? entry.xp : 0);
+
+  const currentLevel = entry.progression?.level !== undefined
+    ? entry.progression.level
+    : (entry.level || 1);
+
+  const currentUnits = entry.progression?.trainingUnits !== undefined
+    ? entry.progression.trainingUnits
+    : (entry.trainingUnits || 0);
+
+  const currentPoints = entry.progression?.points !== undefined
+    ? entry.progression.points
+    : (entry.points !== undefined 
+      ? entry.points 
+      : (currentScore === 0 ? 0 : currentScore <= 25 ? 1 : currentScore <= 55 ? 2 : currentScore <= 80 ? 3 : 4));
 
   const masteryLabel = getTechniqueMasteryLabel(currentScore);
   const resourceName = entry.costResourceName || activePowerSource?.cost || 'Mana';
@@ -116,12 +127,21 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
   const handleSetScore = (scoreVal: number) => {
     const clamped = Math.min(100, Math.max(0, scoreVal));
     const tier = getTechniqueTierFromScore(clamped, category);
+    const mLabel = getTechniqueMasteryLabel(clamped);
+    const pts = clamped === 0 ? 0 : clamped <= 25 ? 1 : clamped <= 55 ? 2 : clamped <= 80 ? 3 : 4;
+
     onUpdate({
       score: clamped,
       trainingProgress: clamped,
       tier,
-      masteryLevel: `${getTechniqueMasteryLabel(clamped)} (${clamped}%)`,
-      points: clamped === 0 ? 0 : clamped <= 25 ? 1 : clamped <= 55 ? 2 : clamped <= 80 ? 3 : 4
+      masteryLevel: `${mLabel} (${clamped}%)`,
+      points: pts,
+      progression: {
+        ...(entry.progression || {}),
+        score: clamped,
+        trainingProgress: clamped,
+        points: pts
+      }
     });
   };
 
@@ -139,13 +159,23 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
       nextTier = getTechniqueTierFromScore(nextScore, category);
     }
 
+    const clampedScore = Math.min(100, Math.max(0, nextScore));
+    const mLabel = getTechniqueMasteryLabel(clampedScore);
+
     onUpdate({
       xp: Math.min(100, Math.max(0, nextXp)),
-      score: nextScore,
-      trainingProgress: nextScore,
+      score: clampedScore,
+      trainingProgress: clampedScore,
       level: nextLevel,
       tier: nextTier,
-      masteryLevel: `${getTechniqueMasteryLabel(nextScore)} (${nextScore}%)`
+      masteryLevel: `${mLabel} (${clampedScore}%)`,
+      progression: {
+        ...(entry.progression || {}),
+        xp: Math.min(100, Math.max(0, nextXp)),
+        score: clampedScore,
+        trainingProgress: clampedScore,
+        level: nextLevel
+      }
     });
   };
 
@@ -153,6 +183,7 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
     const nextScore = Math.min(100, currentScore + 25);
     const nextLevel = Math.min(10, currentLevel + 1);
     const nextTier = getTechniqueTierFromScore(nextScore, category);
+    const mLabel = getTechniqueMasteryLabel(nextScore);
 
     onUpdate({
       xp: 0,
@@ -160,7 +191,14 @@ export const TechniqueCard: React.FC<TechniqueCardProps> = ({
       trainingProgress: nextScore,
       level: nextLevel,
       tier: nextTier,
-      masteryLevel: `${getTechniqueMasteryLabel(nextScore)} (${nextScore}%)`
+      masteryLevel: `${mLabel} (${nextScore}%)`,
+      progression: {
+        ...(entry.progression || {}),
+        xp: 0,
+        score: nextScore,
+        trainingProgress: nextScore,
+        level: nextLevel
+      }
     });
   };
 

@@ -840,4 +840,123 @@ assert.strictEqual(round3.powerSystems[0].powerIds?.length, 3);
 assert.deepStrictEqual(round1, round3, 'Durchlauf 1 und 3 sind exakt identisch');
 console.log('[PASS] Test F: Wiederholte Normalisierung erzeugt keine Duplikate oder veränderten Listen');
 
+// ============================================================================
+// SCHRITT 3 TESTS: UI-DATENQUELLE & INTEGRATION
+// ============================================================================
+console.log('\n=== SCHRITT 3 TESTS: UI-DATENQUELLE & HIERARCHIE-INTEGRATION ===');
+
+// --- Test 3.1: Legacy Datenfall (powerSources, baseAbilities, techniques) ---
+console.log('\n--- Test 3.1: Legacy Datenfall ---');
+const step3LegacyChar = {
+  powerSources: [{ id: 'ps_mag_01', source: 'Magie', powerName: 'Arkanmagie', cost: 'Mana' }],
+  baseAbilities: [{ id: 'ba_arc_01', powerSourceId: 'ps_mag_01', displayName: 'Arkanokinese', abilityType: 'creation_manipulation', element: 'Arkan' }],
+  techniques: [{ id: 'tech_missile_01', name: 'Magisches Geschoss', category: 'Techniken', baseAbilityIds: ['ba_arc_01'], powerSourceId: 'ps_mag_01' }]
+};
+const step3Res1 = buildCharacterPowerHierarchy(step3LegacyChar);
+assert.strictEqual(step3Res1.powerSystems.length, 1);
+assert.strictEqual(step3Res1.powers.length, 1);
+assert.strictEqual(step3Res1.abilities.length, 1);
+assert.strictEqual(step3Res1.techniques.length, 1);
+assert.strictEqual(step3Res1.powers[0].name, 'Arkanmagie');
+assert.strictEqual(step3Res1.abilities[0].name, 'Arkanokinese');
+console.log('[PASS] Test 3.1: Legacy-Daten werden vollständig und konsistent in die neue Hierarchie überführt');
+
+// --- Test 3.2: Neue Hierarchie direkt vorhanden ---
+console.log('\n--- Test 3.2: Neue Hierarchie direkt vorhanden ---');
+const step3NewChar = {
+  powerSystems: [{ id: 'sys_devil_fruit', name: 'Teufelsfrucht', systemType: 'Teufelsfrucht', powerIds: ['power_ice_kitsune'] }],
+  powers: [{ id: 'power_ice_kitsune', powerSystemId: 'sys_devil_fruit', name: 'Mystische Zoan – Eis-Kitsune', abilityIds: ['ab_ice_manip'], formIds: ['form_kitsune_mode'] }],
+  characterAbilities: [{ id: 'ab_ice_manip', powerId: 'power_ice_kitsune', name: 'Eis-Manipulation', abilityType: 'Erschaffung & Manipulation', techniqueIds: ['tech_ice_spear'] }],
+  characterTechniques: [{ id: 'tech_ice_spear', abilityId: 'ab_ice_manip', powerId: 'power_ice_kitsune', name: 'Eisspeer' }],
+  powerForms: [{ id: 'form_kitsune_mode', powerId: 'power_ice_kitsune', name: 'Kitsune-Gestalt', formType: 'Transformation' }]
+};
+const step3Res2 = buildCharacterPowerHierarchy(step3NewChar);
+assert.strictEqual(step3Res2.powerSystems[0].name, 'Teufelsfrucht');
+assert.strictEqual(step3Res2.powers[0].name, 'Mystische Zoan – Eis-Kitsune');
+assert.strictEqual(step3Res2.abilities[0].name, 'Eis-Manipulation');
+assert.strictEqual(step3Res2.techniques[0].name, 'Eisspeer');
+assert.strictEqual(step3Res2.forms[0].name, 'Kitsune-Gestalt');
+console.log('[PASS] Test 3.2: Vollständige neue Hierarchie wird direkt verwendet');
+
+// --- Test 3.3: Teilweise neue Daten (powerSystems + abilities, powers fehlt) ---
+console.log('\n--- Test 3.3: Teilweise neue Daten (fehlende Ebene rekonstruieren) ---');
+const step3PartialChar = {
+  powerSystems: [{ id: 'sys_ki_01', name: 'Ki', systemType: 'Ki', powerIds: [] }],
+  characterAbilities: [{ id: 'ab_ki_focus', name: 'Ki-Fokussierung', abilityType: 'Erzeugung', techniqueIds: [] }]
+};
+const step3Res3 = buildCharacterPowerHierarchy(step3PartialChar);
+assert.strictEqual(step3Res3.powerSystems.length, 1);
+assert.strictEqual(step3Res3.powers.length, 1, 'Fehlende Power wurde automatisch rekonstruiert');
+assert.strictEqual(step3Res3.powers[0].powerSystemId, 'sys_ki_01');
+assert.ok(step3Res3.powers[0].abilityIds.includes('ab_ki_focus'));
+console.log('[PASS] Test 3.3: Fehlende Zwischenebene sauber rekonstruiert');
+
+// --- Test 3.4: Mehrere Powers unter demselben PowerSystem ---
+console.log('\n--- Test 3.4: Mehrere Powers unter demselben PowerSystem ---');
+const step3MultiPower = {
+  powerSystems: [{ id: 'sys_elemental_magic', name: 'Elementarmagie', systemType: 'Magie', powerIds: [] }],
+  powers: [
+    { id: 'power_fire', powerSystemId: 'sys_elemental_magic', name: 'Feuerzauber' },
+    { id: 'power_healing', powerSystemId: 'sys_elemental_magic', name: 'Heilmagie' }
+  ]
+};
+const step3Res4 = buildCharacterPowerHierarchy(step3MultiPower);
+assert.strictEqual(step3Res4.powerSystems.length, 1);
+assert.strictEqual(step3Res4.powerSystems[0].powerIds?.length, 2);
+assert.ok(step3Res4.powerSystems[0].powerIds?.includes('power_fire'));
+assert.ok(step3Res4.powerSystems[0].powerIds?.includes('power_healing'));
+console.log('[PASS] Test 3.4: Beide Powers bleiben sauber unter demselben PowerSystem');
+
+// --- Test 3.5: Passive Ability bleibt CharacterAbility ---
+console.log('\n--- Test 3.5: Passive Ability bleibt CharacterAbility ---');
+const step3PassiveChar = {
+  powers: [{ id: 'power_perception', name: 'Sinnesschärfung', abilityIds: ['ab_passive_sense'] }],
+  characterAbilities: [{ id: 'ab_passive_sense', powerId: 'power_perception', name: 'Verbesserte Wahrnehmung', abilityType: 'Passiv' }]
+};
+const step3Res5 = buildCharacterPowerHierarchy(step3PassiveChar);
+assert.strictEqual(step3Res5.abilities.length, 1);
+assert.strictEqual(step3Res5.abilities[0].name, 'Verbesserte Wahrnehmung');
+assert.strictEqual(step3Res5.abilities[0].abilityType, 'Passiv');
+console.log('[PASS] Test 3.5: Passive Fähigkeiten verbleiben als reguläre CharacterAbility');
+
+// --- Test 3.6: Transformationen als Forms unter Power ---
+console.log('\n--- Test 3.6: Transformationen als Forms unter Power ---');
+const step3FormChar = {
+  powers: [{ id: 'power_shapeshift', name: 'Gestaltwandel', formIds: ['form_wolf'] }],
+  powerForms: [{
+    id: 'form_wolf',
+    powerId: 'power_shapeshift',
+    name: 'Schattenwolf-Gestalt',
+    formType: 'Transformation',
+    isTransformationOnly: true,
+    modifiers: { Geschwindigkeit: 15 },
+    transformationModifiers: [{ transformationId: 'form_wolf', overrideName: 'Schattenwolf-Biss', modifierType: 'addition' }]
+  }]
+};
+const step3Res6 = buildCharacterPowerHierarchy(step3FormChar);
+assert.strictEqual(step3Res6.forms.length, 1);
+assert.strictEqual(step3Res6.forms[0].name, 'Schattenwolf-Gestalt');
+assert.strictEqual(step3Res6.forms[0].modifiers?.['Geschwindigkeit'], 15);
+assert.strictEqual(step3Res6.forms[0].transformationModifiers?.[0]?.overrideName, 'Schattenwolf-Biss');
+console.log('[PASS] Test 3.6: Transformationen und Form-Modifikatoren bleiben vollständig erhalten');
+
+// --- Test 3.7: Altdaten-Laden ohne Datenverlust ---
+console.log('\n--- Test 3.7: Altdaten-Laden ohne Datenverlust ---');
+const step3ExistingChar = {
+  id: 'char_legacy_val',
+  name: 'Valeria Frostklinge',
+  powerSources: [{ id: 'ps_frost', source: 'Kryomagie', powerName: 'Eismagie', cost: 'Mana', powerDescription: 'Alte arktische Zauberkunst' }],
+  baseAbilities: [{ id: 'ba_cryo', powerSourceId: 'ps_frost', displayName: 'Kryokinese', element: 'Eis', abilityType: 'manipulation' }],
+  techniques: [
+    { id: 'tech_blizzard', name: 'Blizzard', category: 'Techniken', baseAbilityIds: ['ba_cryo'], powerSourceId: 'ps_frost', cost: '25 Mana', score: 60, xp: 40, level: 3 }
+  ]
+};
+const step3Res7 = buildCharacterPowerHierarchy(step3ExistingChar);
+assert.strictEqual(step3Res7.powers[0].name, 'Eismagie');
+assert.strictEqual(step3Res7.abilities[0].name, 'Kryokinese');
+assert.strictEqual(step3Res7.techniques[0].name, 'Blizzard');
+assert.strictEqual(step3Res7.techniques[0].progression?.score, 60);
+assert.strictEqual(step3Res7.techniques[0].progression?.level, 3);
+console.log('[PASS] Test 3.7: Legacy-Charakter ohne Datenverlust und mit Progression geladen');
+
 console.log('\n✨ ALL POWER-ABILITY-TECHNIQUE-FORM TESTS PASSED SUCCESSFULLY! ✨');

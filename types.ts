@@ -678,6 +678,31 @@ export interface CharacterPowerForm {
   modifiers?: Record<string, number | string>;
 
   /**
+   * Transformation-Modifikatoren (z.B. flache oder prozentuale Attributboni).
+   */
+  transformationModifiers?: TechniqueTransformationModifier[];
+
+  /**
+   * Nur in Transformation verfügbar.
+   */
+  isTransformationOnly?: boolean;
+
+  /**
+   * Übergeordnete Transformation falls Stufenform.
+   */
+  parentTransformationId?: string;
+
+  /**
+   * Freischaltende Transformations-ID.
+   */
+  unlockedByTransformationId?: string;
+
+  /**
+   * Freischaltende Transformations-IDs (Mehrfach-Voraussetzungen).
+   */
+  unlockedByTransformationIds?: string[];
+
+  /**
    * Globale Progression, falls Formen selbst entwickelt werden.
    */
   progression?: ProgressionState;
@@ -695,6 +720,7 @@ export interface BaseAbility {
   abilityType: AbilityType;
   description?: string;
   techniqueIds?: string[];
+  progression?: ProgressionState;
   level?: number;
   xp?: number;
   maxLevel?: number;
@@ -736,6 +762,7 @@ export interface TechniqueItem {
   applications?: string[];
   range?: string;
   duration?: string;
+  progression?: ProgressionState;
   level?: number;
   xp?: number;
   maxLevel?: number;

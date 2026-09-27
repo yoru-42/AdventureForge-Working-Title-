@@ -633,15 +633,14 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
       if (ps.id === psId) {
         return {
           ...ps,
-          ...updates,
-          powerName: updates.powerName !== undefined ? updates.powerName : (updates.source !== undefined ? updates.source : ps.powerName),
-          source: updates.source !== undefined ? updates.source : (updates.powerName !== undefined ? updates.powerName : ps.source)
+          ...updates
         };
       }
       return ps;
     });
 
-    const newPowerName = updates.powerName !== undefined ? updates.powerName : updates.source;
+    const targetPs = updatedPs.find(p => p.id === psId);
+    const newPowerName = targetPs?.powerName || targetPs?.source;
     const updatedBa = baseAbilities.map(ba => {
       if (ba.powerSourceId === psId && newPowerName !== undefined) {
         return { ...ba, powerSourceName: newPowerName };
@@ -1165,7 +1164,8 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         <div className="flex flex-wrap items-center gap-1.5">
           {safePowerSources.map((ps, psIdx) => {
             const isSelected = activePowerSourceId === ps.id;
-            const displayName = ps.powerName || ps.source || `Kraftquelle ${psIdx + 1}`;
+            const powerTitle = ps.powerName || ps.source || `Kraft ${psIdx + 1}`;
+            const systemTitle = ps.source && ps.powerName && ps.source !== ps.powerName ? ps.source : null;
             return (
               <button
                 key={`ps-tab-${ps.id || psIdx}`}
@@ -1178,7 +1178,12 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                 }`}
               >
                 <LucideIcons.Flame className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-400' : 'text-slate-500'}`} />
-                <span>{displayName}</span>
+                <span>{powerTitle}</span>
+                {systemTitle && (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-slate-900 rounded text-amber-300/90 font-normal border border-slate-800">
+                    {systemTitle}
+                  </span>
+                )}
                 {ps.cost && (
                   <span className="text-[10px] px-1.5 py-0.2 bg-slate-900 rounded text-slate-400 font-mono">
                     {ps.cost}
@@ -1192,18 +1197,32 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
         {/* Aktive Kraftquelle Editor */}
         {activePowerSource && (
           <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 flex flex-col gap-2.5">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                  Name der Kraftquelle
+                  Kraftsystem (Quelle / Ursprung)
                 </label>
                 <input
                   type="text"
                   disabled={readOnly}
                   className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                  placeholder="z.B. Äther-Mana, Ki, Chakra..."
-                  value={activePowerSource.powerName || activePowerSource.source || ''}
-                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { powerName: e.target.value, source: e.target.value })}
+                  placeholder="z.B. Teufelsfrucht, Magie, Ki..."
+                  value={activePowerSource.source || ''}
+                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { source: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
+                  Konkrete Kraft
+                </label>
+                <input
+                  type="text"
+                  disabled={readOnly}
+                  className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
+                  placeholder="z.B. Mystische Zoan – Eis-Kitsune, Mana-Manipulation..."
+                  value={activePowerSource.powerName || ''}
+                  onChange={e => handleUpdatePowerSource(activePowerSource.id, { powerName: e.target.value })}
                 />
               </div>
 
@@ -1215,7 +1234,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
                   type="text"
                   disabled={readOnly}
                   className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1 text-white text-xs outline-none focus:border-amber-500 h-[30px]"
-                  placeholder="z.B. MP, Ausdauer, Fokus..."
+                  placeholder="z.B. Mana, Ausdauer, Willenskraft..."
                   value={activePowerSource.cost || ''}
                   onChange={e => handleUpdatePowerSource(activePowerSource.id, { cost: e.target.value })}
                 />
@@ -1237,7 +1256,7 @@ export const TechniqueHierarchyTree: React.FC<TechniqueHierarchyTreeProps> = ({
 
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wide">
-                Beschreibung der Kraftquelle & Herkunft
+                Beschreibung der Kraftquelle &amp; Herkunft
               </label>
               <AutoExpandingTextarea
                 disabled={readOnly}
