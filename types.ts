@@ -1073,6 +1073,8 @@ export interface Character {
   professionPromotionConditions?: string;
   professionProgress?: ProfessionProgress;
   professionCompetencies?: ProfessionCompetency[];
+  isProfessionFavorite?: boolean;
+  isMainProfessionFavorite?: boolean;
   workplaceId?: string;
   workplaceName?: string;
   workplaceType?: 'economy' | 'administration' | 'military' | 'other';

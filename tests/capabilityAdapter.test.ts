@@ -4,6 +4,7 @@ import {
   trainCharacterCapability,
   toggleFavoriteCapability,
   getCapabilityActionText,
+  isTechniqueMatch,
   CharacterCapabilityEntry
 } from '../utils/capabilityAdapter';
 import { Adventure, Character, TechniqueItem, ProfessionCompetency } from '../types';
@@ -204,7 +205,142 @@ export function runCapabilityAdapterTests() {
   assert(getCapabilityActionText(bladeHardening!).includes('Berufskompetenz'), 'Profession action text correct');
   console.log('[PASS] Test K: Action texts semantically distinct for each domain');
 
-  console.log('=== ALL CAPABILITY ADAPTER TESTS PASSED (11/11) ===');
+  // Test L: Baustelle 1 - Everyday skills favorite toggle, persistence & no duplication
+  console.log('--- Test L: Baustelle 1 - Everyday skills favorite toggle ---');
+  const initialFirstAid = caps.find(c => c.name === 'Erste Hilfe')!;
+  assert(initialFirstAid.isFavorite === false, 'Initially Erste Hilfe is not favorite');
+  
+  // Toggle favorite ON
+  const advWithFavEveryday = toggleFavoriteCapability(mockAdventure, initialFirstAid);
+  assert(advWithFavEveryday.player.everydaySkills?.includes('Favorit'), 'Serialized everydaySkills must contain Favorit keyword');
+  
+  const capsAfterFav = getCharacterCapabilities(advWithFavEveryday.player);
+  const favFirstAid = capsAfterFav.find(c => c.name === 'Erste Hilfe')!;
+  assert(favFirstAid !== undefined, 'Erste Hilfe exists after favorite toggle');
+  assert(favFirstAid.isFavorite === true, 'Erste Hilfe is now recognized as favorite');
+  assert(favFirstAid.progress === initialFirstAid.progress, 'Progress score remained stable');
+
+  // Train the favorited everyday skill - verify no duplicate created and same skill trained
+  const trainFavEveryday = trainCharacterCapability(advWithFavEveryday, favFirstAid);
+  const capsAfterTrain = getCharacterCapabilities(trainFavEveryday.updatedAdventure.player);
+  const firstAidEntries = capsAfterTrain.filter(c => c.name === 'Erste Hilfe');
+  assert(firstAidEntries.length === 1, `Expected exactly 1 Erste Hilfe entry, got ${firstAidEntries.length}`);
+  assert(firstAidEntries[0].isFavorite === true, 'Favorite status retained after training');
+
+  // Toggle favorite OFF
+  const advWithUnfavEveryday = toggleFavoriteCapability(trainFavEveryday.updatedAdventure, firstAidEntries[0]);
+  const capsAfterUnfav = getCharacterCapabilities(advWithUnfavEveryday.player);
+  const unfavFirstAid = capsAfterUnfav.find(c => c.name === 'Erste Hilfe')!;
+  assert(unfavFirstAid.isFavorite === false, 'Erste Hilfe is no longer favorite');
+  console.log('[PASS] Test L: Everyday skill favorite toggle, persistence & single source verified');
+
+  // Test M: Baustelle 2 - Main-Profession-Fallback complete behavior
+  console.log('--- Test M: Baustelle 2 - Main-Profession-Fallback ---');
+  const fallbackPlayer: Character = {
+    ...mockPlayer,
+    profession: 'Alchemist',
+    professionProficiencyScore: 35,
+    professionExperiencePoints: 120,
+    professionCompetencies: undefined, // Kein Array -> Fallback greift
+    professionDescription: 'Meister der Tränke und Elixiere.'
+  };
+
+  const fallbackCaps = getCharacterCapabilities(fallbackPlayer);
+  const mainProfComp = fallbackCaps.find(c => c.name === 'Alchemist');
+  assert(mainProfComp !== undefined, 'Alchemist fallback capability exists');
+  assert(mainProfComp.category === 'profession', 'Category is profession');
+  assert(mainProfComp.id === 'profession_main_alchemist', `Stable ID must be deterministic, got ${mainProfComp.id}`);
+  assert(mainProfComp.progress === 35, 'Progress is 35%');
+  assert(mainProfComp.level === 4, 'Level derived from 35% (out of 10) is 4');
+  assert(mainProfComp.description === 'Meister der Tränke und Elixiere.', 'Uses custom description');
+  assert(mainProfComp.isFavorite === false, 'Initially not favorite');
+
+  // Toggle favorite on main profession fallback
+  const fallbackAdv: Adventure = { ...mockAdventure, player: fallbackPlayer };
+  const favFallbackAdv = toggleFavoriteCapability(fallbackAdv, mainProfComp);
+  assert(favFallbackAdv.player.isMainProfessionFavorite === true, 'isMainProfessionFavorite set to true');
+  
+  const capsAfterFallbackFav = getCharacterCapabilities(favFallbackAdv.player);
+  const favMainProf = capsAfterFallbackFav.find(c => c.id === 'profession_main_alchemist')!;
+  assert(favMainProf.isFavorite === true, 'Main profession fallback now recognized as favorite');
+
+  // Train main profession fallback
+  const trainedFallback = trainCharacterCapability(favFallbackAdv, favMainProf);
+  assert((trainedFallback.updatedAdventure.player.professionProficiencyScore || 0) > 35, 'Proficiency score increased from 35');
+  console.log('[PASS] Test M: Main-Profession-Fallback favorite, training, stable ID & description verified');
+
+  // Test N: Baustelle 3 - Transformations, canonical techniqueList & strict ID isolation
+  console.log('--- Test N: Baustelle 3 - Transformation & Canonical techniqueList isolation ---');
+  const baseSlash: TechniqueItem = {
+    id: 'tech_slash_01',
+    name: 'Schwertstreich',
+    category: 'Techniken',
+    level: 1,
+    xp: 20,
+    xpNeeded: 100,
+    isFavorite: false
+  };
+
+  const sameNameDifferentId: TechniqueItem = {
+    id: 'tech_slash_02',
+    name: 'Schwertstreich',
+    category: 'Waffenbeherrschung',
+    level: 3,
+    xp: 80,
+    xpNeeded: 100,
+    isFavorite: false
+  };
+
+  // Test strict ID matching: same name, different IDs must NOT collide
+  assert(isTechniqueMatch(baseSlash, 'tech_slash_01', 'schwertstreich') === true, 'Matches by primary ID');
+  assert(isTechniqueMatch(baseSlash, 'tech_slash_02', 'schwertstreich') === false, 'Strict ID matching prevents mismatch even if name matches');
+
+  // Test transformed variant pointing to base technique
+  const transformedVariant: CharacterCapabilityEntry = {
+    id: 'trans_fire_slash',
+    name: 'Flammen-Schwertstreich',
+    category: 'technique',
+    categoryLabel: 'Technik',
+    categoryBadge: 'Aktiv',
+    description: 'Brennender Schlag.',
+    level: 1,
+    maxLevel: 10,
+    progress: 20,
+    xp: 20,
+    xpNeeded: 100,
+    progressionLogic: 'ep',
+    isFavorite: false,
+    canTrain: true,
+    canUse: true,
+    sourceType: 'technique',
+    sourceId: 'trans_fire_slash',
+    isTransformedVariant: true,
+    originalTechniqueId: 'tech_slash_01',
+    originalTechniqueName: 'Schwertstreich'
+  };
+
+  const advWithBase: Adventure = {
+    ...mockAdventure,
+    player: {
+      ...mockPlayer,
+      techniqueList: [baseSlash, sameNameDifferentId]
+    }
+  };
+
+  // Toggling favorite on transformed variant updates canonical base technique
+  const toggledTransAdv = toggleFavoriteCapability(advWithBase, transformedVariant);
+  const updatedBaseSlash = toggledTransAdv.player.techniqueList?.find(t => t.id === 'tech_slash_01');
+  const unaffectedSlash = toggledTransAdv.player.techniqueList?.find(t => t.id === 'tech_slash_02');
+  assert(updatedBaseSlash?.isFavorite === true, 'Base technique marked as favorite via transformed variant');
+  assert(unaffectedSlash?.isFavorite === false, 'Technique with same name but different ID untouched');
+
+  // Training transformed variant trains the canonical base technique
+  const trainedTransAdv = trainCharacterCapability(advWithBase, transformedVariant);
+  const trainedBaseSlash = trainedTransAdv.updatedAdventure.player.techniqueList?.find(t => t.id === 'tech_slash_01');
+  assert((trainedBaseSlash?.xp || 0) > 20, 'Base technique gained XP from training transformed variant');
+  console.log('[PASS] Test N: Transformation canonical linkage and strict ID isolation verified');
+
+  console.log('=== ALL CAPABILITY ADAPTER TESTS PASSED (14/14) ===');
 }
 
 runCapabilityAdapterTests();

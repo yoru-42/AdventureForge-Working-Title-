@@ -12,8 +12,10 @@ import {
   toggleFavoriteCapability,
   getCapabilityActionText,
   getCategoryLabels,
-  getCategoryStyles
+  getCategoryStyles,
+  isTechniqueMatch
 } from '../utils/capabilityAdapter';
+import { syncCharacterAbilityTree, normalizeAbilityHierarchy } from '../utils/abilityHierarchy';
 import {
   parseEverydaySkills,
   serializeEverydaySkills,
@@ -168,34 +170,43 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
       const targetId = skill.originalTechniqueId || skill.sourceId || skill.id;
       const targetNameLower = (skill.originalTechniqueName || skill.name).trim().toLowerCase();
 
-      const updatedTechList = Array.isArray(player.techniqueList)
-        ? player.techniqueList.map(t => {
-            if (
-              (t.id && (t.id === targetId || t.id === skill.id)) ||
-              (t.name && t.name.trim().toLowerCase() === targetNameLower)
-            ) {
-              const cur = t.level ?? 1;
-              const maxL = t.maxLevel ?? 10;
-              const next = Math.max(1, Math.min(maxL, cur + delta));
-              return { ...t, level: next };
-            }
-            return t;
-          })
-        : [];
+      const baseTechList = Array.isArray(player.techniqueList) && player.techniqueList.length > 0
+        ? [...player.techniqueList]
+        : normalizeAbilityHierarchy(player).techniques;
+
+      const updatedTechList = baseTechList.map(t => {
+        if (isTechniqueMatch(t, targetId, targetNameLower, skill.id)) {
+          const cur = t.level ?? 1;
+          const maxL = t.maxLevel ?? 10;
+          const next = Math.max(1, Math.min(maxL, cur + delta));
+          return { ...t, level: next };
+        }
+        return t;
+      });
+
+      const hierarchy = normalizeAbilityHierarchy(player);
+      const syncedChar = syncCharacterAbilityTree(
+        player,
+        hierarchy.powerSources,
+        hierarchy.baseAbilities,
+        updatedTechList
+      );
 
       onUpdateAdventure({
         ...adventure,
-        player: {
-          ...player,
-          techniqueList: updatedTechList
-        }
+        player: syncedChar
       });
     } else if (skill.sourceType === 'everyday') {
       const parsed = parseEverydaySkills(player.everydaySkills || '');
+      const targetId = skill.sourceId || skill.id;
       const targetNameLower = skill.name.trim().toLowerCase();
 
       const updated = parsed.map(item => {
-        if (item.name.trim().toLowerCase() === targetNameLower) {
+        const match = (targetId && item.id)
+          ? (item.id === targetId || item.id === skill.id)
+          : (item.name.trim().toLowerCase() === targetNameLower);
+
+        if (match) {
           const cur = item.score || 0;
           const nextScore = Math.max(0, Math.min(100, cur + delta * 20));
           return {
@@ -214,21 +225,46 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
           everydaySkills: serializeEverydaySkills(updated)
         }
       });
-    } else if (skill.sourceType === 'profession' && Array.isArray(player.professionCompetencies)) {
-      const updatedComps = player.professionCompetencies.map(c => {
-        if (c.id === skill.sourceId || c.name.trim().toLowerCase() === skill.name.trim().toLowerCase()) {
-          const cur = c.proficiency || 0;
-          const nextProf = Math.max(0, Math.min(100, cur + delta * 10));
-          return { ...c, proficiency: nextProf };
-        }
-        return c;
-      });
+    } else if (skill.sourceType === 'profession') {
+      const targetId = skill.sourceId || skill.id;
+      const targetNameLower = skill.name.trim().toLowerCase();
 
+      if (Array.isArray(player.professionCompetencies) && player.professionCompetencies.length > 0) {
+        let foundInComps = false;
+        const updatedComps = player.professionCompetencies.map(c => {
+          const match = (targetId && c.id)
+            ? (c.id === targetId || c.id === skill.id)
+            : (c.name.trim().toLowerCase() === targetNameLower);
+
+          if (match) {
+            foundInComps = true;
+            const cur = c.proficiency || 0;
+            const nextProf = Math.max(0, Math.min(100, cur + delta * 10));
+            return { ...c, proficiency: nextProf };
+          }
+          return c;
+        });
+
+        if (foundInComps) {
+          onUpdateAdventure({
+            ...adventure,
+            player: {
+              ...player,
+              professionCompetencies: updatedComps
+            }
+          });
+          return;
+        }
+      }
+
+      // Main-Profession-Fallback: Level +/- über professionProficiencyScore
+      const curProf = player.professionProficiencyScore !== undefined ? player.professionProficiencyScore : 15;
+      const nextProf = Math.max(0, Math.min(100, curProf + delta * 10));
       onUpdateAdventure({
         ...adventure,
         player: {
           ...player,
-          professionCompetencies: updatedComps
+          professionProficiencyScore: nextProf
         }
       });
     }
@@ -246,42 +282,37 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
       const targetId = skill.originalTechniqueId || skill.sourceId || skill.id;
       const targetNameLower = (skill.originalTechniqueName || skill.name).trim().toLowerCase();
 
-      const updatedTechList = Array.isArray(player.techniqueList)
-        ? player.techniqueList.filter(
-            t => !(
-              (t.id && (t.id === targetId || t.id === skill.id)) ||
-              (t.name && t.name.trim().toLowerCase() === targetNameLower)
-            )
-          )
-        : [];
+      const baseTechList = Array.isArray(player.techniqueList) && player.techniqueList.length > 0
+        ? [...player.techniqueList]
+        : normalizeAbilityHierarchy(player).techniques;
 
-      const updatedAbilities = Array.isArray(player.abilities)
-        ? player.abilities.map((ability: any) => {
-            if (!Array.isArray(ability.techniqueList)) return ability;
-            return {
-              ...ability,
-              techniqueList: ability.techniqueList.filter(
-                (t: any) => !(
-                  (t.id && (t.id === targetId || t.id === skill.id)) ||
-                  (t.name && t.name.trim().toLowerCase() === targetNameLower)
-                )
-              )
-            };
-          })
-        : player.abilities;
+      const updatedTechList = baseTechList.filter(
+        t => !isTechniqueMatch(t, targetId, targetNameLower, skill.id)
+      );
+
+      const hierarchy = normalizeAbilityHierarchy(player);
+      const syncedChar = syncCharacterAbilityTree(
+        player,
+        hierarchy.powerSources,
+        hierarchy.baseAbilities,
+        updatedTechList
+      );
 
       onUpdateAdventure({
         ...adventure,
-        player: {
-          ...player,
-          techniqueList: updatedTechList,
-          abilities: updatedAbilities
-        }
+        player: syncedChar
       });
     } else if (skill.sourceType === 'everyday') {
       const parsed = parseEverydaySkills(player.everydaySkills || '');
+      const targetId = skill.sourceId || skill.id;
       const targetNameLower = skill.name.trim().toLowerCase();
-      const updated = parsed.filter(item => item.name.trim().toLowerCase() !== targetNameLower);
+
+      const updated = parsed.filter(item => {
+        if (targetId && item.id) {
+          return item.id !== targetId && item.id !== skill.id;
+        }
+        return item.name.trim().toLowerCase() !== targetNameLower;
+      });
 
       onUpdateAdventure({
         ...adventure,
@@ -290,18 +321,38 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
           everydaySkills: serializeEverydaySkills(updated)
         }
       });
-    } else if (skill.sourceType === 'profession' && Array.isArray(player.professionCompetencies)) {
-      const updatedComps = player.professionCompetencies.filter(
-        c => !(c.id === skill.sourceId || c.name.trim().toLowerCase() === skill.name.trim().toLowerCase())
-      );
+    } else if (skill.sourceType === 'profession') {
+      const targetId = skill.sourceId || skill.id;
+      const targetNameLower = skill.name.trim().toLowerCase();
 
-      onUpdateAdventure({
-        ...adventure,
-        player: {
-          ...player,
-          professionCompetencies: updatedComps
-        }
-      });
+      if (Array.isArray(player.professionCompetencies) && player.professionCompetencies.length > 0) {
+        const updatedComps = player.professionCompetencies.filter(c => {
+          if (targetId && c.id) {
+            return c.id !== targetId && c.id !== skill.id;
+          }
+          return c.name.trim().toLowerCase() !== targetNameLower;
+        });
+
+        onUpdateAdventure({
+          ...adventure,
+          player: {
+            ...player,
+            professionCompetencies: updatedComps
+          }
+        });
+      } else {
+        // Main-Profession-Fallback: Hauptberuf zurücksetzen
+        onUpdateAdventure({
+          ...adventure,
+          player: {
+            ...player,
+            profession: '',
+            professionDescription: undefined,
+            isMainProfessionFavorite: false,
+            isProfessionFavorite: false
+          }
+        });
+      }
     }
   };
 
@@ -317,38 +368,89 @@ export const TrainingSkillsModal: React.FC<TrainingSkillsModalProps> = ({
       const targetId = skill.originalTechniqueId || skill.sourceId || skill.id;
       const targetNameLower = (skill.originalTechniqueName || skill.name).trim().toLowerCase();
 
-      const updatedTechList = Array.isArray(player.techniqueList)
-        ? player.techniqueList.map(t => {
-            if (
-              (t.id && (t.id === targetId || t.id === skill.id)) ||
-              (t.name && t.name.trim().toLowerCase() === targetNameLower)
-            ) {
-              return { ...t, description };
+      const baseTechList = Array.isArray(player.techniqueList) && player.techniqueList.length > 0
+        ? [...player.techniqueList]
+        : normalizeAbilityHierarchy(player).techniques;
+
+      const updatedTechList = baseTechList.map(t => {
+        if (isTechniqueMatch(t, targetId, targetNameLower, skill.id)) {
+          return { ...t, description };
+        }
+        return t;
+      });
+
+      const hierarchy = normalizeAbilityHierarchy(player);
+      const syncedChar = syncCharacterAbilityTree(
+        player,
+        hierarchy.powerSources,
+        hierarchy.baseAbilities,
+        updatedTechList
+      );
+
+      onUpdateAdventure({
+        ...adventure,
+        player: syncedChar
+      });
+    } else if (skill.sourceType === 'everyday') {
+      const parsed = parseEverydaySkills(player.everydaySkills || '');
+      const targetId = skill.sourceId || skill.id;
+      const targetNameLower = skill.name.trim().toLowerCase();
+
+      const updated = parsed.map(item => {
+        const match = (targetId && item.id)
+          ? (item.id === targetId || item.id === skill.id)
+          : (item.name.trim().toLowerCase() === targetNameLower);
+
+        if (match) {
+          return { ...item, note: description.trim() || undefined };
+        }
+        return item;
+      });
+
+      onUpdateAdventure({
+        ...adventure,
+        player: {
+          ...player,
+          everydaySkills: serializeEverydaySkills(updated)
+        }
+      });
+    } else if (skill.sourceType === 'profession') {
+      const targetId = skill.sourceId || skill.id;
+      const targetNameLower = skill.name.trim().toLowerCase();
+
+      if (Array.isArray(player.professionCompetencies) && player.professionCompetencies.length > 0) {
+        let foundInComps = false;
+        const updatedComps = player.professionCompetencies.map(c => {
+          const match = (targetId && c.id)
+            ? (c.id === targetId || c.id === skill.id)
+            : (c.name.trim().toLowerCase() === targetNameLower);
+
+          if (match) {
+            foundInComps = true;
+            return { ...c, description };
+          }
+          return c;
+        });
+
+        if (foundInComps) {
+          onUpdateAdventure({
+            ...adventure,
+            player: {
+              ...player,
+              professionCompetencies: updatedComps
             }
-            return t;
-          })
-        : [];
+          });
+          setEditingSkillId(null);
+          return;
+        }
+      }
 
+      // Main-Profession-Fallback: Beschreibung im Charakter speichern
       onUpdateAdventure({
         ...adventure,
         player: {
           ...player,
-          techniqueList: updatedTechList
-        }
-      });
-    } else if (skill.sourceType === 'profession' && Array.isArray(player.professionCompetencies)) {
-      const updatedComps = player.professionCompetencies.map(c => {
-        if (c.id === skill.sourceId || c.name.trim().toLowerCase() === skill.name.trim().toLowerCase()) {
-          return { ...c, description };
-        }
-        return c;
-      });
-
-      onUpdateAdventure({
-        ...adventure,
-        player: {
-          ...player,
-          professionCompetencies: updatedComps
+          professionDescription: description.trim()
         }
       });
     }

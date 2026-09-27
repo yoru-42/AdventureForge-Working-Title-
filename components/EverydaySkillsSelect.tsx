@@ -50,6 +50,7 @@ export interface EverydaySkillItem {
   milestoneNote?: string; // Story event / exam for 'milestone'
   points?: number; // 1 - 4 for 'static'
   note?: string; // General practical notes
+  isFavorite?: boolean; // Favoriten-Markierung
 }
 
 export function getSkillLabel(score: number): string {
@@ -80,13 +81,15 @@ export function parseEverydaySkills(rawInput: any): EverydaySkillItem[] {
         return { name: match[1].trim(), score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0 };
       } else if (item && typeof item === 'object') {
         return {
+          id: item.id || undefined,
           name: item.name || '',
           score: typeof item.score === 'number' ? item.score : 0,
           label: item.label || 'Anfänger',
           xp: item.xp || 0,
           trainingUnits: item.trainingUnits || 0,
           points: item.points || 0,
-          note: item.note || ''
+          note: item.note || '',
+          isFavorite: !!item.isFavorite
         };
       }
       return { name: String(item), score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0 };
@@ -117,7 +120,7 @@ export function parseEverydaySkills(rawInput: any): EverydaySkillItem[] {
     const match = part.match(/^([^(]+)(?:\(([^)]+)\))?/);
     if (!match) {
       const trimmedName = part.trim();
-      return { name: trimmedName, score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0 };
+      return { name: trimmedName, score: 0, label: 'Anfänger', xp: 0, trainingUnits: 0, points: 0, isFavorite: false };
     }
     const name = match[1].trim();
     const details = match[2] ? match[2].trim() : '';
@@ -128,8 +131,13 @@ export function parseEverydaySkills(rawInput: any): EverydaySkillItem[] {
     let trainingUnits = 0;
     let milestoneNote = '';
     let points = 0;
+    let isFavorite = false;
 
     if (details) {
+      if (/\b(?:favorit|favorite|fav:\s*true)\b/i.test(details)) {
+        isFavorite = true;
+      }
+
       const scoreMatch = details.match(/(\d+)%/);
       if (scoreMatch) {
         score = parseInt(scoreMatch[1], 10);
@@ -174,7 +182,7 @@ export function parseEverydaySkills(rawInput: any): EverydaySkillItem[] {
     }
 
     const label = getSkillLabel(score);
-    return { name, score, label, note, xp, trainingUnits, milestoneNote, points };
+    return { name, score, label, note, xp, trainingUnits, milestoneNote, points, isFavorite };
   });
 
   // Deduplizieren: Gleiche Fertigkeiten zusammenführen (höchster Wert gewinnt, Notizen/Punkte kombinieren)
@@ -197,13 +205,14 @@ export function parseEverydaySkills(rawInput: any): EverydaySkillItem[] {
         trainingUnits: Math.max(existing.trainingUnits || 0, item.trainingUnits || 0),
         points: Math.max(existing.points || 0, item.points || 0),
         note: [existing.note, item.note].filter(Boolean).join(' | ') || undefined,
-        milestoneNote: [existing.milestoneNote, item.milestoneNote].filter(Boolean).join(' | ') || undefined
+        milestoneNote: [existing.milestoneNote, item.milestoneNote].filter(Boolean).join(' | ') || undefined,
+        isFavorite: existing.isFavorite || item.isFavorite
       };
     } else {
       seenIndices.set(key, deduplicatedItems.length);
       deduplicatedItems.push({
         ...item,
-        id: `eskill_${key.replace(/[^a-z0-9]/g, '_')}_${deduplicatedItems.length}`
+        id: item.id || `eskill_${key.replace(/[^a-z0-9_-]/g, '_')}`
       });
     }
   }
@@ -215,6 +224,9 @@ export function serializeEverydaySkills(items: EverydaySkillItem[]): string {
   return items.map(item => {
     const label = getSkillLabel(item.score);
     const segments: string[] = [`${label} - ${item.score}%`];
+    if (item.isFavorite) {
+      segments.push('Favorit');
+    }
     if (item.xp !== undefined && item.xp > 0) {
       segments.push(`EP: ${item.xp}/100`);
     }

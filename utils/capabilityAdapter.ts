@@ -7,7 +7,7 @@ import {
   EffectiveTechniqueItem
 } from '../types';
 import { resolveEffectiveMoveset } from './movesetResolver';
-import { normalizeAbilityHierarchy } from './abilityHierarchy';
+import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from './abilityHierarchy';
 import {
   parseEverydaySkills,
   serializeEverydaySkills,
@@ -34,6 +34,33 @@ export type CapabilitySourceType =
   | 'weapon'
   | 'everyday'
   | 'profession';
+
+/**
+ * Prüft, ob ein TechniqueItem dem gesuchten Ziel entspricht.
+ * STRIKTE ID-PRIORISIERUNG: Wenn IDs vorhanden sind, wird AUSSCHLIESSLICH nach ID verglichen.
+ * Namensvergleich erfolgt nur als Fallback, wenn mindestens eine Seite keine ID besitzt.
+ */
+export function isTechniqueMatch(
+  t: TechniqueItem,
+  targetId?: string,
+  targetName?: string,
+  secondaryId?: string
+): boolean {
+  if (targetId && t.id) {
+    if (t.id === targetId) return true;
+    if (secondaryId && t.id === secondaryId) return true;
+    return false;
+  }
+  if (secondaryId && t.id) {
+    return t.id === secondaryId;
+  }
+  if (!t.id || (!targetId && !secondaryId)) {
+    if (targetName && t.name) {
+      return t.name.trim().toLowerCase() === targetName.trim().toLowerCase();
+    }
+  }
+  return false;
+}
 
 /**
  * Einheitliches View-Modell für die zentrale Darstellung aller 6 Fähigkeiten- & Kompetenzbereiche.
@@ -157,6 +184,29 @@ export function getCharacterCapabilities(
   const seenIds = new Set<string>();
   const seenCategoryName = new Set<string>();
 
+  const activeTransId = activeTransIdOverride !== undefined
+    ? activeTransIdOverride
+    : (character.appearance?.activeTransformationId || 'standard');
+
+  // 1. Effektives Moveset (berücksichtigt Transformationen, Modifikatoren und Freischaltungen)
+  const allEffectiveMoveset: EffectiveTechniqueItem[] = resolveEffectiveMoveset(character, activeTransId, {
+    includeDisabled: true
+  });
+
+  const disabledIds = new Set<string>();
+  const disabledNames = new Set<string>();
+
+  allEffectiveMoveset.forEach(eff => {
+    if (eff.isDisabledInTransformation) {
+      if (eff.id) disabledIds.add(eff.id);
+      if (eff.originalTechniqueId) disabledIds.add(eff.originalTechniqueId);
+      if (eff.name) disabledNames.add(eff.name.trim().toLowerCase());
+      if (eff.originalTechniqueName) disabledNames.add(eff.originalTechniqueName.trim().toLowerCase());
+    }
+  });
+
+  const effectiveMoveset = allEffectiveMoveset.filter(eff => !eff.isDisabledInTransformation);
+
   const canAdd = (
     id: string | undefined,
     category: CapabilityCategory,
@@ -167,6 +217,12 @@ export function getCharacterCapabilities(
     if (!name || !name.trim()) return false;
     const trimmedName = name.trim().toLowerCase();
     const catNameKey = `${category}::${trimmedName}`;
+
+    // Deaktivierte Transformationstechniken niemals als aktive Fähigkeiten eintragen
+    if (id && disabledIds.has(id)) return false;
+    if (originalTechId && disabledIds.has(originalTechId)) return false;
+    if (disabledNames.has(trimmedName)) return false;
+    if (originalTechName && disabledNames.has(originalTechName.trim().toLowerCase())) return false;
 
     // 1. Primär nach stabiler ID deduplizieren
     if (id && seenIds.has(id)) return false;
@@ -188,15 +244,6 @@ export function getCharacterCapabilities(
     }
     return true;
   };
-
-  const activeTransId = activeTransIdOverride !== undefined
-    ? activeTransIdOverride
-    : (character.appearance?.activeTransformationId || 'standard');
-
-  // 1. Effektives Moveset (berücksichtigt Transformationen, Modifikatoren und Freischaltungen)
-  const effectiveMoveset: EffectiveTechniqueItem[] = resolveEffectiveMoveset(character, activeTransId, {
-    includeDisabled: false
-  });
 
   const registerTechniqueItem = (tech: TechniqueItem | EffectiveTechniqueItem, isEffective = false) => {
     const name = (tech.name || (tech as any).title || '').trim();
@@ -308,11 +355,11 @@ export function getCharacterCapabilities(
       const name = es.name.trim();
       if (!name) return;
 
-      const id = es.id || `comp-everyday-${idx}-${name.toLowerCase().replace(/\s+/g, '-')}`;
-      if (!canAdd(id, 'competence', name)) return;
+      const stableSkillId = es.id || `eskill_${name.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}`;
+      if (!canAdd(stableSkillId, 'competence', name)) return;
 
       const central = getCentralSkill(name);
-      const desc = central?.description || getSkillDescription(name) || es.note || `Alltagskompetenz: ${name}`;
+      const desc = es.note || central?.description || getSkillDescription(name) || `Alltagskompetenz: ${name}`;
 
       // Level ableiten (1 bis 5 basierend auf Score 0-100)
       const score = es.score || 0;
@@ -320,7 +367,7 @@ export function getCharacterCapabilities(
       const maxLevel = 5;
 
       list.push({
-        id,
+        id: stableSkillId,
         name,
         category: 'competence',
         categoryLabel: label,
@@ -336,11 +383,11 @@ export function getCharacterCapabilities(
         progressionLogic: 'training',
         type: 'Alltagskompetenz',
         subtype: central?.category || 'Alltag',
-        isFavorite: false,
+        isFavorite: !!es.isFavorite,
         canTrain: score < 100,
         canUse: true,
         sourceType: 'everyday',
-        sourceId: name
+        sourceId: stableSkillId
       });
     });
   }
@@ -353,7 +400,7 @@ export function getCharacterCapabilities(
       const name = (pc.name || '').trim();
       if (!name) return;
 
-      const id = pc.id || `comp-profession-${idx}-${name.toLowerCase().replace(/\s+/g, '-')}`;
+      const id = pc.id || `comp_profession_${name.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}`;
       if (!canAdd(id, 'profession', name)) return;
 
       const profScore = Math.max(0, Math.min(100, pc.proficiency || 0));
@@ -384,10 +431,12 @@ export function getCharacterCapabilities(
   } else if (character.profession && character.profession.trim()) {
     // Primärberuf als Kompetenz darstellen, falls keine Einzelkompetenzen vorhanden sind
     const profName = character.profession.trim();
-    const id = `comp-profession-main-${profName.toLowerCase().replace(/\s+/g, '-')}`;
+    const profKey = profName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const id = `profession_main_${profKey}`;
     if (canAdd(id, 'profession', profName)) {
-      const profScore = Math.max(0, Math.min(100, character.professionProficiencyScore || 15));
+      const profScore = Math.max(0, Math.min(100, character.professionProficiencyScore !== undefined ? character.professionProficiencyScore : 15));
       const level = Math.max(1, Math.min(10, Math.ceil((profScore || 1) / 10)));
+      const isFav = !!(character.isMainProfessionFavorite || character.isProfessionFavorite);
 
       list.push({
         id,
@@ -404,11 +453,11 @@ export function getCharacterCapabilities(
         progressionLogic: 'ep',
         type: 'Hauptberuf',
         subtype: character.professionField || 'Beruf',
-        isFavorite: false,
+        isFavorite: isFav,
         canTrain: profScore < 100,
         canUse: true,
         sourceType: 'profession',
-        sourceId: 'main_profession'
+        sourceId: id
       });
     }
   }
@@ -544,33 +593,34 @@ export function trainCharacterCapability(
       }
     };
 
-    let updatedTechList = Array.isArray(player.techniqueList)
-      ? player.techniqueList.map(t => {
-          if (
-            (t.id && (t.id === targetTechId || t.id === capability.id)) ||
-            (t.name && t.name.trim().toLowerCase() === targetNameLower)
-          ) {
-            return applyTechniqueProgress(t);
-          }
-          return t;
-        })
-      : [];
+    const baseTechList = Array.isArray(player.techniqueList) && player.techniqueList.length > 0
+      ? [...player.techniqueList]
+      : normalizeAbilityHierarchy(player).techniques;
 
-    let updatedAbilities = Array.isArray(player.abilities)
-      ? player.abilities.map((ability: any) => {
-          if (!Array.isArray(ability.techniqueList)) return ability;
-          const nextList = ability.techniqueList.map((t: any) => {
-            if (
-              (t.id && (t.id === targetTechId || t.id === capability.id)) ||
-              (t.name && t.name.trim().toLowerCase() === targetNameLower)
-            ) {
-              return applyTechniqueProgress(t);
-            }
-            return t;
-          });
-          return { ...ability, techniqueList: nextList };
-        })
-      : player.abilities;
+    let targetFound = false;
+    let updatedTechList = baseTechList.map(t => {
+      if (isTechniqueMatch(t, targetTechId, targetNameLower, capability.id)) {
+        targetFound = true;
+        return applyTechniqueProgress(t);
+      }
+      return t;
+    });
+
+    if (!targetFound) {
+      const allHierarchyTechs = normalizeAbilityHierarchy(player).techniques;
+      const foundInHierarchy = allHierarchyTechs.find(t => isTechniqueMatch(t, targetTechId, targetNameLower, capability.id));
+      if (foundInHierarchy) {
+        updatedTechList.push(applyTechniqueProgress(foundInHierarchy));
+      }
+    }
+
+    const hierarchy = normalizeAbilityHierarchy(player);
+    const syncedChar = syncCharacterAbilityTree(
+      player,
+      hierarchy.powerSources,
+      hierarchy.baseAbilities,
+      updatedTechList
+    );
 
     const roleplayText = levelUp
       ? `*trainiert die Fertigkeit '${capability.name}' erfolgreich und erreicht Stufe ${newLevel}!*`
@@ -583,11 +633,7 @@ export function trainCharacterCapability(
     return {
       updatedAdventure: {
         ...adventure,
-        player: {
-          ...player,
-          techniqueList: updatedTechList,
-          abilities: updatedAbilities
-        }
+        player: syncedChar
       },
       notificationTitle,
       roleplayText,
@@ -601,6 +647,7 @@ export function trainCharacterCapability(
   if (capability.sourceType === 'everyday') {
     const rawSkills = player.everydaySkills || '';
     const parsed = parseEverydaySkills(rawSkills);
+    const targetId = capability.sourceId || capability.id;
     const targetNameLower = capability.name.trim().toLowerCase();
 
     let levelUp = false;
@@ -608,7 +655,11 @@ export function trainCharacterCapability(
     let label = '';
 
     const updatedItems = parsed.map(item => {
-      if (item.name.trim().toLowerCase() === targetNameLower) {
+      const match = (targetId && item.id)
+        ? (item.id === targetId || item.id === capability.id)
+        : (item.name.trim().toLowerCase() === targetNameLower);
+
+      if (match) {
         const curScore = item.score || 0;
         const curUnits = (item.trainingUnits || 0) + 1;
         let score = curScore;
@@ -656,10 +707,13 @@ export function trainCharacterCapability(
 
   // 3. Berufe (Source: player.professionCompetencies mit calculateCompetencyProgress)
   if (capability.sourceType === 'profession') {
+    const targetId = capability.sourceId || capability.id;
+    const targetNameLower = capability.name.trim().toLowerCase();
     const comps = Array.isArray(player.professionCompetencies) ? [...player.professionCompetencies] : [];
-    const targetComp = comps.find(
-      c => c.id === capability.sourceId || c.name.trim().toLowerCase() === capability.name.trim().toLowerCase()
-    );
+    const targetComp = comps.find(c => {
+      if (targetId && c.id) return c.id === targetId || c.id === capability.id;
+      return c.name.trim().toLowerCase() === targetNameLower;
+    });
 
     let levelUp = false;
     let newProf = capability.progress || 0;
@@ -709,7 +763,7 @@ export function trainCharacterCapability(
       };
     } else {
       // Hauptberuf-Fallback
-      const curProf = player.professionProficiencyScore || 15;
+      const curProf = player.professionProficiencyScore !== undefined ? player.professionProficiencyScore : 15;
       const newOverallProf = Math.min(100, curProf + 5);
       const roleplayText = `*übt praktische Arbeiten im Beruf '${player.profession || capability.name}' aus*`;
 
@@ -750,7 +804,7 @@ export function toggleFavoriteCapability(
 
   const nextFavState = !capability.isFavorite;
 
-  // Techniken, Passive Fähigkeiten, Ultimative Techniken & Waffenbeherrschung
+  // 1. Techniken, Passive Fähigkeiten, Ultimative Techniken & Waffenbeherrschung
   if (
     capability.sourceType === 'technique' ||
     capability.sourceType === 'passive' ||
@@ -759,76 +813,109 @@ export function toggleFavoriteCapability(
     const targetTechId = capability.originalTechniqueId || capability.sourceId || capability.id;
     const targetNameLower = (capability.originalTechniqueName || capability.name).trim().toLowerCase();
 
-    const updatedTechList = Array.isArray(player.techniqueList)
-      ? player.techniqueList.map(t => {
-          if (
-            (t.id && (t.id === targetTechId || t.id === capability.id)) ||
-            (t.name && t.name.trim().toLowerCase() === targetNameLower)
-          ) {
-            return { ...t, isFavorite: nextFavState, favorite: nextFavState };
-          }
-          return t;
-        })
-      : [];
+    const baseTechList = Array.isArray(player.techniqueList) && player.techniqueList.length > 0
+      ? [...player.techniqueList]
+      : normalizeAbilityHierarchy(player).techniques;
 
-    const updatedAbilities = Array.isArray(player.abilities)
-      ? player.abilities.map((ability: any) => {
-          let modified = false;
-          let nextList = ability.techniqueList;
+    let targetFound = false;
+    let updatedTechList = baseTechList.map(t => {
+      if (isTechniqueMatch(t, targetTechId, targetNameLower, capability.id)) {
+        targetFound = true;
+        return { ...t, isFavorite: nextFavState, favorite: nextFavState };
+      }
+      return t;
+    });
 
-          if (Array.isArray(ability.techniqueList)) {
-            nextList = ability.techniqueList.map((t: any) => {
-              if (
-                (t.id && (t.id === targetTechId || t.id === capability.id)) ||
-                (t.name && t.name.trim().toLowerCase() === targetNameLower)
-              ) {
-                modified = true;
-                return { ...t, isFavorite: nextFavState, favorite: nextFavState };
-              }
-              return t;
-            });
-          }
+    if (!targetFound) {
+      const allHierarchyTechs = normalizeAbilityHierarchy(player).techniques;
+      const foundInHierarchy = allHierarchyTechs.find(t => isTechniqueMatch(t, targetTechId, targetNameLower, capability.id));
+      if (foundInHierarchy) {
+        updatedTechList.push({ ...foundInHierarchy, isFavorite: nextFavState, favorite: nextFavState });
+      }
+    }
 
-          if (
-            (ability.id && (ability.id === targetTechId || ability.id === capability.id)) ||
-            (ability.name && ability.name.trim().toLowerCase() === targetNameLower)
-          ) {
-            return {
-              ...ability,
-              isFavorite: nextFavState,
-              favorite: nextFavState,
-              techniqueList: nextList
-            };
-          }
+    const hierarchy = normalizeAbilityHierarchy(player);
+    const syncedChar = syncCharacterAbilityTree(
+      player,
+      hierarchy.powerSources,
+      hierarchy.baseAbilities,
+      updatedTechList
+    );
 
-          return modified ? { ...ability, techniqueList: nextList } : ability;
-        })
-      : player.abilities;
+    return {
+      ...adventure,
+      player: syncedChar
+    };
+  }
 
+  // 2. Alltagskompetenzen (Baustelle 1)
+  if (capability.sourceType === 'everyday') {
+    const rawSkills = player.everydaySkills || '';
+    const parsed = parseEverydaySkills(rawSkills);
+    const targetId = capability.sourceId || capability.id;
+    const targetNameLower = capability.name.trim().toLowerCase();
+
+    const updated = parsed.map(item => {
+      const match = (targetId && item.id)
+        ? (item.id === targetId || item.id === capability.id)
+        : (item.name.trim().toLowerCase() === targetNameLower);
+
+      if (match) {
+        return {
+          ...item,
+          isFavorite: nextFavState
+        };
+      }
+      return item;
+    });
+
+    const serialized = serializeEverydaySkills(updated);
     return {
       ...adventure,
       player: {
         ...player,
-        techniqueList: updatedTechList,
-        abilities: updatedAbilities
+        everydaySkills: serialized
       }
     };
   }
 
-  // Berufe
-  if (capability.sourceType === 'profession' && Array.isArray(player.professionCompetencies)) {
-    const updatedComps = player.professionCompetencies.map(c => {
-      if (c.id === capability.sourceId || c.name.trim().toLowerCase() === capability.name.trim().toLowerCase()) {
-        return { ...c, isFavorite: nextFavState };
-      }
-      return c;
-    });
+  // 3. Berufe (Baustelle 2)
+  if (capability.sourceType === 'profession') {
+    const targetId = capability.sourceId || capability.id;
+    const targetNameLower = capability.name.trim().toLowerCase();
 
+    if (Array.isArray(player.professionCompetencies) && player.professionCompetencies.length > 0) {
+      let foundInComps = false;
+      const updatedComps = player.professionCompetencies.map(c => {
+        const match = (targetId && c.id)
+          ? (c.id === targetId || c.id === capability.id)
+          : (c.name.trim().toLowerCase() === targetNameLower);
+
+        if (match) {
+          foundInComps = true;
+          return { ...c, isFavorite: nextFavState };
+        }
+        return c;
+      });
+
+      if (foundInComps) {
+        return {
+          ...adventure,
+          player: {
+            ...player,
+            professionCompetencies: updatedComps
+          }
+        };
+      }
+    }
+
+    // Main-Profession-Fallback: Persistent auf dem Spieler-Objekt speichern
     return {
       ...adventure,
       player: {
         ...player,
-        professionCompetencies: updatedComps
+        isProfessionFavorite: nextFavState,
+        isMainProfessionFavorite: nextFavState
       }
     };
   }
