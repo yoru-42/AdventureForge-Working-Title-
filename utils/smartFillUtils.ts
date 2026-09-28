@@ -1,4 +1,4 @@
-import { SmartFillContext, SmartFillSection } from '../types';
+import { SmartFillContext, SmartFillSection, RelationshipsSmartFillScope } from '../types';
 
 /**
  * Wandelt unstrukturierte KI-Rückgabewerte in eine sichere Zeichenkette um.
@@ -10,11 +10,11 @@ function getSafeString(val: any): string {
 }
 
 /**
- * Wendet Smart-Fill-Ergebnisse streng innerhalb der durch `context.section` definierten Update-Grenze an.
+ * Wendet Smart-Fill-Ergebnisse streng innerhalb der durch `context.section` und `context.scope` definierten Update-Grenze an.
  * 
  * Bereichs-Zuständigkeiten:
  * - 'profile': Name, Rufname, Spitzname, Rolle/Beruf, Aussehen/Körpermerkmale, Persönlichkeit, Biografie, Aktuelle Situation.
- *   Darf NICHT verändern: Beziehungen, Ziele/Motivation, Kräfte/Fähigkeiten, Berufe/Talente, Inventar/Ausrüstung, Geheimnisse.
+ * - 'relationships': Beziehungen, Motivation & Ziele (gezielte Teilbereiche durch context.scope).
  * - 'full_character': Vollständiges Charakter-Update (Legacy/Globaler Modus).
  */
 export function applySmartFillUpdates<T extends Record<string, any>>(
@@ -27,7 +27,15 @@ export function applySmartFillUpdates<T extends Record<string, any>>(
 
   // 1. Target ID Überprüfung
   if (context.targetId && prevCharacter.id && context.targetId !== prevCharacter.id) {
-    return prevCharacter;
+    // Falls targetId angegeben ist und nicht die Charakter-ID ist, prüfen wir,
+    // ob targetId zu einem untergeordneten Element gehört (z.B. eine konkrete Beziehungs-ID).
+    const isTargetingSubElement = context.section === 'relationships' && 
+      Array.isArray(prevCharacter.relationships) && 
+      prevCharacter.relationships.some((r: any) => r.id === context.targetId || r.targetCharacter === context.targetId);
+
+    if (!isTargetingSubElement) {
+      return prevCharacter;
+    }
   }
 
   const mode = context.mode || 'supplement';
@@ -37,11 +45,15 @@ export function applySmartFillUpdates<T extends Record<string, any>>(
     return applyProfileSmartFillUpdates(prevCharacter, aiData, mode);
   }
 
+  if (section === 'relationships') {
+    return applyRelationshipsSmartFillUpdates(prevCharacter, aiData, context);
+  }
+
   if (section === 'full_character') {
     return applyFullCharacterSmartFillUpdates(prevCharacter, aiData, mode);
   }
 
-  // Fallback für zukünftige isolierte Abschnitte (beziehungen, abilities, professions, inventory)
+  // Fallback für zukünftige isolierte Abschnitte
   return prevCharacter;
 }
 
@@ -193,6 +205,187 @@ export function applyProfileSmartFillUpdates<T extends Record<string, any>>(
     secretsStage3: prev.secretsStage3,
     knowledge: prev.knowledge
   };
+}
+
+/**
+ * Aktualisiert isoliert den Bereich 'relationships' (Beziehungen, Motivation & Ziele) gemäß context.scope.
+ */
+export function applyRelationshipsSmartFillUpdates<T extends Record<string, any>>(
+  prev: T,
+  aiData: any,
+  context: SmartFillContext
+): T {
+  const mode = context.mode || 'supplement';
+  const isSupplement = mode === 'supplement';
+  const scope = (context.scope as RelationshipsSmartFillScope) || 'relationships_and_motivation_goals';
+
+  const allowRelationships = scope === 'relationships' || scope === 'relationships_and_motivation_goals';
+  const allowMotivationGoals = scope === 'motivation_goals' || scope === 'relationships_and_motivation_goals';
+
+  // 1. BEZIEHUNGEN
+  let nextRelationships = prev.relationships;
+  let nextRelationshipText = prev.relationship;
+  let nextConductText = prev.conduct;
+
+  if (allowRelationships) {
+    if (context.targetId && prev.relationships && prev.relationships.length > 0) {
+      const targetRelIndex = prev.relationships.findIndex(
+        (r: any) => r.id === context.targetId || r.targetCharacter === context.targetId
+      );
+
+      if (targetRelIndex !== -1) {
+        // Zielgerichtetes Update einer einzelnen Beziehung
+        const existingRel = prev.relationships[targetRelIndex];
+        const matchingAiRel = Array.isArray(aiData.relationships)
+          ? aiData.relationships.find((r: any) => r.id === context.targetId || r.targetCharacter === existingRel.targetCharacter) || aiData.relationships[0]
+          : aiData;
+
+        const updatedRel = { ...existingRel, ...(matchingAiRel || {}) };
+
+        nextRelationships = [...prev.relationships];
+        nextRelationships[targetRelIndex] = updatedRel;
+      } else {
+        const incomingList = Array.isArray(aiData.relationships)
+          ? aiData.relationships
+          : (aiData.targetCharacter ? [aiData] : []);
+        if (incomingList.length > 0) {
+          nextRelationships = mergeRelationshipsList(prev.relationships || [], incomingList, isSupplement);
+        }
+      }
+    } else {
+      const incomingList = Array.isArray(aiData.relationships)
+        ? aiData.relationships
+        : (aiData.targetCharacter ? [aiData] : []);
+      if (incomingList.length > 0) {
+        nextRelationships = mergeRelationshipsList(prev.relationships || [], incomingList, isSupplement);
+      }
+    }
+
+    if (aiData.relationship !== undefined) {
+      nextRelationshipText = !isSupplement
+        ? (aiData.relationship || '')
+        : (prev.relationship ? (aiData.relationship ? `${prev.relationship}\n\n${aiData.relationship}` : prev.relationship) : (aiData.relationship || ''));
+    }
+    if (aiData.conduct !== undefined) {
+      nextConductText = !isSupplement
+        ? (aiData.conduct || '')
+        : (prev.conduct ? (aiData.conduct ? `${prev.conduct}\n\n${aiData.conduct}` : prev.conduct) : (aiData.conduct || ''));
+    }
+  }
+
+  // 2. MOTIVATION & ZIELE
+  let nextGoal = prev.goal;
+  let nextMotivationCore = prev.motivationCore;
+  let nextGoals = prev.goals;
+
+  if (allowMotivationGoals) {
+    if (aiData.goal !== undefined) {
+      nextGoal = !isSupplement ? (aiData.goal || '') : (prev.goal || aiData.goal || '');
+    }
+    if (aiData.motivationCore !== undefined) {
+      nextMotivationCore = !isSupplement
+        ? (aiData.motivationCore || (aiData.goal ? { mainGoal: aiData.goal } : undefined))
+        : (prev.motivationCore ? { ...prev.motivationCore, ...(aiData.motivationCore || {}) } : (aiData.motivationCore || (aiData.goal ? { mainGoal: aiData.goal } : undefined)));
+    }
+    if (Array.isArray(aiData.goals) && aiData.goals.length > 0) {
+      if (!isSupplement) {
+        nextGoals = aiData.goals;
+      } else {
+        const existingGoalIds = new Set((prev.goals || []).map((g: any) => g.id || g.title));
+        const newGoals = aiData.goals.filter((g: any) => !existingGoalIds.has(g.id || g.title));
+        nextGoals = [...(prev.goals || []), ...newGoals];
+      }
+    } else if (aiData.goal && (!prev.goals || prev.goals.length === 0)) {
+      nextGoals = [{ id: 'goal-1', title: aiData.goal, timeframe: 'langfristig', targetType: 'self', targetName: 'Selbst', priority: 'hoch', status: 'aktiv', progress: 0 }];
+    }
+  }
+
+  return {
+    ...prev,
+
+    // Updated strictly based on scope:
+    relationships: nextRelationships,
+    relationship: nextRelationshipText,
+    conduct: nextConductText,
+    goal: nextGoal,
+    motivationCore: nextMotivationCore,
+    goals: nextGoals,
+
+    // GUARANTEED UNTOUCHED OTHER DOMAINS:
+    name: prev.name,
+    nickname: prev.nickname,
+    rufName: prev.rufName,
+    role: prev.role,
+    profession: prev.profession,
+    appearance: prev.appearance,
+    personality: prev.personality,
+    personalityArchetype: prev.personalityArchetype,
+    personalityTraits: prev.personalityTraits,
+    bio: prev.bio,
+    currentSituation: prev.currentSituation,
+    skills: prev.skills,
+    powerSource: prev.powerSource,
+    powerCost: prev.powerCost,
+    techniques: prev.techniques,
+    abilities: prev.abilities,
+    techniqueList: prev.techniqueList,
+    campaignPowerLevels: prev.campaignPowerLevels,
+    powerSystems: prev.powerSystems,
+    powers: prev.powers,
+    secondaryProfessions: prev.secondaryProfessions,
+    professionField: prev.professionField,
+    professionSpecialization: prev.professionSpecialization,
+    professionRank: prev.professionRank,
+    professionLevel: prev.professionLevel,
+    professionDescription: prev.professionDescription,
+    craftingSkills: prev.craftingSkills,
+    talents: prev.talents,
+    everydaySkills: prev.everydaySkills,
+    toolsAndEquipment: prev.toolsAndEquipment,
+    jobTitle: prev.jobTitle,
+    structuredInventory: prev.structuredInventory,
+    inventory: prev.inventory,
+    weapons: prev.weapons,
+    equipment: prev.equipment,
+    secretsStage1: prev.secretsStage1,
+    secretsStage2: prev.secretsStage2,
+    secretsStage3: prev.secretsStage3,
+    knowledge: prev.knowledge
+  };
+}
+
+function mergeRelationshipsList(existingList: any[], incomingList: any[], isSupplement: boolean) {
+  if (!incomingList || incomingList.length === 0) return existingList;
+  if (!isSupplement) {
+    return incomingList.map((r, i) => ({
+      id: r.id || `rel_${Date.now()}_${i}`,
+      ...r
+    }));
+  }
+
+  const existingMap = new Map<string, any>();
+  existingList.forEach(r => {
+    const key = (r.targetCharacter || r.id || '').toLowerCase().trim();
+    if (key) existingMap.set(key, r);
+  });
+
+  const merged = [...existingList];
+  incomingList.forEach((inc, i) => {
+    const key = (inc.targetCharacter || inc.id || '').toLowerCase().trim();
+    if (key && existingMap.has(key)) {
+      const idx = merged.findIndex(r => (r.targetCharacter || r.id || '').toLowerCase().trim() === key);
+      if (idx !== -1) {
+        merged[idx] = { ...merged[idx], ...inc };
+      }
+    } else if (inc.targetCharacter) {
+      merged.push({
+        id: inc.id || `rel_${Date.now()}_${i}`,
+        ...inc
+      });
+    }
+  });
+
+  return merged;
 }
 
 /**

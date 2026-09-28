@@ -5010,6 +5010,7 @@ ${existingCodexCharacters.slice(0, 8).map(c => `- Name: "${c.name}" (${c.role ||
       const activeSectionStr: string = typeof targetSection === 'object' && targetSection !== null ? String(targetSection.section) : String(targetSection || 'all');
 
       if (activeSectionStr && activeSectionStr !== 'all' && activeSectionStr !== 'full_character') {
+        const targetScopeStr = typeof targetSection === 'object' && targetSection !== null && targetSection.scope ? String(targetSection.scope) : undefined;
         const sectionDescriptions: Record<string, string> = {
           profile: 'Profil & Aussehen (Name, Rufname, Spitzname, Rolle, Aussehen, Körpermerkmale, Persönlichkeit, Biografie, Aktuelle Situation)',
           appearance: 'Statur & Erscheinung (Geschlecht, Alter, Statur, Haare, Augen, Kleidung, Looks, Rasse, Rassemerkmale, Maße, Körbchengröße, Gewicht, KFA, Muskelmasse, Standort und Verwandlungen)',
@@ -5019,16 +5020,32 @@ ${existingCodexCharacters.slice(0, 8).map(c => `- Name: "${c.name}" (${c.role ||
           motivation: 'Motivationskern & Handlungsantrieb (Hauptziel/Goal, innere Antriebe, Ideale, Schwüre, Ängste, Werte)',
           goals: 'Ziele & Pläne (Hauptziel, mittelfristige & kurzfristige Etappenziele, Aktive Pläne, Hindernisse)',
           secrets: 'Geheimnis-Stufen / Verborgenes Wissen (secretsStage1: Öffentliches Wissen, secretsStage2: Gerüchte & Indizien, secretsStage3: Verborgenes Geheimnis, knowledge)',
-          relationships: 'Beziehungen (Verhältnis zu anderen Charakteren, Gilden, Familie, Anredeformen, Verhalten)',
+          relationships: 'Beziehungen, Motivation & Ziele (Verhältnis zu anderen Charakteren, Gilden, Anredeformen, Verhalten, Hauptziel, Etappenziele)',
           combat: 'Kampffähigkeiten & Techniken (Kräfte, Spezialfähigkeiten, Techniken, Kraftquelle, Kraftkosten, Machtlevel)',
           abilities: 'Kampffähigkeiten & Kräfthierarchie',
           professions: 'Berufe & Talente (Hauptberuf, Berufsrang, Nebenberufe, Handwerkskünste, Talente, Alltagsfertigkeiten)',
           inventory: 'Besitz & Inventar (Waffen, Kleidung/Rüstung, Accessoires/Schmuck, Geld/Währung, Werkzeuge und Gegenstände im Rucksack)'
         };
-        const desc = sectionDescriptions[activeSectionStr] || activeSectionStr;
+        let desc = sectionDescriptions[activeSectionStr] || activeSectionStr;
+        if (activeSectionStr === 'relationships' && targetScopeStr) {
+          if (targetScopeStr === 'relationships') {
+            desc = 'Beziehungen & soziales Gefüge (Ausschließlich Beziehungen zu anderen Charakteren/Gilden, Anreden, Verhalten)';
+          } else if (targetScopeStr === 'motivation_goals') {
+            desc = 'Motivation & Ziele (Ausschließlich Hauptziel, Motivationskern, innere Antriebe, Etappenziele und Pläne)';
+          } else if (targetScopeStr === 'relationships_and_motivation_goals') {
+            desc = 'Beziehungen, Motivation & Ziele (Beziehungen zu Charakteren kombiniert mit Motivation, Hauptziel und Etappenzielen)';
+          }
+        }
+
         contextPrompt += `\n\n### GEZIELTER BEARBEITUNGS-FOKUS: "${desc}"
 MANDATORISCHE DIRECTIVE: Der Nutzer möchte gezielt diesen Bereich bearbeiten oder verfeinern!
 Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend zur Freitext-Eingabe. Behalte bestehende, ausgefüllte Daten anderer Bereiche bei bzw. passe sie nur an, wenn dies zur logischen Stimmigkeit mit dem bearbeiteten Bereich zwingend erforderlich ist.`;
+
+        if (activeSectionStr === 'relationships' && targetScopeStr === 'relationships') {
+          contextPrompt += `\nSTRIKTE TEILBEREICHS-DIRECTIVE: Erzeuge/bearbeite AUSSCHLIESSLICH Beziehungen ('relationships', 'relationship', 'conduct'). Erzeuge oder verändere KEINE Ziele ('goal', 'goals', 'motivationCore')!`;
+        } else if (activeSectionStr === 'relationships' && targetScopeStr === 'motivation_goals') {
+          contextPrompt += `\nSTRIKTE TEILBEREICHS-DIRECTIVE: Erzeuge/bearbeite AUSSCHLIESSLICH Motivation & Ziele ('goal', 'motivationCore', 'goals'). Erzeuge oder verändere KEINE neuen Beziehungen ('relationships')!`;
+        }
       }
 
       contextPrompt += `\n\nText: "${text}"\n`;

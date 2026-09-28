@@ -7,11 +7,17 @@ export type SmartFillSection =
   | 'inventory'
   | 'full_character';
 
+export type RelationshipsSmartFillScope =
+  | 'relationships'
+  | 'motivation_goals'
+  | 'relationships_and_motivation_goals';
+
 export interface SmartFillContext {
   section: SmartFillSection;
   targetId?: string;
   mode?: 'supplement' | 'replace';
   instruction?: string;
+  scope?: RelationshipsSmartFillScope | string;
 }
 
 export interface CharacterAttribute {

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection } from '../types';
+import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection, RelationshipsSmartFillScope } from '../types';
 import { GeminiService } from '../services/geminiService';
 import { applySmartFillUpdates } from '../utils/smartFillUtils';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
@@ -689,6 +689,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   const [mapViewerMode, setMapViewerMode] = useState<'editor' | 'viewer'>('editor');
   const [player, setPlayer] = useState<Character>(startPlayer);
   const [playerCharTab, setPlayerCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('profil');
+  const [relationshipsSmartFillScope, setRelationshipsSmartFillScope] = useState<RelationshipsSmartFillScope>('relationships');
 
   const [step4SubTab, setStep4SubTab] = useState<'interactive' | 'worldmap' | 'tactical'>('interactive');
   const [customCombatState, setCustomCombatState] = useState<any>(() => {
@@ -1651,15 +1652,26 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   const handlePlayerSmartFill = async (overrideContext?: SmartFillContext) => {
     setIsSmartFillingChar(true);
     try {
-      const activeSection: SmartFillSection = playerCharTab === 'profil' ? 'profile' : 'full_character';
+      const activeSection: SmartFillSection = playerCharTab === 'profil' 
+        ? 'profile' 
+        : (playerCharTab === 'beziehungen' ? 'relationships' : 'full_character');
+      const activeScope = playerCharTab === 'beziehungen' ? relationshipsSmartFillScope : undefined;
+
       const context: SmartFillContext = overrideContext || {
         section: activeSection,
+        scope: activeScope,
         targetId: player.id,
         mode: keepExistingPlayerDetails ? 'supplement' : 'replace',
         instruction: playerSmartFill
       };
 
-      const promptToUse = context.instruction || playerSmartFill.trim() || (context.section === 'profile' ? 'Profil & Aussehen des Charakters automatisch ergänzen.' : 'Vollständigen Charakter automatisch mit passenden Details, Vorgeschichte, Beziehungen und Fähigkeiten ausstatten.');
+      const promptToUse = context.instruction || playerSmartFill.trim() || (
+        context.section === 'profile' 
+          ? 'Profil & Aussehen des Charakters automatisch ergänzen.' 
+          : (context.section === 'relationships'
+            ? 'Beziehungen, Motivation & Ziele des Charakters automatisch ausstatten.'
+            : 'Vollständigen Charakter automatisch mit passenden Details, Vorgeschichte, Beziehungen und Fähigkeiten ausstatten.')
+      );
       const existingFactions = loreDatabase
         .filter(l => l.category === 'Fraktionen')
         .map(l => l.title)
@@ -1716,8 +1728,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         return applySmartFillUpdates(prev, data, context);
       });
 
-      // Pull structured inventory automatically ONLY if not in profile section
-      if (context.section !== 'profile') {
+      // Pull structured inventory automatically ONLY if not in profile or relationships section
+      if (context.section !== 'profile' && context.section !== 'relationships') {
         try {
           const tempCharForExtraction = {
             name: data.name || player.name,
@@ -4011,11 +4023,18 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     <span>
                       {playerCharTab === 'profil' 
                         ? 'Smart Fill: Profil & Aussehen' 
-                        : 'Smart Fill Charakter'}
+                        : (playerCharTab === 'beziehungen'
+                          ? 'Smart Fill: Beziehungen, Motivation & Ziele'
+                          : 'Smart Fill Charakter')}
                     </span>
                     {playerCharTab === 'profil' && (
                       <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
                         Bereich: Profil & Aussehen
+                      </span>
+                    )}
+                    {playerCharTab === 'beziehungen' && (
+                      <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
+                        Bereich: Beziehungen, Motivation & Ziele
                       </span>
                     )}
                   </label>
@@ -4023,7 +4042,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     <button 
                       type="button"
                       onClick={() => handlePlayerSmartFill({
-                        section: playerCharTab === 'profil' ? 'profile' : 'full_character',
+                        section: playerCharTab === 'profil' ? 'profile' : (playerCharTab === 'beziehungen' ? 'relationships' : 'full_character'),
+                        scope: playerCharTab === 'beziehungen' ? relationshipsSmartFillScope : undefined,
                         targetId: player.id,
                         mode: keepExistingPlayerDetails ? 'supplement' : 'replace',
                         instruction: playerSmartFill
@@ -4032,9 +4052,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-[10px] font-bold transition-all flex items-center gap-2 cursor-pointer"
                     >
                       <i className={`fa-solid ${isSmartFillingChar ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
-                      {playerCharTab === 'profil' ? 'Profil Ausfüllen' : 'Automatisch Ausfüllen'}
+                      {playerCharTab === 'profil' ? 'Profil Ausfüllen' : (playerCharTab === 'beziehungen' ? 'Bereich Ausfüllen' : 'Automatisch Ausfüllen')}
                     </button>
-                    {playerCharTab === 'profil' && (
+                    {(playerCharTab === 'profil' || playerCharTab === 'beziehungen') && (
                       <button 
                         type="button"
                         onClick={() => handlePlayerSmartFill({
@@ -4052,11 +4072,36 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     )}
                   </div>
                 </div>
+
+                {playerCharTab === 'beziehungen' && (
+                  <div className="flex items-center gap-2 text-xs bg-slate-900/60 p-2 rounded-lg border border-slate-700/50">
+                    <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wide">Smart Fill für:</span>
+                    <select
+                      value={relationshipsSmartFillScope}
+                      onChange={e => setRelationshipsSmartFillScope(e.target.value as RelationshipsSmartFillScope)}
+                      className="bg-slate-950 border border-indigo-500/40 text-slate-200 rounded px-2.5 py-1 text-xs outline-none focus:border-indigo-400 font-semibold cursor-pointer"
+                    >
+                      <option value="relationships">Beziehungen</option>
+                      <option value="motivation_goals">Motivation &amp; Ziele</option>
+                      <option value="relationships_and_motivation_goals">Beziehungen + Motivation &amp; Ziele</option>
+                    </select>
+                  </div>
+                )}
+
                 <AutoExpandingTextarea 
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
                   placeholder={playerCharTab === 'profil' 
                     ? "Beschreibe Aussehen, Persönlichkeit, Biografie, Rasse oder Herkunft des Charakters. Es werden ausschließlich Profil- und Aussehensdaten aktualisiert."
-                    : "Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus."
+                    : (playerCharTab === 'beziehungen'
+                      ? (relationshipsSmartFillScope === 'relationships'
+                        ? "Beschreibe Beziehungen zu anderen Charakteren/Gilden, Verhaltensweisen und Anredeformen. Es werden nur Beziehungsdaten aktualisiert."
+                        : (relationshipsSmartFillScope === 'motivation_goals'
+                          ? "Beschreibe das Hauptziel, innere Antriebe, Werte oder Etappenziele. Es werden nur Motivation & Ziele aktualisiert."
+                          : "Beschreibe Beziehungen zu Charakteren sowie Motivation und Ziele des Charakters."
+                        )
+                      )
+                      : "Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus."
+                    )
                   } 
                   value={playerSmartFill} 
                   onChange={e => setPlayerSmartFill(e.target.value)} 
