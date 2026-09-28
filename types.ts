@@ -15,9 +15,10 @@ export type RelationshipsSmartFillScope =
 export interface SmartFillContext {
   section: SmartFillSection;
   targetId?: string;
+  targetRelationshipId?: string;
   mode?: 'supplement' | 'replace';
   instruction?: string;
-  scope?: RelationshipsSmartFillScope | string;
+  scope?: RelationshipsSmartFillScope;
 }
 
 export interface CharacterAttribute {

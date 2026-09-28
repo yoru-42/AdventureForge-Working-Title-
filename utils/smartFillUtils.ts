@@ -10,6 +10,26 @@ function getSafeString(val: any): string {
 }
 
 /**
+ * Erzeugt eine deterministische, stabile ID für Beziehungen ohne Date.now() oder Math.random().
+ */
+export function generateDeterministicRelationshipId(ownerId: string, targetCharacterName: string, index: number = 0): string {
+  const cleanOwner = (ownerId || 'char').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanTarget = (targetCharacterName || 'target').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const slug = `rel_${cleanOwner}_${cleanTarget}`;
+  return index > 0 ? `${slug}_${index}` : slug;
+}
+
+/**
+ * Erzeugt eine deterministische, stabile ID für Ziele ohne Date.now() oder Math.random().
+ */
+export function generateDeterministicGoalId(ownerId: string, title: string, index: number = 0): string {
+  const cleanOwner = (ownerId || 'char').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanTitle = (title || 'goal').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const slug = `goal_${cleanOwner}_${cleanTitle}`;
+  return index > 0 ? `${slug}_${index}` : slug;
+}
+
+/**
  * Wendet Smart-Fill-Ergebnisse streng innerhalb der durch `context.section` und `context.scope` definierten Update-Grenze an.
  * 
  * Bereichs-Zuständigkeiten:
@@ -29,9 +49,10 @@ export function applySmartFillUpdates<T extends Record<string, any>>(
   if (context.targetId && prevCharacter.id && context.targetId !== prevCharacter.id) {
     // Falls targetId angegeben ist und nicht die Charakter-ID ist, prüfen wir,
     // ob targetId zu einem untergeordneten Element gehört (z.B. eine konkrete Beziehungs-ID).
+    const targetRelId = context.targetRelationshipId || context.targetId;
     const isTargetingSubElement = context.section === 'relationships' && 
       Array.isArray(prevCharacter.relationships) && 
-      prevCharacter.relationships.some((r: any) => r.id === context.targetId || r.targetCharacter === context.targetId);
+      prevCharacter.relationships.some((r: any) => r.id === targetRelId || (r.targetCharacter && r.targetCharacter.toLowerCase().trim() === targetRelId.toLowerCase().trim()));
 
     if (!isTargetingSubElement) {
       return prevCharacter;
@@ -155,7 +176,7 @@ export function applyProfileSmartFillUpdates<T extends Record<string, any>>(
     ? (aiData.currentSituation || prev.currentSituation || '')
     : (aiData.currentSituation ?? prev.currentSituation ?? '');
 
-  // Rückgabe mit isoliertem Profil-Update und strikt UNVERÄNDERTEN anderen Sektionen
+  // Return updated profile fields, keeping prev as base
   return {
     ...prev,
     name: nextName,
@@ -167,43 +188,7 @@ export function applyProfileSmartFillUpdates<T extends Record<string, any>>(
     personalityArchetype: finalArchetype || prev.personalityArchetype,
     personalityTraits: nextTraits,
     bio: nextBio,
-    currentSituation: nextCurrentSituation,
-
-    // GUARANTEED UNTOUCHED SECTIONS:
-    relationships: prev.relationships,
-    goal: prev.goal,
-    motivationCore: prev.motivationCore,
-    goals: prev.goals,
-    relationship: prev.relationship,
-    conduct: prev.conduct,
-    skills: prev.skills,
-    powerSource: prev.powerSource,
-    powerCost: prev.powerCost,
-    techniques: prev.techniques,
-    abilities: prev.abilities,
-    techniqueList: prev.techniqueList,
-    campaignPowerLevels: prev.campaignPowerLevels,
-    powerSystems: prev.powerSystems,
-    powers: prev.powers,
-    secondaryProfessions: prev.secondaryProfessions,
-    professionField: prev.professionField,
-    professionSpecialization: prev.professionSpecialization,
-    professionRank: prev.professionRank,
-    professionLevel: prev.professionLevel,
-    professionDescription: prev.professionDescription,
-    craftingSkills: prev.craftingSkills,
-    talents: prev.talents,
-    everydaySkills: prev.everydaySkills,
-    toolsAndEquipment: prev.toolsAndEquipment,
-    jobTitle: prev.jobTitle,
-    structuredInventory: prev.structuredInventory,
-    inventory: prev.inventory,
-    weapons: prev.weapons,
-    equipment: prev.equipment,
-    secretsStage1: prev.secretsStage1,
-    secretsStage2: prev.secretsStage2,
-    secretsStage3: prev.secretsStage3,
-    knowledge: prev.knowledge
+    currentSituation: nextCurrentSituation
   };
 }
 
@@ -217,30 +202,40 @@ export function applyRelationshipsSmartFillUpdates<T extends Record<string, any>
 ): T {
   const mode = context.mode || 'supplement';
   const isSupplement = mode === 'supplement';
-  const scope = (context.scope as RelationshipsSmartFillScope) || 'relationships_and_motivation_goals';
+  const scope: RelationshipsSmartFillScope = context.scope || 'relationships_and_motivation_goals';
 
   const allowRelationships = scope === 'relationships' || scope === 'relationships_and_motivation_goals';
   const allowMotivationGoals = scope === 'motivation_goals' || scope === 'relationships_and_motivation_goals';
 
-  // 1. BEZIEHUNGEN
-  let nextRelationships = prev.relationships;
-  let nextRelationshipText = prev.relationship;
-  let nextConductText = prev.conduct;
+  const ownerId = prev.id || 'char';
 
+  // Determine if a specific single relationship is targeted
+  const targetRelId = context.targetRelationshipId || 
+    (context.targetId && prev.id && context.targetId !== prev.id ? context.targetId : undefined);
+
+  const updates: Record<string, any> = {};
+
+  // 1. BEZIEHUNGEN
   if (allowRelationships) {
-    if (context.targetId && prev.relationships && prev.relationships.length > 0) {
+    let nextRelationships = prev.relationships;
+    let nextRelationshipText = prev.relationship;
+    let nextConductText = prev.conduct;
+
+    if (targetRelId && Array.isArray(prev.relationships) && prev.relationships.length > 0) {
       const targetRelIndex = prev.relationships.findIndex(
-        (r: any) => r.id === context.targetId || r.targetCharacter === context.targetId
+        (r: any) => r.id === targetRelId || (r.targetCharacter && r.targetCharacter.toLowerCase().trim() === targetRelId.toLowerCase().trim())
       );
 
       if (targetRelIndex !== -1) {
-        // Zielgerichtetes Update einer einzelnen Beziehung
+        // Zielgerichtetes Update einer EINZELNEN Beziehung
         const existingRel = prev.relationships[targetRelIndex];
         const matchingAiRel = Array.isArray(aiData.relationships)
-          ? aiData.relationships.find((r: any) => r.id === context.targetId || r.targetCharacter === existingRel.targetCharacter) || aiData.relationships[0]
+          ? (aiData.relationships.find((r: any) => r.id === targetRelId || (r.targetCharacter && r.targetCharacter.toLowerCase().trim() === existingRel.targetCharacter.toLowerCase().trim())) || aiData.relationships[0])
           : aiData;
 
-        const updatedRel = { ...existingRel, ...(matchingAiRel || {}) };
+        const updatedRel = isSupplement
+          ? { ...existingRel, ...(matchingAiRel || {}) }
+          : { id: existingRel.id, targetCharacter: existingRel.targetCharacter, ...(matchingAiRel || {}) };
 
         nextRelationships = [...prev.relationships];
         nextRelationships[targetRelIndex] = updatedRel;
@@ -249,15 +244,20 @@ export function applyRelationshipsSmartFillUpdates<T extends Record<string, any>
           ? aiData.relationships
           : (aiData.targetCharacter ? [aiData] : []);
         if (incomingList.length > 0) {
-          nextRelationships = mergeRelationshipsList(prev.relationships || [], incomingList, isSupplement);
+          nextRelationships = mergeRelationshipsList(ownerId, prev.relationships || [], incomingList, isSupplement);
         }
       }
     } else {
       const incomingList = Array.isArray(aiData.relationships)
         ? aiData.relationships
         : (aiData.targetCharacter ? [aiData] : []);
-      if (incomingList.length > 0) {
-        nextRelationships = mergeRelationshipsList(prev.relationships || [], incomingList, isSupplement);
+
+      if (!isSupplement) {
+        // Mode 'replace' for entire relationships scope: replace all relationships
+        nextRelationships = mergeRelationshipsList(ownerId, [], incomingList, false);
+      } else {
+        // Mode 'supplement' for entire relationships scope: merge new relationships
+        nextRelationships = mergeRelationshipsList(ownerId, prev.relationships || [], incomingList, true);
       }
     }
 
@@ -271,94 +271,85 @@ export function applyRelationshipsSmartFillUpdates<T extends Record<string, any>
         ? (aiData.conduct || '')
         : (prev.conduct ? (aiData.conduct ? `${prev.conduct}\n\n${aiData.conduct}` : prev.conduct) : (aiData.conduct || ''));
     }
+
+    updates.relationships = nextRelationships;
+    updates.relationship = nextRelationshipText;
+    updates.conduct = nextConductText;
   }
 
   // 2. MOTIVATION & ZIELE
-  let nextGoal = prev.goal;
-  let nextMotivationCore = prev.motivationCore;
-  let nextGoals = prev.goals;
-
   if (allowMotivationGoals) {
+    let nextGoal = prev.goal;
+    let nextMotivationCore = prev.motivationCore;
+    let nextGoals = prev.goals;
+
     if (aiData.goal !== undefined) {
       nextGoal = !isSupplement ? (aiData.goal || '') : (prev.goal || aiData.goal || '');
     }
+
     if (aiData.motivationCore !== undefined) {
       nextMotivationCore = !isSupplement
         ? (aiData.motivationCore || (aiData.goal ? { mainGoal: aiData.goal } : undefined))
         : (prev.motivationCore ? { ...prev.motivationCore, ...(aiData.motivationCore || {}) } : (aiData.motivationCore || (aiData.goal ? { mainGoal: aiData.goal } : undefined)));
     }
+
     if (Array.isArray(aiData.goals) && aiData.goals.length > 0) {
       if (!isSupplement) {
-        nextGoals = aiData.goals;
+        // Replace mode: replace goals cleanly with stable IDs
+        nextGoals = aiData.goals.map((g: any, i: number) => ({
+          ...g,
+          id: g.id || generateDeterministicGoalId(ownerId, g.title || 'goal', i)
+        }));
       } else {
-        const existingGoalIds = new Set((prev.goals || []).map((g: any) => g.id || g.title));
-        const newGoals = aiData.goals.filter((g: any) => !existingGoalIds.has(g.id || g.title));
+        // Supplement mode: keep existing goals, append new non-duplicates with stable IDs
+        const existingGoalIds = new Set<string>();
+        const existingGoalTitles = new Set<string>();
+        (prev.goals || []).forEach((g: any) => {
+          if (g.id) existingGoalIds.add(g.id.toLowerCase().trim());
+          if (g.title) existingGoalTitles.add(g.title.toLowerCase().trim());
+        });
+
+        const newGoals = aiData.goals
+          .filter((g: any) => {
+            const idKey = g.id ? g.id.toLowerCase().trim() : '';
+            const titleKey = g.title ? g.title.toLowerCase().trim() : '';
+            if (idKey && existingGoalIds.has(idKey)) return false;
+            if (titleKey && existingGoalTitles.has(titleKey)) return false;
+            return true;
+          })
+          .map((g: any, i: number) => ({
+            ...g,
+            id: g.id || generateDeterministicGoalId(ownerId, g.title || 'goal', (prev.goals || []).length + i)
+          }));
+
         nextGoals = [...(prev.goals || []), ...newGoals];
       }
+    } else if (!isSupplement) {
+      if (aiData.goal) {
+        nextGoals = [{ id: generateDeterministicGoalId(ownerId, aiData.goal, 0), title: aiData.goal, timeframe: 'langfristig', targetType: 'self', targetName: 'Selbst', priority: 'hoch', status: 'aktiv', progress: 0 }];
+      } else {
+        nextGoals = [];
+      }
     } else if (aiData.goal && (!prev.goals || prev.goals.length === 0)) {
-      nextGoals = [{ id: 'goal-1', title: aiData.goal, timeframe: 'langfristig', targetType: 'self', targetName: 'Selbst', priority: 'hoch', status: 'aktiv', progress: 0 }];
+      nextGoals = [{ id: generateDeterministicGoalId(ownerId, aiData.goal, 0), title: aiData.goal, timeframe: 'langfristig', targetType: 'self', targetName: 'Selbst', priority: 'hoch', status: 'aktiv', progress: 0 }];
     }
+
+    updates.goal = nextGoal;
+    updates.motivationCore = nextMotivationCore;
+    updates.goals = nextGoals;
   }
 
   return {
     ...prev,
-
-    // Updated strictly based on scope:
-    relationships: nextRelationships,
-    relationship: nextRelationshipText,
-    conduct: nextConductText,
-    goal: nextGoal,
-    motivationCore: nextMotivationCore,
-    goals: nextGoals,
-
-    // GUARANTEED UNTOUCHED OTHER DOMAINS:
-    name: prev.name,
-    nickname: prev.nickname,
-    rufName: prev.rufName,
-    role: prev.role,
-    profession: prev.profession,
-    appearance: prev.appearance,
-    personality: prev.personality,
-    personalityArchetype: prev.personalityArchetype,
-    personalityTraits: prev.personalityTraits,
-    bio: prev.bio,
-    currentSituation: prev.currentSituation,
-    skills: prev.skills,
-    powerSource: prev.powerSource,
-    powerCost: prev.powerCost,
-    techniques: prev.techniques,
-    abilities: prev.abilities,
-    techniqueList: prev.techniqueList,
-    campaignPowerLevels: prev.campaignPowerLevels,
-    powerSystems: prev.powerSystems,
-    powers: prev.powers,
-    secondaryProfessions: prev.secondaryProfessions,
-    professionField: prev.professionField,
-    professionSpecialization: prev.professionSpecialization,
-    professionRank: prev.professionRank,
-    professionLevel: prev.professionLevel,
-    professionDescription: prev.professionDescription,
-    craftingSkills: prev.craftingSkills,
-    talents: prev.talents,
-    everydaySkills: prev.everydaySkills,
-    toolsAndEquipment: prev.toolsAndEquipment,
-    jobTitle: prev.jobTitle,
-    structuredInventory: prev.structuredInventory,
-    inventory: prev.inventory,
-    weapons: prev.weapons,
-    equipment: prev.equipment,
-    secretsStage1: prev.secretsStage1,
-    secretsStage2: prev.secretsStage2,
-    secretsStage3: prev.secretsStage3,
-    knowledge: prev.knowledge
+    ...updates
   };
 }
 
-function mergeRelationshipsList(existingList: any[], incomingList: any[], isSupplement: boolean) {
+function mergeRelationshipsList(ownerId: string, existingList: any[], incomingList: any[], isSupplement: boolean) {
   if (!incomingList || incomingList.length === 0) return existingList;
   if (!isSupplement) {
     return incomingList.map((r, i) => ({
-      id: r.id || `rel_${Date.now()}_${i}`,
+      id: r.id || generateDeterministicRelationshipId(ownerId, r.targetCharacter || `target`, i),
       ...r
     }));
   }
@@ -377,9 +368,9 @@ function mergeRelationshipsList(existingList: any[], incomingList: any[], isSupp
       if (idx !== -1) {
         merged[idx] = { ...merged[idx], ...inc };
       }
-    } else if (inc.targetCharacter) {
+    } else if (inc.targetCharacter || inc.id) {
       merged.push({
-        id: inc.id || `rel_${Date.now()}_${i}`,
+        id: inc.id || generateDeterministicRelationshipId(ownerId, inc.targetCharacter || `target`, i),
         ...inc
       });
     }
@@ -397,6 +388,7 @@ function applyFullCharacterSmartFillUpdates<T extends Record<string, any>>(
   mode: 'supplement' | 'replace'
 ): T {
   const isSupplement = mode === 'supplement';
+  const ownerId = prev.id || 'char';
 
   const getSafeStr = (val: any): string => {
     if (typeof val === 'string') return val.trim();
@@ -457,7 +449,7 @@ function applyFullCharacterSmartFillUpdates<T extends Record<string, any>>(
     const incoming = data.relationships.map((r: any, index: number) => {
       let uniqueId = r.id;
       if (!uniqueId || seenRelIds.has(uniqueId)) {
-        uniqueId = `rel_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`;
+        uniqueId = generateDeterministicRelationshipId(ownerId, r.targetCharacter || `target`, index);
       }
       seenRelIds.add(uniqueId);
       return {
@@ -482,7 +474,7 @@ function applyFullCharacterSmartFillUpdates<T extends Record<string, any>>(
           affection: 0, trust: 50, respect: 50, loyalty: 50, familiarity: 30, fear: 0, bond: 30, hostility: 0
         },
         keyEvents: Array.isArray(r.keyEvents) ? r.keyEvents.map((ev: any, evI: number) => ({
-          id: ev.id || `ev_${Date.now()}_${evI}`,
+          id: ev.id || `ev_${ownerId}_${evI}`,
           title: ev.title || 'Schlüsselereignis',
           description: ev.description || '',
           dateOrChapter: ev.dateOrChapter || '',
@@ -536,7 +528,7 @@ function applyFullCharacterSmartFillUpdates<T extends Record<string, any>>(
     currentSituation: data.currentSituation || (isSupplement ? prev.currentSituation : ''),
     goal: data.goal || (isSupplement ? prev.goal : ''),
     motivationCore: data.motivationCore || (isSupplement ? prev.motivationCore : (data.goal ? { mainGoal: data.goal } : undefined)),
-    goals: Array.isArray(data.goals) && data.goals.length > 0 ? data.goals : (isSupplement ? prev.goals : (data.goal ? [{ id: 'goal-1', title: data.goal, timeframe: 'langfristig', targetType: 'self', targetName: 'Selbst', priority: 'hoch', status: 'aktiv', progress: 0 }] : [])),
+    goals: Array.isArray(data.goals) && data.goals.length > 0 ? data.goals : (isSupplement ? prev.goals : (data.goal ? [{ id: generateDeterministicGoalId(ownerId, data.goal, 0), title: data.goal, timeframe: 'langfristig', targetType: 'self', targetName: 'Selbst', priority: 'hoch', status: 'aktiv', progress: 0 }] : [])),
     relationship: data.relationship || (isSupplement ? prev.relationship : ''),
     conduct: data.conduct || (isSupplement ? prev.conduct : ''),
     relationships: mergedRelationships,

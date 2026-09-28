@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
-import { applySmartFillUpdates } from '../utils/smartFillUtils';
-import { SmartFillContext } from '../types';
+import { applySmartFillUpdates, generateDeterministicRelationshipId, generateDeterministicGoalId } from '../utils/smartFillUtils';
+import { SmartFillContext, RelationshipsSmartFillScope } from '../types';
 
 console.log('=== RUNNING SMART FILL RELATIONSHIPS, MOTIVATION & GOALS TESTS ===\n');
 
@@ -24,7 +24,7 @@ const baseCharacter = {
   // Section 2: Relationships, Motivation & Goals
   relationships: [
     { id: 'rel-1', targetCharacter: 'Darian', type: 'Freund', behavior: 'Freundlich' },
-    { id: 'rel-2', targetCharacter: 'Kael', type: 'Rivale', behavior: 'Mistrauisch' }
+    { id: 'rel-2', targetCharacter: 'Kael', type: 'Rivale', behavior: 'Misstrauisch' }
   ],
   relationship: 'Freundlich zu Darian',
   conduct: 'Zurückhaltend gegenüber Fremden',
@@ -43,9 +43,9 @@ const baseCharacter = {
 };
 
 // -----------------------------------------------------------------------------
-// TEST 1: scope: 'relationships'
+// TEST 1: scope: 'relationships' (supplement)
 // -----------------------------------------------------------------------------
-console.log('--- Test 1: scope = relationships ---');
+console.log('--- Test 1: scope = relationships (supplement) ---');
 const ctxRelOnly: SmartFillContext = {
   section: 'relationships',
   scope: 'relationships',
@@ -68,9 +68,9 @@ assert(resRelOnly.goal === 'Das arkanische Arcanum meistern', 'Motivation/Ziel b
 assert(resRelOnly.inventory === 'Stab, 100 Münzen', 'Inventar blieb unverändert');
 
 // -----------------------------------------------------------------------------
-// TEST 2: scope: 'motivation_goals'
+// TEST 2: scope: 'motivation_goals' (supplement)
 // -----------------------------------------------------------------------------
-console.log('\n--- Test 2: scope = motivation_goals ---');
+console.log('\n--- Test 2: scope = motivation_goals (supplement) ---');
 const ctxMotivOnly: SmartFillContext = {
   section: 'relationships',
   scope: 'motivation_goals',
@@ -115,65 +115,116 @@ assert(resBoth.goals.length === 2, 'Neues Ziel hinzugefügt');
 assert(resBoth.name === 'Valeria', 'Profilname blieb unverändert');
 
 // -----------------------------------------------------------------------------
-// TEST 4: targetId für einzelne Beziehung
+// TEST A: Einzelne Beziehung + replace (targetId = rel-1)
 // -----------------------------------------------------------------------------
-console.log('\n--- Test 4: targetId für einzelne Beziehung ---');
-const ctxTargetRel: SmartFillContext = {
+console.log('\n--- Test A: Einzelne Beziehung + replace (targetId = rel-1) ---');
+const ctxTestA: SmartFillContext = {
   section: 'relationships',
   scope: 'relationships',
   targetId: 'rel-1',
-  mode: 'supplement'
+  mode: 'replace'
 };
 
-const aiDataTargetRel = {
-  relationships: [{ id: 'rel-1', behavior: 'Sehr eng befreundet, vertraut ihm das Leben an' }]
+const aiDataTestA = {
+  relationships: [{ id: 'rel-1', targetCharacter: 'Darian', type: 'Ehemaliger Freund', behavior: 'Nachtragend' }]
 };
 
-const resTargetRel = applySmartFillUpdates(baseCharacter, aiDataTargetRel, ctxTargetRel);
+const resTestA = applySmartFillUpdates(baseCharacter, aiDataTestA, ctxTestA);
 
-assert(resTargetRel.relationships.find((r: any) => r.id === 'rel-1').behavior.includes('Sehr eng befreundet'), 'Gezielte Beziehung wurde aktualisiert');
-assert(resTargetRel.relationships.find((r: any) => r.id === 'rel-2').behavior === 'Mistrauisch', 'Andere Beziehung blieb unverändert');
+assert(resTestA.relationships.length === 2, 'Gesamtanzahl der Beziehungen bleibt 2 (keine Löschung von rel-2)');
+assert(resTestA.relationships.find((r: any) => r.id === 'rel-1').type === 'Ehemaliger Freund', 'Nur rel-1 wurde in replace ersetzt');
+assert(resTestA.relationships.find((r: any) => r.id === 'rel-2').type === 'Rivale', 'rel-2 bleibt unangetastet');
+assert(resTestA.goal === 'Das arkanische Arcanum meistern', 'Motivation/Ziele blieben bei gezieltem Beziehungs-replace unangetastet');
 
 // -----------------------------------------------------------------------------
-// TEST 5: mode = 'replace' mit scope = 'relationships'
+// TEST B: Gesamte Beziehungen + replace (targetId = character.id)
 // -----------------------------------------------------------------------------
-console.log('\n--- Test 5: mode = replace mit scope = relationships ---');
-const ctxReplaceRel: SmartFillContext = {
+console.log('\n--- Test B: Gesamte Beziehungen + replace (targetId = character.id) ---');
+const ctxTestB: SmartFillContext = {
   section: 'relationships',
   scope: 'relationships',
   targetId: 'char-456',
   mode: 'replace'
 };
 
-const aiDataReplaceRel = {
-  relationships: [{ targetCharacter: 'Neuer Partner', type: 'Verbündeter' }]
+const aiDataTestB = {
+  relationships: [{ targetCharacter: 'Lord Malakor', type: 'Erzfeind' }]
 };
 
-const resReplaceRel = applySmartFillUpdates(baseCharacter, aiDataReplaceRel, ctxReplaceRel);
+const resTestB = applySmartFillUpdates(baseCharacter, aiDataTestB, ctxTestB);
 
-assert(resReplaceRel.relationships.length === 1 && resReplaceRel.relationships[0].targetCharacter === 'Neuer Partner', 'Beziehungen wurden ersetzt');
-assert(resReplaceRel.goal === 'Das arkanische Arcanum meistern', 'Motivation & Ziele blieben auch bei replace der Beziehungen unangetastet');
+assert(resTestB.relationships.length === 1 && resTestB.relationships[0].targetCharacter === 'Lord Malakor', 'Alle bisherigen Beziehungen wurden durch neue ersetzt');
+assert(resTestB.goal === 'Das arkanische Arcanum meistern', 'Motivation & Ziele blieben beim Ersetzen aller Beziehungen unangetastet');
 
 // -----------------------------------------------------------------------------
-// TEST 6: mode = 'replace' mit scope = 'motivation_goals'
+// TEST C: Motivation/Ziele + replace
 // -----------------------------------------------------------------------------
-console.log('\n--- Test 6: mode = replace mit scope = motivation_goals ---');
-const ctxReplaceMotiv: SmartFillContext = {
+console.log('\n--- Test C: Motivation/Ziele + replace ---');
+const ctxTestC: SmartFillContext = {
   section: 'relationships',
   scope: 'motivation_goals',
   targetId: 'char-456',
   mode: 'replace'
 };
 
-const aiDataReplaceMotiv = {
-  goal: 'Neues alleiniges Ziel',
-  goals: [{ id: 'goal-new', title: 'Neues Ziel' }]
+const aiDataTestC = {
+  goal: 'Das alte Kaiserreich wiedererrichten',
+  motivationCore: { mainGoal: 'Kaiserreich wiedererrichten', whyGoal: 'Ehre' },
+  goals: [{ id: 'goal-kaiser', title: 'Hauptstadt einnehmen' }]
 };
 
-const resReplaceMotiv = applySmartFillUpdates(baseCharacter, aiDataReplaceMotiv, ctxReplaceMotiv);
+const resTestC = applySmartFillUpdates(baseCharacter, aiDataTestC, ctxTestC);
 
-assert(resReplaceMotiv.goal === 'Neues alleiniges Ziel', 'Ziel wurde ersetzt');
-assert(resReplaceMotiv.relationships.length === 2, 'Beziehungen blieben bei replace der Motivation unangetastet');
+assert(resTestC.goal === 'Das alte Kaiserreich wiedererrichten', 'Hauptziel wurde im replace-Modus ersetzt');
+assert(resTestC.goals.length === 1 && resTestC.goals[0].title === 'Hauptstadt einnehmen', 'Alte Ziele wurden durch neue Ziele ersetzt');
+assert(resTestC.relationships.length === 2, 'Beziehungen blieben beim Ersetzen von Motivation/Zielen vollständig erhalten');
+
+// -----------------------------------------------------------------------------
+// TEST D: Motivation/Ziele + supplement
+// -----------------------------------------------------------------------------
+console.log('\n--- Test D: Motivation/Ziele + supplement ---');
+const ctxTestD: SmartFillContext = {
+  section: 'relationships',
+  scope: 'motivation_goals',
+  targetId: 'char-456',
+  mode: 'supplement'
+};
+
+const aiDataTestD = {
+  goals: [
+    { title: 'Erstes Buch der Arcanum finden' }, // Duplikat
+    { title: 'Zweites Buch der Arcanum suchen' }  // Neu
+  ]
+};
+
+const resTestD = applySmartFillUpdates(baseCharacter, aiDataTestD, ctxTestD);
+
+assert(resTestD.goals.length === 2, 'Bestehende Ziele bleiben erhalten und neues Ziel wird ohne Duplikate ergänzt');
+assert(resTestD.goals.some((g: any) => g.title === 'Zweites Buch der Arcanum suchen'), 'Neues Ziel ist vorhanden');
+
+// -----------------------------------------------------------------------------
+// TEST E: Strict Typing Check
+// -----------------------------------------------------------------------------
+console.log('\n--- Test E: Strict Scope Typing Check ---');
+const validScopes: RelationshipsSmartFillScope[] = [
+  'relationships',
+  'motivation_goals',
+  'relationships_and_motivation_goals'
+];
+assert(validScopes.length === 3, 'Alle 3 Scopes im RelationshipsSmartFillScope Typ vorhanden');
+
+// -----------------------------------------------------------------------------
+// TEST F: Stabile IDs (Kein Date.now())
+// -----------------------------------------------------------------------------
+console.log('\n--- Test F: Stabile IDs (Kein Date.now()) ---');
+const id1 = generateDeterministicRelationshipId('char-456', 'Darian', 0);
+const id2 = generateDeterministicRelationshipId('char-456', 'Darian', 0);
+assert(id1 === id2, 'Zwei Aufrufe mit gleichen Parametern erzeugen absolut identische, deterministische IDs');
+assert(id1 === 'rel_char456_darian', `ID ist strukturiert und stabil: ${id1}`);
+
+const goalId1 = generateDeterministicGoalId('char-456', 'Arcanum finden', 0);
+const goalId2 = generateDeterministicGoalId('char-456', 'Arcanum finden', 0);
+assert(goalId1 === goalId2, 'Ziel-IDs sind ebenfalls deterministisch und stabil');
 
 // -----------------------------------------------------------------------------
 // TEST 7: Cross-Domain Versehentliche AI-Daten filtern
@@ -196,7 +247,7 @@ const aiDataCrossDomain = {
 
 const resCrossDomain = applySmartFillUpdates(baseCharacter, aiDataCrossDomain, ctxCrossDomain);
 
-assert(resCrossDomain.appearance.hairColor === 'Rot', 'Aussehen wurde gefiltert');
+assert(resCrossDomain.appearance.hairColor === 'Rot', 'Aussehen wurde gefiltered');
 assert(resCrossDomain.abilities.length === 1 && resCrossDomain.abilities[0].id === 'ab-1', 'Fähigkeiten wurden gefiltert');
 assert(resCrossDomain.profession === 'Alchemistin', 'Berufe wurden gefiltert');
 assert(resCrossDomain.inventory === 'Stab, 100 Münzen', 'Inventar wurde gefiltert');
