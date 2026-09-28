@@ -222,7 +222,43 @@ export class ProgressionService {
   }
 
   /**
+   * Prüft, ob ein Charakter oder eine Entität den maximal möglichen Entwicklungsstand erreicht hat.
+   */
+  static isAtMaxProgression(
+    currentRank: string | undefined,
+    currentLevel: number,
+    config: ProgressionConfig = DEFAULT_PROGRESSION_CONFIG
+  ): boolean {
+    if (config.rankSystem?.enabled && currentRank) {
+      const ranks = config.rankSystem.ranks || STANDARD_RANKS;
+      const cleanRank = currentRank.trim().toUpperCase();
+      const rankIdx = ranks.findIndex(r => String(r).trim().toUpperCase() === cleanRank);
+      const isLastRank = rankIdx >= ranks.length - 1;
+      const levelsPerRank = config.levelSystem?.levelsPerRank ?? 10;
+      const rankMaxLevel = config.levelSystem?.resetLevelOnRankUp
+        ? levelsPerRank
+        : (rankIdx + 1) * levelsPerRank;
+
+      return isLastRank && currentLevel >= rankMaxLevel;
+    }
+
+    if (config.levelSystem?.enabled) {
+      const maxLvl = config.levelSystem.maxLevel ?? 100;
+      return currentLevel >= maxLvl;
+    }
+
+    return false;
+  }
+
+  /**
    * Prüft, ob ein Rangaufstieg möglich ist.
+   *
+   * Bedingungen:
+   * 1. Rangsystem muss aktiviert sein.
+   * 2. Ein nachfolgender Rang muss existieren (letzter Rang S kann nicht weiter aufsteigen).
+   * 3. Falls requiresMaxLevelForRankUp aktiv ist: Das maximale Level des aktuellen Rangs muss erreicht sein.
+   * 4. Optionale Zusatzbedingung minXpForRankUp: Prüft, ob im aktuellen EP-Pool mindestens minXp vorhanden sind.
+   *    (Standardmäßig auf 0 deaktiviert, um keine zweite parallele EP-Währung zu erzeugen).
    */
   static checkRankUpConditions(
     currentRank: string = 'F',
@@ -264,7 +300,7 @@ export class ProgressionService {
       return {
         canRankUp: false,
         nextRank,
-        reason: `Mindest-EP für Rangaufstieg (${minXp}) nicht erreicht (aktuell: ${currentXp})`
+        reason: `Mindest-EP für Rangaufstieg (${minXp}) nicht erreicht (aktuell verfügbar: ${currentXp})`
       };
     }
 
@@ -273,8 +309,14 @@ export class ProgressionService {
 
   /**
    * Wendet einen EP-Gewinn auf einen ProgressionState an.
-   * Führt bei ausreichenden EP deterministische Level-Ups durch, verarbeitet eventuelle Rangaufstiege
-   * und erhält überschüssige EP präzise ohne Rundungsverluste.
+   *
+   * Trennung der Aufgaben:
+   * - Level-Ups: Werden nur durchgeführt, wenn levelSystem.enabled aktiv ist.
+   * - Ränge: Werden nur verwaltet, wenn rankSystem.enabled aktiv ist.
+   * - Rest-EP (Überschuss): Bleiben vollständig für den nächsten Fortschritt erhalten.
+   * - Dynamischer EP-Bedarf: Nach jedem Level- und Rangaufstieg wird der neue Bedarf neu berechnet.
+   * - Attribute: points vergibt freie Zuteilungspunkte; automatisches Attributwachstum erfolgt
+   *   separat über applyLevelUpToAttributes(), um Doppelsteigerungen zu verhindern.
    */
   static applyXpGain(
     currentState: ProgressionState,
@@ -287,16 +329,80 @@ export class ProgressionService {
 
     let currentLvl = currentState.level ?? 1;
     let currentXp = (currentState.xp ?? 0) + effectiveGain;
-    let currentRank = currentState.rank || (config.rankSystem.enabled ? String(config.rankSystem.ranks[0] || 'F') : undefined);
-    const maxLvl = currentState.maxLevel ?? config.levelSystem?.maxLevel ?? 100;
+    let currentRank: string | undefined = config.rankSystem?.enabled
+      ? (currentState.rank || String(config.rankSystem.ranks[0] || 'F'))
+      : undefined;
+
     const levelsPerRank = config.levelSystem?.levelsPerRank ?? 10;
+    const globalMaxLvl = currentState.maxLevel ?? config.levelSystem?.maxLevel ?? 100;
+
+    // Wenn das Levelsystem deaktiviert ist, werden keine normalen Level-Ups durchgeführt.
+    // EP werden im Zustand gespeichert.
+    if (!config.levelSystem?.enabled) {
+      return {
+        previousState: { ...currentState },
+        newState: {
+          ...currentState,
+          level: currentLvl,
+          xp: currentXp,
+          xpNeeded: 0,
+          rank: currentRank,
+          rankIndex: currentRank ? this.getRankIndex(currentRank, config) : undefined,
+          developmentProfile: profileKey
+        },
+        gainedXp: effectiveGain,
+        levelsGained: 0,
+        rankUps: [],
+        levelUpEvents: [],
+        attributePointsEarned: 0
+      };
+    }
 
     let levelsGained = 0;
     const rankUps: { fromRank: string; toRank: string }[] = [];
     const levelUpEvents: { level: number; rank?: string; xpNeeded: number }[] = [];
 
-    // Iterative Level-Up Berechnung
-    while (currentLvl < maxLvl) {
+    // Iterative Level-Up und Rangaufstiegsberechnung
+    while (true) {
+      // 1. Prüfe, ob die absolute Maximalprogression bereits erreicht ist
+      if (this.isAtMaxProgression(currentRank, currentLvl, config)) {
+        break;
+      }
+
+      // 2. Bestimme die Levelobergrenze für den aktuellen Rang bzw. das System
+      let rankMaxLevel = globalMaxLvl;
+      if (config.rankSystem?.enabled && currentRank) {
+        const rankIdx = this.getRankIndex(currentRank, config);
+        rankMaxLevel = config.levelSystem?.resetLevelOnRankUp
+          ? levelsPerRank
+          : (rankIdx + 1) * levelsPerRank;
+      }
+
+      // 3. Falls die Levelgrenze des aktuellen Rangs bereits erreicht ist, prüfe Rangaufstieg
+      if (config.rankSystem?.enabled && currentRank && currentLvl >= rankMaxLevel) {
+        const rankCheck = this.checkRankUpConditions(currentRank, currentLvl, currentXp, config);
+        if (rankCheck.canRankUp && rankCheck.nextRank) {
+          const oldRank = currentRank;
+          currentRank = rankCheck.nextRank;
+          rankUps.push({ fromRank: oldRank, toRank: currentRank });
+
+          if (config.levelSystem?.resetLevelOnRankUp) {
+            currentLvl = 1;
+          }
+          // Nach dem Rangaufstieg sofort mit dem neuen Rang und neuem EP-Bedarf fortfahren
+          continue;
+        } else {
+          // Rangaufstieg nicht möglich (z.B. höchster Rang S erreicht oder Bedingungen nicht erfüllt)
+          break;
+        }
+      }
+
+      // 4. Globales Sicherheitslimit prüfen
+      if (currentLvl >= globalMaxLvl) {
+        break;
+      }
+
+      // 5. EP-Bedarf für das aktuelle Level und den aktuellen Rang dynamisch berechnen
       const xpReq = this.calculateXpRequirement(currentLvl, currentRank, config, profileKey);
 
       if (currentXp >= xpReq) {
@@ -310,32 +416,37 @@ export class ProgressionService {
           xpNeeded: xpReq
         });
 
-        // Rangaufstieg prüfen, wenn Levelgrenze des Rangs erreicht ist
+        // 6. Wurde durch dieses Level-Up die Levelgrenze des Rangs erreicht? Sofort prüfen!
         if (config.rankSystem?.enabled && currentRank) {
-          const rankCheck = this.checkRankUpConditions(currentRank, currentLvl, currentXp, config);
-          if (rankCheck.canRankUp && rankCheck.nextRank) {
-            const oldRank = currentRank;
-            currentRank = rankCheck.nextRank;
-            rankUps.push({ fromRank: oldRank, toRank: currentRank });
+          const currentRankIdx = this.getRankIndex(currentRank, config);
+          const currentRankMaxLvl = config.levelSystem?.resetLevelOnRankUp
+            ? levelsPerRank
+            : (currentRankIdx + 1) * levelsPerRank;
 
-            if (config.levelSystem?.resetLevelOnRankUp) {
-              currentLvl = 1;
+          if (currentLvl >= currentRankMaxLvl) {
+            const rankCheck = this.checkRankUpConditions(currentRank, currentLvl, currentXp, config);
+            if (rankCheck.canRankUp && rankCheck.nextRank) {
+              const oldRank = currentRank;
+              currentRank = rankCheck.nextRank;
+              rankUps.push({ fromRank: oldRank, toRank: currentRank });
+
+              if (config.levelSystem?.resetLevelOnRankUp) {
+                currentLvl = 1;
+              }
             }
           }
         }
       } else {
+        // Nicht genügend EP für das nächste Level-Up vorhanden
         break;
       }
     }
 
-    // Falls maxLevel erreicht, überschüssige EP begrenzen
-    if (currentLvl >= maxLvl) {
-      currentXp = 0;
-    }
-
-    const nextXpNeeded = currentLvl < maxLvl
-      ? this.calculateXpRequirement(currentLvl, currentRank, config, profileKey)
-      : 0;
+    // EP-Bedarf für die nächste Stufe anhand des aktuellen Zustands bestimmen
+    const atMax = this.isAtMaxProgression(currentRank, currentLvl, config);
+    const nextXpNeeded = atMax
+      ? 0
+      : this.calculateXpRequirement(currentLvl, currentRank, config, profileKey);
 
     const rankIdx = currentRank ? this.getRankIndex(currentRank, config) : undefined;
     const pointsEarned = levelsGained * (config.attributeProgression?.baseGrowthPerLevel ?? 2);
@@ -415,7 +526,9 @@ export class ProgressionService {
     config: ProgressionConfig = DEFAULT_PROGRESSION_CONFIG
   ): ProgressionState {
     const existingProg = char.progression || {};
-    const rank = char.rank || existingProg.rank || (config.rankSystem.enabled ? String(config.rankSystem.ranks[0] || 'F') : undefined);
+    const rank = config.rankSystem?.enabled
+      ? (char.rank || existingProg.rank || String(config.rankSystem.ranks[0] || 'F'))
+      : undefined;
     const level = existingProg.level ?? 1;
     const xp = existingProg.xp ?? 0;
     const profile = char.developmentProfile || existingProg.developmentProfile || config.activeProfile || 'normal';

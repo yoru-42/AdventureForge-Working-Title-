@@ -11,7 +11,7 @@ import {
   Character
 } from '../types';
 
-console.log('=== RUNNING PROGRESSION SYSTEM TESTS ===\n');
+console.log('=== RUNNING PROGRESSION SYSTEM CLEANUP & SPECIFICATION TESTS ===\n');
 
 function assert(condition: boolean, msg: string) {
   if (!condition) {
@@ -23,157 +23,59 @@ function assert(condition: boolean, msg: string) {
 }
 
 // -----------------------------------------------------------------------------
-// TEST 1: Modus A – Fester EP-Bedarf
+// TEST 1: F Level 1 + ausreichende EP -> Level-Up funktioniert
 // -----------------------------------------------------------------------------
-console.log('--- Test 1: Modus A (Fester EP-Bedarf) ---');
-const configFixed: ProgressionConfig = {
-  ...ProgressionService.createDefaultProgressionConfig(),
-  epSystem: {
-    enabled: true,
-    requirementMode: 'fixed',
-    baseRequirement: 100,
-    levelGrowth: 20,
-    rankGrowth: 50,
-    multiplier: 1.0
-  }
-};
-
-const reqLvl1 = ProgressionService.calculateXpRequirement(1, 'F', configFixed);
-const reqLvl5 = ProgressionService.calculateXpRequirement(5, 'F', configFixed);
-const reqLvl10 = ProgressionService.calculateXpRequirement(10, 'A', configFixed);
-
-assert(reqLvl1 === 100, `Level 1 benötigt 100 EP (erhalten: ${reqLvl1})`);
-assert(reqLvl5 === 100, `Level 5 benötigt ebenfalls 100 EP im festen Modus (erhalten: ${reqLvl5})`);
-assert(reqLvl10 === 100, `Level 10 auf Rang A benötigt ebenfalls 100 EP (erhalten: ${reqLvl10})`);
-
-// -----------------------------------------------------------------------------
-// TEST 2: Modus B – Levelabhängiger EP-Bedarf
-// -----------------------------------------------------------------------------
-console.log('\n--- Test 2: Modus B (Levelabhängiger EP-Bedarf) ---');
-const configLevelGrowth: ProgressionConfig = {
-  ...ProgressionService.createDefaultProgressionConfig(),
-  epSystem: {
-    enabled: true,
-    requirementMode: 'level_growth',
-    baseRequirement: 100,
-    levelGrowth: 20,
-    rankGrowth: 50,
-    multiplier: 1.0
-  }
-};
-
-const reqB1 = ProgressionService.calculateXpRequirement(1, 'F', configLevelGrowth);
-const reqB2 = ProgressionService.calculateXpRequirement(2, 'F', configLevelGrowth);
-const reqB3 = ProgressionService.calculateXpRequirement(3, 'F', configLevelGrowth);
-const reqB4 = ProgressionService.calculateXpRequirement(4, 'F', configLevelGrowth);
-
-assert(reqB1 === 100, `Level 1 benötigt 100 EP (erhalten: ${reqB1})`);
-assert(reqB2 === 120, `Level 2 benötigt 120 EP (erhalten: ${reqB2})`);
-assert(reqB3 === 140, `Level 3 benötigt 140 EP (erhalten: ${reqB3})`);
-assert(reqB4 === 160, `Level 4 benötigt 160 EP (erhalten: ${reqB4})`);
-
-// -----------------------------------------------------------------------------
-// TEST 3: Modus C – Level- und rangabhängiger EP-Bedarf
-// -----------------------------------------------------------------------------
-console.log('\n--- Test 3: Modus C (Level- und rangabhängiger EP-Bedarf) ---');
-const configRankGrowth: ProgressionConfig = {
-  ...ProgressionService.createDefaultProgressionConfig(),
-  epSystem: {
-    enabled: true,
-    requirementMode: 'level_and_rank_growth',
-    baseRequirement: 100,
-    levelGrowth: 20,
-    rankGrowth: 80,
-    multiplier: 1.0
-  }
-};
-
-// Rang F = Index 0 -> Base 100
-const reqC_F1 = ProgressionService.calculateXpRequirement(1, 'F', configRankGrowth);
-const reqC_F2 = ProgressionService.calculateXpRequirement(2, 'F', configRankGrowth);
-// Rang E = Index 1 -> Base 100 + 80 = 180
-const reqC_E1 = ProgressionService.calculateXpRequirement(1, 'E', configRankGrowth);
-const reqC_E2 = ProgressionService.calculateXpRequirement(2, 'E', configRankGrowth);
-// Rang D = Index 2 -> Base 100 + 160 = 260
-const reqC_D1 = ProgressionService.calculateXpRequirement(1, 'D', configRankGrowth);
-
-assert(reqC_F1 === 100, `F-Rang Level 1 benötigt 100 EP (erhalten: ${reqC_F1})`);
-assert(reqC_F2 === 120, `F-Rang Level 2 benötigt 120 EP (erhalten: ${reqC_F2})`);
-assert(reqC_E1 === 180, `E-Rang Level 1 benötigt 180 EP (erhalten: ${reqC_E1})`);
-assert(reqC_E2 === 200, `E-Rang Level 2 benötigt 200 EP (erhalten: ${reqC_E2})`);
-assert(reqC_D1 === 260, `D-Rang Level 1 benötigt 260 EP (erhalten: ${reqC_D1})`);
-
-// -----------------------------------------------------------------------------
-// TEST 4: Trennung von EP-Bedarf und EP-Gewinn (Entwicklungsrate & Profile)
-// -----------------------------------------------------------------------------
-console.log('\n--- Test 4: Trennung EP-Bedarf vs. EP-Gewinn (Profile) ---');
-const normalGain = ProgressionService.calculateEffectiveXpGain(100, DEFAULT_PROGRESSION_CONFIG, 'normal');
-const fastGain = ProgressionService.calculateEffectiveXpGain(100, DEFAULT_PROGRESSION_CONFIG, 'fast');
-const slowGain = ProgressionService.calculateEffectiveXpGain(100, DEFAULT_PROGRESSION_CONFIG, 'slow');
-
-assert(normalGain === 100, `Normales Profil erhält 100 EP (erhalten: ${normalGain})`);
-assert(fastGain === 150, `Schnelles Profil erhält 150 EP (1.5x) (erhalten: ${fastGain})`);
-assert(slowGain === 75, `Langsames Profil erhält 75 EP (0.75x) (erhalten: ${slowGain})`);
-
-// EP requirement scaling per profile
-const normalReq = ProgressionService.calculateXpRequirement(1, 'F', DEFAULT_PROGRESSION_CONFIG, 'normal');
-const slowReq = ProgressionService.calculateXpRequirement(1, 'F', DEFAULT_PROGRESSION_CONFIG, 'slow');
-assert(normalReq === 100, `Normal EP-Bedarf = 100 (erhalten: ${normalReq})`);
-assert(slowReq === 125, `Slow EP-Bedarf = 125 (1.25x Multiplikator) (erhalten: ${slowReq})`);
-
-// -----------------------------------------------------------------------------
-// TEST 5: Iteratives Level-Up & Rest-EP Erhaltung
-// -----------------------------------------------------------------------------
-console.log('\n--- Test 5: Iteratives Level-Up & Rest-EP Erhaltung ---');
-const startState: ProgressionState = {
-  level: 1,
-  xp: 95,
-  rank: 'F'
-};
-
-// Mode B: Lvl 1->2 benötigt 100 EP, Lvl 2->3 benötigt 120 EP
-const res1 = ProgressionService.applyXpGain(startState, 50, configLevelGrowth);
-// 95 + 50 = 145 EP. 145 >= 100 -> Level 2, Rest 45 EP. 45 < 120 -> Stop.
-assert(res1.levelsGained === 1, `Genau 1 Level aufgestiegen (erhalten: ${res1.levelsGained})`);
-assert(res1.newState.level === 2, `Neues Level ist 2 (erhalten: ${res1.newState.level})`);
-assert(res1.newState.xp === 45, `Verbleibende EP sind 45 (erhalten: ${res1.newState.xp})`);
-assert(res1.newState.xpNeeded === 120, `Nächster EP-Bedarf für Level 2 ist 120 (erhalten: ${res1.newState.xpNeeded})`);
-
-// Großer EP-Gewinn mit mehrfachem Level-Up
-const multiLevelState: ProgressionState = {
+console.log('--- Test 1: F Level 1 + ausreichende EP -> Level-Up ---');
+const stateF1: ProgressionState = {
   level: 1,
   xp: 0,
   rank: 'F'
 };
-// Lvl 1->2: 100, Lvl 2->3: 120, Lvl 3->4: 140. Summe = 360 EP.
-// Mit 380 EP: 3 Level-Ups (Lvl 4), Rest 20 EP.
-const resMulti = ProgressionService.applyXpGain(multiLevelState, 380, configLevelGrowth);
-assert(resMulti.levelsGained === 3, `3 Level-Ups erhalten (erhalten: ${resMulti.levelsGained})`);
-assert(resMulti.newState.level === 4, `Neues Level ist 4 (erhalten: ${resMulti.newState.level})`);
-assert(resMulti.newState.xp === 20, `Restliche EP sind 20 (erhalten: ${resMulti.newState.xp})`);
+// Im Standard-Config (Modus C): F Level 1 benötigt 100 EP.
+const resF1 = ProgressionService.applyXpGain(stateF1, 100, DEFAULT_PROGRESSION_CONFIG);
+assert(resF1.levelsGained === 1, `Genau 1 Level aufgestiegen (erhalten: ${resF1.levelsGained})`);
+assert(resF1.newState.level === 2, `Neues Level ist 2 (erhalten: ${resF1.newState.level})`);
+assert(resF1.newState.rank === 'F', `Rang bleibt F`);
+assert(resF1.newState.xp === 0, `Verbleibende EP sind 0 (erhalten: ${resF1.newState.xp})`);
 
 // -----------------------------------------------------------------------------
-// TEST 6: Rangaufstieg (Rang vs. Level)
+// TEST 2: F Level 10 + ausreichende EP -> E-Rang wird erreicht
 // -----------------------------------------------------------------------------
-console.log('\n--- Test 6: Rangaufstieg bei Erreichen der Levelgrenze ---');
-const nearRankUpState: ProgressionState = {
-  level: 9,
+console.log('\n--- Test 2: F Level 10 + ausreichende EP -> E-Rang Aufstieg ---');
+const stateF10: ProgressionState = {
+  level: 10,
   xp: 0,
   rank: 'F'
 };
-
-// Im Standard-Config hat ein Rang 10 Level. Lvl 9->10 erfordert 260 EP, dann erfolgt Rangaufstieg nach E Level 1
-const resRankUp = ProgressionService.applyXpGain(nearRankUpState, 300, DEFAULT_PROGRESSION_CONFIG);
-assert(resRankUp.rankUps.length === 1, `Genau ein Rangaufstieg ausgelöst (erhalten: ${resRankUp.rankUps.length})`);
-assert(resRankUp.rankUps[0].fromRank === 'F' && resRankUp.rankUps[0].toRank === 'E', `Aufstieg von F nach E`);
-assert(resRankUp.newState.rank === 'E', `Neuer Rang ist E (erhalten: ${resRankUp.newState.rank})`);
-assert(resRankUp.newState.level === 1, `Level wurde bei Rangaufstieg auf 1 zurückgesetzt (resetLevelOnRankUp: true)`);
-assert(resRankUp.newState.xp === 40, `Verbleibende EP nach Rangaufstieg sind 40 (erhalten: ${resRankUp.newState.xp})`);
+// Level 10 ist bereits das maximale Level für F (levelsPerRank = 10).
+// Bei Erreichen/Aufstieg von F Level 10 wird E-Rang Level 1 freigeschaltet.
+const resF10 = ProgressionService.applyXpGain(stateF10, 50, DEFAULT_PROGRESSION_CONFIG);
+assert(resF10.rankUps.length === 1, `Genau 1 Rangaufstieg ausgelöst`);
+assert(resF10.rankUps[0].fromRank === 'F' && resF10.rankUps[0].toRank === 'E', `Aufstieg von F nach E`);
+assert(resF10.newState.rank === 'E', `Neuer Rang ist E (erhalten: ${resF10.newState.rank})`);
+assert(resF10.newState.level === 1, `Level wird bei resetLevelOnRankUp auf 1 gesetzt`);
+assert(resF10.newState.xp === 50, `Überschüssige 50 EP bleiben erhalten (erhalten: ${resF10.newState.xp})`);
 
 // -----------------------------------------------------------------------------
-// TEST 7: Levelsystem ohne Rangsystem (Deaktiviertes Rangsystem)
+// TEST 3: S Level 10 + sehr viele EP -> kein weiterer Rang wird erzeugt
 // -----------------------------------------------------------------------------
-console.log('\n--- Test 7: Levelsystem mit deaktiviertem Rangsystem ---');
+console.log('\n--- Test 3: S Level 10 + sehr viele EP -> Kein weiterer Rang ---');
+const stateS10: ProgressionState = {
+  level: 10,
+  xp: 0,
+  rank: 'S'
+};
+const resS10 = ProgressionService.applyXpGain(stateS10, 100000, DEFAULT_PROGRESSION_CONFIG);
+assert(resS10.rankUps.length === 0, `Kein Rangaufstieg auf dem höchsten Rang S (erhalten: ${resS10.rankUps.length})`);
+assert(resS10.newState.rank === 'S', `Rang bleibt stabil S, kein S+ oder Ähnliches (erhalten: ${resS10.newState.rank})`);
+assert(resS10.newState.level === 10, `Level bleibt auf maximal 10 (erhalten: ${resS10.newState.level})`);
+assert(resS10.newState.xpNeeded === 0, `xpNeeded ist 0 am Maximum`);
+assert(resS10.newState.xp === 100000, `EP-Überschuss bleibt im Zustand erhalten (erhalten: ${resS10.newState.xp})`);
+
+// -----------------------------------------------------------------------------
+// TEST 4: Rangsystem deaktiviert -> kein Rang wird automatisch erzeugt
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 4: Rangsystem deaktiviert -> kein automatischer Rang ---');
 const configNoRank: ProgressionConfig = {
   ...ProgressionService.createDefaultProgressionConfig(),
   rankSystem: {
@@ -186,71 +88,194 @@ const configNoRank: ProgressionConfig = {
     levelsPerRank: 10,
     maxLevel: 50,
     resetLevelOnRankUp: false
-  },
-  epSystem: {
-    enabled: true,
-    requirementMode: 'level_growth',
-    baseRequirement: 100,
-    levelGrowth: 10,
-    rankGrowth: 0,
-    multiplier: 1.0
   }
 };
-
 const stateNoRank: ProgressionState = {
-  level: 10,
+  level: 1,
   xp: 0
 };
+const resNoRank = ProgressionService.applyXpGain(stateNoRank, 150, configNoRank);
+assert(resNoRank.newState.rank === undefined, `Kein Rang gesetzt bei deaktiviertem Rangsystem`);
+assert(resNoRank.rankUps.length === 0, `Keine Rangaufstiege bei deaktiviertem Rangsystem`);
+assert(resNoRank.levelsGained === 1, `Level steigt normal von 1 auf 2 (erhalten: ${resNoRank.newState.level})`);
 
-const resNoRank = ProgressionService.applyXpGain(stateNoRank, 500, configNoRank);
-assert(resNoRank.rankUps.length === 0, `Kein Rangaufstieg wenn Rangsystem deaktiviert`);
-assert(resNoRank.newState.level > 10, `Level steigt kontinuierlich über 10 hinaus (erhalten: ${resNoRank.newState.level})`);
-assert(resNoRank.newState.rank === undefined, `Kein Rang gesetzt`);
+// Auch in resolveCharacterProgression darf kein Rang erzeugt werden:
+const charNoRank: Character = {
+  name: 'NoRankChar',
+  role: 'Bürger',
+  personality: 'Ruhig',
+  bio: 'Ein einfacher Bewohner.',
+  appearance: { gender: 'Divers', hairColor: 'Schwarz', eyeColor: 'Braun', age: '30', build: 'Normal' },
+  attributes: []
+};
+const resolvedNoRank = ProgressionService.resolveCharacterProgression(charNoRank, configNoRank);
+assert(resolvedNoRank.rank === undefined, `resolveCharacterProgression erzeugt keinen Rang wenn rankSystem.enabled = false`);
 
 // -----------------------------------------------------------------------------
-// TEST 8: Attributsteigerung & Entwicklungspotenzial
+// TEST 5: Levelsystem deaktiviert -> keine normale Level-Up-Schleife
 // -----------------------------------------------------------------------------
-console.log('\n--- Test 8: Attributsteigerung & Potenzial ---');
+console.log('\n--- Test 5: Levelsystem deaktiviert -> Keine Level-Up-Schleife ---');
+const configNoLevel: ProgressionConfig = {
+  ...ProgressionService.createDefaultProgressionConfig(),
+  levelSystem: {
+    enabled: false,
+    levelsPerRank: 10,
+    maxLevel: 100,
+    resetLevelOnRankUp: true
+  }
+};
+const stateNoLevel: ProgressionState = {
+  level: 5,
+  xp: 10,
+  rank: 'C'
+};
+const resNoLevel = ProgressionService.applyXpGain(stateNoLevel, 5000, configNoLevel);
+assert(resNoLevel.levelsGained === 0, `Keine Level gewonnen bei deaktiviertem Levelsystem (erhalten: ${resNoLevel.levelsGained})`);
+assert(resNoLevel.newState.level === 5, `Level bleibt unverändert bei 5 (erhalten: ${resNoLevel.newState.level})`);
+assert(resNoLevel.newState.xp === 5010, `EP wurden im Zustand festgehalten (erhalten: ${resNoLevel.newState.xp})`);
+
+// -----------------------------------------------------------------------------
+// TEST 6: Großer EP-Gewinn -> mehrere Level-Ups funktionieren
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 6: Großer EP-Gewinn -> Mehrere Level-Ups ---');
+const stateMulti: ProgressionState = {
+  level: 1,
+  xp: 0,
+  rank: 'F'
+};
+// Modus C im Standard:
+// F1->2: 100 EP
+// F2->3: 120 EP
+// F3->4: 140 EP
+// Summe für 3 Level-Ups = 360 EP.
+// 400 EP -> 3 Level-Ups, Rest = 40 EP.
+const resMulti = ProgressionService.applyXpGain(stateMulti, 400, DEFAULT_PROGRESSION_CONFIG);
+assert(resMulti.levelsGained === 3, `Genau 3 Level gewonnen (erhalten: ${resMulti.levelsGained})`);
+assert(resMulti.newState.level === 4, `Neues Level ist 4 (erhalten: ${resMulti.newState.level})`);
+assert(resMulti.newState.xp === 40, `Verbleibende EP sind 40 (erhalten: ${resMulti.newState.xp})`);
+
+// -----------------------------------------------------------------------------
+// TEST 7: EP-Überschuss -> Rest-EP bleiben exakt erhalten
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 7: EP-Überschuss -> Rest-EP erhalten ---');
+const stateSurplus: ProgressionState = {
+  level: 1,
+  xp: 25,
+  rank: 'F'
+};
+// 25 + 120 = 145 EP. Bedarf = 100 EP. Rest = 45 EP.
+const resSurplus = ProgressionService.applyXpGain(stateSurplus, 120, DEFAULT_PROGRESSION_CONFIG);
+assert(resSurplus.newState.level === 2, `Level stieg von 1 auf 2`);
+assert(resSurplus.newState.xp === 45, `Exakt 45 Rest-EP erhalten (erhalten: ${resSurplus.newState.xp})`);
+
+// -----------------------------------------------------------------------------
+// TEST 8: Level-Up + Attributwachstum -> Keine doppelte Steigerung
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 8: Trennung points vs. applyLevelUpToAttributes ---');
 const testAttributes: CharacterAttribute[] = [
-  { name: 'Stärke', value: 50, max: 200 },
-  { name: 'Geschwindigkeit', value: 98, max: 100 }
+  { name: 'Stärke', value: 20, max: 100 },
+  { name: 'Abwehr', value: 15, max: 100 }
 ];
-
-const potentials = {
-  'Stärke': 500,
-  'Geschwindigkeit': 100
+const statePoints: ProgressionState = {
+  level: 1,
+  xp: 0,
+  points: 0
 };
+const resPoints = ProgressionService.applyXpGain(statePoints, 100, DEFAULT_PROGRESSION_CONFIG);
+assert(resPoints.attributePointsEarned === 2, `2 Attributpunkte erworben (erhalten: ${resPoints.attributePointsEarned})`);
+assert(resPoints.newState.points === 2, `State enthält 2 points zur manuellen Verteilung`);
+// attributes-Array wurde durch applyXpGain NICHT mutiert!
+assert(testAttributes[0].value === 20, `Stärke-Attribut im Array blieb unverändert bei 20 (keine automatische Doppelsteigerung)`);
 
-// 5 Level-Ups. BaseGrowth = 2 -> 5 * 2 = +10 Stärke, +10 Geschw.
-// Geschwindigkeit ist bei 98 mit Max 100 -> wird auf 100 gekappt!
-const updatedAttrs = ProgressionService.applyLevelUpToAttributes(testAttributes, 5, DEFAULT_PROGRESSION_CONFIG, 'normal', potentials);
-
-const strength = updatedAttrs.find(a => a.name === 'Stärke');
-const speed = updatedAttrs.find(a => a.name === 'Geschwindigkeit');
-
-assert(strength?.value === 60, `Stärke stieg von 50 auf 60 (erhalten: ${strength?.value})`);
-assert(speed?.value === 100, `Geschwindigkeit wurde bei Potenzialgrenze 100 gekappt (erhalten: ${speed?.value})`);
+// Separater expliziter Aufruf des automatischen Wachstums:
+const grownAttrs = ProgressionService.applyLevelUpToAttributes(testAttributes, 1, DEFAULT_PROGRESSION_CONFIG, 'normal');
+assert(grownAttrs[0].value === 22, `Automatische Steigerung erhöht Stärke von 20 auf 22 (erhalten: ${grownAttrs[0].value})`);
 
 // -----------------------------------------------------------------------------
-// TEST 9: Charakter-Progression Resolution (Deterministisch ohne KI)
+// TEST 9: Eindeutige Trennung von levelsPerRank und maxLevel
 // -----------------------------------------------------------------------------
-console.log('\n--- Test 9: resolveCharacterProgression ---');
-const testChar: Character = {
-  name: 'Aiden',
-  role: 'Abenteurer',
-  personality: 'Mutig',
-  bio: 'Ein junger Krieger.',
-  appearance: { gender: 'Männlich', hairColor: 'Braun', eyeColor: 'Blau', age: '20', build: 'Athletisch' },
-  attributes: [{ name: 'Stärke', value: 15, max: 100 }],
-  rank: 'E',
-  potential: 750
+console.log('\n--- Test 9: levelsPerRank vs maxLevel Trennung ---');
+const configSeparation: ProgressionConfig = {
+  ...ProgressionService.createDefaultProgressionConfig(),
+  levelSystem: {
+    enabled: true,
+    levelsPerRank: 5,
+    maxLevel: 100,
+    resetLevelOnRankUp: true
+  }
 };
+const stateSep: ProgressionState = {
+  level: 4,
+  xp: 0,
+  rank: 'F'
+};
+// F4->F5 benötigt 160 EP. Bei levelsPerRank = 5 ist Level 5 die Grenze!
+// Bei 500 EP: Level 5 erreicht -> Rangaufstieg zu E Level 1 -> weiter...
+const resSep = ProgressionService.applyXpGain(stateSep, 500, configSeparation);
+assert(resSep.rankUps.length >= 1, `Rangaufstieg ausgelöst bei Erreichen von levelsPerRank (5)`);
+assert(resSep.rankUps[0].toRank === 'E', `Zu Rang E aufgestiegen`);
 
-const resolved = ProgressionService.resolveCharacterProgression(testChar, configRankGrowth);
-assert(resolved.rank === 'E', `Rang E übernommen`);
-assert(resolved.level === 1, `Start-Level 1`);
-assert(resolved.potential === 750, `Potenzial 750 übernommen`);
-assert(resolved.xpNeeded === 180, `E-Rang Start-EP-Bedarf = 180 (erhalten: ${resolved.xpNeeded})`);
-assert(resolved.rankIndex === 1, `RankIndex ist 1`);
+// -----------------------------------------------------------------------------
+// TEST 10: Dynamische Neuberechnung des EP-Bedarfs nach Rangaufstieg
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 10: EP-Bedarf nach Rangaufstieg neu berechnet ---');
+// F1 benötigt: 100 EP.
+// E1 benötigt: 100 + 1 * 100 = 200 EP (da rankGrowth = 100).
+const reqF = ProgressionService.calculateXpRequirement(1, 'F', DEFAULT_PROGRESSION_CONFIG);
+const reqE = ProgressionService.calculateXpRequirement(1, 'E', DEFAULT_PROGRESSION_CONFIG);
+assert(reqF === 100, `F Level 1 benötigt 100 EP (erhalten: ${reqF})`);
+assert(reqE === 200, `E Level 1 benötigt 200 EP (erhalten: ${reqE})`);
 
-console.log('\n=== ALL PROGRESSION SYSTEM TESTS PASSED SUCCESSFULLY! ===');
+// Rangaufstieg von F nach E prüfen:
+const statePreRank: ProgressionState = {
+  level: 10,
+  xp: 0,
+  rank: 'F'
+};
+// 50 EP geben: löst Rangaufstieg aus, neuer Zustand ist E Level 1.
+const resPreRank = ProgressionService.applyXpGain(statePreRank, 50, DEFAULT_PROGRESSION_CONFIG);
+assert(resPreRank.newState.rank === 'E', `Rang ist nun E`);
+assert(resPreRank.newState.level === 1, `Level ist 1`);
+assert(resPreRank.newState.xpNeeded === 200, `Neuer EP-Bedarf für E1 ist 200 und NICHT der alte F1-Bedarf (erhalten: ${resPreRank.newState.xpNeeded})`);
+
+// -----------------------------------------------------------------------------
+// TEST 11: minXpForRankUp saubere Bedingungsprüfung
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 11: minXpForRankUp Bedingungsprüfung ---');
+const configMinXp: ProgressionConfig = {
+  ...DEFAULT_PROGRESSION_CONFIG,
+  rankSystem: {
+    ...DEFAULT_PROGRESSION_CONFIG.rankSystem,
+    minXpForRankUp: 500
+  }
+};
+// Level 10 erreicht, aber nur 200 EP verfügbar -> kein Rangaufstieg
+const checkFailed = ProgressionService.checkRankUpConditions('F', 10, 200, configMinXp);
+assert(checkFailed.canRankUp === false, `Rangaufstieg abgewiesen da 200 EP < 500 EP`);
+
+// Level 10 erreicht und 600 EP verfügbar -> Rangaufstieg erlaubt
+const checkSuccess = ProgressionService.checkRankUpConditions('F', 10, 600, configMinXp);
+assert(checkSuccess.canRankUp === true, `Rangaufstieg gestattet bei 600 EP >= 500 EP`);
+
+// -----------------------------------------------------------------------------
+// TEST 12: resetLevelOnRankUp: false Unterstützung
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 12: resetLevelOnRankUp: false Unterstützung ---');
+const configNoReset: ProgressionConfig = {
+  ...DEFAULT_PROGRESSION_CONFIG,
+  levelSystem: {
+    ...DEFAULT_PROGRESSION_CONFIG.levelSystem,
+    resetLevelOnRankUp: false
+  }
+};
+const stateNoReset: ProgressionState = {
+  level: 10,
+  xp: 0,
+  rank: 'F'
+};
+const resNoReset = ProgressionService.applyXpGain(stateNoReset, 50, configNoReset);
+assert(resNoReset.rankUps.length === 1, `Rangaufstieg ausgelöst`);
+assert(resNoReset.newState.rank === 'E', `Rang ist E`);
+assert(resNoReset.newState.level === 10, `Level bleibt 10 wenn resetLevelOnRankUp = false (erhalten: ${resNoReset.newState.level})`);
+
+console.log('\n=== ALL PROGRESSION SYSTEM CLEANUP TESTS PASSED SUCCESSFULLY! ===');

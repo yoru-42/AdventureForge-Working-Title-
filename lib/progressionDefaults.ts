@@ -7,7 +7,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'physical'
   },
   'Magie': {
@@ -15,7 +15,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'supernatural'
   },
   'Geschicklichkeit': {
@@ -23,7 +23,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'physical'
   },
   'Konstitution': {
@@ -31,7 +31,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'physical'
   },
   'Intelligenz': {
@@ -39,7 +39,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'supernatural'
   },
   'Glück': {
@@ -47,7 +47,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'supernatural'
   },
   'Geschwindigkeit': {
@@ -55,7 +55,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'physical'
   },
   'Abwehr': {
@@ -63,7 +63,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'physical'
   },
   'Magie Abwehr': {
@@ -71,7 +71,7 @@ export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
     max: 100,
     scaleMin: 0,
     scaleMax: 100,
-    levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
+    levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
     category: 'supernatural'
   }
 };
