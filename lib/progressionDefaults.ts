@@ -1,4 +1,5 @@
 import { CampaignPowerParameter, CustomStatAllocation, CostResource, CustomResourceMapping } from '../types';
+import { ProgressionService } from '../services/progressionService';
 
 export const EP_DEFAULT_PARAMETERS: Record<string, CampaignPowerParameter> = {
   'Stärke': {
@@ -201,6 +202,7 @@ export function createEpDefaultWorldSettings() {
     techniqueProgressionLogic: 'ep' as const,
     techniqueProgressionRate: 'normal',
     campaignPowerSettings: JSON.parse(JSON.stringify(EP_DEFAULT_PARAMETERS)),
+    progressionConfig: ProgressionService.createDefaultProgressionConfig(),
     customStatAllocations: JSON.parse(JSON.stringify(EP_DEFAULT_STAT_ALLOCATIONS)),
     costResources: JSON.parse(JSON.stringify(EP_DEFAULT_COST_RESOURCES)),
     customResourceMappings: JSON.parse(JSON.stringify(EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS)),

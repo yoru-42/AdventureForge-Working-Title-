@@ -15,6 +15,7 @@ import { formatRelationshipForAI, formatMotivationCoreForAI, formatNPCForAIPromp
 import { formatDisplayLocationName } from '../utils/mapUtils';
 import { createOrganicIslandPoints } from './worldmap/worldMapData';
 import { formatPersonalityTraitsAsPrompt } from './PersonalityTraitsEditor';
+import { ProgressionService } from '../services/progressionService';
 import { WorkManagementModal } from './WorkManagementModal';
 import { NavigationModal } from './NavigationModal';
 import { TradeModal } from './TradeModal';
@@ -6103,39 +6104,51 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
             if (logic === 'ep') {
               const currentXP = t.xp ?? 0;
               const rawGain = t.xpGainPerUse ?? epToGain;
-              const gain = Math.round(rawGain * multiplier);
-              const xpNeeded = t.xpNeeded ?? 100;
+              const effectiveGain = ProgressionService.calculateEffectiveXpGain(rawGain, adventure.world?.progressionConfig);
+              const gain = Math.round(effectiveGain * multiplier);
               
               let nextXP = currentXP + gain;
               let nextLevel = currentLevel;
-              
-              if (nextLevel < maxLvl) {
-                if (nextXP >= xpNeeded) {
-                  const numLevels = Math.floor(nextXP / xpNeeded);
-                  nextXP = nextXP % xpNeeded;
-                  nextLevel = Math.min(maxLvl, nextLevel + numLevels);
-                  
-                  // Add a notification about level up!
-                  setLoreNotifications(prev => [
-                    ...prev,
-                    {
-                      id: Math.random().toString(),
-                      type: 'unlock',
-                      title: ` Technik-Aufstieg: ${t.name} ist nun Level ${nextLevel}!`,
-                      category: 'Fähigkeit'
-                    }
-                  ]);
+              let didLevelUp = false;
+
+              while (nextLevel < maxLvl) {
+                const needed = t.xpNeeded ?? ProgressionService.calculateXpRequirement(nextLevel, undefined, adventure.world?.progressionConfig);
+                if (nextXP >= needed) {
+                  nextXP -= needed;
+                  nextLevel += 1;
+                  didLevelUp = true;
+                } else {
+                  break;
                 }
-              } else {
+              }
+              
+              if (didLevelUp) {
+                // Add a notification about level up!
+                setLoreNotifications(prev => [
+                  ...prev,
+                  {
+                    id: Math.random().toString(),
+                    type: 'unlock',
+                    title: ` Technik-Aufstieg: ${t.name} ist nun Level ${nextLevel}!`,
+                    category: 'Fähigkeit'
+                  }
+                ]);
+              }
+
+              if (nextLevel >= maxLvl) {
                 nextXP = 0;
               }
+
+              const currentReq = nextLevel < maxLvl
+                ? (t.xpNeeded ?? ProgressionService.calculateXpRequirement(nextLevel, undefined, adventure.world?.progressionConfig))
+                : 0;
               
               return {
                 ...t,
                 level: nextLevel,
                 xp: nextXP,
                 maxLevel: maxLvl,
-                xpNeeded: xpNeeded
+                xpNeeded: currentReq
               };
             } else if (logic === 'training') {
               const req = t.trainingRequired ?? 3;

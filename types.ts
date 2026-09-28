@@ -413,9 +413,87 @@ export interface UserProfile {
 // PROGRESSION & POWER ARCHITECTURE (KRAFT - FÄHIGKEIT - TECHNIK - FORM)
 // ============================================================================
 
+export type CharacterRank = 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S';
+
+export type DevelopmentProfileType =
+  | 'verySlow'
+  | 'slow'
+  | 'normal'
+  | 'fast'
+  | 'veryFast'
+  | 'custom';
+
+export interface DevelopmentProfile {
+  name: DevelopmentProfileType;
+  label: string;
+  description: string;
+  epGainMultiplier: number;
+  epRequirementMultiplier: number;
+  attributeGrowthMultiplier: number;
+}
+
+export type EpRequirementMode = 'fixed' | 'level_growth' | 'level_and_rank_growth';
+
+export interface RankSystemConfig {
+  enabled: boolean;
+  ranks: (CharacterRank | string)[];
+  requiresMaxLevelForRankUp: boolean;
+  minXpForRankUp?: number;
+}
+
+export interface LevelSystemConfig {
+  enabled: boolean;
+  levelsPerRank: number;
+  maxLevel: number;
+  resetLevelOnRankUp: boolean;
+}
+
+export interface EpSystemConfig {
+  enabled: boolean;
+  requirementMode: EpRequirementMode;
+  baseRequirement: number;
+  levelGrowth: number;
+  rankGrowth: number;
+  multiplier: number;
+  maxRequirement?: number;
+}
+
+export interface DevelopmentRateConfig {
+  epGainMultiplier: number;
+  epRequirementMultiplier: number;
+  attributeGrowthMultiplier: number;
+}
+
+export interface AttributeProgressionConfig {
+  baseGrowthPerLevel: number;
+  maxAttributeValue: number;
+  minAttributeValue: number;
+  enforcePotentialCap: boolean;
+}
+
+export interface ProgressionConfig {
+  rankSystem: RankSystemConfig;
+  levelSystem: LevelSystemConfig;
+  epSystem: EpSystemConfig;
+  developmentRate: DevelopmentRateConfig;
+  attributeProgression: AttributeProgressionConfig;
+  developmentProfiles: Record<DevelopmentProfileType, DevelopmentProfile>;
+  activeProfile?: DevelopmentProfileType;
+}
+
+export interface ProgressionResult {
+  previousState: ProgressionState;
+  newState: ProgressionState;
+  gainedXp: number;
+  levelsGained: number;
+  rankUps: { fromRank: string; toRank: string }[];
+  levelUpEvents: { level: number; rank?: string; xpNeeded: number }[];
+  attributePointsEarned: number;
+}
+
 /**
  * Gemeinsamer, zentraler Progressionszustand für alle entwickelbaren Entitäten
- * (Kräfte, Fähigkeiten, Techniken, Formen, Waffenbeherrschung, Berufe etc.).
+ * (Charaktere, Kräfte, Fähigkeiten, Techniken, Formen, Waffenbeherrschung, Berufe etc.).
  * Die konkrete Berechnung erfolgt im globalen Progressionssystem.
  */
 export interface ProgressionState {
@@ -423,6 +501,11 @@ export interface ProgressionState {
   xp?: number;
   maxLevel?: number;
   xpNeeded?: number;
+
+  rank?: CharacterRank | string;
+  rankIndex?: number;
+  developmentProfile?: DevelopmentProfileType;
+  potential?: number;
 
   progressionLogic?: 'ep' | 'training' | 'milestone' | 'static' | string;
 
@@ -1549,6 +1632,10 @@ export interface Character {
   characterTechniques?: CharacterTechnique[];
   powerForms?: CharacterPowerForm[];
   campaignPowerLevels?: Record<string, { value: number; potentialMax: number; xp?: number }>;
+  rank?: CharacterRank | string;
+  progression?: ProgressionState;
+  developmentProfile?: DevelopmentProfileType;
+  potential?: number;
   relationship?: string;
   conduct?: string;
   relationships?: CharacterRelationship[];
@@ -2780,6 +2867,7 @@ export interface WorldSetting {
   currentTerritoryId?: string;
   borders?: { id: string; name: string; points: { x: number; y: number }[]; color?: string; isLandmass?: boolean; isClosed?: boolean; isDashed?: boolean; cx?: number; cy?: number; radius?: number }[];
   campaignPowerSettings?: Record<string, number | CampaignPowerParameter>;
+  progressionConfig?: ProgressionConfig;
   healthPowerName?: string;
   costPowerName?: string;
   healthPowerNames?: string[];

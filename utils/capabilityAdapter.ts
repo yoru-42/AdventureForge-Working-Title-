@@ -6,6 +6,7 @@ import {
   BaseAbility,
   EffectiveTechniqueItem
 } from '../types';
+import { ProgressionService } from '../services/progressionService';
 import { resolveEffectiveMoveset } from './movesetResolver';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from './abilityHierarchy';
 import {
@@ -540,27 +541,39 @@ export function trainCharacterCapability(
       if (logic === 'ep') {
         const currentXP = t.xp ?? 0;
         const rawGain = t.xpGainPerUse ?? 30;
-        const gain = Math.round(rawGain * multiplier);
-        const xpNeeded = t.xpNeeded ?? 100;
+        const effectiveGain = ProgressionService.calculateEffectiveXpGain(rawGain, adventure.world?.progressionConfig);
+        const gain = Math.round(effectiveGain * multiplier);
 
         let nextXP = currentXP + gain;
         let nextLevel = currentLevel;
 
-        if (nextXP >= xpNeeded) {
-          const numLevels = Math.floor(nextXP / xpNeeded);
-          nextXP = nextXP % xpNeeded;
-          nextLevel = Math.min(maxLvl, nextLevel + numLevels);
-          levelUp = true;
+        while (nextLevel < maxLvl) {
+          const needed = t.xpNeeded ?? ProgressionService.calculateXpRequirement(nextLevel, undefined, adventure.world?.progressionConfig);
+          if (nextXP >= needed) {
+            nextXP -= needed;
+            nextLevel += 1;
+            levelUp = true;
+          } else {
+            break;
+          }
         }
 
+        if (nextLevel >= maxLvl) {
+          nextXP = 0;
+        }
+
+        const currentReq = nextLevel < maxLvl
+          ? (t.xpNeeded ?? ProgressionService.calculateXpRequirement(nextLevel, undefined, adventure.world?.progressionConfig))
+          : 0;
+
         newLevel = nextLevel;
-        newProgress = Math.min(100, Math.round((nextXP / xpNeeded) * 100));
+        newProgress = currentReq > 0 ? Math.min(100, Math.round((nextXP / currentReq) * 100)) : 100;
 
         return {
           ...t,
           level: nextLevel,
           xp: nextXP,
-          xpNeeded,
+          xpNeeded: currentReq,
           maxLevel: maxLvl
         };
       } else {
