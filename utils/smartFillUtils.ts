@@ -1,4 +1,11 @@
-import { SmartFillContext, SmartFillSection, RelationshipsSmartFillScope } from '../types';
+import { SmartFillContext, SmartFillSection, RelationshipsSmartFillScope, AbilitiesSmartFillScope } from '../types';
+import {
+  generatePowerSystemId,
+  generateCharacterPowerId,
+  generateCharacterAbilityId,
+  generateCharacterTechniqueId,
+  generateCharacterPowerFormId
+} from './abilityHierarchy';
 
 /**
  * Wandelt unstrukturierte KI-Rückgabewerte in eine sichere Zeichenkette um.
@@ -47,14 +54,20 @@ export function applySmartFillUpdates<T extends Record<string, any>>(
 
   // 1. Target ID Überprüfung
   if (context.targetId && prevCharacter.id && context.targetId !== prevCharacter.id) {
-    // Falls targetId angegeben ist und nicht die Charakter-ID ist, prüfen wir,
-    // ob targetId zu einem untergeordneten Element gehört (z.B. eine konkrete Beziehungs-ID).
     const targetRelId = context.targetRelationshipId || context.targetId;
-    const isTargetingSubElement = context.section === 'relationships' && 
+    const isTargetingRel = context.section === 'relationships' && 
       Array.isArray(prevCharacter.relationships) && 
       prevCharacter.relationships.some((r: any) => r.id === targetRelId || (r.targetCharacter && r.targetCharacter.toLowerCase().trim() === targetRelId.toLowerCase().trim()));
 
-    if (!isTargetingSubElement) {
+    const subId = context.targetPowerId || context.targetAbilityId || context.targetTechniqueId || context.targetFormId || context.targetId;
+    const isTargetingAbility = context.section === 'abilities' && (
+      (Array.isArray(prevCharacter.powers) && prevCharacter.powers.some((p: any) => p.id === subId)) ||
+      (Array.isArray(prevCharacter.characterAbilities || prevCharacter.abilities) && (prevCharacter.characterAbilities || prevCharacter.abilities).some((a: any) => a.id === subId)) ||
+      (Array.isArray(prevCharacter.characterTechniques || prevCharacter.techniqueList) && (prevCharacter.characterTechniques || prevCharacter.techniqueList).some((t: any) => t.id === subId)) ||
+      (Array.isArray(prevCharacter.powerForms || prevCharacter.forms) && (prevCharacter.powerForms || prevCharacter.forms).some((f: any) => f.id === subId))
+    );
+
+    if (!isTargetingRel && !isTargetingAbility) {
       return prevCharacter;
     }
   }
@@ -68,6 +81,10 @@ export function applySmartFillUpdates<T extends Record<string, any>>(
 
   if (section === 'relationships') {
     return applyRelationshipsSmartFillUpdates(prevCharacter, aiData, context);
+  }
+
+  if (section === 'abilities') {
+    return applyAbilitiesSmartFillUpdates(prevCharacter, aiData, context);
   }
 
   if (section === 'full_character') {
@@ -202,7 +219,7 @@ export function applyRelationshipsSmartFillUpdates<T extends Record<string, any>
 ): T {
   const mode = context.mode || 'supplement';
   const isSupplement = mode === 'supplement';
-  const scope: RelationshipsSmartFillScope = context.scope || 'relationships_and_motivation_goals';
+  const scope: RelationshipsSmartFillScope = (context.scope as RelationshipsSmartFillScope) || 'relationships_and_motivation_goals';
 
   const allowRelationships = scope === 'relationships' || scope === 'relationships_and_motivation_goals';
   const allowMotivationGoals = scope === 'motivation_goals' || scope === 'relationships_and_motivation_goals';
@@ -545,4 +562,369 @@ function applyFullCharacterSmartFillUpdates<T extends Record<string, any>>(
     knowledge: data.knowledge !== undefined ? data.knowledge : (isSupplement ? prev.knowledge : ''),
     appearance: newAppearance
   };
+}
+
+/**
+ * Aktualisiert isoliert den Bereich 'abilities' (Kräfte & Fähigkeiten) gemäß context.scope.
+ */
+export function applyAbilitiesSmartFillUpdates<T extends Record<string, any>>(
+  prev: T,
+  aiData: any,
+  context: SmartFillContext
+): T {
+  const mode = context.mode || 'supplement';
+  const isSupplement = mode === 'supplement';
+  const scope: AbilitiesSmartFillScope = (context.scope as AbilitiesSmartFillScope) || 'powers_abilities_techniques_forms';
+
+  const allowPowersAbilities = scope === 'powers_abilities' || scope === 'powers_abilities_techniques_forms';
+  const allowTechniques = scope === 'techniques' || scope === 'powers_abilities_techniques_forms';
+  const allowForms = scope === 'forms_transformations' || scope === 'powers_abilities_techniques_forms';
+
+  const ownerId = prev.id || 'char';
+
+  // Sub-target IDs
+  const targetPowerId = context.targetPowerId;
+  const targetAbilityId = context.targetAbilityId;
+  const targetTechniqueId = context.targetTechniqueId;
+  const targetFormId = context.targetFormId;
+  const genericSubTargetId = (context.targetId && prev.id && context.targetId !== prev.id) ? context.targetId : undefined;
+
+  const updates: Record<string, any> = {};
+
+  // 1. KRAFT-SYSTEME, KRÄFTE & GRUNDFÄHIGKEITEN
+  if (allowPowersAbilities) {
+    let nextPowerSystems = prev.powerSystems || [];
+    let nextPowers = prev.powers || [];
+    let nextCharacterAbilities = prev.characterAbilities || prev.abilities || [];
+    let nextPowerSource = prev.powerSource;
+    let nextPowerCost = prev.powerCost;
+    let nextSkills = prev.skills;
+    let nextCampaignPowerLevels = prev.campaignPowerLevels;
+
+    if (aiData.powerSystems && Array.isArray(aiData.powerSystems)) {
+      nextPowerSystems = mergePowerSystemsList(ownerId, prev.powerSystems || [], aiData.powerSystems, isSupplement);
+    } else if (aiData.powerSystem) {
+      nextPowerSystems = mergePowerSystemsList(ownerId, prev.powerSystems || [], [aiData.powerSystem], isSupplement);
+    }
+
+    const specPowerId = targetPowerId || (genericSubTargetId && (prev.powers || []).some((p: any) => p.id === genericSubTargetId) ? genericSubTargetId : undefined);
+    if (specPowerId && Array.isArray(prev.powers) && prev.powers.length > 0) {
+      const idx = prev.powers.findIndex((p: any) => p.id === specPowerId);
+      if (idx !== -1) {
+        const existingP = prev.powers[idx];
+        const incomingP = Array.isArray(aiData.powers) ? aiData.powers.find((p: any) => p.id === specPowerId) || aiData.powers[0] : (aiData.power || aiData);
+        const updatedP = isSupplement ? { ...existingP, ...(incomingP || {}) } : { id: existingP.id, ...incomingP };
+        nextPowers = [...prev.powers];
+        nextPowers[idx] = updatedP;
+      } else {
+        const incomingP = Array.isArray(aiData.powers) ? aiData.powers : (aiData.power ? [aiData.power] : []);
+        nextPowers = mergePowersList(ownerId, prev.powers || [], incomingP, isSupplement);
+      }
+    } else if (aiData.powers && Array.isArray(aiData.powers)) {
+      nextPowers = mergePowersList(ownerId, prev.powers || [], aiData.powers, isSupplement);
+    } else if (aiData.power) {
+      nextPowers = mergePowersList(ownerId, prev.powers || [], [aiData.power], isSupplement);
+    }
+
+    const existingAbList = prev.characterAbilities || prev.abilities || [];
+    const specAbId = targetAbilityId || (genericSubTargetId && existingAbList.some((a: any) => a.id === genericSubTargetId) ? genericSubTargetId : undefined);
+    if (specAbId && Array.isArray(existingAbList) && existingAbList.length > 0) {
+      const idx = existingAbList.findIndex((a: any) => a.id === specAbId);
+      if (idx !== -1) {
+        const existingA = existingAbList[idx];
+        const incomingA = Array.isArray(aiData.abilities) ? aiData.abilities.find((a: any) => a.id === specAbId) || aiData.abilities[0] : (aiData.ability || aiData);
+        const updatedA = isSupplement ? { ...existingA, ...(incomingA || {}) } : { id: existingA.id, ...incomingA };
+        nextCharacterAbilities = [...existingAbList];
+        nextCharacterAbilities[idx] = updatedA;
+      } else {
+        const incomingA = Array.isArray(aiData.abilities) ? aiData.abilities : (aiData.ability ? [aiData.ability] : []);
+        nextCharacterAbilities = mergeAbilitiesList(ownerId, existingAbList, incomingA, isSupplement);
+      }
+    } else if (aiData.abilities && Array.isArray(aiData.abilities)) {
+      const filteredAiAbilities = allowForms ? aiData.abilities : aiData.abilities.filter((a: any) => a.category !== 'Transformationen');
+      nextCharacterAbilities = mergeAbilitiesList(ownerId, existingAbList, filteredAiAbilities, isSupplement);
+    } else if (aiData.ability) {
+      nextCharacterAbilities = mergeAbilitiesList(ownerId, existingAbList, [aiData.ability], isSupplement);
+    }
+
+    if (aiData.powerSource !== undefined) {
+      nextPowerSource = !isSupplement ? (aiData.powerSource || '') : (prev.powerSource || aiData.powerSource || '');
+    }
+    if (aiData.powerCost !== undefined) {
+      nextPowerCost = !isSupplement ? (aiData.powerCost || '') : (prev.powerCost || aiData.powerCost || '');
+    }
+    if (aiData.skills !== undefined) {
+      nextSkills = !isSupplement ? (aiData.skills || '') : (prev.skills || aiData.skills || '');
+    }
+    if (aiData.campaignPowerLevels !== undefined) {
+      nextCampaignPowerLevels = !isSupplement
+        ? (aiData.campaignPowerLevels || {})
+        : { ...(prev.campaignPowerLevels || {}), ...(aiData.campaignPowerLevels || {}) };
+    }
+
+    updates.powerSystems = nextPowerSystems;
+    updates.powers = nextPowers;
+    updates.characterAbilities = nextCharacterAbilities;
+    updates.abilities = nextCharacterAbilities;
+    updates.powerSource = nextPowerSource;
+    updates.powerCost = nextPowerCost;
+    updates.skills = nextSkills;
+    updates.campaignPowerLevels = nextCampaignPowerLevels;
+  }
+
+  // 2. TECHNIKEN
+  if (allowTechniques) {
+    let nextCharacterTechniques = prev.characterTechniques || prev.techniqueList || [];
+    let nextTechniquesText = prev.techniques;
+
+    const existingTechList = prev.characterTechniques || prev.techniqueList || [];
+    const specTechId = targetTechniqueId || (genericSubTargetId && existingTechList.some((t: any) => t.id === genericSubTargetId) ? genericSubTargetId : undefined);
+
+    if (specTechId && Array.isArray(existingTechList) && existingTechList.length > 0) {
+      const idx = existingTechList.findIndex((t: any) => t.id === specTechId);
+      if (idx !== -1) {
+        const existingT = existingTechList[idx];
+        const incomingT = Array.isArray(aiData.techniqueList) ? aiData.techniqueList.find((t: any) => t.id === specTechId) || aiData.techniqueList[0]
+          : (Array.isArray(aiData.techniques) ? aiData.techniques.find((t: any) => t.id === specTechId) || aiData.techniques[0] : (aiData.technique || aiData));
+        const updatedT = isSupplement ? { ...existingT, ...(incomingT || {}) } : { id: existingT.id, ...incomingT };
+        nextCharacterTechniques = [...existingTechList];
+        nextCharacterTechniques[idx] = updatedT;
+      } else {
+        const incomingT = Array.isArray(aiData.techniqueList) ? aiData.techniqueList : (Array.isArray(aiData.techniques) ? aiData.techniques : (aiData.technique ? [aiData.technique] : []));
+        nextCharacterTechniques = mergeTechniquesList(ownerId, existingTechList, incomingT, isSupplement);
+      }
+    } else {
+      const incomingT = Array.isArray(aiData.techniqueList) ? aiData.techniqueList : (Array.isArray(aiData.techniques) && typeof aiData.techniques !== 'string' ? aiData.techniques : (aiData.technique ? [aiData.technique] : []));
+      if (!isSupplement) {
+        nextCharacterTechniques = mergeTechniquesList(ownerId, [], incomingT, false);
+      } else {
+        nextCharacterTechniques = mergeTechniquesList(ownerId, existingTechList, incomingT, true);
+      }
+    }
+
+    if (typeof aiData.techniques === 'string') {
+      nextTechniquesText = !isSupplement ? (aiData.techniques || '') : (prev.techniques ? (aiData.techniques ? `${prev.techniques}\n\n${aiData.techniques}` : prev.techniques) : (aiData.techniques || ''));
+    }
+
+    updates.characterTechniques = nextCharacterTechniques;
+    updates.techniqueList = nextCharacterTechniques;
+    updates.techniques = nextTechniquesText;
+  }
+
+  // 3. GESTALTEN / TRANSFORMATIONEN
+  if (allowForms) {
+    let nextPowerForms = prev.powerForms || prev.forms || [];
+
+    const existingFormsList = prev.powerForms || prev.forms || [];
+    const specFormId = targetFormId || (genericSubTargetId && existingFormsList.some((f: any) => f.id === genericSubTargetId) ? genericSubTargetId : undefined);
+
+    if (specFormId && Array.isArray(existingFormsList) && existingFormsList.length > 0) {
+      const idx = existingFormsList.findIndex((f: any) => f.id === specFormId);
+      if (idx !== -1) {
+        const existingF = existingFormsList[idx];
+        const incomingF = Array.isArray(aiData.powerForms) ? aiData.powerForms.find((f: any) => f.id === specFormId) || aiData.powerForms[0]
+          : (Array.isArray(aiData.forms) ? aiData.forms.find((f: any) => f.id === specFormId) || aiData.forms[0] : (aiData.form || aiData));
+        const updatedF = isSupplement ? { ...existingF, ...(incomingF || {}) } : { id: existingF.id, ...incomingF };
+        nextPowerForms = [...existingFormsList];
+        nextPowerForms[idx] = updatedF;
+      } else {
+        const incomingF = Array.isArray(aiData.powerForms) ? aiData.powerForms : (Array.isArray(aiData.forms) ? aiData.forms : (aiData.form ? [aiData.form] : []));
+        nextPowerForms = mergeFormsList(ownerId, existingFormsList, incomingF, isSupplement);
+      }
+    } else {
+      const incomingF: any[] = Array.isArray(aiData.powerForms) ? [...aiData.powerForms] : (Array.isArray(aiData.forms) ? [...aiData.forms] : (aiData.form ? [aiData.form] : []));
+      if (Array.isArray(aiData.abilities)) {
+        const transformAbilities = aiData.abilities.filter((a: any) => a.category === 'Transformationen');
+        transformAbilities.forEach((ab: any) => {
+          if (!incomingF.some((f: any) => (f.name || '').toLowerCase().trim() === (ab.name || '').toLowerCase().trim())) {
+            incomingF.push({
+              name: ab.name,
+              description: ab.description,
+              formType: 'Transformation',
+              transformationModifiers: ab.transformationModifiers
+            });
+          }
+        });
+      }
+
+      if (!isSupplement) {
+        nextPowerForms = mergeFormsList(ownerId, [], incomingF, false);
+      } else {
+        nextPowerForms = mergeFormsList(ownerId, existingFormsList, incomingF, true);
+      }
+    }
+
+    updates.powerForms = nextPowerForms;
+    updates.forms = nextPowerForms;
+  }
+
+  return {
+    ...prev,
+    ...updates
+  };
+}
+
+function mergePowerSystemsList(ownerId: string, existingList: any[], incomingList: any[], isSupplement: boolean) {
+  if (!incomingList || incomingList.length === 0) return existingList;
+  if (!isSupplement) {
+    const ids = new Set<string>();
+    return incomingList.map(s => {
+      const id = s.id || generatePowerSystemId(s.name || s.systemName || 'system', ids);
+      ids.add(id);
+      return { ...s, id };
+    });
+  }
+
+  const existingIds = new Set(existingList.map(s => s.id).filter(Boolean));
+  const existingNames = new Set(existingList.map(s => (s.name || s.systemName || '').toLowerCase().trim()));
+  const merged = [...existingList];
+
+  incomingList.forEach(inc => {
+    const key = (inc.name || inc.systemName || '').toLowerCase().trim();
+    if (key && existingNames.has(key)) {
+      const idx = merged.findIndex(s => (s.name || s.systemName || '').toLowerCase().trim() === key);
+      if (idx !== -1) {
+        const prog = merged[idx].progression || inc.progression;
+        merged[idx] = { ...merged[idx], ...inc, progression: prog };
+      }
+    } else {
+      const id = inc.id || generatePowerSystemId(inc.name || inc.systemName || 'system', existingIds);
+      existingIds.add(id);
+      merged.push({ ...inc, id });
+    }
+  });
+
+  return merged;
+}
+
+function mergePowersList(ownerId: string, existingList: any[], incomingList: any[], isSupplement: boolean) {
+  if (!incomingList || incomingList.length === 0) return existingList;
+  if (!isSupplement) {
+    const ids = new Set<string>();
+    return incomingList.map(p => {
+      const id = p.id || generateCharacterPowerId(p.powerSystemId || 'ps', p.name || 'power', ids);
+      ids.add(id);
+      return { ...p, id };
+    });
+  }
+
+  const existingIds = new Set(existingList.map(p => p.id).filter(Boolean));
+  const existingNames = new Set(existingList.map(p => (p.name || '').toLowerCase().trim()));
+  const merged = [...existingList];
+
+  incomingList.forEach(inc => {
+    const key = (inc.name || '').toLowerCase().trim();
+    if (key && existingNames.has(key)) {
+      const idx = merged.findIndex(p => (p.name || '').toLowerCase().trim() === key);
+      if (idx !== -1) {
+        const prog = merged[idx].progression || inc.progression;
+        merged[idx] = { ...merged[idx], ...inc, progression: prog };
+      }
+    } else {
+      const id = inc.id || generateCharacterPowerId(inc.powerSystemId || 'ps', inc.name || 'power', existingIds);
+      existingIds.add(id);
+      merged.push({ ...inc, id });
+    }
+  });
+
+  return merged;
+}
+
+function mergeAbilitiesList(ownerId: string, existingList: any[], incomingList: any[], isSupplement: boolean) {
+  if (!incomingList || incomingList.length === 0) return existingList;
+  if (!isSupplement) {
+    const ids = new Set<string>();
+    return incomingList.map(a => {
+      const id = a.id || generateCharacterAbilityId(a.powerId || 'pow', a.name || 'ability', ids);
+      ids.add(id);
+      return { ...a, id };
+    });
+  }
+
+  const existingIds = new Set(existingList.map(a => a.id).filter(Boolean));
+  const existingNames = new Set(existingList.map(a => (a.name || '').toLowerCase().trim()));
+  const merged = [...existingList];
+
+  incomingList.forEach(inc => {
+    const key = (inc.name || '').toLowerCase().trim();
+    if (key && existingNames.has(key)) {
+      const idx = merged.findIndex(a => (a.name || '').toLowerCase().trim() === key);
+      if (idx !== -1) {
+        const prog = merged[idx].progression || inc.progression;
+        merged[idx] = { ...merged[idx], ...inc, progression: prog };
+      }
+    } else {
+      const id = inc.id || generateCharacterAbilityId(inc.powerId || 'pow', inc.name || 'ability', existingIds);
+      existingIds.add(id);
+      merged.push({ ...inc, id });
+    }
+  });
+
+  return merged;
+}
+
+function mergeTechniquesList(ownerId: string, existingList: any[], incomingList: any[], isSupplement: boolean) {
+  if (!incomingList || incomingList.length === 0) return existingList;
+  if (!isSupplement) {
+    const ids = new Set<string>();
+    return incomingList.map(t => {
+      const id = t.id || generateCharacterTechniqueId(t.abilityId || t.powerId || 'parent', t.name || 'technique', ids);
+      ids.add(id);
+      return { ...t, id };
+    });
+  }
+
+  const existingIds = new Set(existingList.map(t => t.id).filter(Boolean));
+  const existingNames = new Set(existingList.map(t => (t.name || '').toLowerCase().trim()));
+  const merged = [...existingList];
+
+  incomingList.forEach(inc => {
+    const key = (inc.name || '').toLowerCase().trim();
+    if (key && existingNames.has(key)) {
+      const idx = merged.findIndex(t => (t.name || '').toLowerCase().trim() === key);
+      if (idx !== -1) {
+        const prog = merged[idx].progression || inc.progression;
+        merged[idx] = { ...merged[idx], ...inc, progression: prog };
+      }
+    } else {
+      const id = inc.id || generateCharacterTechniqueId(inc.abilityId || inc.powerId || 'parent', inc.name || 'technique', existingIds);
+      existingIds.add(id);
+      merged.push({ ...inc, id });
+    }
+  });
+
+  return merged;
+}
+
+function mergeFormsList(ownerId: string, existingList: any[], incomingList: any[], isSupplement: boolean) {
+  if (!incomingList || incomingList.length === 0) return existingList;
+  if (!isSupplement) {
+    const ids = new Set<string>();
+    return incomingList.map(f => {
+      const id = f.id || generateCharacterPowerFormId(f.powerId || 'pow', f.name || 'form', ids);
+      ids.add(id);
+      return { ...f, id };
+    });
+  }
+
+  const existingIds = new Set(existingList.map(f => f.id).filter(Boolean));
+  const existingNames = new Set(existingList.map(f => (f.name || '').toLowerCase().trim()));
+  const merged = [...existingList];
+
+  incomingList.forEach(inc => {
+    const key = (inc.name || '').toLowerCase().trim();
+    if (key && existingNames.has(key)) {
+      const idx = merged.findIndex(f => (f.name || '').toLowerCase().trim() === key);
+      if (idx !== -1) {
+        const prog = merged[idx].progression || inc.progression;
+        merged[idx] = { ...merged[idx], ...inc, progression: prog };
+      }
+    } else {
+      const id = inc.id || generateCharacterPowerFormId(inc.powerId || 'pow', inc.name || 'form', existingIds);
+      existingIds.add(id);
+      merged.push({ ...inc, id });
+    }
+  });
+
+  return merged;
 }

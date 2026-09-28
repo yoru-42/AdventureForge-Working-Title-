@@ -12,13 +12,23 @@ export type RelationshipsSmartFillScope =
   | 'motivation_goals'
   | 'relationships_and_motivation_goals';
 
+export type AbilitiesSmartFillScope =
+  | 'powers_abilities'
+  | 'techniques'
+  | 'forms_transformations'
+  | 'powers_abilities_techniques_forms';
+
 export interface SmartFillContext {
   section: SmartFillSection;
   targetId?: string;
   targetRelationshipId?: string;
+  targetPowerId?: string;
+  targetAbilityId?: string;
+  targetTechniqueId?: string;
+  targetFormId?: string;
   mode?: 'supplement' | 'replace';
   instruction?: string;
-  scope?: RelationshipsSmartFillScope;
+  scope?: RelationshipsSmartFillScope | AbilitiesSmartFillScope;
 }
 
 export interface CharacterAttribute {

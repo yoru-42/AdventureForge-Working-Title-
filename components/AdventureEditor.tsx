@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection, RelationshipsSmartFillScope } from '../types';
+import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection, RelationshipsSmartFillScope, AbilitiesSmartFillScope } from '../types';
 import { GeminiService } from '../services/geminiService';
 import { applySmartFillUpdates } from '../utils/smartFillUtils';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
@@ -690,6 +690,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   const [player, setPlayer] = useState<Character>(startPlayer);
   const [playerCharTab, setPlayerCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('profil');
   const [relationshipsSmartFillScope, setRelationshipsSmartFillScope] = useState<RelationshipsSmartFillScope>('relationships');
+  const [abilitiesSmartFillScope, setAbilitiesSmartFillScope] = useState<AbilitiesSmartFillScope>('powers_abilities');
 
   const [step4SubTab, setStep4SubTab] = useState<'interactive' | 'worldmap' | 'tactical'>('interactive');
   const [customCombatState, setCustomCombatState] = useState<any>(() => {
@@ -1654,8 +1655,12 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     try {
       const activeSection: SmartFillSection = playerCharTab === 'profil' 
         ? 'profile' 
-        : (playerCharTab === 'beziehungen' ? 'relationships' : 'full_character');
-      const activeScope = playerCharTab === 'beziehungen' ? relationshipsSmartFillScope : undefined;
+        : (playerCharTab === 'beziehungen' 
+          ? 'relationships' 
+          : (playerCharTab === 'kampffaehigkeiten' ? 'abilities' : 'full_character'));
+      const activeScope = playerCharTab === 'beziehungen' 
+        ? relationshipsSmartFillScope 
+        : (playerCharTab === 'kampffaehigkeiten' ? abilitiesSmartFillScope : undefined);
 
       const context: SmartFillContext = overrideContext || {
         section: activeSection,
@@ -1670,7 +1675,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           ? 'Profil & Aussehen des Charakters automatisch ergänzen.' 
           : (context.section === 'relationships'
             ? 'Beziehungen, Motivation & Ziele des Charakters automatisch ausstatten.'
-            : 'Vollständigen Charakter automatisch mit passenden Details, Vorgeschichte, Beziehungen und Fähigkeiten ausstatten.')
+            : (context.section === 'abilities'
+              ? 'Kampffähigkeiten, Kräfte und Techniken des Charakters automatisch erzeugen.'
+              : 'Vollständigen Charakter automatisch mit passenden Details, Vorgeschichte, Beziehungen und Fähigkeiten ausstatten.'))
       );
       const existingFactions = loreDatabase
         .filter(l => l.category === 'Fraktionen')
@@ -1728,8 +1735,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         return applySmartFillUpdates(prev, data, context);
       });
 
-      // Pull structured inventory automatically ONLY if not in profile or relationships section
-      if (context.section !== 'profile' && context.section !== 'relationships') {
+      // Pull structured inventory automatically ONLY if not in profile, relationships or abilities section
+      if (context.section !== 'profile' && context.section !== 'relationships' && context.section !== 'abilities') {
         try {
           const tempCharForExtraction = {
             name: data.name || player.name,
@@ -4025,7 +4032,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                         ? 'Smart Fill: Profil & Aussehen' 
                         : (playerCharTab === 'beziehungen'
                           ? 'Smart Fill: Beziehungen, Motivation & Ziele'
-                          : 'Smart Fill Charakter')}
+                          : (playerCharTab === 'kampffaehigkeiten'
+                            ? 'Smart Fill: Kräfte & Fähigkeiten'
+                            : 'Smart Fill Charakter'))}
                     </span>
                     {playerCharTab === 'profil' && (
                       <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
@@ -4037,13 +4046,18 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                         Bereich: Beziehungen, Motivation & Ziele
                       </span>
                     )}
+                    {playerCharTab === 'kampffaehigkeiten' && (
+                      <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
+                        Bereich: Kräfte & Fähigkeiten
+                      </span>
+                    )}
                   </label>
                   <div className="flex items-center gap-2">
                     <button 
                       type="button"
                       onClick={() => handlePlayerSmartFill({
-                        section: playerCharTab === 'profil' ? 'profile' : (playerCharTab === 'beziehungen' ? 'relationships' : 'full_character'),
-                        scope: playerCharTab === 'beziehungen' ? relationshipsSmartFillScope : undefined,
+                        section: playerCharTab === 'profil' ? 'profile' : (playerCharTab === 'beziehungen' ? 'relationships' : (playerCharTab === 'kampffaehigkeiten' ? 'abilities' : 'full_character')),
+                        scope: playerCharTab === 'beziehungen' ? relationshipsSmartFillScope : (playerCharTab === 'kampffaehigkeiten' ? abilitiesSmartFillScope : undefined),
                         targetId: player.id,
                         mode: keepExistingPlayerDetails ? 'supplement' : 'replace',
                         instruction: playerSmartFill
@@ -4052,9 +4066,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-[10px] font-bold transition-all flex items-center gap-2 cursor-pointer"
                     >
                       <i className={`fa-solid ${isSmartFillingChar ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
-                      {playerCharTab === 'profil' ? 'Profil Ausfüllen' : (playerCharTab === 'beziehungen' ? 'Bereich Ausfüllen' : 'Automatisch Ausfüllen')}
+                      {playerCharTab === 'profil' ? 'Profil Ausfüllen' : ((playerCharTab === 'beziehungen' || playerCharTab === 'kampffaehigkeiten') ? 'Bereich Ausfüllen' : 'Automatisch Ausfüllen')}
                     </button>
-                    {(playerCharTab === 'profil' || playerCharTab === 'beziehungen') && (
+                    {(playerCharTab === 'profil' || playerCharTab === 'beziehungen' || playerCharTab === 'kampffaehigkeiten') && (
                       <button 
                         type="button"
                         onClick={() => handlePlayerSmartFill({
@@ -4088,6 +4102,22 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                   </div>
                 )}
 
+                {playerCharTab === 'kampffaehigkeiten' && (
+                  <div className="flex items-center gap-2 text-xs bg-slate-900/60 p-2 rounded-lg border border-slate-700/50">
+                    <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-wide">Smart Fill für:</span>
+                    <select
+                      value={abilitiesSmartFillScope}
+                      onChange={e => setAbilitiesSmartFillScope(e.target.value as AbilitiesSmartFillScope)}
+                      className="bg-slate-950 border border-indigo-500/40 text-slate-200 rounded px-2.5 py-1 text-xs outline-none focus:border-indigo-400 font-semibold cursor-pointer"
+                    >
+                      <option value="powers_abilities">Kräfte &amp; Fähigkeiten</option>
+                      <option value="techniques">Techniken</option>
+                      <option value="forms_transformations">Gestalten / Transformationen</option>
+                      <option value="powers_abilities_techniques_forms">Alles in Kräfte &amp; Fähigkeiten</option>
+                    </select>
+                  </div>
+                )}
+
                 <AutoExpandingTextarea 
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
                   placeholder={playerCharTab === 'profil' 
@@ -4100,7 +4130,19 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                           : "Beschreibe Beziehungen zu Charakteren sowie Motivation und Ziele des Charakters."
                         )
                       )
-                      : "Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus."
+                      : (playerCharTab === 'kampffaehigkeiten'
+                        ? (abilitiesSmartFillScope === 'powers_abilities'
+                          ? "Beschreibe Magiesysteme, Teufelsfrüchte, Elementarkräfte oder Grundfähigkeiten. Es werden Kräfte & Fähigkeiten aktualisiert."
+                          : (abilitiesSmartFillScope === 'techniques'
+                            ? "Beschreibe Kampftechniken, Angriffe oder Zaubersprüche. Es werden ausschließlich Techniken aktualisiert."
+                            : (abilitiesSmartFillScope === 'forms_transformations'
+                              ? "Beschreibe Gestalten, Dämonenformen, Verwandlungen oder Aussehen im transformierten Zustand. Es werden nur Transformationen/Gestalten aktualisiert."
+                              : "Beschreibe das gesamte Kräfte- und Fähigkeitensystem inkl. Grundfähigkeiten, Techniken und Transformationen."
+                            )
+                          )
+                        )
+                        : "Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus."
+                      )
                     )
                   } 
                   value={playerSmartFill} 

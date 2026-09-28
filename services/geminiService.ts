@@ -5035,6 +5035,16 @@ ${existingCodexCharacters.slice(0, 8).map(c => `- Name: "${c.name}" (${c.role ||
           } else if (targetScopeStr === 'relationships_and_motivation_goals') {
             desc = 'Beziehungen, Motivation & Ziele (Beziehungen zu Charakteren kombiniert mit Motivation, Hauptziel und Etappenzielen)';
           }
+        } else if (activeSectionStr === 'abilities' && targetScopeStr) {
+          if (targetScopeStr === 'powers_abilities') {
+            desc = 'Kräfte & Grundfähigkeiten (Magiesysteme, Teufelsfrüchte, Elementarkräfte, Grundfähigkeiten)';
+          } else if (targetScopeStr === 'techniques') {
+            desc = 'Techniken & Kampfmanöver (Spezifische Kampftechniken, Angriffe, Zaubersprüche)';
+          } else if (targetScopeStr === 'forms_transformations') {
+            desc = 'Gestalten & Transformationen (Verwandlungen, Dämonenformen, alternative Körperformen)';
+          } else if (targetScopeStr === 'powers_abilities_techniques_forms') {
+            desc = 'Vollständiger Kräfte- & Fähigkeitenbereich (Kräfte, Grundfähigkeiten, Techniken und Gestalten/Transformationen)';
+          }
         }
 
         contextPrompt += `\n\n### GEZIELTER BEARBEITUNGS-FOKUS: "${desc}"
@@ -5045,6 +5055,14 @@ Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend 
           contextPrompt += `\nSTRIKTE TEILBEREICHS-DIRECTIVE: Erzeuge/bearbeite AUSSCHLIESSLICH Beziehungen ('relationships', 'relationship', 'conduct'). Erzeuge oder verändere KEINE Ziele ('goal', 'goals', 'motivationCore')!`;
         } else if (activeSectionStr === 'relationships' && targetScopeStr === 'motivation_goals') {
           contextPrompt += `\nSTRIKTE TEILBEREICHS-DIRECTIVE: Erzeuge/bearbeite AUSSCHLIESSLICH Motivation & Ziele ('goal', 'motivationCore', 'goals'). Erzeuge oder verändere KEINE neuen Beziehungen ('relationships')!`;
+        } else if (activeSectionStr === 'abilities' && targetScopeStr === 'powers_abilities') {
+          contextPrompt += `\nSTRIKTE TEILBEREICHS-DIRECTIVE: Der Nutzer bearbeitet ausschließlich Kräfte & Fähigkeiten. Erzeuge/bearbeite PowerSystems, CharacterPowers und CharacterAbilities. Erzeuge KEINE neuen Techniken ('techniques' / 'techniqueList') oder Transformationen ('forms' / 'CharacterPowerForm')!`;
+        } else if (activeSectionStr === 'abilities' && targetScopeStr === 'techniques') {
+          contextPrompt += `\nSTRIKTE TEILBEREICHS-DIRECTIVE: Der Nutzer bearbeitet ausschließlich Techniken. Verwende die bestehende CharacterTechnique-Hierarchie. Erzeuge KEINE Profil-, Berufs-, Inventar-, Beziehungs- oder Verwandlungsdaten!`;
+        } else if (activeSectionStr === 'abilities' && targetScopeStr === 'forms_transformations') {
+          contextPrompt += `\nSTRIKTE TEILBEREICHS-DIRECTIVE: Der Nutzer bearbeitet ausschließlich Gestalten und Transformationen. Verwende CharacterPowerForm ('forms' / 'powerForms'). Transformationen nicht als normale Techniken erzeugen!`;
+        } else if (activeSectionStr === 'abilities' && targetScopeStr === 'powers_abilities_techniques_forms') {
+          contextPrompt += `\nSTRIKTE TEILBEREICHS-DIRECTIVE: Der Nutzer bearbeitet den vollständigen Bereich Kräfte & Fähigkeiten. PowerSystem, CharacterPower, CharacterAbility, CharacterTechnique und CharacterPowerForm dürfen gemeinsam aktualisiert werden. Andere Charakterbereiche bleiben unverändert.`;
         }
       }
 
