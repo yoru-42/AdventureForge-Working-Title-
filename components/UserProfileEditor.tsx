@@ -168,7 +168,11 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
                   attributeGrowth: formData.attributeGrowth,
                   epRequirement: formData.epRequirement
                 }}
-                onChange={updates => setFormData(prev => ({ ...prev, ...updates }))}
+                onChange={updates => setFormData(prev => ({
+                  ...prev,
+                  ...updates,
+                  campaignPowerLevels: updates.campaignPowerLevels || prev.campaignPowerLevels
+                }))}
               />
             </div>
           </div>

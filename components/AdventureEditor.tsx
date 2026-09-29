@@ -4162,30 +4162,14 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                   </div>
 
                   {/* Macht & Werte (Kampagnen-Skala) */}
-                  {world.campaignPowerSettings && Object.keys(world.campaignPowerSettings).length > 0 && (
-                    <div className="bg-slate-950/60 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-inner">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                        <div className="flex items-center gap-2">
-                          <i className="fa-solid fa-chart-pie text-amber-400"></i>
-                          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                            Macht &amp; Werte (Kampagnen-Skala)
-                          </span>
-                        </div>
-                      </div>
-                      <CharacterPowerRadar 
-                        worldPowerSettings={world.campaignPowerSettings}
-                        characterData={player.campaignPowerLevels}
-                        world={world}
-                        title="Macht & Werte"
-                        onChange={(newData) => setPlayer({ ...player, campaignPowerLevels: newData })}
-                      />
-                    </div>
-                  )}
-
                   {/* Wiederverwendbare Progressions- & Wertekomponente */}
                   <IndividualProgressionEditor
                     progressionLogic={world.techniqueProgressionLogic || 'ep'}
                     worldProgressionConfig={world.progressionConfig}
+                    world={world}
+                    worldPowerSettings={world.campaignPowerSettings}
+                    campaignPowerLevels={player.campaignPowerLevels || {}}
+                    onChangeCampaignPowerLevels={(newData) => setPlayer(prev => ({ ...prev, campaignPowerLevels: newData }))}
                     values={{
                       rank: player.rank,
                       level: player.level,
@@ -4205,7 +4189,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       requiresMaxLevelForRankUp: player.requiresMaxLevelForRankUp,
                       developmentRate: player.developmentRate,
                       attributeGrowth: player.attributeGrowth,
-                      epRequirement: player.epRequirement
+                      epRequirement: player.epRequirement,
+                      campaignPowerLevels: player.campaignPowerLevels || {}
                     }}
                     onChange={updates => setPlayer(prev => ({ ...prev, ...updates }))}
                   />

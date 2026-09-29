@@ -1,8 +1,9 @@
 // -*- coding: utf-8 -*-
 import React from 'react';
-import { CharacterRank, ProgressionConfig } from '../types';
+import { CharacterRank, ProgressionConfig, WorldSetting, CampaignPowerParameter } from '../types';
 import { STANDARD_RANKS, ProgressionService } from '../services/progressionService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
+import { calculateDerivedCombatProperties } from './RpgStatusWindow';
 
 export interface IndividualProgressionValues {
   rank?: CharacterRank | string;
@@ -40,11 +41,17 @@ export interface IndividualProgressionValues {
     rankGrowth?: number;
     maxRequirement?: number;
   };
+  campaignPowerLevels?: Record<string, { value: number; potentialMax: number }>;
+  campaignPowerData?: any;
 }
 
 interface IndividualProgressionEditorProps {
   progressionLogic?: 'ep' | 'training' | 'milestone' | 'static' | string;
   worldProgressionConfig?: ProgressionConfig;
+  world?: WorldSetting;
+  worldPowerSettings?: Record<string, number | CampaignPowerParameter>;
+  campaignPowerLevels?: Record<string, { value: number; potentialMax: number }>;
+  onChangeCampaignPowerLevels?: (newLevels: Record<string, { value: number; potentialMax: number }>) => void;
   values: IndividualProgressionValues;
   onChange: (updated: Partial<IndividualProgressionValues>) => void;
   title?: string;
@@ -54,6 +61,10 @@ interface IndividualProgressionEditorProps {
 export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorProps> = ({
   progressionLogic = 'ep',
   worldProgressionConfig,
+  world,
+  worldPowerSettings,
+  campaignPowerLevels: explicitPowerLevels,
+  onChangeCampaignPowerLevels,
   values,
   onChange
 }) => {
@@ -68,6 +79,13 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
       : typeof values.experience === 'number'
       ? values.experience
       : values.xp ?? 0;
+
+  // Power / Parameter levels
+  const powerLevels =
+    explicitPowerLevels ||
+    values.campaignPowerLevels ||
+    values.campaignPowerData ||
+    {};
 
   // Multipliers
   const epGainMult = values.developmentRate?.epGainMultiplier ?? 1.0;
@@ -169,16 +187,50 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
     });
   };
 
+  // Derived Combat Properties & Parameters
+  const derivedData = calculateDerivedCombatProperties(powerLevels, world, worldPowerSettings);
+
+  const handleParameterChange = (cat: string, field: 'value' | 'potentialMax', val: number) => {
+    const sMin = derivedData.globalSettings[cat]?.scaleMin ?? 0;
+    const sMax = derivedData.globalSettings[cat]?.scaleMax ?? 1000;
+    const clampedVal = Math.max(sMin, Math.min(sMax, val));
+
+    const current = powerLevels[cat] || {
+      value: derivedData.globalSettings[cat]?.min ?? 10,
+      potentialMax: derivedData.globalSettings[cat]?.max ?? 100
+    };
+
+    let updated = { ...current };
+    if (field === 'value') {
+      updated.value = clampedVal;
+      if (updated.value > updated.potentialMax) {
+        updated.potentialMax = updated.value;
+      }
+    } else {
+      updated.potentialMax = clampedVal;
+      if (updated.potentialMax < updated.value) {
+        updated.value = updated.potentialMax;
+      }
+    }
+
+    const newPowerLevels = {
+      ...powerLevels,
+      [cat]: updated
+    };
+
+    if (onChangeCampaignPowerLevels) {
+      onChangeCampaignPowerLevels(newPowerLevels);
+    }
+    onChange({
+      campaignPowerLevels: newPowerLevels
+    });
+  };
+
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
-      {/* 1. Entwicklungsstatus Bar (NUR bei EP-basierten Regeln) */}
+      {/* 1. Kompakte Entwicklungs-Statuszeile (bei EP-Logik) */}
       {isEpLogic && (
-        <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 shadow-sm space-y-3">
-          <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center justify-between">
-            <span>Entwicklungsstatus</span>
-            <span className="text-[10px] text-slate-500 font-normal">Globale EP-Regel aktiv</span>
-          </div>
-
+        <div className="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 shadow-sm">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">
@@ -240,7 +292,155 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
         </div>
       )}
 
-      {/* 2. Persönliche Entwicklung (Kompaktes Layout) */}
+      {/* 2. RPG-Statusanzeige: Kampfeigenschaften & Parameter */}
+      {derivedData.categories.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          {/* Spalte 1: Kampfeigenschaften */}
+          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-3">
+            <div className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-1.5 flex justify-between">
+              <span>Kampfeigenschaften</span>
+              <span className="text-slate-500 font-normal">Abgeleitet aus Parametern</span>
+            </div>
+
+            <div className="space-y-1.5 font-mono text-xs">
+              {derivedData.combatProperties.map(prop => (
+                <div
+                  key={`prop-${prop.id}`}
+                  className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-950/60 transition-colors"
+                >
+                  <div className="flex items-center gap-1.5 text-slate-300 truncate pr-2">
+                    <span className="truncate">{prop.label}</span>
+                    {prop.sources && prop.sources.length > 0 && (
+                      <span className="text-[9px] text-slate-500 font-sans truncate">
+                        ({prop.sources.join(', ')})
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-amber-300 font-bold text-xs shrink-0">
+                    {prop.value}
+                    {prop.isPercentage ? '%' : ''}
+                    <span className="text-slate-600 text-[10px] font-normal ml-1">
+                      / {prop.potentialMax}{prop.isPercentage ? '%' : ''}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Ressourcen (HP, MP etc.) */}
+            {derivedData.resources.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                <div className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider border-b border-slate-800 pb-1">
+                  Ressourcen
+                </div>
+
+                <div className="space-y-1.5 font-mono text-xs">
+                  {derivedData.resources.map(res => (
+                    <div
+                      key={`res-row-${res.id}`}
+                      className="flex items-center justify-between py-1 px-2 rounded bg-slate-950/50 border border-slate-800/50"
+                    >
+                      <span className="text-slate-200 font-bold">{res.name}</span>
+                      <div className="text-emerald-300 font-bold">
+                        {res.value} <span className="text-slate-500 font-normal">/ {res.max}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Spalte 2: Parameter */}
+          <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3.5 space-y-3">
+            <div className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-1.5 flex justify-between">
+              <span>Parameter</span>
+              <span className="text-slate-500 font-normal">Editierbare Grundwerte</span>
+            </div>
+
+            <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+              {derivedData.categories.map(cat => {
+                const sMin = derivedData.globalSettings[cat]?.scaleMin ?? 0;
+                const sMax = derivedData.globalSettings[cat]?.scaleMax ?? 1000;
+                const charVal = powerLevels[cat]?.value ?? derivedData.globalSettings[cat]?.min ?? 10;
+                const charMax = powerLevels[cat]?.potentialMax ?? derivedData.globalSettings[cat]?.max ?? 100;
+
+                return (
+                  <div
+                    key={`param-row-${cat}`}
+                    className="bg-slate-950/60 p-2 rounded-lg border border-slate-800/80 space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="font-bold text-slate-200">{cat}</span>
+                      <span className="text-slate-400 text-[11px]">
+                        <span className="text-amber-400 font-bold">{charVal}</span>
+                        <span className="text-slate-600"> / </span>
+                        <span className="text-emerald-400 font-bold">{charMax}</span>
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                          <span>Aktuell</span>
+                          <input
+                            type="number"
+                            min={sMin}
+                            max={sMax}
+                            value={charVal}
+                            onChange={e =>
+                              handleParameterChange(cat, 'value', parseInt(e.target.value) || sMin)
+                            }
+                            className="w-12 bg-slate-900 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-amber-300 text-right font-mono font-bold"
+                          />
+                        </div>
+                        <input
+                          type="range"
+                          min={sMin}
+                          max={sMax}
+                          value={charVal}
+                          onChange={e =>
+                            handleParameterChange(cat, 'value', parseInt(e.target.value) || sMin)
+                          }
+                          className="w-full h-1.5 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                          <span>Potenzial</span>
+                          <input
+                            type="number"
+                            min={sMin}
+                            max={sMax}
+                            value={charMax}
+                            onChange={e =>
+                              handleParameterChange(cat, 'potentialMax', parseInt(e.target.value) || sMax)
+                            }
+                            className="w-12 bg-slate-900 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-emerald-300 text-right font-mono font-bold"
+                          />
+                        </div>
+                        <input
+                          type="range"
+                          min={sMin}
+                          max={sMax}
+                          value={charMax}
+                          onChange={e =>
+                            handleParameterChange(cat, 'potentialMax', parseInt(e.target.value) || sMax)
+                          }
+                          className="w-full h-1.5 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Persönliche Entwicklung */}
       <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-4">
         <div className="border-b border-slate-800 pb-2">
           <h4 className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
@@ -384,7 +584,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
           </div>
         </div>
 
-        {/* Potenzial (Kompakt konsolidiert) */}
+        {/* Potenzial */}
         <div className="pt-3 border-t border-slate-800/60 space-y-2">
           <label className="block text-xs font-semibold text-slate-300">
             Potenzial
@@ -449,7 +649,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
         </div>
       </div>
 
-      {/* 3. Rangentwicklung (NUR bei EP-basierten Regeln) */}
+      {/* 4. Rangentwicklung (NUR bei EP-basierten Regeln) */}
       {isEpLogic && (
         <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
           <div className="border-b border-slate-800 pb-2">

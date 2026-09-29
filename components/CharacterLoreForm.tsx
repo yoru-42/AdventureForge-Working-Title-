@@ -1993,34 +1993,19 @@ export const CharacterLoreForm: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Macht & Werte (Kampagnen-Skala) */}
-          <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-chart-pie text-amber-400"></i>
-                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                  Macht &amp; Werte (Kampagnen-Skala)
-                </h4>
-              </div>
-            </div>
-            <CharacterPowerRadar
-              worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings || EP_DEFAULT_PARAMETERS}
-              characterData={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
-              world={world}
-              title="Macht & Werte"
-              onChange={newData => {
-                updateMultipleDetails({
-                  campaignPowerData: newData,
-                  campaignPowerLevels: newData
-                });
-              }}
-            />
-          </div>
-
           {/* Wiederverwendbare Progressions- & Wertekomponente */}
           <IndividualProgressionEditor
             progressionLogic={world?.techniqueProgressionLogic || 'ep'}
             worldProgressionConfig={world?.progressionConfig}
+            world={world}
+            worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
+            campaignPowerLevels={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
+            onChangeCampaignPowerLevels={newData => {
+              updateMultipleDetails({
+                campaignPowerData: newData,
+                campaignPowerLevels: newData
+              });
+            }}
             values={{
               rank: getDetail('rank', 'F'),
               level: getDetail('level', 1),
@@ -2040,7 +2025,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
               requiresMaxLevelForRankUp: getDetail('requiresMaxLevelForRankUp', true),
               developmentRate: getDetail('developmentRate', undefined),
               attributeGrowth: getDetail('attributeGrowth', undefined),
-              epRequirement: getDetail('epRequirement', undefined)
+              epRequirement: getDetail('epRequirement', undefined),
+              campaignPowerLevels: editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}
             }}
             onChange={updates => updateMultipleDetails(updates)}
           />
