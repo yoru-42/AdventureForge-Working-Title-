@@ -4183,6 +4183,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                   {/* Wiederverwendbare Progressions- & Wertekomponente */}
                   <IndividualProgressionEditor
                     progressionLogic={world.techniqueProgressionLogic || 'ep'}
+                    worldProgressionConfig={world.progressionConfig}
                     values={{
                       rank: player.rank,
                       level: player.level,

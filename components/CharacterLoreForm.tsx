@@ -2018,6 +2018,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
           {/* Wiederverwendbare Progressions- & Wertekomponente */}
           <IndividualProgressionEditor
             progressionLogic={world?.techniqueProgressionLogic || 'ep'}
+            worldProgressionConfig={world?.progressionConfig}
             values={{
               rank: getDetail('rank', 'F'),
               level: getDetail('level', 1),
