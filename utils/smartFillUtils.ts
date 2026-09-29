@@ -75,6 +75,10 @@ export function applySmartFillUpdates<T extends Record<string, any>>(
   const mode = context.mode || 'supplement';
   const section = context.section || 'full_character';
 
+  if (section === 'race_stats') {
+    return applyRaceStatsSmartFillUpdates(prevCharacter, aiData, mode);
+  }
+
   if (section === 'profile') {
     return applyProfileSmartFillUpdates(prevCharacter, aiData, mode);
   }
@@ -93,6 +97,54 @@ export function applySmartFillUpdates<T extends Record<string, any>>(
 
   // Fallback für zukünftige isolierte Abschnitte
   return prevCharacter;
+}
+
+/**
+ * Aktualisiert ausschließlich die Rasse- & Werte-/Progressionsdaten eines Charakters.
+ * Alle anderen Abschnitte (Beziehungen, Fähigkeiten, Berufe, Inventar, etc.) bleiben strikt unverändert.
+ */
+export function applyRaceStatsSmartFillUpdates<T extends Record<string, any>>(
+  prev: T,
+  aiData: any,
+  mode: 'supplement' | 'replace'
+): T {
+  const isSupplement = mode === 'supplement';
+  const prevApp = prev.appearance || {};
+  const aiApp = aiData.appearance || {};
+
+  const nextRace = getSafeString(aiData.race) || getSafeString(aiApp.race) || (isSupplement ? (getSafeString(prev.race) || getSafeString(prevApp.race) || 'Mensch') : 'Mensch');
+  const nextRaceFeatures = getSafeString(aiData.raceFeatures) || getSafeString(aiApp.raceFeatures) || (isSupplement ? (getSafeString(prev.raceFeatures) || getSafeString(prevApp.raceFeatures) || '') : '');
+
+  const nextRank = aiData.rank !== undefined ? aiData.rank : (isSupplement ? (prev.rank || 'F') : 'F');
+  const nextLevel = typeof aiData.level === 'number' ? aiData.level : (isSupplement ? (prev.level ?? 1) : 1);
+  const nextXp = typeof aiData.xp === 'number' ? aiData.xp : (typeof aiData.experiencePoints === 'number' ? aiData.experiencePoints : (isSupplement ? (prev.xp ?? 0) : 0));
+  const nextPotential = typeof aiData.potential === 'number' ? aiData.potential : (isSupplement ? (prev.potential ?? 100) : 100);
+  const nextDevProfile = aiData.developmentProfile || (isSupplement ? (prev.developmentProfile || 'normal') : 'normal');
+
+  const incomingPowerLevels = aiData.campaignPowerLevels || aiData.campaignPowerData;
+  const nextPowerLevels = isSupplement
+    ? { ...(prev.campaignPowerLevels || prev.campaignPowerData || {}), ...(incomingPowerLevels || {}) }
+    : (incomingPowerLevels || prev.campaignPowerLevels || prev.campaignPowerData || {});
+
+  const updatedAppearance = {
+    ...prevApp,
+    race: nextRace,
+    raceFeatures: nextRaceFeatures
+  };
+
+  return {
+    ...prev,
+    race: nextRace,
+    raceFeatures: nextRaceFeatures,
+    rank: nextRank,
+    level: nextLevel,
+    xp: nextXp,
+    potential: nextPotential,
+    developmentProfile: nextDevProfile,
+    campaignPowerLevels: nextPowerLevels,
+    campaignPowerData: nextPowerLevels,
+    appearance: updatedAppearance
+  };
 }
 
 /**

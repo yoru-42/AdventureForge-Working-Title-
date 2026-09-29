@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection, RelationshipsSmartFillScope, AbilitiesSmartFillScope } from '../types';
+import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection, RelationshipsSmartFillScope, AbilitiesSmartFillScope, CharacterRank, DevelopmentProfileType } from '../types';
 import { GeminiService } from '../services/geminiService';
 import { applySmartFillUpdates } from '../utils/smartFillUtils';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
@@ -43,6 +43,7 @@ import {
   EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS,
   createEpDefaultWorldSettings
 } from '../lib/progressionDefaults';
+import { ProgressionSettingSection } from './ProgressionSettingSection';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { createStandardLoreEntries } from '../lib/standardItemsData';
@@ -61,6 +62,14 @@ interface Props {
 const GENDER_OPTIONS = ["Männlich", "Weiblich", "Divers", "Nicht-Binär", "Androgyn", "Unbekannt"];
 const BUILD_OPTIONS = ["Schlank", "Sportlich", "Muskulös", "Kräftig", "Zierlich", "Drahtig", "Kurvig", "Stämmig", "Hager"];
 const CUP_SIZE_OPTIONS = ["-", "AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"];
+const RANK_OPTIONS = ['EX', 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D', 'E', 'F', 'Unbekannt'];
+const DEV_PROFILE_OPTIONS = [
+  { value: 'balanced', label: 'Ausgewogen (Standard)' },
+  { value: 'fast_start', label: 'Schneller Einstieg / Frühblüher' },
+  { value: 'focused', label: 'Fokussiert / Spezialist' },
+  { value: 'late_bloomer', label: 'Spätentwickler (Hohes Potenzial)' },
+  { value: 'slow_growth', label: 'Langsames, methodisches Wachstum' }
+];
 
 const TAG_OPTIONS = [
   "Fantasy", "Sci-Fi", "Horror", "Cyberpunk", "Steampunk", "Post-Apokalyptisch", 
@@ -291,6 +300,7 @@ const computeInitialWorld = (initialData?: Adventure): WorldSetting => {
     borders: [],
     techniqueProgressionLogic: 'ep',
     techniqueProgressionRate: 'normal',
+    progressionConfig: initialData?.world?.progressionConfig ?? epDefaults.progressionConfig,
     techniqueRulesList: [],
     campaignPowerSettings: epDefaults.campaignPowerSettings,
     customStatAllocations: epDefaults.customStatAllocations,
@@ -343,6 +353,17 @@ const computeInitialPlayer = (initialData?: Adventure, userProfile?: UserProfile
       bio: userProfile.bio,
       currentSituation: '',
       goal: '',
+      race: userProfile.race || (userProfile.appearance as any)?.race || 'Mensch',
+      raceFeatures: userProfile.raceFeatures || userProfile.appearance.raceFeatures || '',
+      rank: userProfile.rank || 'F',
+      level: userProfile.level !== undefined ? userProfile.level : 1,
+      experience: userProfile.experience || (userProfile.experiencePoints !== undefined ? userProfile.experiencePoints : 0),
+      experiencePoints: userProfile.experiencePoints !== undefined ? userProfile.experiencePoints : 0,
+      experienceText: userProfile.experienceText || '0 / 100 EP',
+      potential: userProfile.potential || 'Rang A (Hoch)',
+      developmentProfile: userProfile.developmentProfile || 'balanced',
+      rankUpRequirements: userProfile.rankUpRequirements || '',
+      campaignPowerLevels: userProfile.campaignPowerLevels ? JSON.parse(JSON.stringify(userProfile.campaignPowerLevels)) : undefined,
       appearance: {
         hairColor: userProfile.appearance.hairColor,
         eyeColor: userProfile.appearance.eyeColor,
@@ -350,7 +371,8 @@ const computeInitialPlayer = (initialData?: Adventure, userProfile?: UserProfile
         build: userProfile.appearance.build,
         gender: userProfile.appearance.gender,
         cupSize: userProfile.appearance.cupSize,
-        raceFeatures: userProfile.appearance.raceFeatures || '',
+        race: userProfile.race || (userProfile.appearance as any)?.race || 'Mensch',
+        raceFeatures: userProfile.raceFeatures || userProfile.appearance.raceFeatures || '',
         outfit: '',
         looks: ''
       },
@@ -688,7 +710,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   const [world, setWorld] = useState<WorldSetting>(startWorld);
   const [mapViewerMode, setMapViewerMode] = useState<'editor' | 'viewer'>('editor');
   const [player, setPlayer] = useState<Character>(startPlayer);
-  const [playerCharTab, setPlayerCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('profil');
+  const [playerCharTab, setPlayerCharTab] = useState<'rasse_werte' | 'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('rasse_werte');
   const [relationshipsSmartFillScope, setRelationshipsSmartFillScope] = useState<RelationshipsSmartFillScope>('relationships');
   const [abilitiesSmartFillScope, setAbilitiesSmartFillScope] = useState<AbilitiesSmartFillScope>('powers_abilities');
 
@@ -1653,11 +1675,13 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
   const handlePlayerSmartFill = async (overrideContext?: SmartFillContext) => {
     setIsSmartFillingChar(true);
     try {
-      const activeSection: SmartFillSection = playerCharTab === 'profil' 
-        ? 'profile' 
-        : (playerCharTab === 'beziehungen' 
-          ? 'relationships' 
-          : (playerCharTab === 'kampffaehigkeiten' ? 'abilities' : 'full_character'));
+      const activeSection: SmartFillSection = playerCharTab === 'rasse_werte'
+        ? 'race_stats'
+        : (playerCharTab === 'profil' 
+          ? 'profile' 
+          : (playerCharTab === 'beziehungen' 
+            ? 'relationships' 
+            : (playerCharTab === 'kampffaehigkeiten' ? 'abilities' : 'full_character')));
       const activeScope = playerCharTab === 'beziehungen' 
         ? relationshipsSmartFillScope 
         : (playerCharTab === 'kampffaehigkeiten' ? abilitiesSmartFillScope : undefined);
@@ -1671,13 +1695,15 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       };
 
       const promptToUse = context.instruction || playerSmartFill.trim() || (
-        context.section === 'profile' 
-          ? 'Profil & Aussehen des Charakters automatisch ergänzen.' 
-          : (context.section === 'relationships'
-            ? 'Beziehungen, Motivation & Ziele des Charakters automatisch ausstatten.'
-            : (context.section === 'abilities'
-              ? 'Kampffähigkeiten, Kräfte und Techniken des Charakters automatisch erzeugen.'
-              : 'Vollständigen Charakter automatisch mit passenden Details, Vorgeschichte, Beziehungen und Fähigkeiten ausstatten.'))
+        context.section === 'race_stats'
+          ? 'Rasse, Rassemerkmale, Macht- & Werteskala, Rang, Level, Potenzial und individuelle Entwicklung des Charakters automatisch ergänzen.'
+          : (context.section === 'profile' 
+            ? 'Profil & Aussehen des Charakters automatisch ergänzen.' 
+            : (context.section === 'relationships'
+              ? 'Beziehungen, Motivation & Ziele des Charakters automatisch ausstatten.'
+              : (context.section === 'abilities'
+                ? 'Kampffähigkeiten, Kräfte und Techniken des Charakters automatisch erzeugen.'
+                : 'Vollständigen Charakter automatisch mit passenden Details, Vorgeschichte, Beziehungen und Fähigkeiten ausstatten.')))
       );
       const existingFactions = loreDatabase
         .filter(l => l.category === 'Fraktionen')
@@ -1735,8 +1761,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         return applySmartFillUpdates(prev, data, context);
       });
 
-      // Pull structured inventory automatically ONLY if not in profile, relationships or abilities section
-      if (context.section !== 'profile' && context.section !== 'relationships' && context.section !== 'abilities') {
+      // Pull structured inventory automatically ONLY if not in race_stats, profile, relationships or abilities section
+      if (context.section !== 'race_stats' && context.section !== 'profile' && context.section !== 'relationships' && context.section !== 'abilities') {
         try {
           const tempCharForExtraction = {
             name: data.name || player.name,
@@ -3350,180 +3376,18 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           
           {step === 2 && mode !== GameViewMode.JOIN_CUSTOM_CHAR && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800 space-y-4">
-                <div>
-                  <h3 className="text-xl font-fantasy text-amber-400 flex items-center gap-2">
-                    <span className="text-2xl">🧠</span>
-                    <span>LOGIK FÜR DIE WERTE-STEIGERUNG & PROGRESSION</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-relaxed mt-1">
-                    Wähle die globale Progression-Regel aus, die für alle erstellten Parameter (z.B. HP, Magie, Stärke) sowie Fertigkeiten und Techniken in dieser Kampagne gilt.
-                  </p>
-                </div>
+              <ProgressionSettingSection
+                world={world}
+                onChange={updatedWorld => setWorld(updatedWorld)}
+              />
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                  {[
-                    { id: 'ep', icon: '⚡', label: 'EP-basiert (Kampf)', desc: 'Erfahrungspunkte (XP) werden für fast jede Aktion im Kampf erhalten. Immer genau 100 EP für ein Level-Up. Wenn dein Charakter ein viel höheres Level und Rang als der Gegner hat, erhältst du nur minimale EP.' },
-                    { id: 'training', icon: '🏋️', label: 'Training & Übung', desc: 'Dieser Wert steigt dynamisch, wenn der Charakter den Wert im Rollenspiel anwendet, trainiert oder im Abenteuer gezielt einsetzt (z.B. Einheiten & praktische Übungen außerhalb von Kämpfen).' },
-                    { id: 'milestone', icon: '🏆', label: 'Story-Meilensteine', desc: 'Dieser Wert steigt nur nach dem Erreichen von bedeutenden Meilensteinen in der Story oder nach dem Besiegen von Boss-Gegnern.' },
-                    { id: 'static', icon: '🔒', label: 'Statisch', desc: 'Manuelle Verteilung durch Talentpunkte oder Gold. Dieser Wert stellt die feste, naturgegebene Grenze des Charakters dar.' },
-                  ].map((item, itemIdx) => {
-                    const active = (world.techniqueProgressionLogic || 'ep') === item.id;
-                    return (
-                      <button
-                        key={`prog-logic-${item.id}-${itemIdx}`}
-                        type="button"
-                        onClick={() => {
-                          setWorld(prev => {
-                            const updatedWorld = { ...prev, techniqueProgressionLogic: item.id as any };
-                            if (item.id === 'ep') {
-                              // If campaignPowerSettings is empty or doesn't contain 'Stärke', initialize with standard EP defaults
-                              const existingKeys = Object.keys(updatedWorld.campaignPowerSettings || {});
-                              if (existingKeys.length === 0 || !existingKeys.includes('Stärke')) {
-                                updatedWorld.campaignPowerSettings = JSON.parse(JSON.stringify(EP_DEFAULT_PARAMETERS));
-                              } else {
-                                const updatedSettings = { ...updatedWorld.campaignPowerSettings };
-                                Object.keys(updatedSettings).forEach(k => {
-                                  const val = updatedSettings[k];
-                                  if (val && typeof val === 'object') {
-                                    updatedSettings[k] = {
-                                      ...val,
-                                      levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP."
-                                    } as any;
-                                  }
-                                });
-                                updatedWorld.campaignPowerSettings = updatedSettings;
-                              }
-
-                              if (!updatedWorld.customStatAllocations || updatedWorld.customStatAllocations.length === 0) {
-                                updatedWorld.customStatAllocations = JSON.parse(JSON.stringify(EP_DEFAULT_STAT_ALLOCATIONS));
-                              }
-                              if (!updatedWorld.costResources || updatedWorld.costResources.length === 0) {
-                                updatedWorld.costResources = JSON.parse(JSON.stringify(EP_DEFAULT_COST_RESOURCES));
-                              }
-                              if (!updatedWorld.costPowerNames || updatedWorld.costPowerNames.length === 0) {
-                                updatedWorld.costPowerNames = [...EP_DEFAULT_COST_NAMES];
-                              }
-                              if (!updatedWorld.healthPowerNames || updatedWorld.healthPowerNames.length === 0) {
-                                updatedWorld.healthPowerNames = [...EP_DEFAULT_HEALTH_NAMES];
-                              }
-                            } else {
-                              // Auto-synchronize all parameters' levelUpLogic text to stay fully aligned
-                              if (updatedWorld.campaignPowerSettings) {
-                                const updatedSettings = { ...updatedWorld.campaignPowerSettings };
-                                const textMapping = {
-                                  ep: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP.",
-                                  training: "Dieser Wert steigt dynamisch, wenn der Charakter den Wert im Rollenspiel anwendet, trainiert oder im Abenteuer gezielt einsetzt.",
-                                  milestone: "Dieser Wert steigt nur nach dem Erreichen von bedeutenden Meilensteinen in der Story oder nach dem Besiegen von Boss-Gegnern.",
-                                  static: "Dieser Wert ist unveränderlich und stellt die feste, naturgegebene bzw. unüberwindbare Grenze des Charerakters dar."
-                                };
-                                const text = textMapping[item.id as 'ep' | 'training' | 'milestone' | 'static'];
-                                Object.keys(updatedSettings).forEach(k => {
-                                  const val = updatedSettings[k];
-                                  if (val && typeof val === 'object') {
-                                    updatedSettings[k] = {
-                                      ...val,
-                                      levelUpLogic: text
-                                    } as any;
-                                  } else {
-                                    updatedSettings[k] = {
-                                      min: 0,
-                                      max: typeof val === 'number' ? val : 100,
-                                      levelUpLogic: text
-                                    } as any;
-                                  }
-                                });
-                                updatedWorld.campaignPowerSettings = updatedSettings;
-                              }
-                            }
-                            return updatedWorld;
-                          });
-                        }}
-                        className={`p-5 rounded-2xl border text-left transition-all space-y-2 flex flex-col justify-between relative overflow-hidden group ${
-                          active
-                            ? 'bg-amber-500/10 border-amber-500 text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                        }`}
-                      >
-                        {active && (
-                          <div className="absolute top-0 right-0 bg-amber-500 text-slate-950 font-extrabold text-[9px] px-3 py-1 rounded-bl-xl uppercase tracking-wider shadow">
-                            Aktiviert
-                          </div>
-                        )}
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl bg-slate-950/80 w-11 h-11 rounded-xl flex items-center justify-center border border-slate-800 group-hover:scale-105 transition-transform">{item.icon}</span>
-                          <div>
-                            <span className="text-sm font-extrabold uppercase tracking-wide block">{item.label}</span>
-                            <span className="text-[10px] text-slate-500">Globaler Regelsatz</span>
-                          </div>
-                        </div>
-                        <p className="text-xs text-slate-400 leading-relaxed pt-1">
-                          {item.desc}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Sub-rate selection */}
-                <div className="bg-slate-950/50 p-5 rounded-2xl border border-slate-800 space-y-4 animate-in slide-in-from-top-4 duration-300">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800/80 pb-3 gap-2">
-                    <div>
-                      <h4 className="text-sm font-fantasy text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                        <span>📈</span>
-                        <span>STEIGERUNGS-RATE & ENTWICKLUNGS-TEMPO</span>
-                      </h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        Passe an, mit welcher Intensität und Geschwindigkeit Parameter & Techniken anwachsen.
-                      </p>
-                    </div>
-                    <span className="self-start sm:self-center text-[10px] font-mono font-bold px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/25 rounded-md uppercase tracking-wider">
-                      Modus: {
-                        (world.techniqueProgressionLogic || 'ep') === 'ep' ? '⚡ EP-basiert' :
-                        (world.techniqueProgressionLogic || 'ep') === 'training' ? '🏋️ Training' :
-                        (world.techniqueProgressionLogic || 'ep') === 'milestone' ? '🏆 Meilensteine' : '🔒 Statisch'
-                      }
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {(progressionRatesConfig[world.techniqueProgressionLogic || 'ep'] || []).map((rate, rateIdx) => {
-                      const isRateActive = (world.techniqueProgressionRate || 'normal') === rate.id;
-                      return (
-                        <button
-                          key={`prog-rate-${rate.id}-${rateIdx}`}
-                          type="button"
-                          onClick={() => setWorld(prev => ({ ...prev, techniqueProgressionRate: rate.id }))}
-                          className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between relative overflow-hidden group/rate ${
-                            isRateActive
-                              ? 'bg-amber-500/10 border-amber-500 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.08)]'
-                              : 'bg-slate-900 border-slate-800/80 text-slate-400 hover:border-slate-700 hover:text-slate-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-lg group-hover/rate:scale-110 transition-transform">{rate.icon}</span>
-                            <span className="text-xs font-bold uppercase tracking-wide">{rate.label}</span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 leading-relaxed pl-6">
-                            {rate.desc}
-                          </p>
-                          {isRateActive && (
-                            <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Techniken Regelsatz & Default-Konfigurations-Datenbank (Excel-style) */}
-                <div className="bg-slate-950/50 p-5 rounded-2xl border border-slate-800 space-y-4 animate-in slide-in-from-top-4 duration-300">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-fantasy text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                        <span>📊</span>
-                        <span>TECHNIK-REGELN & BALANCING-VORGABEN (DATENBLATT)</span>
-                      </h4>
+              {/* Techniken Regelsatz & Default-Konfigurations-Datenbank (Excel-style) */}
+              <div className="bg-slate-950/50 p-5 rounded-2xl border border-slate-800 space-y-4 animate-in slide-in-from-top-4 duration-300">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-fantasy text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                      <span>TECHNIK-REGELN & BALANCING-VORGABEN (DATENBLATT)</span>
+                    </h4>
                       <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
                         Definiere im Spielwelt-Datenblatt die Formeln und Standardwerte deiner Techniken. Spieler übernehmen diese Balancing-Vorgaben bei der Erstellung.
                       </p>
@@ -3685,8 +3549,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {step === 3 && mode !== GameViewMode.JOIN_CUSTOM_CHAR && (
             <div className="space-y-6 animate-in fade-in duration-300">
@@ -3945,32 +3808,45 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 </div>
               </div>
 
-              {/* 5 Main Tabs */}
+              {/* 6 Main Tabs */}
               <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 flex-wrap">
                 <button
                   type="button"
+                  onClick={() => setPlayerCharTab('rasse_werte')}
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
+                    playerCharTab === 'rasse_werte'
+                      ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+                  }`}
+                >
+                  <i className="fa-solid fa-dna"></i>
+                  <span>1. Rasse &amp; Werte</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setPlayerCharTab('profil')}
-                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
                     playerCharTab === 'profil'
                       ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
                   <i className="fa-solid fa-user-gear"></i>
-                  <span>1. Profil &amp; Aussehen</span>
+                  <span>2. Profil &amp; Aussehen</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPlayerCharTab('beziehungen')}
-                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
                     playerCharTab === 'beziehungen'
                       ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
                   <i className="fa-solid fa-people-arrows"></i>
-                  <span>2. Beziehungen, Motivation &amp; Ziele</span>
+                  <span>3. Beziehungen, Motivation &amp; Ziele</span>
                   {((player.relationships && player.relationships.length > 0) || (player.goals && player.goals.length > 0)) && (
                     <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${playerCharTab === 'beziehungen' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-400'}`}>
                       {(player.relationships?.length || 0) + (player.goals?.length || 0)}
@@ -3981,40 +3857,40 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 <button
                   type="button"
                   onClick={() => setPlayerCharTab('kampffaehigkeiten')}
-                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
                     playerCharTab === 'kampffaehigkeiten'
                       ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
                   <i className="fa-solid fa-bolt"></i>
-                  <span>3. Kampffähigkeiten</span>
+                  <span>4. Kampffähigkeiten</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPlayerCharTab('beruf_talente')}
-                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
                     playerCharTab === 'beruf_talente'
                       ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
                   <i className="fa-solid fa-graduation-cap"></i>
-                  <span>4. Berufe &amp; Talente</span>
+                  <span>5. Berufe &amp; Talente</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPlayerCharTab('besitz_inventar')}
-                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+                  className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
                     playerCharTab === 'besitz_inventar'
                       ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
                   }`}
                 >
                   <i className="fa-solid fa-briefcase"></i>
-                  <span>5. Besitz / Inventar</span>
+                  <span>6. Besitz / Inventar</span>
                   {((structuredInventory?.customItems?.length || 0) > 0 || (structuredInventory?.weapons?.length || 0) > 0) && (
                     <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${playerCharTab === 'besitz_inventar' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-400'}`}>
                       {(structuredInventory?.customItems?.length || 0) + (structuredInventory?.weapons?.length || 0)}
@@ -4028,27 +3904,34 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label className="text-xs text-indigo-400 font-bold uppercase flex items-center gap-2">
                     <span>
-                      {playerCharTab === 'profil' 
-                        ? 'Smart Fill: Profil & Aussehen' 
-                        : (playerCharTab === 'beziehungen'
-                          ? 'Smart Fill: Beziehungen, Motivation & Ziele'
-                          : (playerCharTab === 'kampffaehigkeiten'
-                            ? 'Smart Fill: Kräfte & Fähigkeiten'
-                            : 'Smart Fill Charakter'))}
+                      {playerCharTab === 'rasse_werte'
+                        ? 'Smart Fill: Rasse & Werte'
+                        : (playerCharTab === 'profil' 
+                          ? 'Smart Fill: Profil & Aussehen' 
+                          : (playerCharTab === 'beziehungen'
+                            ? 'Smart Fill: Beziehungen, Motivation & Ziele'
+                            : (playerCharTab === 'kampffaehigkeiten'
+                              ? 'Smart Fill: Kräfte & Fähigkeiten'
+                              : 'Smart Fill Charakter')))}
                     </span>
+                    {playerCharTab === 'rasse_werte' && (
+                      <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
+                        Bereich: Rasse &amp; Werte
+                      </span>
+                    )}
                     {playerCharTab === 'profil' && (
                       <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
-                        Bereich: Profil & Aussehen
+                        Bereich: Profil &amp; Aussehen
                       </span>
                     )}
                     {playerCharTab === 'beziehungen' && (
                       <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
-                        Bereich: Beziehungen, Motivation & Ziele
+                        Bereich: Beziehungen, Motivation &amp; Ziele
                       </span>
                     )}
                     {playerCharTab === 'kampffaehigkeiten' && (
                       <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-950 border border-indigo-700/50 text-indigo-300 font-normal">
-                        Bereich: Kräfte & Fähigkeiten
+                        Bereich: Kräfte &amp; Fähigkeiten
                       </span>
                     )}
                   </label>
@@ -4056,7 +3939,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     <button 
                       type="button"
                       onClick={() => handlePlayerSmartFill({
-                        section: playerCharTab === 'profil' ? 'profile' : (playerCharTab === 'beziehungen' ? 'relationships' : (playerCharTab === 'kampffaehigkeiten' ? 'abilities' : 'full_character')),
+                        section: playerCharTab === 'rasse_werte' ? 'race_stats' : (playerCharTab === 'profil' ? 'profile' : (playerCharTab === 'beziehungen' ? 'relationships' : (playerCharTab === 'kampffaehigkeiten' ? 'abilities' : 'full_character'))),
                         scope: playerCharTab === 'beziehungen' ? relationshipsSmartFillScope : (playerCharTab === 'kampffaehigkeiten' ? abilitiesSmartFillScope : undefined),
                         targetId: player.id,
                         mode: keepExistingPlayerDetails ? 'supplement' : 'replace',
@@ -4066,9 +3949,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-[10px] font-bold transition-all flex items-center gap-2 cursor-pointer"
                     >
                       <i className={`fa-solid ${isSmartFillingChar ? 'fa-spinner animate-spin' : 'fa-bolt'}`}></i>
-                      {playerCharTab === 'profil' ? 'Profil Ausfüllen' : ((playerCharTab === 'beziehungen' || playerCharTab === 'kampffaehigkeiten') ? 'Bereich Ausfüllen' : 'Automatisch Ausfüllen')}
+                      {playerCharTab === 'rasse_werte' ? 'Rasse & Werte Ausfüllen' : (playerCharTab === 'profil' ? 'Profil Ausfüllen' : ((playerCharTab === 'beziehungen' || playerCharTab === 'kampffaehigkeiten') ? 'Bereich Ausfüllen' : 'Automatisch Ausfüllen'))}
                     </button>
-                    {(playerCharTab === 'profil' || playerCharTab === 'beziehungen' || playerCharTab === 'kampffaehigkeiten') && (
+                    {(playerCharTab === 'rasse_werte' || playerCharTab === 'profil' || playerCharTab === 'beziehungen' || playerCharTab === 'kampffaehigkeiten') && (
                       <button 
                         type="button"
                         onClick={() => handlePlayerSmartFill({
@@ -4078,7 +3961,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                           instruction: playerSmartFill
                         })}
                         disabled={isSmartFillingChar}
-                        title="Füllt alle Tabs des Charakters aus (Profil, Fähigkeiten, Beziehungen, Inventar)"
+                        title="Füllt alle Tabs des Charakters aus (Rasse & Werte, Profil, Fähigkeiten, Beziehungen, Inventar)"
                         className="px-2 py-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-300 border border-slate-700 rounded text-[10px] transition-all cursor-pointer"
                       >
                         Alle Tabs ausfüllen
@@ -4120,28 +4003,31 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
                 <AutoExpandingTextarea 
                   className="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-slate-300 text-xs min-h-[60px] outline-none focus:border-indigo-500" 
-                  placeholder={playerCharTab === 'profil' 
-                    ? "Beschreibe Aussehen, Persönlichkeit, Biografie, Rasse oder Herkunft des Charakters. Es werden ausschließlich Profil- und Aussehensdaten aktualisiert."
-                    : (playerCharTab === 'beziehungen'
-                      ? (relationshipsSmartFillScope === 'relationships'
-                        ? "Beschreibe Beziehungen zu anderen Charakteren/Gilden, Verhaltensweisen und Anredeformen. Es werden nur Beziehungsdaten aktualisiert."
-                        : (relationshipsSmartFillScope === 'motivation_goals'
-                          ? "Beschreibe das Hauptziel, innere Antriebe, Werte oder Etappenziele. Es werden nur Motivation & Ziele aktualisiert."
-                          : "Beschreibe Beziehungen zu Charakteren sowie Motivation und Ziele des Charakters."
-                        )
-                      )
-                      : (playerCharTab === 'kampffaehigkeiten'
-                        ? (abilitiesSmartFillScope === 'powers_abilities'
-                          ? "Beschreibe Magiesysteme, Teufelsfrüchte, Elementarkräfte oder Grundfähigkeiten. Es werden Kräfte & Fähigkeiten aktualisiert."
-                          : (abilitiesSmartFillScope === 'techniques'
-                            ? "Beschreibe Kampftechniken, Angriffe oder Zaubersprüche. Es werden ausschließlich Techniken aktualisiert."
-                            : (abilitiesSmartFillScope === 'forms_transformations'
-                              ? "Beschreibe Gestalten, Dämonenformen, Verwandlungen oder Aussehen im transformierten Zustand. Es werden nur Transformationen/Gestalten aktualisiert."
-                              : "Beschreibe das gesamte Kräfte- und Fähigkeitensystem inkl. Grundfähigkeiten, Techniken und Transformationen."
-                            )
+                  placeholder={playerCharTab === 'rasse_werte'
+                    ? "Beschreibe Rasse, Rassemerkmale, Rang, Level, Erfahrungspunkte, Potenzial, Kampagnen-Werte-Skala und individuelle Entwicklung. Es werden ausschließlich Rasse- & Wertedaten aktualisiert."
+                    : (playerCharTab === 'profil' 
+                      ? "Beschreibe Aussehen, Persönlichkeit, Biografie oder Herkunft des Charakters. Es werden ausschließlich Profil- und Aussehensdaten aktualisiert."
+                      : (playerCharTab === 'beziehungen'
+                        ? (relationshipsSmartFillScope === 'relationships'
+                          ? "Beschreibe Beziehungen zu anderen Charakteren/Gilden, Verhaltensweisen und Anredeformen. Es werden nur Beziehungsdaten aktualisiert."
+                          : (relationshipsSmartFillScope === 'motivation_goals'
+                            ? "Beschreibe das Hauptziel, innere Antriebe, Werte oder Etappenziele. Es werden nur Motivation & Ziele aktualisiert."
+                            : "Beschreibe Beziehungen zu Charakteren sowie Motivation und Ziele des Charakters."
                           )
                         )
-                        : "Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus."
+                        : (playerCharTab === 'kampffaehigkeiten'
+                          ? (abilitiesSmartFillScope === 'powers_abilities'
+                            ? "Beschreibe Magiesysteme, Teufelsfrüchte, Elementarkräfte oder Grundfähigkeiten. Es werden Kräfte & Fähigkeiten aktualisiert."
+                            : (abilitiesSmartFillScope === 'techniques'
+                              ? "Beschreibe Kampftechniken, Angriffe oder Zaubersprüche. Es werden ausschließlich Techniken aktualisiert."
+                              : (abilitiesSmartFillScope === 'forms_transformations'
+                                ? "Beschreibe Gestalten, Dämonenformen, Verwandlungen oder Aussehen im transformierten Zustand. Es werden nur Transformationen/Gestalten aktualisiert."
+                                : "Beschreibe das gesamte Kräfte- und Fähigkeitensystem inkl. Grundfähigkeiten, Techniken und Transformationen."
+                              )
+                            )
+                          )
+                          : "Beschreibe deinen Charakter, seine Verwandlungen, Beziehungen, Kampffähigkeiten sowie Berufe, Handwerke und Talente. Die KI füllt alle Felder in allen Tabs aus."
+                        )
                       )
                     )
                   } 
@@ -4163,7 +4049,250 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 </div>
               </div>
 
-              {/* TAB 1: PROFIL & AUSSEHEN */}
+              {/* TAB 1: RASSE & WERTE */}
+              {playerCharTab === 'rasse_werte' && (
+                <div className="space-y-6 animate-in fade-in duration-200">
+                  {/* Gestalt / Form Switcher Banner */}
+                  <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 ${activeTransformation ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'}`}>
+                        <i className={`fa-solid ${activeTransformation ? 'fa-bolt' : 'fa-dna'}`}></i>
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-200 flex items-center gap-2 flex-wrap">
+                          <span>1. RASSE &amp; WERTE BEARBEITEN</span>
+                          {activeTransformation ? (
+                            <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded text-[10px] font-bold">
+                              ⚡ AKTIV: {activeTransformation.transformName || activeTransformation.name}
+                            </span>
+                          ) : (
+                            <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded text-[10px] font-bold">
+                              👤 STANDARDGESTALT
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {activeTransformation 
+                            ? `Du bearbeitest gerade Rasse, Rassemerkmale und Machtwerte für die aktive Form "${activeTransformation.transformName || activeTransformation.name}".`
+                            : 'Persönliche Rasse, Rassemerkmale, Kampagnen-Machtskala und individuelle Progressionswerte deines Spielercharakters.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditorSelectedTransformationId('standard');
+                        }}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                          !activeTransformation 
+                            ? 'bg-indigo-600 text-white shadow border border-indigo-400' 
+                            : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+                        }`}
+                      >
+                        <i className="fa-solid fa-user text-[10px]"></i>
+                        Standard
+                      </button>
+
+                      {(player.abilities || []).filter(a => a.category === 'Transformationen' || (a as any).type === 'Transformation').map((t, tIdx) => (
+                        <button
+                          key={t.id ? `trans-${t.id}-${tIdx}` : `trans-${tIdx}`}
+                          type="button"
+                          onClick={() => {
+                            setEditorSelectedTransformationId(t.id);
+                          }}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                            activeTransformationId === t.id 
+                              ? 'bg-amber-600 text-white shadow border border-amber-400' 
+                              : 'bg-slate-800 text-amber-400 hover:bg-slate-700 border border-amber-500/30'
+                          }`}
+                        >
+                          <i className="fa-solid fa-bolt text-[10px]"></i>
+                          {t.transformName || t.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Rasse & Rassemerkmale */}
+                  <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800/80 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
+                      <i className="fa-solid fa-dna text-amber-400"></i>
+                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                        Rasse &amp; Biologische Merkmale
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                          <span className="text-amber-500">◆</span> Rasse
+                          <span className="text-amber-500">*</span>
+                        </label>
+                        <AutoExpandingTextarea 
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-semibold"
+                          placeholder="z.B. Mensch, Elf, Vampir, Cyborg, Dämon..." 
+                          value={getAppearanceValue('race') || player.race || 'Mensch'} 
+                          onChange={e => {
+                            const val = e.target.value;
+                            updateAppearanceValue('race', val);
+                            setPlayer(prev => ({ ...prev, race: val }));
+                          }} 
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Spezifische Rassemerkmale / Physische Besonderheiten
+                        </label>
+                        <AutoExpandingTextarea 
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
+                          placeholder="z.B. Spitze Ohren, Reißzähne, Schwingen, Nachtsicht, Schuppen..." 
+                          value={getAppearanceValue('raceFeatures') || player.raceFeatures || ''} 
+                          onChange={e => {
+                            const val = e.target.value;
+                            updateAppearanceValue('raceFeatures', val);
+                            setPlayer(prev => ({ ...prev, raceFeatures: val }));
+                          }} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Macht & Werte (Kampagnen-Skala) */}
+                  {world.campaignPowerSettings && Object.keys(world.campaignPowerSettings).length > 0 && (
+                    <div className="bg-slate-950/60 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-inner">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                        <div className="flex items-center gap-2">
+                          <i className="fa-solid fa-chart-pie text-amber-400"></i>
+                          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                            Macht &amp; Werte (Kampagnen-Skala)
+                          </span>
+                        </div>
+                      </div>
+                      <CharacterPowerRadar 
+                        worldPowerSettings={world.campaignPowerSettings}
+                        characterData={player.campaignPowerLevels}
+                        onChange={(newData) => setPlayer({ ...player, campaignPowerLevels: newData })}
+                      />
+                    </div>
+                  )}
+
+                  {/* Individuelle Progression & Entwicklungsdaten */}
+                  <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800/80 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
+                      <i className="fa-solid fa-arrow-trend-up text-amber-400"></i>
+                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                        Individuelle Progression &amp; Entwicklung
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Aktueller Rang
+                        </label>
+                        <select
+                          value={player.rank || 'F'}
+                          onChange={e => setPlayer(prev => ({ ...prev, rank: e.target.value as CharacterRank }))}
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 font-semibold cursor-pointer"
+                        >
+                          {RANK_OPTIONS.map(r => (
+                            <option key={r} value={r}>Rang {r}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Aktuelles Level
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={999}
+                          value={player.level !== undefined ? player.level : 1}
+                          onChange={e => setPlayer(prev => ({ ...prev, level: parseInt(e.target.value) || 1 }))}
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 font-semibold shadow-inner"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Individuelle Erfahrungspunkte (EP)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={player.experiencePoints !== undefined ? player.experiencePoints : (typeof player.experience === 'number' ? player.experience : 0)}
+                          onChange={e => {
+                            const val = parseInt(e.target.value) || 0;
+                            setPlayer(prev => ({ ...prev, experiencePoints: val, experience: val }));
+                          }}
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 shadow-inner"
+                          placeholder="z.B. 0"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          EP-Anforderung / Fortschritt
+                        </label>
+                        <input
+                          type="text"
+                          value={player.experienceText || '0 / 100 EP'}
+                          onChange={e => setPlayer(prev => ({ ...prev, experienceText: e.target.value }))}
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 shadow-inner"
+                          placeholder="z.B. 0 / 100 EP oder 25%"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Individuelles Potenzial (Max-Grenze)
+                        </label>
+                        <input
+                          type="text"
+                          value={player.potential || 'Rang A (Hoch)'}
+                          onChange={e => setPlayer(prev => ({ ...prev, potential: e.target.value }))}
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 shadow-inner"
+                          placeholder="z.B. Rang SSS (Grenzenlos), Rang A (Hoch)..."
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Individuelles Entwicklungstempo
+                        </label>
+                        <select
+                          value={player.developmentProfile || 'balanced'}
+                          onChange={e => setPlayer(prev => ({ ...prev, developmentProfile: e.target.value as DevelopmentProfileType }))}
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 font-semibold cursor-pointer"
+                        >
+                          {DEV_PROFILE_OPTIONS.map(d => (
+                            <option key={d.value} value={d.value}>{d.label}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 sm:col-span-2 md:col-span-3">
+                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                          Voraussetzungen für den nächsten Rang / Levelanzahl pro Rang
+                        </label>
+                        <AutoExpandingTextarea
+                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
+                          placeholder="z.B. Erreichen von Level 10 + Bestehen der Abenteurer-Prüfung in der Hauptstadt..."
+                          value={player.rankUpRequirements || ''}
+                          onChange={e => setPlayer(prev => ({ ...prev, rankUpRequirements: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: PROFIL & AUSSEHEN */}
               {playerCharTab === 'profil' && (
                 <div className="space-y-6 animate-in fade-in duration-200">
 
@@ -4862,30 +4991,12 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 </div>
               )}
 
-              {/* TAB 3: KAMPFFÄHIGKEITEN */}
+              {/* TAB 4: KAMPFFÄHIGKEITEN */}
               {playerCharTab === 'kampffaehigkeiten' && (
                 <div className="space-y-6 animate-in fade-in duration-200">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                     <h4 className="text-sm font-bold text-slate-300">Gefährte / Fähigkeiten &amp; Kräfte</h4>
                   </div>
-
-                  {world.campaignPowerSettings && Object.keys(world.campaignPowerSettings).length > 0 && (
-                    <div className="bg-slate-950/60 p-5 rounded-2xl border border-slate-800 space-y-4 shadow-inner">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                        <div className="flex items-center gap-2">
-                          <i className="fa-solid fa-chart-pie text-amber-400"></i>
-                          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                            Macht &amp; Werte (Kampagnen-Skala)
-                          </span>
-                        </div>
-                      </div>
-                      <CharacterPowerRadar 
-                        worldPowerSettings={world.campaignPowerSettings}
-                        characterData={player.campaignPowerLevels}
-                        onChange={(newData) => setPlayer({ ...player, campaignPowerLevels: newData })}
-                      />
-                    </div>
-                  )}
 
                   {/* Einheitliche Fähigkeiten- & Techniken-Hierarchie */}
                   {(() => {
@@ -4967,6 +5078,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 </div>
               )}
 
+              {/* TAB 5: BERUFE & TALENTE */}
               {playerCharTab === 'beruf_talente' && (
                 <div className="space-y-6 animate-in fade-in duration-200">
                   <div className="flex flex-col gap-4">
@@ -5045,7 +5157,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 </div>
               )}
 
-              {/* TAB 5: BESITZ / INVENTAR */}
+              {/* TAB 6: BESITZ / INVENTAR */}
               {playerCharTab === 'besitz_inventar' && (
                 <div className="space-y-6 animate-in fade-in duration-200">
                   <CharacterInventorySection

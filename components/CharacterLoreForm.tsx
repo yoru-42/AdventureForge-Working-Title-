@@ -9,8 +9,11 @@ import {
   PersonalityTraits, 
   CampaignPowerParameter,
   WorldSetting,
-  CharacterGoal
+  CharacterGoal,
+  CharacterRank,
+  DevelopmentProfileType
 } from '../types';
+import { EP_DEFAULT_PARAMETERS } from '../lib/progressionDefaults';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { EyeColorEditor } from './EyeColorEditor';
 import { LocationSelector } from './LocationSelector';
@@ -29,6 +32,7 @@ import { migrateLegacyProfessionData } from '../services/professionCompetencySer
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { CharacterInventorySection } from './CharacterInventorySection';
+import { IndividualProgressionEditor } from './IndividualProgressionEditor';
 
 export interface CharacterAbility {
   id: string;
@@ -94,20 +98,29 @@ interface Props {
 const GENDER_OPTIONS = ['Männlich', 'Weiblich', 'Divers', 'Nicht-Binär', 'Androgyn', 'Futanari', 'Unbekannt'];
 const BUILD_OPTIONS = ['Schlank', 'Sportlich', 'Muskulös', 'Kräftig', 'Zierlich', 'Drahtig', 'Kurvig', 'Stämmig', 'Hager', 'Unbekannt'];
 const CUP_SIZE_OPTIONS = ['-', 'AA', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
+const RANK_OPTIONS: (CharacterRank | string)[] = ['F', 'E', 'D', 'C', 'B', 'A', 'S'];
+const DEV_PROFILE_OPTIONS: { id: DevelopmentProfileType; label: string; desc: string }[] = [
+  { id: 'verySlow', label: 'Sehr langsam (0.5x)', desc: 'Harter, langsamer Fortschritt' },
+  { id: 'slow', label: 'Langsam (0.75x)', desc: 'Bedachter, anspruchsvoller Zuwachs' },
+  { id: 'normal', label: 'Normal (1.0x)', desc: 'Ausgewogenes Standard-Wachstum' },
+  { id: 'fast', label: 'Schnell (1.5x)', desc: 'Zügiges Entwicklungstempo' },
+  { id: 'veryFast', label: 'Sehr schnell (2.0x)', desc: 'Rasantes Potenzialwachstum' }
+];
 
 const TARGET_SECTIONS = [
   { id: 'all', label: 'Kompletter Charakter (Alle Bereiche)' },
-  { id: 'appearance', label: 'Statur & Erscheinung' },
+  { id: 'race_stats', label: '1. Rasse & Werte (Rasse, Rang, Level, Potenzial, Macht-Skala)' },
+  { id: 'appearance', label: '2. Statur & Erscheinung' },
   { id: 'personality', label: 'Persönlichkeit' },
   { id: 'bio', label: 'Vergangenheit / Biografie' },
   { id: 'situation', label: 'Aktuelle Situation' },
   { id: 'motivation', label: 'Motivationskern & Handlungsantrieb' },
   { id: 'goals', label: 'Ziele & Pläne' },
   { id: 'secrets', label: 'Geheimnis-Stufen (Verborgenes Wissen)' },
-  { id: 'relationships', label: 'Beziehungen' },
-  { id: 'combat', label: 'Kampffähigkeiten & Techniken' },
-  { id: 'professions', label: 'Berufe & Talente' },
-  { id: 'inventory', label: '5. Besitz & Inventar' }
+  { id: 'relationships', label: '3. Beziehungen' },
+  { id: 'combat', label: '4. Kampffähigkeiten & Techniken' },
+  { id: 'professions', label: '5. Berufe & Talente' },
+  { id: 'inventory', label: '6. Besitz & Inventar' }
 ];
 
 const toSafeString = (val: any): string => {
@@ -135,7 +148,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
   playerName,
   world
 }) => {
-  const [charTab, setCharTab] = useState<'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('profil');
+  const [charTab, setCharTab] = useState<'rasse_werte' | 'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar'>('rasse_werte');
   const [activeTransformationId, setActiveTransformationId] = useState<string>('standard');
   const [activePowerSourceIdx, setActivePowerSourceIdx] = useState<number>(0);
   const [activeAbilityTab, setActiveAbilityTab] = useState<string>('Techniken');
@@ -222,8 +235,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
   const getSmartFillPlaceholder = () => {
     switch (smartFillTargetSection) {
+      case 'race_stats':
+        return 'Beschreibe Rasse, Rassemerkmale, Rang, Level, Erfahrungspunkte, Potenzial, Kampagnen-Werte-Skala und individuelle Entwicklung...';
       case 'appearance':
-        return 'Beschreibe Statur, Größe, Körperform, Haare, Augen, Rassemerkmale, Kleidung und das visuelle Erscheinungsbild...';
+        return 'Beschreibe Statur, Größe, Körperform, Haare, Augen, Kleidung und das visuelle Erscheinungsbild...';
       case 'personality':
         return 'Beschreibe Wesenszüge, Temperament, Werte, Macken, Ängste, Vorlieben und den Charakter-Archetyp...';
       case 'bio':
@@ -889,7 +904,28 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
           let newDetails: any = { ...currentDetails };
 
-          if (smartFillTargetSection === 'appearance') {
+          if (smartFillTargetSection === 'race_stats') {
+            const nextRace = data.appearance?.race || data.race || currentDetails.race || 'Mensch';
+            const nextRaceFeatures = data.appearance?.raceFeatures || data.raceFeatures || currentDetails.raceFeatures || 'keine';
+            newDetails = {
+              ...currentDetails,
+              race: nextRace,
+              raceFeatures: nextRaceFeatures,
+              rank: data.rank || currentDetails.rank || 'F',
+              level: typeof data.level === 'number' ? data.level : (currentDetails.level ?? 1),
+              xp: typeof data.xp === 'number' ? data.xp : (currentDetails.xp ?? 0),
+              potential: typeof data.potential === 'number' ? data.potential : (currentDetails.potential ?? 100),
+              developmentProfile: data.developmentProfile || currentDetails.developmentProfile || 'normal',
+              rankUpRequirements: data.rankUpRequirements || currentDetails.rankUpRequirements || '',
+              campaignPowerLevels: data.campaignPowerLevels || data.campaignPowerData || currentDetails.campaignPowerLevels || currentDetails.campaignPowerData || {},
+              campaignPowerData: data.campaignPowerData || data.campaignPowerLevels || currentDetails.campaignPowerData || currentDetails.campaignPowerLevels || {},
+              appearance: {
+                ...(currentDetails.appearance || {}),
+                race: nextRace,
+                raceFeatures: nextRaceFeatures
+              }
+            };
+          } else if (smartFillTargetSection === 'appearance') {
             newDetails = {
               ...currentDetails,
               gender: data.appearance?.gender || currentDetails.gender || 'Unbekannt',
@@ -1262,8 +1298,10 @@ export const CharacterLoreForm: React.FC<Props> = ({
           };
         });
 
-        let targetTab: 'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar' = 'profil';
-        if (['appearance', 'personality', 'bio', 'situation', 'secrets'].includes(smartFillTargetSection)) {
+        let targetTab: 'rasse_werte' | 'profil' | 'beziehungen' | 'kampffaehigkeiten' | 'beruf_talente' | 'besitz_inventar' = 'rasse_werte';
+        if (smartFillTargetSection === 'race_stats') {
+          targetTab = 'rasse_werte';
+        } else if (['appearance', 'personality', 'bio', 'situation', 'secrets'].includes(smartFillTargetSection)) {
           targetTab = 'profil';
         } else if (['motivation', 'goals', 'relationships'].includes(smartFillTargetSection)) {
           targetTab = 'beziehungen';
@@ -1274,7 +1312,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
         } else if (smartFillTargetSection === 'inventory') {
           targetTab = 'besitz_inventar';
         } else {
-          targetTab = 'profil';
+          targetTab = 'rasse_werte';
         }
         setCharTab(targetTab);
       }
@@ -1663,32 +1701,45 @@ export const CharacterLoreForm: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* 5 Main Tabs */}
+      {/* 6 Main Tabs */}
       <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 gap-1 flex-wrap">
         <button
           type="button"
+          onClick={() => setCharTab('rasse_werte')}
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
+            charTab === 'rasse_werte'
+              ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
+          }`}
+        >
+          <i className="fa-solid fa-dna"></i>
+          <span>1. Rasse &amp; Werte</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => setCharTab('profil')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
             charTab === 'profil'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
           }`}
         >
           <i className="fa-solid fa-user-gear"></i>
-          <span>1. Profil &amp; Aussehen</span>
+          <span>2. Profil &amp; Aussehen</span>
         </button>
 
         <button
           type="button"
           onClick={() => setCharTab('beziehungen')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
             charTab === 'beziehungen'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
           }`}
         >
           <i className="fa-solid fa-people-arrows"></i>
-          <span>2. Beziehungen, Motivation &amp; Ziele</span>
+          <span>3. Beziehungen, Motivation &amp; Ziele</span>
           {(getRelationships().length > 0 || getGoals().length > 0) && (
             <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${charTab === 'beziehungen' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-400'}`}>
               {getRelationships().length + getGoals().length}
@@ -1699,40 +1750,40 @@ export const CharacterLoreForm: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => setCharTab('kampffaehigkeiten')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
             charTab === 'kampffaehigkeiten'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
           }`}
         >
           <i className="fa-solid fa-bolt"></i>
-          <span>3. Kampffähigkeiten</span>
+          <span>4. Kampffähigkeiten</span>
         </button>
 
         <button
           type="button"
           onClick={() => setCharTab('beruf_talente')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
             charTab === 'beruf_talente'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
           }`}
         >
           <i className="fa-solid fa-graduation-cap"></i>
-          <span>4. Berufe &amp; Talente</span>
+          <span>5. Berufe &amp; Talente</span>
         </button>
 
         <button
           type="button"
           onClick={() => setCharTab('besitz_inventar')}
-          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[140px] ${
+          className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer min-w-[130px] ${
             charTab === 'besitz_inventar'
               ? 'bg-amber-500 text-slate-950 shadow font-extrabold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/50'
           }`}
         >
           <i className="fa-solid fa-briefcase"></i>
-          <span>5. Besitz / Inventar</span>
+          <span>6. Besitz / Inventar</span>
           {((structuredInventory?.customItems?.length || 0) > 0 || (structuredInventory?.weapons?.length || 0) > 0) && (
             <span className={`px-1.5 py-0.2 text-[9px] rounded-full font-bold ${charTab === 'besitz_inventar' ? 'bg-slate-950 text-amber-500' : 'bg-slate-900 text-slate-400'}`}>
               {(structuredInventory?.customItems?.length || 0) + (structuredInventory?.weapons?.length || 0)}
@@ -1846,7 +1897,154 @@ export const CharacterLoreForm: React.FC<Props> = ({
         )}
       </div>
 
-      {/* TAB 1: PROFIL & AUSSEHEN */}
+      {/* TAB 1: RASSE & WERTE */}
+      {charTab === 'rasse_werte' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Gestalt / Form Switcher */}
+          <div className="bg-slate-900/90 border border-slate-700/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 ${activeTransformation ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'}`}>
+                <i className={`fa-solid ${activeTransformation ? 'fa-bolt' : 'fa-dna'}`}></i>
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-200 flex items-center gap-2 flex-wrap">
+                  <span>RASSE &amp; WERTE BEARBEITEN</span>
+                  {activeTransformation ? (
+                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded text-[10px] font-bold">
+                      AKTIV: {activeTransformation.transformName || activeTransformation.name}
+                    </span>
+                  ) : (
+                    <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded text-[10px] font-bold">
+                      STANDARDGESTALT
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {activeTransformation 
+                    ? `Du bearbeitest gerade Rasse & Werte für die aktive Form "${activeTransformation.transformName || activeTransformation.name}".`
+                    : 'Persönliche Rasse, Kampagnen-Werte-Skala und individuelle Entwicklungsdaten.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveTransformationId('standard')}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                  activeTransformationId === 'standard'
+                    ? 'bg-indigo-600 text-white shadow border border-indigo-400'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+                }`}
+              >
+                <i className="fa-solid fa-user text-[10px]"></i>
+                Standard
+              </button>
+
+              {charTransformations.map((t, idx) => (
+                <button
+                  key={t.id ? `transf-rw-${t.id}-${idx}` : `transf-rw-${idx}`}
+                  type="button"
+                  onClick={() => setActiveTransformationId(t.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                    activeTransformationId === t.id
+                      ? 'bg-amber-600 text-white shadow border border-amber-400'
+                      : 'bg-slate-800 text-amber-400 hover:bg-slate-700 border border-amber-500/30'
+                  }`}
+                >
+                  <i className="fa-solid fa-bolt text-[10px]"></i>
+                  {t.transformName || t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Rasse & Rassemerkmale */}
+          <div className="p-5 bg-slate-800/30 rounded-2xl border border-slate-700/80 space-y-4">
+            <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-700/50 pb-2">
+              <i className="fa-solid fa-dna text-amber-400"></i>
+              <span>Rasse &amp; Rassemerkmale {activeTransformation ? `(${activeTransformation.transformName || activeTransformation.name})` : ''}</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Rasse</label>
+                <AutoExpandingTextarea 
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500" 
+                  placeholder="z.B. Mensch, Dunkelelf, Tiefling, Kitsune" 
+                  value={getAppearanceValue('race')} 
+                  onChange={e => updateAppearanceValue('race', e.target.value)} 
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Die biologische oder magische Spezies des Charakters.</p>
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
+                  Rassemerkmale (Physische Besonderheiten)
+                </label>
+                <AutoExpandingTextarea 
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500" 
+                  placeholder="z.B. Spitze Ohren, Katzenohren, Schweif, Schuppen, Flügel, Hörner oder 'keine'" 
+                  value={getAppearanceValue('raceFeatures')} 
+                  onChange={e => updateAppearanceValue('raceFeatures', e.target.value)} 
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Physische Merkmale, tierische/dämonische Züge oder Besonderheiten.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Macht & Werte (Kampagnen-Skala) */}
+          <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800 space-y-3 shadow-inner">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-chart-pie text-amber-400"></i>
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                  Macht &amp; Werte (Kampagnen-Skala)
+                </h4>
+              </div>
+            </div>
+            <CharacterPowerRadar
+              worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings || EP_DEFAULT_PARAMETERS}
+              characterData={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
+              onChange={newData => {
+                updateMultipleDetails({
+                  campaignPowerData: newData,
+                  campaignPowerLevels: newData
+                });
+              }}
+            />
+          </div>
+
+          {/* Wiederverwendbare Progressions- & Wertekomponente */}
+          <IndividualProgressionEditor
+            progressionLogic={world?.techniqueProgressionLogic || 'ep'}
+            values={{
+              rank: getDetail('rank', 'F'),
+              level: getDetail('level', 1),
+              xp: getDetail('xp', 0),
+              experience: getDetail('experience', 0),
+              experiencePoints: getDetail('experiencePoints', 0),
+              experienceText: getDetail('experienceText', ''),
+              potential: getDetail('potential', 100),
+              potentialCap: getDetail('potentialCap', 1000),
+              enforcePotentialCap: getDetail('enforcePotentialCap', true),
+              developmentProfile: getDetail('developmentProfile', 'normal'),
+              rankUpRequirements: getDetail('rankUpRequirements', ''),
+              levelsPerRank: getDetail('levelsPerRank', 10),
+              resetLevelOnRankUp: getDetail('resetLevelOnRankUp', true),
+              autoRankUp: getDetail('autoRankUp', true),
+              minXpForRankUp: getDetail('minXpForRankUp', 0),
+              requiresMaxLevelForRankUp: getDetail('requiresMaxLevelForRankUp', true),
+              developmentRate: getDetail('developmentRate', undefined),
+              attributeGrowth: getDetail('attributeGrowth', undefined),
+              epRequirement: getDetail('epRequirement', undefined)
+            }}
+            onChange={updates => updateMultipleDetails(updates)}
+          />
+        </div>
+      )}
+
+      {/* TAB 2: PROFIL & AUSSEHEN */}
       {charTab === 'profil' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Porträts (Gesichtsausdrücke) */}
@@ -2264,16 +2462,6 @@ export const CharacterLoreForm: React.FC<Props> = ({
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Rasse</label>
-                <AutoExpandingTextarea 
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500" 
-                  placeholder="z.B. Mensch, Dunkelelf" 
-                  value={getAppearanceValue('race')} 
-                  onChange={e => updateAppearanceValue('race', e.target.value)} 
-                />
-              </div>
-
-              <div>
                 <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Herkunft</label>
                 <AutoExpandingTextarea 
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500" 
@@ -2464,19 +2652,6 @@ export const CharacterLoreForm: React.FC<Props> = ({
                   placeholder="z.B. Dunkle Lederrobe, metallbeschlagene Handschuhe, Kapuzenumhang..." 
                   value={getAppearanceValue('outfit')} 
                   onChange={e => updateAppearanceValue('outfit', e.target.value)} 
-                />
-              </div>
-
-              {/* Rassemerkmale */}
-              <div className="col-span-2 sm:col-span-3">
-                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
-                  Rassemerkmale (Nicht-menschliche physische Eigenschaften)
-                </label>
-                <AutoExpandingTextarea 
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs min-h-[40px] outline-none focus:border-amber-500" 
-                  placeholder="z.B. Spitze Ohren, Katzenohren, Schweif, Schuppen, Flügel oder 'keine'" 
-                  value={getAppearanceValue('raceFeatures')} 
-                  onChange={e => updateAppearanceValue('raceFeatures', e.target.value)} 
                 />
               </div>
             </div>
@@ -2775,33 +2950,13 @@ export const CharacterLoreForm: React.FC<Props> = ({
         </div>
       )}
 
-      {/* TAB 3: KAMPFFÄHIGKEITEN */}
+      {/* TAB 4: KAMPFFÄHIGKEITEN */}
       {charTab === 'kampffaehigkeiten' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <h4 className="text-sm font-bold text-slate-300">Fähigkeiten, Kräfte &amp; Kampfeinstufung</h4>
+              <h4 className="text-sm font-bold text-slate-300">Kräfte, Fähigkeiten &amp; Techniken-Hierarchie</h4>
             </div>
-
-            {/* Macht- & Kampfeinstufung (CharacterPowerRadar) */}
-            {worldPowerSettings && Object.keys(worldPowerSettings).length > 0 && (
-              <div className="bg-slate-900/40 p-4 rounded-xl border border-slate-800/80 space-y-3">
-                <div className="text-[11px] font-extrabold text-amber-500 uppercase tracking-widest flex items-center gap-1.5">
-                  <i className="fa-solid fa-chart-pie text-amber-400"></i>
-                  <span>Macht- &amp; Kampfeinstufung (Power-Level)</span>
-                </div>
-                <CharacterPowerRadar
-                  worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
-                  characterData={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
-                  onChange={newData => {
-                    updateMultipleDetails({
-                      campaignPowerData: newData,
-                      campaignPowerLevels: newData
-                    });
-                  }}
-                />
-              </div>
-            )}
 
             {/* Einheitliche Fähigkeiten- & Techniken-Hierarchie */}
             {(() => {

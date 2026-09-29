@@ -39,7 +39,7 @@ interface Props {
 const PRESET_LOGICS = [
   {
     name: "EP-basiert (Gegnerstärke)",
-    text: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du. Sehr schwache Gegner geben fast gar keine EP."
+    text: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben."
   },
   {
     name: "Nutzungsbasiert (Training)",
@@ -441,7 +441,7 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
       normalizedData[key] = {
         min: Math.floor(val * 0.4), // nehme 40% als startpunkt
         max: val,
-        levelUpLogic: "Standard EP-Verteilung (100 EP für Level-Up).",
+        levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt.",
         scaleMin: 0,
         scaleMax: 100,
         category: getAutoCategory(key)
@@ -450,7 +450,7 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
       normalizedData[key] = {
         min: typeof val.min === 'number' ? val.min : 10,
         max: typeof val.max === 'number' ? val.max : 100,
-        levelUpLogic: typeof val.levelUpLogic === 'string' ? val.levelUpLogic : "Immer genau 100 EP für ein Level-Up.",
+        levelUpLogic: typeof val.levelUpLogic === 'string' ? val.levelUpLogic : "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt.",
         scaleMin: typeof val.scaleMin === 'number' ? val.scaleMin : 0,
         scaleMax: typeof val.scaleMax === 'number' ? val.scaleMax : 100,
         category: val.category || getAutoCategory(key)
@@ -733,7 +733,7 @@ const getAutoCategory = (name: string): 'physical' | 'supernatural' => {
           max: currentScaleMax,
           scaleMin: currentScaleMin,
           scaleMax: currentScaleMax,
-          levelUpLogic: "Immer genau 100 EP für ein Level-Up. Je stärker dein Gegner im Kampf ist, desto mehr EP erhältst du.",
+          levelUpLogic: "Der benötigte EP-Wert wird durch die zentrale Progressionskonfiguration bestimmt. Je anspruchsvoller die Herausforderung, desto mehr EP werden vergeben.",
           category: getAutoCategory(trimmed)
         }
       };

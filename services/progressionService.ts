@@ -59,13 +59,53 @@ export const DEFAULT_DEVELOPMENT_PROFILES: Record<DevelopmentProfileType, Develo
     epRequirementMultiplier: 0.7,
     attributeGrowthMultiplier: 1.5
   },
-  custom: {
+    custom: {
     name: 'custom',
     label: 'Individuell',
     description: 'Frei definierte Multiplikatoren und Entwicklungswerte.',
     epGainMultiplier: 1.0,
     epRequirementMultiplier: 1.0,
     attributeGrowthMultiplier: 1.0
+  },
+  balanced: {
+    name: 'balanced',
+    label: 'Ausgewogen (Standard)',
+    description: 'Standardmäßiges, ausgewogenes Entwicklungstempo.',
+    epGainMultiplier: 1.0,
+    epRequirementMultiplier: 1.0,
+    attributeGrowthMultiplier: 1.0
+  },
+  fast_start: {
+    name: 'fast_start',
+    label: 'Schneller Einstieg / Frühblüher',
+    description: 'Schneller anfänglicher Fortschritt.',
+    epGainMultiplier: 1.5,
+    epRequirementMultiplier: 0.85,
+    attributeGrowthMultiplier: 1.25
+  },
+  focused: {
+    name: 'focused',
+    label: 'Fokussiert / Spezialist',
+    description: 'Gezielte, konzentrierte Werteentwicklung.',
+    epGainMultiplier: 1.25,
+    epRequirementMultiplier: 1.0,
+    attributeGrowthMultiplier: 1.25
+  },
+  late_bloomer: {
+    name: 'late_bloomer',
+    label: 'Spätentwickler (Hohes Potenzial)',
+    description: 'Langsamerer Anfang mit gewaltigem Endgame-Potenzial.',
+    epGainMultiplier: 0.8,
+    epRequirementMultiplier: 1.2,
+    attributeGrowthMultiplier: 1.5
+  },
+  slow_growth: {
+    name: 'slow_growth',
+    label: 'Langsames Wachstum',
+    description: 'Gleichmäßiges, anspruchsvolles Entwicklungstempo.',
+    epGainMultiplier: 0.7,
+    epRequirementMultiplier: 1.3,
+    attributeGrowthMultiplier: 0.8
   }
 };
 
@@ -76,11 +116,14 @@ export const DEFAULT_PROGRESSION_CONFIG: ProgressionConfig = {
   rankSystem: {
     enabled: true,
     ranks: [...STANDARD_RANKS],
+    startRank: 'F',
+    autoRankUp: true,
     requiresMaxLevelForRankUp: true,
     minXpForRankUp: 0
   },
   levelSystem: {
     enabled: true,
+    startLevel: 1,
     levelsPerRank: 10,
     maxLevel: 100,
     resetLevelOnRankUp: true
@@ -103,7 +146,9 @@ export const DEFAULT_PROGRESSION_CONFIG: ProgressionConfig = {
     baseGrowthPerLevel: 2,
     maxAttributeValue: 1000,
     minAttributeValue: 0,
-    enforcePotentialCap: true
+    enforcePotentialCap: true,
+    potentialCap: 1000,
+    allowIndividualPotentialVariance: true
   },
   developmentProfiles: DEFAULT_DEVELOPMENT_PROFILES,
   activeProfile: 'normal'
@@ -543,7 +588,7 @@ export class ProgressionService {
       rank,
       rankIndex,
       developmentProfile: profile,
-      potential: char.potential ?? existingProg.potential ?? 1000,
+      potential: typeof char.potential === 'number' ? char.potential : (typeof char.potential === 'string' ? parseFloat(char.potential) || 1000 : (existingProg.potential ?? 1000)),
       progressionLogic: existingProg.progressionLogic || 'ep'
     };
   }

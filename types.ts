@@ -1,5 +1,6 @@
 
 export type SmartFillSection =
+  | 'race_stats'
   | 'profile'
   | 'relationships'
   | 'abilities'
@@ -386,6 +387,45 @@ export interface UserProfile {
   preferredRole: string;
   personalityArchetype?: string;
   personalityTraits?: PersonalityTraits;
+  race?: string;
+  raceFeatures?: string;
+  rank?: CharacterRank | string;
+  level?: number;
+  xp?: number;
+  experience?: number;
+  experiencePoints?: number;
+  experienceText?: string;
+  potential?: number | string;
+  potentialCap?: number;
+  enforcePotentialCap?: boolean;
+  developmentProfile?: DevelopmentProfileType;
+  rankUpRequirements?: string;
+  levelsPerRank?: number;
+  resetLevelOnRankUp?: boolean;
+  autoRankUp?: boolean;
+  minXpForRankUp?: number;
+  requiresMaxLevelForRankUp?: boolean;
+  developmentRate?: {
+    epGainMultiplier?: number;
+    epRequirementMultiplier?: number;
+    attributeGrowthMultiplier?: number;
+  };
+  attributeGrowth?: {
+    baseGrowthPerLevel?: number;
+    minAttributeValue?: number;
+    maxAttributeValue?: number;
+    enforcePotentialCap?: boolean;
+    potentialCap?: number;
+  };
+  epRequirement?: {
+    requirementMode?: EpRequirementMode;
+    baseRequirement?: number;
+    levelGrowth?: number;
+    rankGrowth?: number;
+    maxRequirement?: number;
+  };
+  campaignPowerLevels?: Record<string, { value: number; potentialMax: number; xp?: number }>;
+  campaignPowerData?: Record<string, number | CampaignPowerParameter>;
   appearance: {
     gender: string;
     age: string;
@@ -397,6 +437,7 @@ export interface UserProfile {
     eyeColorRight?: string;
     cupSize: string;
     personalityArchetype?: string;
+    race?: string;
     raceFeatures?: string;
     height?: string;
     measurements?: string;
@@ -421,7 +462,12 @@ export type DevelopmentProfileType =
   | 'normal'
   | 'fast'
   | 'veryFast'
-  | 'custom';
+  | 'custom'
+  | 'balanced'
+  | 'fast_start'
+  | 'focused'
+  | 'late_bloomer'
+  | 'slow_growth';
 
 export interface DevelopmentProfile {
   name: DevelopmentProfileType;
@@ -437,12 +483,15 @@ export type EpRequirementMode = 'fixed' | 'level_growth' | 'level_and_rank_growt
 export interface RankSystemConfig {
   enabled: boolean;
   ranks: (CharacterRank | string)[];
+  startRank?: CharacterRank | string;
+  autoRankUp?: boolean;
   requiresMaxLevelForRankUp: boolean;
   minXpForRankUp?: number;
 }
 
 export interface LevelSystemConfig {
   enabled: boolean;
+  startLevel?: number;
   levelsPerRank: number;
   maxLevel: number;
   resetLevelOnRankUp: boolean;
@@ -469,6 +518,8 @@ export interface AttributeProgressionConfig {
   maxAttributeValue: number;
   minAttributeValue: number;
   enforcePotentialCap: boolean;
+  potentialCap?: number;
+  allowIndividualPotentialVariance?: boolean;
 }
 
 export interface ProgressionConfig {
@@ -1632,10 +1683,44 @@ export interface Character {
   characterTechniques?: CharacterTechnique[];
   powerForms?: CharacterPowerForm[];
   campaignPowerLevels?: Record<string, { value: number; potentialMax: number; xp?: number }>;
+  race?: string;
+  raceFeatures?: string;
   rank?: CharacterRank | string;
-  progression?: ProgressionState;
+  level?: number;
+  xp?: number;
+  experience?: number;
+  experiencePoints?: number;
+  experienceText?: string;
+  potential?: number | string;
+  potentialCap?: number;
+  enforcePotentialCap?: boolean;
   developmentProfile?: DevelopmentProfileType;
-  potential?: number;
+  rankUpRequirements?: string;
+  levelsPerRank?: number;
+  resetLevelOnRankUp?: boolean;
+  autoRankUp?: boolean;
+  minXpForRankUp?: number;
+  requiresMaxLevelForRankUp?: boolean;
+  developmentRate?: {
+    epGainMultiplier?: number;
+    epRequirementMultiplier?: number;
+    attributeGrowthMultiplier?: number;
+  };
+  attributeGrowth?: {
+    baseGrowthPerLevel?: number;
+    minAttributeValue?: number;
+    maxAttributeValue?: number;
+    enforcePotentialCap?: boolean;
+    potentialCap?: number;
+  };
+  epRequirement?: {
+    requirementMode?: EpRequirementMode;
+    baseRequirement?: number;
+    levelGrowth?: number;
+    rankGrowth?: number;
+    maxRequirement?: number;
+  };
+  progression?: ProgressionState;
   relationship?: string;
   conduct?: string;
   relationships?: CharacterRelationship[];

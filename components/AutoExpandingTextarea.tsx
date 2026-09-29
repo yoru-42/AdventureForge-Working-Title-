@@ -40,4 +40,5 @@ const AutoExpandingTextarea = forwardRef<HTMLTextAreaElement, Props>(({ value, m
 
 AutoExpandingTextarea.displayName = 'AutoExpandingTextarea';
 
+export { AutoExpandingTextarea };
 export default AutoExpandingTextarea;
