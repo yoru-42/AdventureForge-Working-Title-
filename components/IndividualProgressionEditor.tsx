@@ -60,7 +60,7 @@ export interface IndividualProgressionValues {
 }
 
 interface IndividualProgressionEditorProps {
-  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static';
+  progressionLogic?: 'ep' | 'training' | 'milestone' | 'static' | string;
   values: IndividualProgressionValues;
   onChange: (updated: Partial<IndividualProgressionValues>) => void;
   title?: string;
@@ -71,8 +71,8 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
   progressionLogic = 'ep',
   values,
   onChange,
-  title = 'Individuelle Progressions- & Entwicklungslogik',
-  subtitle = 'Definiert die persönlichen Steigerungsraten, Entwicklungsgeschwindigkeiten und Potenzialgrenzen dieses Charakters.'
+  title = 'Individuelle Progression & Entwicklung',
+  subtitle = 'Definiert die persönlichen Steigerungsraten, Entwicklungsgeschwindigkeiten und Potenzialgrenzen.'
 }) => {
   const isEpLogic = progressionLogic === 'ep';
 
@@ -624,19 +624,48 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  EP-Fortschrittsanzeige
+                  Maximale EP-Anforderung
                 </label>
                 <input
-                  type="text"
-                  value={currentXpText}
-                  onChange={e => onChange({ experienceText: e.target.value })}
-                  placeholder="0 / 100 EP"
+                  type="number"
+                  min={1}
+                  value={maxReq}
+                  onChange={e => {
+                    const val = Math.max(1, parseInt(e.target.value) || 50000);
+                    onChange({
+                      epRequirement: {
+                        requirementMode: reqMode,
+                        baseRequirement: baseReq,
+                        levelGrowth,
+                        rankGrowth,
+                        maxRequirement: val
+                      }
+                    });
+                  }}
+                  placeholder="50000"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 shadow-inner"
                 />
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
-                  Individueller Text im Profil/HUD
+                  Obergrenze für den EP-Bedarf
                 </span>
               </div>
+            </div>
+
+            {/* HUD / Anzeige Freitext */}
+            <div className="pt-2 border-t border-slate-800/60 max-w-md">
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                EP-Fortschrittsanzeige (HUD / Profiltext)
+              </label>
+              <input
+                type="text"
+                value={currentXpText}
+                onChange={e => onChange({ experienceText: e.target.value })}
+                placeholder="0 / 100 EP"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 shadow-inner"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                Individueller Text im Profil/HUD (z.B. {currentXp} / {baseReq} EP)
+              </span>
             </div>
           </div>
         </div>
@@ -663,7 +692,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-amber-400" />
             <h4 className="text-sm font-bold text-amber-400 uppercase tracking-wide">
-              Individueller EP-Gewinn / Wachstumsrate
+              EP-Gewinn
             </h4>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -703,25 +732,49 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
           </div>
         </div>
 
-        <div className="max-w-xs pt-1">
-          <label className="block text-xs font-semibold text-slate-300 mb-1">
+        <div className="space-y-2 pt-1">
+          <label className="block text-xs font-semibold text-slate-300">
             EP-Gewinn-Multiplikator
           </label>
-          <input
-            type="number"
-            step="0.05"
-            min={0.1}
-            max={10.0}
-            value={epGainMult}
-            onChange={e => {
-              const val = Math.max(0.1, parseFloat(e.target.value) || 1.0);
-              handleEpGainChange(val);
-            }}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 shadow-inner"
-          />
-          <span className="text-[10px] text-slate-400 mt-0.5 block">
-            Faktor auf erhaltene Erfahrungspunkte / Zuwachs
-          </span>
+          
+          {/* Quick-Preset Buttons for Multipliers */}
+          <div className="flex flex-wrap gap-2 mb-2">
+            {[0.25, 0.5, 1.0, 1.5, 2.0].map(multiplier => {
+              const isMatch = Math.abs(epGainMult - multiplier) < 0.01;
+              return (
+                <button
+                  key={`ep-gain-mult-btn-${multiplier}`}
+                  type="button"
+                  onClick={() => handleEpGainChange(multiplier)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                    isMatch
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-bold'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  }`}
+                >
+                  {multiplier.toFixed(2)}×
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="max-w-xs">
+            <input
+              type="number"
+              step="0.05"
+              min={0.1}
+              max={10.0}
+              value={epGainMult}
+              onChange={e => {
+                const val = Math.max(0.1, parseFloat(e.target.value) || 1.0);
+                handleEpGainChange(val);
+              }}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 shadow-inner"
+            />
+            <span className="text-[10px] text-slate-400 mt-0.5 block">
+              Faktor auf erhaltene Erfahrungspunkte / Zuwachs
+            </span>
+          </div>
         </div>
       </div>
 
@@ -731,11 +784,11 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
           <div className="flex items-center gap-2">
             <Sliders className="w-4 h-4 text-amber-400" />
             <h4 className="text-sm font-bold text-amber-400 uppercase tracking-wide">
-              Individuelles Entwicklungs-Tempo
+              Entwicklungs-Tempo
             </h4>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Bestimmt unabhängig von der weltweiten Grundregel, wie dynamisch sich dieser spezifische Charakter entwickelt.
+            Das Entwicklungs-Tempo bestimmt unabhängig von der weltweiten Grundregel, wie dynamisch sich dieser spezifische Charakter entwickelt.
           </p>
         </div>
 
@@ -811,18 +864,18 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-amber-400" />
             <h4 className="text-sm font-bold text-amber-400 uppercase tracking-wide">
-              Individuelle Werte-/Attributsteigerung
+              Werte-/Attributsteigerung
             </h4>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Legt fest, wie stark Attribute bei Steigerungen und Aufstiegen wachsen.
+            Legt fest, was bei einem erfolgreichen Levelaufstieg bzw. Trainingsfortschritt passiert.
           </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Wertsteigerung pro Stufe / Training
+              Wertsteigerung pro Level
             </label>
             <input
               type="number"
@@ -844,7 +897,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 shadow-inner"
             />
             <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Basis-Attributzuwachs
+              Basis-Attributzuwachs pro Stufe
             </span>
           </div>
 
@@ -900,7 +953,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 shadow-inner"
             />
             <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Absolute Obergrenze
+              Absolute Obergrenze für Attribute
             </span>
           </div>
 
@@ -967,18 +1020,18 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-amber-400" />
             <h4 className="text-sm font-bold text-amber-400 uppercase tracking-wide">
-              Individuelles Potenzial
+              Potenzial
             </h4>
           </div>
           <p className="text-xs text-slate-400 mt-0.5">
-            Begrenzt oder definiert die absolute Maximalstufe und das Talentlevel dieses Charakters.
+            Das Potenzial begrenzt, wie weit sich dieser Charakter innerhalb des Systems entwickeln kann.
           </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Potenzial aktiv begrenzen
+              Potenzial berücksichtigen
             </label>
             <div className="flex gap-2">
               <button
@@ -1027,13 +1080,13 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
               </button>
             </div>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Aktive Kappe bei Maximalwert
+              Aktive Begrenzung durch Potenzial
             </span>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Numerische Potenzialgrenze
+              Potenzialgrenze
             </label>
             <input
               type="number"
@@ -1057,7 +1110,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 shadow-inner"
             />
             <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Maximal erreichbarer Attributswert
+              Individuelle Potenzialobergrenze
             </span>
           </div>
 
@@ -1081,4 +1134,5 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
     </div>
   );
 };
+
 export default IndividualProgressionEditor;

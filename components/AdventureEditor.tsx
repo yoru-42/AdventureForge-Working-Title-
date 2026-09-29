@@ -44,6 +44,7 @@ import {
   createEpDefaultWorldSettings
 } from '../lib/progressionDefaults';
 import { ProgressionSettingSection } from './ProgressionSettingSection';
+import { IndividualProgressionEditor } from './IndividualProgressionEditor';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { createStandardLoreEntries } from '../lib/standardItemsData';
@@ -4179,116 +4180,32 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </div>
                   )}
 
-                  {/* Individuelle Progression & Entwicklungsdaten */}
-                  <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800/80 space-y-4">
-                    <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
-                      <i className="fa-solid fa-arrow-trend-up text-amber-400"></i>
-                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                        Individuelle Progression &amp; Entwicklung
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Aktueller Rang
-                        </label>
-                        <select
-                          value={player.rank || 'F'}
-                          onChange={e => setPlayer(prev => ({ ...prev, rank: e.target.value as CharacterRank }))}
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 font-semibold cursor-pointer"
-                        >
-                          {RANK_OPTIONS.map(r => (
-                            <option key={r} value={r}>Rang {r}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Aktuelles Level
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={999}
-                          value={player.level !== undefined ? player.level : 1}
-                          onChange={e => setPlayer(prev => ({ ...prev, level: parseInt(e.target.value) || 1 }))}
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 font-semibold shadow-inner"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Individuelle Erfahrungspunkte (EP)
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={player.experiencePoints !== undefined ? player.experiencePoints : (typeof player.experience === 'number' ? player.experience : 0)}
-                          onChange={e => {
-                            const val = parseInt(e.target.value) || 0;
-                            setPlayer(prev => ({ ...prev, experiencePoints: val, experience: val }));
-                          }}
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 shadow-inner"
-                          placeholder="z.B. 0"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          EP-Anforderung / Fortschritt
-                        </label>
-                        <input
-                          type="text"
-                          value={player.experienceText || '0 / 100 EP'}
-                          onChange={e => setPlayer(prev => ({ ...prev, experienceText: e.target.value }))}
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 shadow-inner"
-                          placeholder="z.B. 0 / 100 EP oder 25%"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Individuelles Potenzial (Max-Grenze)
-                        </label>
-                        <input
-                          type="text"
-                          value={player.potential || 'Rang A (Hoch)'}
-                          onChange={e => setPlayer(prev => ({ ...prev, potential: e.target.value }))}
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 shadow-inner"
-                          placeholder="z.B. Rang SSS (Grenzenlos), Rang A (Hoch)..."
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Individuelles Entwicklungstempo
-                        </label>
-                        <select
-                          value={player.developmentProfile || 'balanced'}
-                          onChange={e => setPlayer(prev => ({ ...prev, developmentProfile: e.target.value as DevelopmentProfileType }))}
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 font-semibold cursor-pointer"
-                        >
-                          {DEV_PROFILE_OPTIONS.map(d => (
-                            <option key={d.value} value={d.value}>{d.label}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5 sm:col-span-2 md:col-span-3">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Voraussetzungen für den nächsten Rang / Levelanzahl pro Rang
-                        </label>
-                        <AutoExpandingTextarea
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
-                          placeholder="z.B. Erreichen von Level 10 + Bestehen der Abenteurer-Prüfung in der Hauptstadt..."
-                          value={player.rankUpRequirements || ''}
-                          onChange={e => setPlayer(prev => ({ ...prev, rankUpRequirements: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  {/* Wiederverwendbare Progressions- & Wertekomponente */}
+                  <IndividualProgressionEditor
+                    progressionLogic={world.techniqueProgressionLogic || 'ep'}
+                    values={{
+                      rank: player.rank,
+                      level: player.level,
+                      xp: player.xp,
+                      experience: player.experience,
+                      experiencePoints: player.experiencePoints,
+                      experienceText: player.experienceText,
+                      potential: player.potential,
+                      potentialCap: player.potentialCap,
+                      enforcePotentialCap: player.enforcePotentialCap,
+                      developmentProfile: player.developmentProfile,
+                      rankUpRequirements: player.rankUpRequirements,
+                      levelsPerRank: player.levelsPerRank,
+                      resetLevelOnRankUp: player.resetLevelOnRankUp,
+                      autoRankUp: player.autoRankUp,
+                      minXpForRankUp: player.minXpForRankUp,
+                      requiresMaxLevelForRankUp: player.requiresMaxLevelForRankUp,
+                      developmentRate: player.developmentRate,
+                      attributeGrowth: player.attributeGrowth,
+                      epRequirement: player.epRequirement
+                    }}
+                    onChange={updates => setPlayer(prev => ({ ...prev, ...updates }))}
+                  />
                 </div>
               )}
 
