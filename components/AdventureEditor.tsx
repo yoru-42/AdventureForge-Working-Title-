@@ -4175,6 +4175,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       <CharacterPowerRadar 
                         worldPowerSettings={world.campaignPowerSettings}
                         characterData={player.campaignPowerLevels}
+                        world={world}
+                        title="Macht & Werte"
                         onChange={(newData) => setPlayer({ ...player, campaignPowerLevels: newData })}
                       />
                     </div>

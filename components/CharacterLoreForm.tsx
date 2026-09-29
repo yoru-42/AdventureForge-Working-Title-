@@ -2006,6 +2006,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
             <CharacterPowerRadar
               worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings || EP_DEFAULT_PARAMETERS}
               characterData={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
+              world={world}
+              title="Macht & Werte"
               onChange={newData => {
                 updateMultipleDetails({
                   campaignPowerData: newData,
