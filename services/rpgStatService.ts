@@ -21,6 +21,15 @@ export interface CharacterPowerData {
   };
 }
 
+export const STANDARD_PARAMETERS = [
+  'Stärke',
+  'Geschicklichkeit',
+  'Konstitution',
+  'Intelligenz',
+  'Willenskraft',
+  'Magie'
+];
+
 export interface DerivedCombatProperty {
   id: string;
   label: string;
@@ -84,7 +93,35 @@ export function calculateRpgCharacterStats(
     }
   });
 
-  const categories = Object.keys(globalSettings);
+  // Ensure the 6 standard parameters are always in globalSettings
+  STANDARD_PARAMETERS.forEach(pName => {
+    if (!globalSettings[pName]) {
+      globalSettings[pName] = {
+        min: 10,
+        max: 1000,
+        levelUpLogic: '',
+        scaleMin: 0,
+        scaleMax: 1000
+      };
+    }
+  });
+
+  // Also include any extra keys present in campaignPowerLevels
+  Object.keys(campaignPowerLevels).forEach(k => {
+    if (!globalSettings[k]) {
+      globalSettings[k] = {
+        min: 10,
+        max: 1000,
+        levelUpLogic: '',
+        scaleMin: 0,
+        scaleMax: 1000
+      };
+    }
+  });
+
+  // Build categories with STANDARD_PARAMETERS first, followed by remaining keys
+  const remainingKeys = Object.keys(globalSettings).filter(k => !STANDARD_PARAMETERS.includes(k));
+  const categories = [...STANDARD_PARAMETERS, ...remainingKeys];
 
   const statAllocations: CustomStatAllocation[] =
     world?.customStatAllocations && world.customStatAllocations.length > 0

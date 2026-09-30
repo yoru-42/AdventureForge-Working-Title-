@@ -5,7 +5,7 @@ import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '
 import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
-import { Dna, BarChart3, Layers, Sliders, Plus, Minus, RotateCcw, Shield } from 'lucide-react';
+import { Dna, Layers, Sliders, Shield } from 'lucide-react';
 
 export interface CharacterRaceAndStatsSectionProps {
   race: string;
@@ -140,17 +140,14 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   // Level bis Rangaufstieg calculation
   const levelsUntilRankUp = Math.max(0, currentLevelsPerRank - (((safeLevel - 1) % currentLevelsPerRank) + 1));
 
-  // Parameter List
+  // Parameter List: Standard parameters are always included, plus any custom parameters
   const parameterList = useMemo(() => {
-    const keys = new Set<string>();
+    const keys = new Set<string>(STANDARD_PARAMETERS);
     if (worldPowerSettings && typeof worldPowerSettings === 'object') {
       Object.keys(worldPowerSettings).forEach(k => keys.add(k));
     }
     if (characterPowerData && typeof characterPowerData === 'object') {
       Object.keys(characterPowerData).forEach(k => keys.add(k));
-    }
-    if (keys.size === 0) {
-      STANDARD_PARAMETERS.forEach(k => keys.add(k));
     }
     return Array.from(keys);
   }, [worldPowerSettings, characterPowerData]);
@@ -161,7 +158,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     ? rawBaseGrowth
     : 2;
 
-  // Total Budget pro Level (freely adjustable, fallback to parameter count * base growth)
+  // Total Budget pro Level
   const defaultBudget = parameterList.length * baseGrowthPerParam;
   const rawDevPoints = typeof developmentPointsPerLevel === 'number' && !isNaN(developmentPointsPerLevel)
     ? developmentPointsPerLevel
@@ -170,114 +167,43 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     ? rawDevPoints
     : defaultBudget;
 
-  // Allocated points per parameter
-  const allocatedPoints: Record<string, number> = useMemo(() => {
-    const result: Record<string, number> = {};
-    parameterList.forEach(paramName => {
-      const pPoints = parameterGrowthPoints?.[paramName];
-      const pFactors = parameterGrowthFactors?.[paramName];
-      if (typeof pPoints === 'number' && !isNaN(pPoints)) {
-        result[paramName] = Math.max(0, pPoints);
-      } else if (typeof pFactors === 'number' && !isNaN(pFactors)) {
-        result[paramName] = Math.max(0, Math.round(pFactors * baseGrowthPerParam));
-      } else {
-        result[paramName] = baseGrowthPerParam;
-      }
-    });
-    return result;
-  }, [parameterList, parameterGrowthPoints, parameterGrowthFactors, baseGrowthPerParam]);
-
-  const totalSpent = useMemo(() => {
-    return Object.values(allocatedPoints).reduce((sum, val) => sum + (typeof val === 'number' && !isNaN(val) ? val : 0), 0);
-  }, [allocatedPoints]);
-
-  const remainingBudget = currentBudget - totalSpent;
-
-  // Initialize fresh character Level 1 base parameters if not yet present
+  // Initialize and ensure all standard parameters exist without overwriting existing character data
   useEffect(() => {
-    if (!characterPowerData || Object.keys(characterPowerData).length === 0) {
-      const initialPowerData: Record<string, { value: number; potentialMax: number }> = {};
-      parameterList.forEach(paramName => {
+    const currentData = characterPowerData || {};
+    let needsUpdate = false;
+    const updatedPowerData: Record<string, { value: number; potentialMax: number }> = {};
+
+    parameterList.forEach(paramName => {
+      const existing = currentData[paramName];
+      if (existing !== undefined && existing !== null) {
+        if (typeof existing === 'number') {
+          updatedPowerData[paramName] = {
+            value: !isNaN(existing) ? existing : (baseParams[paramName] ?? 10),
+            potentialMax: 1000
+          };
+          needsUpdate = true;
+        } else if (typeof existing === 'object') {
+          const val = typeof existing.value === 'number' && !isNaN(existing.value)
+            ? existing.value
+            : (baseParams[paramName] ?? 10);
+          const pMax = typeof existing.potentialMax === 'number' && !isNaN(existing.potentialMax)
+            ? existing.potentialMax
+            : 1000;
+          updatedPowerData[paramName] = { value: val, potentialMax: pMax };
+        }
+      } else {
         const startVal = typeof baseParams[paramName] === 'number' && !isNaN(baseParams[paramName])
           ? baseParams[paramName]
           : 10;
-        initialPowerData[paramName] = { value: startVal, potentialMax: 1000 };
-      });
-      onCharacterPowerDataChange(initialPowerData);
+        updatedPowerData[paramName] = { value: startVal, potentialMax: 1000 };
+        needsUpdate = true;
+      }
+    });
+
+    if (needsUpdate || Object.keys(currentData).length === 0) {
+      onCharacterPowerDataChange(updatedPowerData);
     }
   }, [characterPowerData, parameterList, baseParams, onCharacterPowerDataChange]);
-
-  // Point adjustment handlers
-  const handlePointChange = (paramName: string, delta: number) => {
-    const current = allocatedPoints[paramName] ?? baseGrowthPerParam;
-    const nextVal = current + delta;
-    if (nextVal < 0) return;
-
-    if (delta > 0 && remainingBudget < delta) {
-      return;
-    }
-
-    const nextPoints = { ...allocatedPoints, [paramName]: nextVal };
-    onParameterGrowthPointsChange?.(nextPoints);
-
-    // Keep factors in sync for central calculation
-    const nextFactors: Record<string, number> = { ...(parameterGrowthFactors || {}) };
-    parameterList.forEach(p => {
-      const pts = nextPoints[p] ?? baseGrowthPerParam;
-      nextFactors[p] = baseGrowthPerParam > 0 ? pts / baseGrowthPerParam : 1.0;
-    });
-    onParameterGrowthFactorsChange?.(nextFactors);
-  };
-
-  const handlePointDirectInput = (paramName: string, value: number) => {
-    const validVal = isNaN(value) ? 0 : Math.max(0, value);
-    const nextPoints = { ...allocatedPoints, [paramName]: validVal };
-    onParameterGrowthPointsChange?.(nextPoints);
-
-    const nextFactors: Record<string, number> = { ...(parameterGrowthFactors || {}) };
-    parameterList.forEach(p => {
-      const pts = nextPoints[p] ?? baseGrowthPerParam;
-      nextFactors[p] = baseGrowthPerParam > 0 ? pts / baseGrowthPerParam : 1.0;
-    });
-    onParameterGrowthFactorsChange?.(nextFactors);
-  };
-
-  const handleResetToEvenBudget = () => {
-    const count = parameterList.length;
-    if (count === 0) return;
-
-    const basePerItem = Math.floor(currentBudget / count);
-    const remainder = currentBudget % count;
-
-    const nextPoints: Record<string, number> = {};
-    const nextFactors: Record<string, number> = {};
-
-    parameterList.forEach((p, idx) => {
-      const pts = basePerItem + (idx < remainder ? 1 : 0);
-      nextPoints[p] = pts;
-      nextFactors[p] = baseGrowthPerParam > 0 ? pts / baseGrowthPerParam : 1.0;
-    });
-
-    onParameterGrowthPointsChange?.(nextPoints);
-    onParameterGrowthFactorsChange?.(nextFactors);
-  };
-
-  const handleCurrentValueChange = (paramName: string, newVal: number) => {
-    const currentEntry = characterPowerData?.[paramName];
-    const potMax = typeof currentEntry === 'object' && currentEntry !== null && typeof currentEntry.potentialMax === 'number' && !isNaN(currentEntry.potentialMax)
-      ? currentEntry.potentialMax
-      : 1000;
-
-    const safeVal = isNaN(newVal) ? 0 : Math.max(0, newVal);
-    const updated = {
-      ...characterPowerData,
-      [paramName]: {
-        value: safeVal,
-        potentialMax: potMax
-      }
-    };
-    onCharacterPowerDataChange(updated);
-  };
 
   return (
     <div className="space-y-6">
@@ -345,7 +271,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         </div>
       </div>
 
-      {/* 2. PROGRESSION */}
+      {/* 2. PROGRESSION & ENTWICKLUNG */}
       <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
         <div className="flex items-center gap-2 border-b border-slate-800 pb-2.5">
           <Layers className="w-4 h-4 text-amber-400" />
@@ -452,48 +378,17 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           </div>
         </div>
 
-        {/* EP-Fortschrittsbalken */}
-        <div className="pt-2 border-t border-slate-800/60 space-y-1.5">
-          <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-slate-400 text-[11px]">Fortschritt zur nächsten Stufe</span>
-            <span className="font-bold text-amber-300 text-xs">
-              {safeXp} <span className="text-slate-500 font-normal">/ {xpNeeded} EP</span>
-              <span className="ml-2 text-slate-400 font-normal text-[10px]">({progressPercent}%)</span>
-            </span>
-          </div>
-          <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80 p-0.5">
-            <div
-              className="h-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 rounded-full transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-500">
-            <span>Aktuelle Stufe: {safeLevel}</span>
-            <span>
-              {xpNeeded > safeXp ? `Noch ${xpNeeded - safeXp} EP bis Stufe ${safeLevel + 1}` : 'Stufe aufstiegsbereit'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. ENTWICKLUNG & BUDGET */}
-      <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-2.5">
-          <Sliders className="w-4 h-4 text-amber-400" />
-          <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-            Entwicklung
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Entwicklungsprofil, Entwicklungsrate & Rangbonus */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-xl">
           <div>
-            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-              Entwicklungsprofil
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-amber-400" />
+              <span>Entwicklungsprofil</span>
             </label>
             <select
               value={activeProfileKey}
               onChange={e => onDevelopmentProfileChange?.(e.target.value as DevelopmentProfileType)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
             >
               {PROFILE_OPTIONS.map(opt => (
                 <option key={opt.value} value={opt.value}>
@@ -518,7 +413,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                   const val = parseInt(e.target.value) || 100;
                   onDevelopmentRateChange?.(val / 100);
                 }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
               />
               <span className="text-xs text-slate-300 font-mono font-bold shrink-0">%</span>
             </div>
@@ -539,176 +434,38 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                   const val = Math.max(0, parseInt(e.target.value) || 0);
                   onRankGrowthBonusChange?.(val);
                 }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
               />
               <span className="text-xs text-slate-300 font-mono font-bold shrink-0">+{rankBonusValue} %</span>
             </div>
           </div>
+        </div>
 
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-              Entwicklungspunkte pro Level
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                max={500}
-                value={currentBudget}
-                onChange={e => {
-                  const val = Math.max(0, parseInt(e.target.value) || 0);
-                  onDevelopmentPointsPerLevelChange?.(val);
-                }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-amber-300 focus:outline-none focus:border-amber-500 font-mono font-bold"
-              />
-              <button
-                type="button"
-                onClick={handleResetToEvenBudget}
-                title="Gleichmäßig verteilen"
-                className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors flex items-center gap-1 text-xs shrink-0 cursor-pointer"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="flex items-center justify-between text-[10px] mt-1 font-mono">
-              <span className="text-slate-400">Verteilt:</span>
-              <span className={`font-bold ${
-                remainingBudget === 0
-                  ? 'text-emerald-400'
-                  : remainingBudget > 0
-                  ? 'text-blue-400'
-                  : 'text-rose-400'
-              }`}>
-                {totalSpent} / {currentBudget}
-              </span>
-            </div>
+        {/* EP-Fortschrittsbalken */}
+        <div className="pt-2 border-t border-slate-800/60 space-y-1.5">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-slate-400 text-[11px]">Fortschritt zur nächsten Stufe</span>
+            <span className="font-bold text-amber-300 text-xs">
+              {safeXp} <span className="text-slate-500 font-normal">/ {xpNeeded} EP</span>
+              <span className="ml-2 text-slate-400 font-normal text-[10px]">({progressPercent}%)</span>
+            </span>
+          </div>
+          <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80 p-0.5">
+            <div
+              className="h-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 rounded-full transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-slate-500">
+            <span>Aktuelle Stufe: {safeLevel}</span>
+            <span>
+              {xpNeeded > safeXp ? `Noch ${xpNeeded - safeXp} EP bis Stufe ${safeLevel + 1}` : 'Stufe aufstiegsbereit'}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* 4. PARAMETER & WERTENTWICKLUNG */}
-      <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-amber-400" />
-            <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-              Parameter
-            </h3>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="text-slate-400 text-[11px]">Budget:</span>
-              <span className="font-bold text-amber-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                {currentBudget} Punkte pro Level
-              </span>
-              <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
-                remainingBudget === 0
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                  : remainingBudget > 0
-                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-              }`}>
-                {totalSpent} / {currentBudget} verteilt
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleResetToEvenBudget}
-              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors flex items-center gap-1 text-[11px] cursor-pointer"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Gleichmäßig</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Clean Parameter Table / List */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-800 text-[11px] font-semibold text-slate-400">
-                <th className="py-2.5 px-3">Parameter</th>
-                <th className="py-2.5 px-3 text-center">Basiswert (Rasse)</th>
-                <th className="py-2.5 px-3 text-center">Aktuell</th>
-                <th className="py-2.5 px-3 text-right">Pro Level</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 text-xs">
-              {parameterList.map(paramName => {
-                const baseVal = typeof baseParams[paramName] === 'number' && !isNaN(baseParams[paramName])
-                  ? baseParams[paramName]
-                  : 10;
-                const rawParamData = characterPowerData?.[paramName];
-                const rawVal = typeof rawParamData === 'number'
-                  ? rawParamData
-                  : typeof rawParamData?.value === 'number'
-                  ? rawParamData.value
-                  : (typeof rawParamData?.value === 'string' ? parseFloat(rawParamData.value) : baseVal);
-                const currentVal = typeof rawVal === 'number' && !isNaN(rawVal) ? rawVal : baseVal;
-
-                const allocated = typeof allocatedPoints[paramName] === 'number' && !isNaN(allocatedPoints[paramName])
-                  ? allocatedPoints[paramName]
-                  : baseGrowthPerParam;
-
-                return (
-                  <tr
-                    key={`param-row-${paramName}`}
-                    className="hover:bg-slate-800/30 transition-colors"
-                  >
-                    <td className="py-2.5 px-3 font-semibold text-slate-200">
-                      {paramName}
-                    </td>
-
-                    <td className="py-2.5 px-3 text-center font-mono text-slate-400">
-                      {baseVal}
-                    </td>
-
-                    <td className="py-2.5 px-3 text-center">
-                      <input
-                        type="number"
-                        min={0}
-                        value={currentVal}
-                        onChange={e => handleCurrentValueChange(paramName, parseInt(e.target.value) || 0)}
-                        className="w-20 bg-slate-950 border border-slate-800 rounded px-2 py-1 text-center font-mono font-bold text-slate-100 focus:outline-none focus:border-amber-500 text-xs"
-                      />
-                    </td>
-
-                    <td className="py-2.5 px-3 text-right">
-                      <div className="inline-flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          disabled={allocated <= 0}
-                          onClick={() => handlePointChange(paramName, -1)}
-                          className="w-6 h-6 rounded bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <input
-                          type="number"
-                          min={0}
-                          value={allocated}
-                          onChange={e => handlePointDirectInput(paramName, parseInt(e.target.value) || 0)}
-                          className="w-12 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-center font-mono font-bold text-amber-300 focus:outline-none focus:border-amber-500 text-xs"
-                        />
-                        <button
-                          type="button"
-                          disabled={remainingBudget <= 0}
-                          onClick={() => handlePointChange(paramName, 1)}
-                          className="w-6 h-6 rounded bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 5. KAMPFEIGENSCHAFTEN & STATUS */}
+      {/* 3. KAMPFEIGENSCHAFTEN & STATUS (mit integrierter Parameter-Entwicklung) */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 border-b border-slate-800 pb-2 px-1">
           <Shield className="w-4 h-4 text-amber-400" />
@@ -727,6 +484,14 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           xp={safeXp}
           maxXp={xpNeeded}
           showStatusHeader={false}
+          baseParameters={baseParams}
+          developmentPointsPerLevel={currentBudget}
+          onDevelopmentPointsPerLevelChange={onDevelopmentPointsPerLevelChange}
+          parameterGrowthPoints={parameterGrowthPoints}
+          onParameterGrowthPointsChange={onParameterGrowthPointsChange}
+          parameterGrowthFactors={parameterGrowthFactors}
+          onParameterGrowthFactorsChange={onParameterGrowthFactorsChange}
+          baseGrowthPerParam={baseGrowthPerParam}
         />
       </div>
     </div>
