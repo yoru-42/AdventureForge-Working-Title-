@@ -1,11 +1,11 @@
 // -*- coding: utf-8 -*-
-import React from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentProfileType } from '../types';
 import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
-import { DEFAULT_RACES, RaceService, RaceDefinition } from '../services/raceService';
+import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
-import { Dna, BarChart3, Layers, Info, TrendingUp, Award, Zap, ShieldCheck } from 'lucide-react';
+import { Dna, BarChart3, Layers, Info, Sliders, Sparkles, Plus, Minus, RotateCcw } from 'lucide-react';
 
 export interface CharacterRaceAndStatsSectionProps {
   race: string;
@@ -23,14 +23,38 @@ export interface CharacterRaceAndStatsSectionProps {
   onLevelChange?: (lvl: number) => void;
   rank?: string;
   onRankChange?: (rank: string) => void;
-  potential?: number;
+  potential?: number | string;
   onPotentialChange?: (pot: number) => void;
   xp?: number;
   onXpChange?: (xp: number) => void;
   developmentProfile?: DevelopmentProfileType;
+  onDevelopmentProfileChange?: (profile: DevelopmentProfileType) => void;
+  developmentRate?: number;
+  onDevelopmentRateChange?: (rate: number) => void;
+  rankGrowthBonus?: number;
+  onRankGrowthBonusChange?: (bonus: number) => void;
+  parameterGrowthPoints?: Record<string, number>;
+  onParameterGrowthPointsChange?: (points: Record<string, number>) => void;
+  parameterGrowthFactors?: Record<string, number>;
+  onParameterGrowthFactorsChange?: (factors: Record<string, number>) => void;
   progressionConfig?: ProgressionConfig;
   levelsPerRank?: number;
 }
+
+const PROFILE_OPTIONS: { value: DevelopmentProfileType; label: string; desc: string }[] = [
+  { value: 'normal', label: 'Normal (1.0× EP / 1.0× Werte)', desc: 'Standardmäßiges, ausgewogenes Entwicklungstempo.' },
+  { value: 'fast', label: 'Schnell (1.5× EP / 1.25× Werte)', desc: 'Beschleunigte Progression für rasche Spielentwicklung.' },
+  { value: 'veryFast', label: 'Sehr schnell (2.5× EP / 1.5× Werte)', desc: 'Rasanter Fortschritt mit hohem EP-Gewinn.' },
+  { value: 'slow', label: 'Langsam (0.75× EP / 0.75× Werte)', desc: 'Gemächlicher Fortschritt mit leicht erhöhtem EP-Bedarf.' },
+  { value: 'verySlow', label: 'Sehr langsam (0.5× EP / 0.5× Werte)', desc: 'Deutlich verzögerter Fortschritt für anspruchsvolle Kampagnen.' },
+  { value: 'balanced', label: 'Ausgewogen (1.0× EP / 1.0× Werte)', desc: 'Gleichmäßiges Entwicklungstempo.' },
+  { value: 'focused', label: 'Fokussiert / Spezialist (1.25× Werte)', desc: 'Gezielte, konzentrierte Werteentwicklung.' },
+  { value: 'late_bloomer', label: 'Spätentwickler (1.5× Endgame-Werte)', desc: 'Langsamerer Anfang mit starkem Endgame-Potenzial.' },
+  { value: 'slow_growth', label: 'Langsames Wachstum (0.8× Werte)', desc: 'Gleichmäßiges, anspruchsvolles Entwicklungstempo.' },
+  { value: 'custom', label: 'Individuell', desc: 'Frei definierte Multiplikatoren.' }
+];
+
+const STANDARD_PARAMETERS = ['Stärke', 'Geschicklichkeit', 'Konstitution', 'Intelligenz', 'Willenskraft', 'Magie'];
 
 export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSectionProps> = ({
   race,
@@ -52,7 +76,16 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   onPotentialChange,
   xp = 0,
   onXpChange,
-  developmentProfile,
+  developmentProfile = 'normal',
+  onDevelopmentProfileChange,
+  developmentRate = 1.0,
+  onDevelopmentRateChange,
+  rankGrowthBonus = 25,
+  onRankGrowthBonusChange,
+  parameterGrowthPoints = {},
+  onParameterGrowthPointsChange,
+  parameterGrowthFactors = {},
+  onParameterGrowthFactorsChange,
   progressionConfig,
   levelsPerRank
 }) => {
@@ -62,51 +95,110 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     : DEFAULT_RACES;
 
   const currentRaceDef = RaceService.getRaceDefinition(currentRace, availableRaces);
+  const baseParams = currentRaceDef.baseParameters || HUMAN_BASE_PARAMETERS;
+
   const effectiveConfig = progressionConfig || world?.progressionConfig || DEFAULT_PROGRESSION_CONFIG;
   const currentLevelsPerRank = levelsPerRank ?? effectiveConfig.levelSystem?.levelsPerRank ?? 10;
-  const resetLevelOnRankUp = effectiveConfig.levelSystem?.resetLevelOnRankUp ?? true;
 
   // Progression & EP Calculations
-  const xpNeeded = ProgressionService.calculateXpRequirement(level, rank, effectiveConfig, developmentProfile);
+  const activeProfileKey = developmentProfile || 'normal';
+  const xpNeeded = ProgressionService.calculateXpRequirement(level, rank, effectiveConfig, activeProfileKey);
   const progressPercent = xpNeeded > 0 ? Math.min(100, Math.max(0, Math.round((xp / xpNeeded) * 100))) : 100;
 
-  // Rank Index & Next Rank Calculations
-  const ranks = effectiveConfig.rankSystem?.ranks || STANDARD_RANKS;
-  const rankIdx = ProgressionService.getRankIndex(rank, effectiveConfig);
-  const isMaxRank = rankIdx >= ranks.length - 1;
-  const nextRank = isMaxRank ? 'Maximaler Rang' : String(ranks[rankIdx + 1]);
-
-  // Levels & XP to Rank Up
-  const currentRankMaxLevel = resetLevelOnRankUp
-    ? currentLevelsPerRank
-    : (rankIdx + 1) * currentLevelsPerRank;
-
-  const levelsToRankUp = isMaxRank ? 0 : Math.max(0, currentRankMaxLevel - level);
-
-  let xpToRankUp = 0;
-  if (!isMaxRank) {
-    xpToRankUp = Math.max(0, xpNeeded - xp);
-    for (let lvl = level + 1; lvl <= currentRankMaxLevel; lvl++) {
-      xpToRankUp += ProgressionService.calculateXpRequirement(lvl, rank, effectiveConfig, developmentProfile);
-    }
-  }
-
-  // Rank Up Check & Conditions
-  const rankCheck = ProgressionService.checkRankUpConditions(rank, level, xp, effectiveConfig, currentLevelsPerRank);
-
-  // Wertsteigerung (Stat Growth) calculation preview
-  const baseGrowth = effectiveConfig.attributeProgression?.baseGrowthPerLevel ?? 2;
-  const rankGrowthMultiplier = effectiveConfig.attributeProgression?.rankGrowthMultiplier ?? 4;
-  const profile = ProgressionService.getDevelopmentProfile(developmentProfile, effectiveConfig);
-  
   const potNum = typeof potential === 'number' && !isNaN(potential)
     ? potential
     : typeof potential === 'string'
     ? parseFloat(potential) || 1000
     : 1000;
-  const normPot = potNum <= 10 ? potNum * 100 : potNum;
-  const potentialFactor = Math.max(0.2, Math.min(3.0, 1 + (normPot - 1000) / 2000));
-  const potentialPercentOffset = Math.round((potentialFactor - 1) * 100);
+
+  // Percentage values for Entwicklungsrate & Rangbonus
+  const devRatePercent = Math.round((typeof developmentRate === 'number' ? developmentRate : 1.0) * 100);
+  const rankBonusValue = typeof rankGrowthBonus === 'number' ? rankGrowthBonus : 25;
+
+  // 1. Parameter List Determination
+  const parameterList = useMemo(() => {
+    const keys = new Set<string>();
+    if (worldPowerSettings && typeof worldPowerSettings === 'object') {
+      Object.keys(worldPowerSettings).forEach(k => keys.add(k));
+    }
+    if (characterPowerData && typeof characterPowerData === 'object') {
+      Object.keys(characterPowerData).forEach(k => keys.add(k));
+    }
+    if (keys.size === 0) {
+      STANDARD_PARAMETERS.forEach(k => keys.add(k));
+    }
+    return Array.from(keys);
+  }, [worldPowerSettings, characterPowerData]);
+
+  // 2. Budget Calculation (Base 2 points per parameter)
+  const baseGrowthPerParam = effectiveConfig.attributeProgression?.baseGrowthPerLevel ?? 2;
+  const totalBudget = parameterList.length * baseGrowthPerParam;
+
+  // 3. Current Allocated Points per Parameter
+  const allocatedPoints: Record<string, number> = useMemo(() => {
+    const result: Record<string, number> = {};
+    parameterList.forEach(paramName => {
+      if (typeof parameterGrowthPoints?.[paramName] === 'number') {
+        result[paramName] = parameterGrowthPoints[paramName];
+      } else if (typeof parameterGrowthFactors?.[paramName] === 'number') {
+        result[paramName] = Math.max(0, Math.round(parameterGrowthFactors[paramName] * baseGrowthPerParam));
+      } else {
+        result[paramName] = baseGrowthPerParam;
+      }
+    });
+    return result;
+  }, [parameterList, parameterGrowthPoints, parameterGrowthFactors, baseGrowthPerParam]);
+
+  const totalSpent = useMemo(() => {
+    return Object.values(allocatedPoints).reduce((sum, val) => sum + val, 0);
+  }, [allocatedPoints]);
+
+  const remainingBudget = totalBudget - totalSpent;
+
+  // Initialize fresh character Level 1 base parameters if not yet present
+  useEffect(() => {
+    if (!characterPowerData || Object.keys(characterPowerData).length === 0) {
+      const initialPowerData: Record<string, { value: number; potentialMax: number }> = {};
+      parameterList.forEach(paramName => {
+        const startVal = baseParams[paramName] ?? 10;
+        initialPowerData[paramName] = { value: startVal, potentialMax: 1000 };
+      });
+      onCharacterPowerDataChange(initialPowerData);
+    }
+  }, [characterPowerData, parameterList, baseParams, onCharacterPowerDataChange]);
+
+  // Handlers for adjusting allocated growth points
+  const handlePointChange = (paramName: string, delta: number) => {
+    const current = allocatedPoints[paramName] ?? baseGrowthPerParam;
+    const nextVal = current + delta;
+    if (nextVal < 0) return; // No negative growth per level
+
+    if (delta > 0 && remainingBudget < delta) {
+      return; // Budget exhausted
+    }
+
+    const nextPoints = { ...allocatedPoints, [paramName]: nextVal };
+    onParameterGrowthPointsChange?.(nextPoints);
+
+    // Keep factors in sync
+    const nextFactors: Record<string, number> = { ...(parameterGrowthFactors || {}) };
+    parameterList.forEach(p => {
+      const pts = nextPoints[p] ?? baseGrowthPerParam;
+      nextFactors[p] = baseGrowthPerParam > 0 ? pts / baseGrowthPerParam : 1.0;
+    });
+    onParameterGrowthFactorsChange?.(nextFactors);
+  };
+
+  const handleResetToEvenBudget = () => {
+    const nextPoints: Record<string, number> = {};
+    const nextFactors: Record<string, number> = {};
+    parameterList.forEach(p => {
+      nextPoints[p] = baseGrowthPerParam;
+      nextFactors[p] = 1.0;
+    });
+    onParameterGrowthPointsChange?.(nextPoints);
+    onParameterGrowthFactorsChange?.(nextFactors);
+  };
 
   return (
     <div className="space-y-6">
@@ -221,7 +313,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
             />
             <span className="text-[10px] text-slate-500 mt-0.5 block">
-              Stufe {level} / {currentLevelsPerRank} (pro Rang)
+              Stufe {level} (Stufen pro Rang: {currentLevelsPerRank})
             </span>
           </div>
 
@@ -247,12 +339,12 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 
           <div>
             <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-              Individuelles Potenzial
+              Potenzial
             </label>
             <input
               type="number"
               min={1}
-              value={potential}
+              value={potNum}
               onChange={e => {
                 const val = Math.max(1, parseInt(e.target.value) || 1000);
                 onPotentialChange?.(val);
@@ -261,74 +353,80 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
             />
             <span className="text-[10px] text-slate-400 mt-0.5 block leading-tight">
-              Beeinflusst die Wachstumsgeschwindigkeit
+              Beeinflusst die Wachstumsgeschwindigkeit.
             </span>
           </div>
         </div>
 
-        {/* Rangaufstiegs-Übersicht: Nächster Rang, Level bis Rangaufstieg, EP bis Rangaufstieg */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
-              <Award className="w-4 h-4 text-amber-400" />
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Nächster Rang</span>
-              <span className="text-xs font-mono font-bold text-slate-100">
-                {isMaxRank ? 'Maximaler Rang (S)' : `Rang ${nextRank}`}
-              </span>
+        {/* Entwicklungsprofil, Entwicklungsrate & Rangbonus */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-xl">
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-amber-400" />
+              <span>Entwicklungsprofil</span>
+            </label>
+            <select
+              value={activeProfileKey}
+              onChange={e => onDevelopmentProfileChange?.(e.target.value as DevelopmentProfileType)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              {PROFILE_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Entwicklungsrate</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step={5}
+                min={10}
+                max={500}
+                value={devRatePercent}
+                onChange={e => {
+                  const val = parseInt(e.target.value) || 100;
+                  onDevelopmentRateChange?.(val / 100);
+                }}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
+              />
+              <span className="text-xs text-slate-300 font-mono font-bold shrink-0">%</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
-              <Zap className="w-4 h-4 text-blue-400" />
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Level bis Rangaufstieg</span>
-              <span className="text-xs font-mono font-bold text-slate-100">
-                {isMaxRank
-                  ? 'Maximal erreicht'
-                  : levelsToRankUp === 0
-                  ? 'Bereit für Aufstieg'
-                  : `${levelsToRankUp} ${levelsToRankUp === 1 ? 'Stufe' : 'Stufen'}`}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">EP bis Rangaufstieg</span>
-              <span className="text-xs font-mono font-bold text-slate-100">
-                {isMaxRank
-                  ? '—'
-                  : levelsToRankUp === 0 && rankCheck.canRankUp
-                  ? 'Erreicht'
-                  : `${xpToRankUp.toLocaleString()} EP`}
-              </span>
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Rangaufstiegs-Bonus</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step={5}
+                min={0}
+                max={500}
+                value={rankBonusValue}
+                onChange={e => {
+                  const val = Math.max(0, parseInt(e.target.value) || 0);
+                  onRankGrowthBonusChange?.(val);
+                }}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
+              />
+              <span className="text-xs text-slate-300 font-mono font-bold shrink-0">+{rankBonusValue} %</span>
             </div>
           </div>
-        </div>
-
-        {/* Rangaufstiegsbedingung / Status-Hinweis */}
-        <div className="text-[11px] px-3.5 py-2 rounded-lg bg-slate-950/40 border border-slate-800/60 flex items-center justify-between">
-          <span className="text-slate-400 font-medium">Rangaufstiegsbedingung:</span>
-          <span className={`font-semibold ${rankCheck.canRankUp ? 'text-emerald-400' : 'text-slate-300'}`}>
-            {isMaxRank
-              ? 'Höchste Rangstufe erreicht'
-              : rankCheck.canRankUp
-              ? 'Bedingungen erfüllt – Rangaufstieg bereit'
-              : rankCheck.reason || `Erfordert Stufe ${currentRankMaxLevel}${effectiveConfig.rankSystem?.minXpForRankUp ? ` und min. ${effectiveConfig.rankSystem.minXpForRankUp} EP` : ''}`}
-          </span>
         </div>
 
         {/* EP-Fortschrittsbalken */}
         <div className="pt-2 border-t border-slate-800/60 space-y-1.5">
           <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-slate-400 text-[11px]">EP-Fortschritt / nächste Stufe</span>
+            <span className="text-slate-400 text-[11px]">Fortschritt zur nächsten Stufe</span>
             <span className="font-bold text-amber-300 text-xs">
               {xp} <span className="text-slate-500 font-normal">/ {xpNeeded} EP</span>
               <span className="ml-2 text-slate-400 font-normal text-[10px]">({progressPercent}%)</span>
@@ -347,51 +445,106 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             </span>
           </div>
         </div>
+      </div>
 
-        {/* Wertsteigerung / Persönliche Werteentwicklung */}
-        <div className="pt-3 border-t border-slate-800/60 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200 uppercase tracking-wider">
-            <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
-            <span>Wertsteigerung &amp; Entwicklung</span>
+      {/* 3. PARAMETER & ENTWICKLUNGSBUDGET */}
+      <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-amber-400" />
+            <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+              Parameter &amp; Entwicklungsbudget
+            </h3>
           </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 block uppercase font-medium">Basis pro Level</span>
-              <span className="text-slate-200 font-mono font-bold">+{baseGrowth} Punkte</span>
-            </div>
-            
-            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 block uppercase font-medium">Rang-Schub</span>
-              <span className="text-slate-200 font-mono font-bold">×{rankGrowthMultiplier}</span>
-            </div>
-
-            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 block uppercase font-medium">Potenzial-Faktor</span>
-              <span className="text-slate-200 font-mono font-bold">
-                ×{potentialFactor.toFixed(2)}{' '}
-                <span className="text-[10px] text-amber-400/90 font-normal">
-                  ({potentialPercentOffset >= 0 ? `+${potentialPercentOffset}` : potentialPercentOffset}%)
-                </span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <span className="text-slate-400 text-[11px]">Budget:</span>
+              <span className="font-bold text-amber-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                {totalBudget} Punkte pro Level
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                remainingBudget === 0
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  : remainingBudget > 0
+                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                  : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+              }`}>
+                {totalSpent} / {totalBudget} verteilt
               </span>
             </div>
-
-            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
-              <span className="text-[10px] text-slate-400 block uppercase font-medium">Entwicklungsprofil</span>
-              <span className="text-slate-200 font-medium truncate block" title={profile.label}>
-                {profile.label}
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={handleResetToEvenBudget}
+              title="Gleichmäßig verteilen"
+              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors flex items-center gap-1 text-[11px]"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span className="hidden md:inline">Gleichmäßig</span>
+            </button>
           </div>
+        </div>
+
+        {/* Parameter Rows */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {parameterList.map(paramName => {
+            const rawParamData = characterPowerData?.[paramName];
+            const currentVal = typeof rawParamData === 'number'
+              ? rawParamData
+              : typeof rawParamData?.value === 'number'
+              ? rawParamData.value
+              : baseParams[paramName] ?? 10;
+
+            const allocated = allocatedPoints[paramName] ?? baseGrowthPerParam;
+
+            return (
+              <div
+                key={`param-budget-card-${paramName}`}
+                className="p-3.5 bg-slate-950/80 border border-slate-800/90 rounded-xl space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-200">{paramName}</span>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 uppercase block font-medium">Aktuell</span>
+                    <span className="text-xs font-mono font-bold text-slate-100">{currentVal}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-850">
+                  <span className="text-[11px] text-slate-400 font-medium">Pro Level</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={allocated <= 0}
+                      onClick={() => handlePointChange(paramName, -1)}
+                      className="w-6 h-6 rounded bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="w-8 text-center text-xs font-mono font-bold text-amber-300">
+                      +{allocated}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={remainingBudget <= 0}
+                      onClick={() => handlePointChange(paramName, 1)}
+                      className="w-6 h-6 rounded bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* 3. KAMPFEIGENSCHAFTEN & PARAMETER */}
+      {/* 4. KAMPFEIGENSCHAFTEN & STATUS */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 border-b border-slate-800 pb-2 px-1">
           <BarChart3 className="w-4 h-4 text-amber-400" />
           <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-            Kampfeigenschaften &amp; Parameter
+            Kampfeigenschaften &amp; Status
           </h3>
         </div>
 

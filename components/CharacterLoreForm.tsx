@@ -1997,6 +1997,15 @@ export const CharacterLoreForm: React.FC<Props> = ({
             xp={getDetail('xp', 0)}
             onXpChange={x => updateDetail('xp', x)}
             developmentProfile={getDetail('developmentProfile', 'normal')}
+            onDevelopmentProfileChange={prof => updateDetail('developmentProfile', prof)}
+            developmentRate={typeof getDetail('developmentRate') === 'number' ? getDetail('developmentRate') : (typeof getDetail('developmentRate') === 'object' ? (getDetail('developmentRate') as any)?.attributeGrowthMultiplier : (parseFloat(getDetail('developmentRate')) || 1.0))}
+            onDevelopmentRateChange={rate => updateDetail('developmentRate', rate)}
+            parameterGrowthFactors={getDetail('parameterGrowthFactors', {})}
+            onParameterGrowthFactorsChange={factors => updateDetail('parameterGrowthFactors', factors)}
+            parameterGrowthPoints={getDetail('parameterGrowthPoints', {})}
+            onParameterGrowthPointsChange={points => updateDetail('parameterGrowthPoints', points)}
+            rankGrowthBonus={typeof getDetail('rankGrowthBonus') === 'number' ? getDetail('rankGrowthBonus') : 25}
+            onRankGrowthBonusChange={bonus => updateDetail('rankGrowthBonus', bonus)}
             levelsPerRank={getDetail('levelsPerRank')}
           />
         </div>

@@ -115,7 +115,16 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
               onPotentialChange={pot => setFormData(prev => ({ ...prev, potential: pot }))}
               xp={formData.xp ?? 0}
               onXpChange={x => setFormData(prev => ({ ...prev, xp: x }))}
-              developmentProfile={formData.developmentProfile}
+              developmentProfile={formData.developmentProfile || 'normal'}
+              onDevelopmentProfileChange={prof => setFormData(prev => ({ ...prev, developmentProfile: prof }))}
+              developmentRate={typeof formData.developmentRate === 'number' ? formData.developmentRate : (formData.developmentRate?.attributeGrowthMultiplier ?? 1.0)}
+              onDevelopmentRateChange={rate => setFormData(prev => ({ ...prev, developmentRate: typeof prev.developmentRate === 'object' ? { ...prev.developmentRate, attributeGrowthMultiplier: rate } : rate } as any))}
+              parameterGrowthFactors={formData.parameterGrowthFactors || {}}
+              onParameterGrowthFactorsChange={factors => setFormData(prev => ({ ...prev, parameterGrowthFactors: factors }))}
+              parameterGrowthPoints={formData.parameterGrowthPoints || {}}
+              onParameterGrowthPointsChange={points => setFormData(prev => ({ ...prev, parameterGrowthPoints: points }))}
+              rankGrowthBonus={formData.rankGrowthBonus ?? 25}
+              onRankGrowthBonusChange={bonus => setFormData(prev => ({ ...prev, rankGrowthBonus: bonus }))}
               levelsPerRank={formData.levelsPerRank}
             />
           </div>

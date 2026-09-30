@@ -4147,7 +4147,16 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     onPotentialChange={pot => setPlayer(prev => ({ ...prev, potential: pot }))}
                     xp={player.xp ?? 0}
                     onXpChange={x => setPlayer(prev => ({ ...prev, xp: x }))}
-                    developmentProfile={player.developmentProfile}
+                    developmentProfile={player.developmentProfile || 'normal'}
+                    onDevelopmentProfileChange={prof => setPlayer(prev => ({ ...prev, developmentProfile: prof }))}
+                    developmentRate={typeof player.developmentRate === 'number' ? player.developmentRate : (player.developmentRate?.attributeGrowthMultiplier ?? 1.0)}
+                    onDevelopmentRateChange={rate => setPlayer(prev => ({ ...prev, developmentRate: typeof prev.developmentRate === 'object' ? { ...prev.developmentRate, attributeGrowthMultiplier: rate } : rate } as any))}
+                    parameterGrowthFactors={player.parameterGrowthFactors || {}}
+                    onParameterGrowthFactorsChange={factors => setPlayer(prev => ({ ...prev, parameterGrowthFactors: factors }))}
+                    parameterGrowthPoints={player.parameterGrowthPoints || {}}
+                    onParameterGrowthPointsChange={points => setPlayer(prev => ({ ...prev, parameterGrowthPoints: points }))}
+                    rankGrowthBonus={player.rankGrowthBonus ?? 25}
+                    onRankGrowthBonusChange={bonus => setPlayer(prev => ({ ...prev, rankGrowthBonus: bonus }))}
                     levelsPerRank={player.levelsPerRank}
                   />
                 </div>

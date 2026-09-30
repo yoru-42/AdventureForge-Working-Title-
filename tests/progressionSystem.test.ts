@@ -278,4 +278,126 @@ assert(resNoReset.rankUps.length === 1, `Rangaufstieg ausgelöst`);
 assert(resNoReset.newState.rank === 'E', `Rang ist E`);
 assert(resNoReset.newState.level === 10, `Level bleibt 10 wenn resetLevelOnRankUp = false (erhalten: ${resNoReset.newState.level})`);
 
+// -----------------------------------------------------------------------------
+// TEST 13: Individuelle Parameter-Werteentwicklung & Rangaufstiegsbonus
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 13: Individuelle Parameter-Werteentwicklung & Akzeptanztest ---');
+const charTestState: ProgressionState = {
+  level: 1,
+  xp: 0,
+  rank: 'F',
+  potential: 1000,
+  developmentProfile: 'normal',
+  developmentRate: 1.0,
+  race: 'Mensch',
+  parameterGrowthFactors: {
+    'Stärke': 1.0
+  },
+  campaignPowerLevels: {
+    'Stärke': { value: 100, potentialMax: 1000 }
+  }
+};
+
+// 1. Levelaufstieg mit Stärke-Faktor 1.0 (100 EP für Level 2)
+const resLvl1 = ProgressionService.applyXpGain(charTestState, 100, DEFAULT_PROGRESSION_CONFIG);
+assert(resLvl1.levelsGained === 1, `1 Level gewonnen`);
+assert(resLvl1.newState.campaignPowerLevels?.['Stärke']?.value === 102, `Stärke ist von 100 auf 102 gestiegen (+2 Basis)`);
+
+// 2. Anpassung des Stärke-Faktors auf 1.5
+const charStateUpdatedFactor: ProgressionState = {
+  ...resLvl1.newState,
+  parameterGrowthFactors: {
+    'Stärke': 1.5
+  }
+};
+
+// Berechnetes Wachstum kontrollieren: 2 * 1.5 = +3
+const calcGrowth = ProgressionService.calculateParameterGrowth({
+  parameterName: 'Stärke',
+  currentValue: 102,
+  potential: 1000,
+  parameterGrowthFactors: { 'Stärke': 1.5 },
+  race: 'Mensch',
+  developmentRateMultiplier: 1.0,
+  profileMultiplier: 1.0,
+  isRankUp: false
+});
+assert(calcGrowth === 3, `Berechnetes Wachstum pro Level bei Faktor 1.5 ist exakt +3 (erhalten: ${calcGrowth})`);
+
+// Weiterer Levelaufstieg (120 EP für Level 3)
+const resLvl2 = ProgressionService.applyXpGain(charStateUpdatedFactor, 120, DEFAULT_PROGRESSION_CONFIG);
+assert(resLvl2.levelsGained === 1, `1 weiteres Level gewonnen`);
+assert(resLvl2.newState.campaignPowerLevels?.['Stärke']?.value === 105, `Stärke ist von 102 auf 105 gestiegen (+3 bei Faktor 1.5)`);
+
+// 3. Rangaufstieg mit Rang-Schub (rankGrowthMultiplier = 4)
+const calcRankGrowth = ProgressionService.calculateParameterGrowth({
+  parameterName: 'Stärke',
+  currentValue: 105,
+  potential: 1000,
+  parameterGrowthFactors: { 'Stärke': 1.5 },
+  race: 'Mensch',
+  developmentRateMultiplier: 1.0,
+  profileMultiplier: 1.0,
+  rankGrowthMultiplier: 4,
+  isRankUp: true
+});
+assert(calcRankGrowth === 12, `Berechnetes Rangwachstum bei Faktor 1.5 und Rangschub 4 ist exakt +12 (3 * 4)`);
+
+// -----------------------------------------------------------------------------
+// TEST 14: Entwicklungsbudget & freie Punkteverteilung (12 Punkte)
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 14: Entwicklungsbudget & freie Punkteverteilung ---');
+const budgetState: ProgressionState = {
+  level: 1,
+  xp: 0,
+  rank: 'F',
+  potential: 1000,
+  developmentProfile: 'normal',
+  developmentRate: 1.0,
+  race: 'Mensch',
+  parameterGrowthPoints: {
+    'Stärke': 4,
+    'Geschicklichkeit': 3,
+    'Konstitution': 2,
+    'Intelligenz': 1,
+    'Willenskraft': 1,
+    'Magie': 1
+  },
+  campaignPowerLevels: {
+    'Stärke': { value: 10, potentialMax: 1000 },
+    'Geschicklichkeit': { value: 10, potentialMax: 1000 },
+    'Konstitution': { value: 10, potentialMax: 1000 },
+    'Intelligenz': { value: 10, potentialMax: 1000 },
+    'Willenskraft': { value: 10, potentialMax: 1000 },
+    'Magie': { value: 10, potentialMax: 1000 }
+  }
+};
+
+const resBudgetLvl = ProgressionService.applyXpGain(budgetState, 100, DEFAULT_PROGRESSION_CONFIG);
+assert(resBudgetLvl.levelsGained === 1, `Level 1 -> 2`);
+assert(resBudgetLvl.newState.campaignPowerLevels?.['Stärke']?.value === 14, `Stärke: 10 + 4 = 14`);
+assert(resBudgetLvl.newState.campaignPowerLevels?.['Geschicklichkeit']?.value === 13, `Geschick: 10 + 3 = 13`);
+assert(resBudgetLvl.newState.campaignPowerLevels?.['Konstitution']?.value === 12, `Konstitution: 10 + 2 = 12`);
+assert(resBudgetLvl.newState.campaignPowerLevels?.['Intelligenz']?.value === 11, `Intelligenz: 10 + 1 = 11`);
+assert(resBudgetLvl.newState.campaignPowerLevels?.['Willenskraft']?.value === 11, `Willenskraft: 10 + 1 = 11`);
+assert(resBudgetLvl.newState.campaignPowerLevels?.['Magie']?.value === 11, `Magie: 10 + 1 = 11`);
+
+// -----------------------------------------------------------------------------
+// TEST 15: Gemeinsamer Rangbonus (+25%)
+// -----------------------------------------------------------------------------
+console.log('\n--- Test 15: Gemeinsamer Rangbonus (+25%) ---');
+const calcCommonRankGrowth = ProgressionService.calculateParameterGrowth({
+  parameterName: 'Stärke',
+  currentValue: 14,
+  potential: 1000,
+  parameterGrowthPoints: { 'Stärke': 4 },
+  race: 'Mensch',
+  developmentRateMultiplier: 1.0,
+  profileMultiplier: 1.0,
+  rankGrowthBonus: 25,
+  isRankUp: true
+});
+// 4 * 1.25 = 5.0
+assert(calcCommonRankGrowth === 5, `Rangwachstum bei +25% Bonus auf 4 Punkte ist exakt 5.0 (erhalten: ${calcCommonRankGrowth})`);
+
 console.log('\n=== ALL PROGRESSION SYSTEM CLEANUP TESTS PASSED SUCCESSFULLY! ===');

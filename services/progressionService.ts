@@ -405,7 +405,29 @@ export class ProgressionService {
         break;
       }
 
-      // 2. EP-Bedarf für das aktuelle Level und den aktuellen Rang berechnen
+      // 2. Prüfe Rangaufstieg, falls aktuelles Level bereits das Maximallevel des Rangs erreicht hat
+      if (config.rankSystem?.enabled && currentRank) {
+        const currentRankIdx = this.getRankIndex(currentRank, config);
+        const currentRankMaxLvl = resetLevelOnRankUp
+          ? levelsPerRank
+          : (currentRankIdx + 1) * levelsPerRank;
+
+        if (currentLvl >= currentRankMaxLvl) {
+          const rankCheck = this.checkRankUpConditions(currentRank, currentLvl, currentXp, config, levelsPerRank);
+          if (rankCheck.canRankUp && rankCheck.nextRank) {
+            const oldRank = currentRank;
+            currentRank = rankCheck.nextRank;
+            rankUps.push({ fromRank: oldRank, toRank: currentRank });
+
+            if (resetLevelOnRankUp) {
+              currentLvl = 1;
+            }
+            continue;
+          }
+        }
+      }
+
+      // 3. EP-Bedarf für das aktuelle Level und den aktuellen Rang berechnen
       const xpReq = this.calculateXpRequirement(currentLvl, currentRank, config, profileKey);
 
       if (currentXp >= xpReq) {
@@ -419,7 +441,7 @@ export class ProgressionService {
           xpNeeded: xpReq
         });
 
-        // 3. Prüfe Rangaufstieg bei Erreichen des Maximallevels pro Rang
+        // 4. Prüfe Rangaufstieg bei Erreichen des Maximallevels pro Rang
         if (config.rankSystem?.enabled && currentRank) {
           const currentRankIdx = this.getRankIndex(currentRank, config);
           const currentRankMaxLvl = resetLevelOnRankUp
@@ -458,6 +480,7 @@ export class ProgressionService {
     const rankUpsCount = rankUps.length;
     const charRace = currentState.race || 'Mensch';
     const charRaceFactors = currentState.raceGrowthFactors || RaceService.getRaceGrowthFactors(charRace);
+    const charDevRate = currentState.developmentRateMultiplier ?? currentState.developmentRate ?? config.developmentRate?.attributeGrowthMultiplier ?? 1.0;
 
     if ((levelsGained !== 0 || rankUpsCount > 0) && currentState.campaignPowerLevels) {
       const scaleMax = config.attributeProgression?.maxAttributeValue ?? 1000;
@@ -472,10 +495,14 @@ export class ProgressionService {
         undefined,
         {
           potential: currentState.potential,
-          parameterGrowthFactors: (currentState as any).parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+          parameterGrowthFactors: currentState.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+          parameterGrowthPoints: currentState.parameterGrowthPoints,
           raceGrowthFactors: charRaceFactors,
           race: charRace,
-          rankUpsCount
+          rankUpsCount,
+          developmentRateMultiplier: charDevRate,
+          rankGrowthBonus: currentState.rankGrowthBonus,
+          rankGrowthMultiplier: currentState.rankGrowthMultiplier ?? config.attributeProgression?.rankGrowthMultiplier
         }
       );
     }
@@ -520,6 +547,7 @@ export class ProgressionService {
     parameterName: string;
     currentValue?: number;
     baseGrowth?: number;
+    parameterGrowthPoints?: Record<string, number>;
     parameterGrowthFactors?: Record<string, number>;
     raceGrowthFactors?: Record<string, number>;
     race?: string;
@@ -527,12 +555,14 @@ export class ProgressionService {
     developmentRateMultiplier?: number;
     profileMultiplier?: number;
     rankGrowthMultiplier?: number;
+    rankGrowthBonus?: number;
     isRankUp?: boolean;
     usePotentialForGrowth?: boolean;
   }): number {
     const {
       parameterName,
       baseGrowth = 2,
+      parameterGrowthPoints,
       parameterGrowthFactors = {},
       raceGrowthFactors,
       race,
@@ -540,6 +570,7 @@ export class ProgressionService {
       developmentRateMultiplier = 1.0,
       profileMultiplier = 1.0,
       rankGrowthMultiplier = 4,
+      rankGrowthBonus,
       isRankUp = false,
       usePotentialForGrowth = true
     } = params;
@@ -551,16 +582,28 @@ export class ProgressionService {
       raceGrowthFactors ||
       RaceService.getRaceGrowthFactors(race || 'Mensch');
 
-    // 2. Individueller Parameterfaktor
-    let paramFactor = 1.0;
-    if (parameterGrowthFactors && typeof parameterGrowthFactors[pKey] === 'number') {
-      paramFactor = parameterGrowthFactors[pKey];
-    } else if (parameterGrowthFactors) {
+    // 2. Punkt- oder Faktor-Wachstum ermitteln
+    let effectivePointBase = baseGrowth;
+    if (parameterGrowthPoints && typeof parameterGrowthPoints[pKey] === 'number') {
+      effectivePointBase = parameterGrowthPoints[pKey];
+    } else if (parameterGrowthPoints) {
       const lowerKey = pKey.toLowerCase();
-      const foundKey = Object.keys(parameterGrowthFactors).find(k => k.toLowerCase() === lowerKey);
-      if (foundKey && typeof parameterGrowthFactors[foundKey] === 'number') {
-        paramFactor = parameterGrowthFactors[foundKey];
+      const foundKey = Object.keys(parameterGrowthPoints).find(k => k.toLowerCase() === lowerKey);
+      if (foundKey && typeof parameterGrowthPoints[foundKey] === 'number') {
+        effectivePointBase = parameterGrowthPoints[foundKey];
       }
+    } else {
+      let paramFactor = 1.0;
+      if (parameterGrowthFactors && typeof parameterGrowthFactors[pKey] === 'number') {
+        paramFactor = parameterGrowthFactors[pKey];
+      } else if (parameterGrowthFactors) {
+        const lowerKey = pKey.toLowerCase();
+        const foundKey = Object.keys(parameterGrowthFactors).find(k => k.toLowerCase() === lowerKey);
+        if (foundKey && typeof parameterGrowthFactors[foundKey] === 'number') {
+          paramFactor = parameterGrowthFactors[foundKey];
+        }
+      }
+      effectivePointBase = baseGrowth * paramFactor;
     }
 
     // 3. Rassenfaktor für den spezifischen Parameter
@@ -575,10 +618,7 @@ export class ProgressionService {
       }
     }
 
-    // Kombinierter Parameter- & Rassenfaktor
-    const combinedFactor = paramFactor * raceFactor;
-
-    // 4. Potenzialfaktor berechnen (Potential ist KEINE Obergrenze, sondern beeinflusst die Wachstumsrate)
+    // 4. Potenzialfaktor berechnen
     let potentialFactor = 1.0;
     if (usePotentialForGrowth) {
       const potNum =
@@ -593,10 +633,14 @@ export class ProgressionService {
 
     // 5. Grundformel
     const baseDevGrowth =
-      baseGrowth * combinedFactor * potentialFactor * developmentRateMultiplier * profileMultiplier;
+      effectivePointBase * raceFactor * potentialFactor * developmentRateMultiplier * profileMultiplier;
 
-    // 6. Rangfaktor anwenden, falls ein Rangaufstieg verarbeitet wird
-    const rawGrowth = isRankUp ? baseDevGrowth * rankGrowthMultiplier : baseDevGrowth;
+    // 6. Rangfaktor anwenden
+    let effectiveRankMult = rankGrowthMultiplier;
+    if (typeof rankGrowthBonus === 'number') {
+      effectiveRankMult = 1 + rankGrowthBonus / 100;
+    }
+    const rawGrowth = isRankUp ? baseDevGrowth * effectiveRankMult : baseDevGrowth;
 
     return Math.round(rawGrowth * 100) / 100;
   }
@@ -615,7 +659,11 @@ export class ProgressionService {
       race?: string;
       potential?: number | string;
       parameterGrowthFactors?: Record<string, number>;
+      parameterGrowthPoints?: Record<string, number>;
       raceGrowthFactors?: Record<string, number>;
+      developmentRateMultiplier?: number;
+      rankGrowthBonus?: number;
+      rankGrowthMultiplier?: number;
     }
   ): CharacterAttribute[] {
     if (!attributes || attributes.length === 0 || levelsGained <= 0) {
@@ -624,7 +672,7 @@ export class ProgressionService {
 
     const profile = this.getDevelopmentProfile(profileType, config);
     const baseGrowth = config.attributeProgression?.baseGrowthPerLevel ?? 2;
-    const devRateMult = config.developmentRate?.attributeGrowthMultiplier ?? 1.0;
+    const devRateMult = options?.developmentRateMultiplier ?? config.developmentRate?.attributeGrowthMultiplier ?? 1.0;
     const profileMult = profile.attributeGrowthMultiplier ?? 1.0;
 
     const minVal = config.attributeProgression?.minAttributeValue ?? 0;
@@ -638,12 +686,14 @@ export class ProgressionService {
         currentValue: currentVal,
         baseGrowth,
         parameterGrowthFactors: options?.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+        parameterGrowthPoints: options?.parameterGrowthPoints,
         raceGrowthFactors: options?.raceGrowthFactors,
         race: options?.race,
         potential: options?.potential,
         developmentRateMultiplier: devRateMult,
         profileMultiplier: profileMult,
-        rankGrowthMultiplier: config.attributeProgression?.rankGrowthMultiplier ?? 4,
+        rankGrowthMultiplier: options?.rankGrowthMultiplier ?? config.attributeProgression?.rankGrowthMultiplier ?? 4,
+        rankGrowthBonus: options?.rankGrowthBonus,
         isRankUp: false,
         usePotentialForGrowth: usePot
       });
@@ -675,9 +725,13 @@ export class ProgressionService {
     options?: {
       potential?: number | string;
       parameterGrowthFactors?: Record<string, number>;
+      parameterGrowthPoints?: Record<string, number>;
       raceGrowthFactors?: Record<string, number>;
       race?: string;
       rankUpsCount?: number;
+      developmentRateMultiplier?: number;
+      rankGrowthBonus?: number;
+      rankGrowthMultiplier?: number;
     }
   ): Record<string, { value: number; potentialMax: number }> {
     const rankUpsCount = options?.rankUpsCount ?? 0;
@@ -687,10 +741,10 @@ export class ProgressionService {
 
     const profile = this.getDevelopmentProfile(profileType, config);
     const baseGrowth = config.attributeProgression?.baseGrowthPerLevel ?? 2;
-    const rankGrowthMult = config.attributeProgression?.rankGrowthMultiplier ?? 4;
+    const rankGrowthMult = options?.rankGrowthMultiplier ?? config.attributeProgression?.rankGrowthMultiplier ?? 4;
     const usePot = config.attributeProgression?.usePotentialForGrowth ?? true;
 
-    const devRateMult = config.developmentRate?.attributeGrowthMultiplier ?? 1.0;
+    const devRateMult = options?.developmentRateMultiplier ?? config.developmentRate?.attributeGrowthMultiplier ?? 1.0;
     const profileMult = profile.attributeGrowthMultiplier ?? 1.0;
 
     const maxVal = config.attributeProgression?.maxAttributeValue ?? scaleMax;
@@ -722,12 +776,14 @@ export class ProgressionService {
           currentValue: currentVal,
           baseGrowth,
           parameterGrowthFactors: options?.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+          parameterGrowthPoints: options?.parameterGrowthPoints,
           raceGrowthFactors: options?.raceGrowthFactors,
           race: options?.race,
           potential: options?.potential,
           developmentRateMultiplier: devRateMult,
           profileMultiplier: profileMult,
           rankGrowthMultiplier: rankGrowthMult,
+          rankGrowthBonus: options?.rankGrowthBonus,
           isRankUp: false,
           usePotentialForGrowth: usePot
         });
@@ -741,12 +797,14 @@ export class ProgressionService {
           currentValue: currentVal,
           baseGrowth,
           parameterGrowthFactors: options?.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+          parameterGrowthPoints: options?.parameterGrowthPoints,
           raceGrowthFactors: options?.raceGrowthFactors,
           race: options?.race,
           potential: options?.potential,
           developmentRateMultiplier: devRateMult,
           profileMultiplier: profileMult,
           rankGrowthMultiplier: rankGrowthMult,
+          rankGrowthBonus: options?.rankGrowthBonus,
           isRankUp: true,
           usePotentialForGrowth: usePot
         });
@@ -784,6 +842,15 @@ export class ProgressionService {
     const xpNeeded = this.calculateXpRequirement(level, rank, config, profile);
     const rankIndex = rank ? this.getRankIndex(rank, config) : undefined;
 
+    const charRace = char.race || (char.appearance as any)?.race || existingProg.race || 'Mensch';
+    const charRaceFactors = existingProg.raceGrowthFactors || RaceService.getRaceGrowthFactors(charRace);
+    const devRate = typeof char.developmentRate === 'number'
+      ? char.developmentRate
+      : (char.developmentRate?.attributeGrowthMultiplier ?? existingProg.developmentRate ?? config.developmentRate?.attributeGrowthMultiplier ?? 1.0);
+    const paramFactors = char.parameterGrowthFactors || existingProg.parameterGrowthFactors || {};
+    const paramPoints = char.parameterGrowthPoints || existingProg.parameterGrowthPoints;
+    const powerLevels = char.campaignPowerLevels || existingProg.campaignPowerLevels;
+
     return {
       ...existingProg,
       level,
@@ -792,6 +859,15 @@ export class ProgressionService {
       rank,
       rankIndex,
       developmentProfile: profile,
+      developmentRate: devRate,
+      developmentRateMultiplier: devRate,
+      parameterGrowthFactors: paramFactors,
+      parameterGrowthPoints: paramPoints,
+      rankGrowthBonus: char.rankGrowthBonus ?? existingProg.rankGrowthBonus,
+      rankGrowthMultiplier: char.rankGrowthMultiplier ?? existingProg.rankGrowthMultiplier,
+      campaignPowerLevels: powerLevels,
+      race: charRace,
+      raceGrowthFactors: charRaceFactors,
       potential: typeof char.potential === 'number' ? char.potential : (typeof char.potential === 'string' ? parseFloat(char.potential) || 1000 : (existingProg.potential ?? 1000)),
       progressionLogic: existingProg.progressionLogic || 'ep'
     };

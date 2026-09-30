@@ -5,15 +5,26 @@ export interface RaceDefinition {
   id: string;
   name: string;
   description: string;
+  baseParameters?: Record<string, number>;
   growthFactors: Record<string, number>;
   defaultFeatures?: string;
   details?: any;
 }
 
+export const HUMAN_BASE_PARAMETERS: Record<string, number> = {
+  'Stärke': 10,
+  'Geschicklichkeit': 10,
+  'Konstitution': 10,
+  'Intelligenz': 10,
+  'Willenskraft': 10,
+  'Magie': 10
+};
+
 export const HUMAN_RACE_DEFINITION: RaceDefinition = {
   id: 'human',
   name: 'Mensch',
   description: 'Anpassungsfähig und vielseitig. Dient als biologischer Standard ohne ausgeprägte Stärken oder Schwächen.',
+  baseParameters: { ...HUMAN_BASE_PARAMETERS },
   growthFactors: {
     'Stärke': 1.0,
     'Geschicklichkeit': 1.0,
@@ -79,6 +90,14 @@ export class RaceService {
   static getRaceGrowthFactors(raceName?: string, customRaces?: RaceDefinition[]): Record<string, number> {
     const def = this.getRaceDefinition(raceName, customRaces);
     return def.growthFactors;
+  }
+
+  /**
+   * Holt die Startparameter für eine gegebene Rasse (Standard: Mensch Level 1 = 10 auf alle Parameter).
+   */
+  static getBaseParameters(raceName?: string, customRaces?: RaceDefinition[]): Record<string, number> {
+    const def = this.getRaceDefinition(raceName, customRaces);
+    return def.baseParameters || { ...HUMAN_BASE_PARAMETERS };
   }
 
   /**
