@@ -8,7 +8,7 @@ import {
   MonsterLootItem 
 } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
-import CharacterPowerRadar from './CharacterPowerRadar';
+import RpgStatusWindow from './RpgStatusWindow';
 import { GeminiService } from '../services/geminiService';
 import { EP_DEFAULT_PARAMETERS } from '../lib/progressionDefaults';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
@@ -1025,12 +1025,12 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
               </span>
             </div>
 
-            <CharacterPowerRadar
+            <RpgStatusWindow
+              world={world}
               worldPowerSettings={effectivePowerSettings}
-              characterData={editForm.details?.campaignPowerData || {}}
-              onChange={newData => {
+              campaignPowerLevels={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
+              onChangeCampaignPowerLevels={newData => {
                 updateDetail('campaignPowerData', newData);
-                // Halte auch campaignPowerLevels synchron
                 updateDetail('campaignPowerLevels', newData);
               }}
             />

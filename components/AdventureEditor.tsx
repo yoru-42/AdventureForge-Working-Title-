@@ -20,7 +20,6 @@ import { updateStandardFormFromMetamorphosisThresholds } from './bodyConditionRe
 import { PersonalityTraitsEditor } from './PersonalityTraitsEditor';
 import { PERSONALITY_ARCHETYPES, PERSONALITY_ARCHETYPE_OPTIONS, applyArchetypeToTraits } from './personalityArchetypesData';
 import CampaignPowerSettings from './CampaignPowerSettings';
-import CharacterPowerRadar from './CharacterPowerRadar';
 import { LocationSelector } from './LocationSelector';
 import { CivilizationManager } from './CivilizationManager';
 import { RegionsManager } from './RegionsManager';

@@ -19,7 +19,6 @@ import { EyeColorEditor } from './EyeColorEditor';
 import { LocationSelector } from './LocationSelector';
 import { PersonalityTraitsEditor } from './PersonalityTraitsEditor';
 import { RelationshipDetailEditor } from './RelationshipDetailEditor';
-import CharacterPowerRadar from './CharacterPowerRadar';
 import ProfessionSelect from './ProfessionSelect';
 import CompetenceProfileEditor from './CompetenceProfileEditor';
 import { CharacterMotivationPanel } from './CharacterMotivationPanel';

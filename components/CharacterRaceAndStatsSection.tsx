@@ -3,7 +3,7 @@ import React from 'react';
 import { CampaignPowerParameter, CharacterRank } from '../types';
 import { STANDARD_RANKS } from '../services/progressionService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
-import CharacterPowerRadar from './CharacterPowerRadar';
+import RpgStatusWindow from './RpgStatusWindow';
 import { Dna, BarChart3, Layers, Info } from 'lucide-react';
 
 interface CharacterRaceAndStatsSectionProps {
@@ -226,10 +226,10 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         </div>
 
         {worldPowerSettings && Object.keys(worldPowerSettings).length > 0 ? (
-          <CharacterPowerRadar
+          <RpgStatusWindow
             worldPowerSettings={worldPowerSettings}
-            characterData={characterPowerData}
-            onChange={onCharacterPowerDataChange}
+            campaignPowerLevels={characterPowerData}
+            onChangeCampaignPowerLevels={onCharacterPowerDataChange}
           />
         ) : (
           <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center gap-2.5 text-xs text-slate-400">
