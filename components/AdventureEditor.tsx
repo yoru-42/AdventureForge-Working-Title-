@@ -4189,6 +4189,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       developmentRate: player.developmentRate,
                       attributeGrowth: player.attributeGrowth,
                       epRequirement: player.epRequirement,
+                      race: player.race || player.appearance?.race || 'Mensch',
                       campaignPowerLevels: player.campaignPowerLevels || {}
                     }}
                     onChange={updates => setPlayer(prev => ({ ...prev, ...updates }))}

@@ -45,6 +45,7 @@ export interface IndividualProgressionValues {
   campaignPowerData?: any;
   parameterGrowthFactors?: Record<string, number>;
   raceGrowthFactors?: Record<string, number>;
+  race?: string;
 }
 
 interface IndividualProgressionEditorProps {
@@ -142,6 +143,8 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
       ? String(values.potential)
       : 'Rang A (Hoch)';
 
+  const currentRace = values.race || 'Mensch';
+
   // Attribute Growth & Base Growth via ProgressionService
   const baseAttrGrowth =
     values.attributeGrowth?.baseGrowthPerLevel ??
@@ -153,6 +156,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
     baseGrowth: baseAttrGrowth,
     parameterGrowthFactors: values.parameterGrowthFactors || worldProgressionConfig?.attributeProgression?.parameterGrowthFactors,
     raceGrowthFactors: values.raceGrowthFactors,
+    race: currentRace,
     potential: potCapVal,
     developmentRateMultiplier: epGainMult,
     profileMultiplier: attrGrowthMult,
@@ -182,7 +186,8 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
         {
           potential: potCapVal,
           parameterGrowthFactors: values.parameterGrowthFactors,
-          raceGrowthFactors: values.raceGrowthFactors
+          raceGrowthFactors: values.raceGrowthFactors,
+          race: currentRace
         }
       );
     }
@@ -208,6 +213,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
         xp: currentXp,
         rank: currentRank,
         potential: potCapVal,
+        race: currentRace,
         developmentProfile: values.developmentProfile,
         campaignPowerLevels: powerLevels,
         levelsPerRank: currentLevelsPerRank,
@@ -238,6 +244,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
             potential: potCapVal,
             parameterGrowthFactors: values.parameterGrowthFactors,
             raceGrowthFactors: values.raceGrowthFactors,
+            race: currentRace,
             rankUpsCount: result.rankUps ? result.rankUps.length : 0
           }
         );

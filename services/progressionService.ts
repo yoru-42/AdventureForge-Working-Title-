@@ -10,6 +10,7 @@ import {
   Character,
   CampaignPowerParameter
 } from '../types';
+import RaceService from './raceService';
 
 /**
  * Standard-Rangfolge im AdventureForge-System: F -> E -> D -> C -> B -> A -> S
@@ -468,7 +469,9 @@ export class ProgressionService {
         undefined,
         {
           potential: currentState.potential,
-          parameterGrowthFactors: config.attributeProgression?.parameterGrowthFactors,
+          parameterGrowthFactors: (currentState as any).parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+          raceGrowthFactors: (currentState as any).raceGrowthFactors,
+          race: (currentState as any).race,
           rankUpsCount
         }
       );
@@ -514,6 +517,7 @@ export class ProgressionService {
     baseGrowth?: number;
     parameterGrowthFactors?: Record<string, number>;
     raceGrowthFactors?: Record<string, number>;
+    race?: string;
     potential?: number | string;
     developmentRateMultiplier?: number;
     profileMultiplier?: number;
@@ -525,7 +529,8 @@ export class ProgressionService {
       parameterName,
       baseGrowth = 2,
       parameterGrowthFactors = {},
-      raceGrowthFactors = {},
+      raceGrowthFactors,
+      race,
       potential = 1000,
       developmentRateMultiplier = 1.0,
       profileMultiplier = 1.0,
@@ -536,29 +541,39 @@ export class ProgressionService {
 
     const pKey = (parameterName || '').trim();
 
-    // 1. Parameter-/Rassenfaktor ermitteln
+    // 1. Rassenfaktoren bestimmen (Fallback: Mensch)
+    const effectiveRaceFactors =
+      raceGrowthFactors ||
+      RaceService.getRaceGrowthFactors(race || 'Mensch');
+
+    // 2. Individueller Parameterfaktor
     let paramFactor = 1.0;
     if (parameterGrowthFactors && typeof parameterGrowthFactors[pKey] === 'number') {
       paramFactor = parameterGrowthFactors[pKey];
-    } else if (raceGrowthFactors && typeof raceGrowthFactors[pKey] === 'number') {
-      paramFactor = raceGrowthFactors[pKey];
-    } else {
+    } else if (parameterGrowthFactors) {
       const lowerKey = pKey.toLowerCase();
-      if (parameterGrowthFactors) {
-        const foundKey = Object.keys(parameterGrowthFactors).find(k => k.toLowerCase() === lowerKey);
-        if (foundKey && typeof parameterGrowthFactors[foundKey] === 'number') {
-          paramFactor = parameterGrowthFactors[foundKey];
-        }
-      }
-      if (paramFactor === 1.0 && raceGrowthFactors) {
-        const foundKey = Object.keys(raceGrowthFactors).find(k => k.toLowerCase() === lowerKey);
-        if (foundKey && typeof raceGrowthFactors[foundKey] === 'number') {
-          paramFactor = raceGrowthFactors[foundKey];
-        }
+      const foundKey = Object.keys(parameterGrowthFactors).find(k => k.toLowerCase() === lowerKey);
+      if (foundKey && typeof parameterGrowthFactors[foundKey] === 'number') {
+        paramFactor = parameterGrowthFactors[foundKey];
       }
     }
 
-    // 2. Potenzialfaktor berechnen (Potential ist KEINE Obergrenze, sondern beeinflusst die Wachstumsrate)
+    // 3. Rassenfaktor für den spezifischen Parameter
+    let raceFactor = 1.0;
+    if (effectiveRaceFactors && typeof effectiveRaceFactors[pKey] === 'number') {
+      raceFactor = effectiveRaceFactors[pKey];
+    } else if (effectiveRaceFactors) {
+      const lowerKey = pKey.toLowerCase();
+      const foundKey = Object.keys(effectiveRaceFactors).find(k => k.toLowerCase() === lowerKey);
+      if (foundKey && typeof effectiveRaceFactors[foundKey] === 'number') {
+        raceFactor = effectiveRaceFactors[foundKey];
+      }
+    }
+
+    // Kombinierter Parameter- & Rassenfaktor
+    const combinedFactor = paramFactor * raceFactor;
+
+    // 4. Potenzialfaktor berechnen (Potential ist KEINE Obergrenze, sondern beeinflusst die Wachstumsrate)
     let potentialFactor = 1.0;
     if (usePotentialForGrowth) {
       const potNum =
@@ -571,11 +586,11 @@ export class ProgressionService {
       potentialFactor = Math.max(0.2, Math.min(3.0, 1 + (normPot - 1000) / 2000));
     }
 
-    // 3. Grundformel
+    // 5. Grundformel
     const baseDevGrowth =
-      baseGrowth * paramFactor * potentialFactor * developmentRateMultiplier * profileMultiplier;
+      baseGrowth * combinedFactor * potentialFactor * developmentRateMultiplier * profileMultiplier;
 
-    // 4. Rangfaktor anwenden, falls ein Rangaufstieg verarbeitet wird
+    // 6. Rangfaktor anwenden, falls ein Rangaufstieg verarbeitet wird
     const rawGrowth = isRankUp ? baseDevGrowth * rankGrowthMultiplier : baseDevGrowth;
 
     return Math.round(rawGrowth * 100) / 100;
@@ -638,6 +653,7 @@ export class ProgressionService {
       potential?: number | string;
       parameterGrowthFactors?: Record<string, number>;
       raceGrowthFactors?: Record<string, number>;
+      race?: string;
       rankUpsCount?: number;
     }
   ): Record<string, { value: number; potentialMax: number }> {
@@ -684,6 +700,7 @@ export class ProgressionService {
           baseGrowth,
           parameterGrowthFactors: options?.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
           raceGrowthFactors: options?.raceGrowthFactors,
+          race: options?.race,
           potential: options?.potential,
           developmentRateMultiplier: devRateMult,
           profileMultiplier: profileMult,
@@ -702,6 +719,7 @@ export class ProgressionService {
           baseGrowth,
           parameterGrowthFactors: options?.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
           raceGrowthFactors: options?.raceGrowthFactors,
+          race: options?.race,
           potential: options?.potential,
           developmentRateMultiplier: devRateMult,
           profileMultiplier: profileMult,

@@ -166,7 +166,9 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
                   requiresMaxLevelForRankUp: formData.requiresMaxLevelForRankUp,
                   developmentRate: formData.developmentRate,
                   attributeGrowth: formData.attributeGrowth,
-                  epRequirement: formData.epRequirement
+                  epRequirement: formData.epRequirement,
+                  race: formData.race || 'Mensch',
+                  campaignPowerLevels: formData.campaignPowerLevels || (formData as any).campaignPowerData
                 }}
                 onChange={updates => setFormData(prev => ({
                   ...prev,

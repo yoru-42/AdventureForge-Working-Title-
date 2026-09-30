@@ -581,6 +581,9 @@ export interface ProgressionState {
   levelsPerRank?: number;
   resetLevelOnRankUp?: boolean;
   campaignPowerLevels?: Record<string, { value: number; potentialMax: number }>;
+  raceId?: string;
+  race?: string;
+  raceGrowthFactors?: Record<string, number>;
 
   isUnlocked?: boolean;
   isLearnable?: boolean;

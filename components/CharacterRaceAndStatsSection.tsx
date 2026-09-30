@@ -68,7 +68,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             </label>
             <AutoExpandingTextarea
               minRows={1}
-              value={race}
+              value={race || 'Mensch'}
               onChange={e => onRaceChange(e.target.value)}
               placeholder="z. B. Mensch, Elf, Zwerg"
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"

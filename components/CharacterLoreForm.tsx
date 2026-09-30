@@ -2025,6 +2025,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               developmentRate: getDetail('developmentRate', undefined),
               attributeGrowth: getDetail('attributeGrowth', undefined),
               epRequirement: getDetail('epRequirement', undefined),
+              race: getAppearanceValue('race') || getDetail('race', 'Mensch'),
               campaignPowerLevels: editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}
             }}
             onChange={updates => updateMultipleDetails(updates)}
