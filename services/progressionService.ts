@@ -863,6 +863,7 @@ export class ProgressionService {
       developmentRateMultiplier: devRate,
       parameterGrowthFactors: paramFactors,
       parameterGrowthPoints: paramPoints,
+      developmentPointsPerLevel: char.developmentPointsPerLevel ?? existingProg.developmentPointsPerLevel,
       rankGrowthBonus: char.rankGrowthBonus ?? existingProg.rankGrowthBonus,
       rankGrowthMultiplier: char.rankGrowthMultiplier ?? existingProg.rankGrowthMultiplier,
       campaignPowerLevels: powerLevels,

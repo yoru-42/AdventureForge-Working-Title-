@@ -2006,6 +2006,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
             onParameterGrowthPointsChange={points => updateDetail('parameterGrowthPoints', points)}
             rankGrowthBonus={typeof getDetail('rankGrowthBonus') === 'number' ? getDetail('rankGrowthBonus') : 25}
             onRankGrowthBonusChange={bonus => updateDetail('rankGrowthBonus', bonus)}
+            developmentPointsPerLevel={getDetail('developmentPointsPerLevel')}
+            onDevelopmentPointsPerLevelChange={budget => updateDetail('developmentPointsPerLevel', budget)}
             levelsPerRank={getDetail('levelsPerRank')}
           />
         </div>

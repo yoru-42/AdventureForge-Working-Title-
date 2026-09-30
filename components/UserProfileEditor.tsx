@@ -125,6 +125,8 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
               onParameterGrowthPointsChange={points => setFormData(prev => ({ ...prev, parameterGrowthPoints: points }))}
               rankGrowthBonus={formData.rankGrowthBonus ?? 25}
               onRankGrowthBonusChange={bonus => setFormData(prev => ({ ...prev, rankGrowthBonus: bonus }))}
+              developmentPointsPerLevel={formData.developmentPointsPerLevel}
+              onDevelopmentPointsPerLevelChange={budget => setFormData(prev => ({ ...prev, developmentPointsPerLevel: budget }))}
               levelsPerRank={formData.levelsPerRank}
             />
           </div>

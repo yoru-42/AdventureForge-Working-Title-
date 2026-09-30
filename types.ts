@@ -428,6 +428,7 @@ export interface UserProfile {
   campaignPowerData?: Record<string, number | CampaignPowerParameter>;
   parameterGrowthFactors?: Record<string, number>;
   parameterGrowthPoints?: Record<string, number>;
+  developmentPointsPerLevel?: number;
   rankGrowthBonus?: number;
   rankGrowthMultiplier?: number;
   appearance: {
@@ -591,6 +592,7 @@ export interface ProgressionState {
   campaignPowerLevels?: Record<string, { value: number; potentialMax: number }>;
   parameterGrowthFactors?: Record<string, number>;
   parameterGrowthPoints?: Record<string, number>;
+  developmentPointsPerLevel?: number;
   raceId?: string;
   race?: string;
   raceGrowthFactors?: Record<string, number>;
@@ -1707,6 +1709,7 @@ export interface Character {
   campaignPowerLevels?: Record<string, { value: number; potentialMax: number; xp?: number }>;
   parameterGrowthFactors?: Record<string, number>;
   parameterGrowthPoints?: Record<string, number>;
+  developmentPointsPerLevel?: number;
   rankGrowthBonus?: number;
   rankGrowthMultiplier?: number;
   race?: string;

@@ -4157,6 +4157,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     onParameterGrowthPointsChange={points => setPlayer(prev => ({ ...prev, parameterGrowthPoints: points }))}
                     rankGrowthBonus={player.rankGrowthBonus ?? 25}
                     onRankGrowthBonusChange={bonus => setPlayer(prev => ({ ...prev, rankGrowthBonus: bonus }))}
+                    developmentPointsPerLevel={player.developmentPointsPerLevel}
+                    onDevelopmentPointsPerLevelChange={budget => setPlayer(prev => ({ ...prev, developmentPointsPerLevel: budget }))}
                     levelsPerRank={player.levelsPerRank}
                   />
                 </div>
