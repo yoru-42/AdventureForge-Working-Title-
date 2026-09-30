@@ -28,6 +28,7 @@ import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArc
 import { syncLoreWithReciprocalRelationships, removeCounterpartRelationshipFromLore, normalizeRelationships } from '../lib/relationshipHelper';
 import { sanitizeCharacterNameAndProfession } from '../lib/loreSanitizer';
 import { migrateLegacyProfessionData } from '../services/professionCompetencyService';
+import { DEFAULT_RACES, RaceService } from '../services/raceService';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { CharacterInventorySection } from './CharacterInventorySection';
@@ -1967,14 +1968,21 @@ export const CharacterLoreForm: React.FC<Props> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Rasse</label>
-                <AutoExpandingTextarea 
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500" 
-                  placeholder="z.B. Mensch, Dunkelelf, Tiefling, Kitsune" 
-                  value={getAppearanceValue('race')} 
-                  onChange={e => updateAppearanceValue('race', e.target.value)} 
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Die biologische oder magische Spezies des Charakters.</p>
+                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Rasse / Spezies</label>
+                <select
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 cursor-pointer"
+                  value={getAppearanceValue('race') || 'Mensch'}
+                  onChange={e => updateAppearanceValue('race', e.target.value)}
+                >
+                  {RaceService.parseRaceLoreEntries(lore).map(r => (
+                    <option key={r.id || r.name} value={r.name}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1 italic">
+                  {RaceService.getRaceDefinition(getAppearanceValue('race') || 'Mensch', RaceService.parseRaceLoreEntries(lore)).description || 'Biologische Spezies'}
+                </p>
               </div>
 
               <div>

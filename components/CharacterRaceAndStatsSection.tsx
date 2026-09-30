@@ -2,6 +2,7 @@
 import React from 'react';
 import { CampaignPowerParameter, CharacterRank } from '../types';
 import { STANDARD_RANKS } from '../services/progressionService';
+import { DEFAULT_RACES, RaceService, RaceDefinition } from '../services/raceService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
 import { Dna, BarChart3, Layers, Info } from 'lucide-react';
@@ -9,6 +10,7 @@ import { Dna, BarChart3, Layers, Info } from 'lucide-react';
 interface CharacterRaceAndStatsSectionProps {
   race: string;
   onRaceChange: (val: string) => void;
+  customRaces?: RaceDefinition[];
   raceFeatures?: string;
   onRaceFeaturesChange?: (val: string) => void;
   origin?: string;
@@ -29,6 +31,7 @@ interface CharacterRaceAndStatsSectionProps {
 export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSectionProps> = ({
   race,
   onRaceChange,
+  customRaces,
   raceFeatures = '',
   onRaceFeaturesChange,
   origin = '',
@@ -45,6 +48,13 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   xp = 0,
   onXpChange
 }) => {
+  const currentRace = race || 'Mensch';
+  const availableRaces = customRaces && customRaces.length > 0
+    ? Array.from(new Map([...DEFAULT_RACES, ...customRaces].map(r => [r.name.toLowerCase(), r])).values())
+    : DEFAULT_RACES;
+
+  const currentRaceDef = RaceService.getRaceDefinition(currentRace, availableRaces);
+
   return (
     <div className="space-y-6">
       {/* 1. Rasse & grundlegende Eigenschaften */}
@@ -66,15 +76,19 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             <label className="block text-xs font-semibold text-slate-300 mb-1">
               Rasse / Spezies
             </label>
-            <AutoExpandingTextarea
-              minRows={1}
-              value={race || 'Mensch'}
+            <select
+              value={currentRace}
               onChange={e => onRaceChange(e.target.value)}
-              placeholder="z. B. Mensch, Elf, Zwerg"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
-            />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Biologische Spezies
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+            >
+              {availableRaces.map(r => (
+                <option key={r.id || r.name} value={r.name}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-slate-400 mt-1 block leading-relaxed italic">
+              {currentRaceDef.description || 'Biologische Spezies'}
             </span>
           </div>
 
@@ -183,7 +197,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
             />
             <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Persönliche Wachstumsgrenze
+              Beeinflusst die Wachstumsgeschwindigkeit
             </span>
           </div>
 

@@ -48,6 +48,7 @@ import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { createStandardLoreEntries } from '../lib/standardItemsData';
 import { AdventureResetService } from '../services/adventureResetService';
+import { DEFAULT_RACES, RaceService } from '../services/raceService';
 
 interface Props {
   onSave: (adventure: Adventure) => void;
@@ -4536,8 +4537,18 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold">Rasse</label>
-                    <AutoExpandingTextarea className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500" placeholder="z.B. Mensch, Elf" value={getAppearanceValue('race')} onChange={e => updateAppearanceValue('race', e.target.value)} />
+                    <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold">Rasse / Spezies</label>
+                    <select
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 cursor-pointer"
+                      value={getAppearanceValue('race') || 'Mensch'}
+                      onChange={e => updateAppearanceValue('race', e.target.value)}
+                    >
+                      {RaceService.parseRaceLoreEntries(loreDatabase).map(r => (
+                        <option key={r.id || r.name} value={r.name}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold">Herkunft</label>
