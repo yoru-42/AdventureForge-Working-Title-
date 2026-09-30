@@ -540,6 +540,7 @@ export interface ProgressionResult {
   rankUps: { fromRank: string; toRank: string }[];
   levelUpEvents: { level: number; rank?: string; xpNeeded: number }[];
   attributePointsEarned: number;
+  updatedPowerLevels?: Record<string, { value: number; potentialMax: number }>;
 }
 
 /**
@@ -576,6 +577,7 @@ export interface ProgressionState {
   epGainMultiplier?: number;
   levelsPerRank?: number;
   resetLevelOnRankUp?: boolean;
+  campaignPowerLevels?: Record<string, { value: number; potentialMax: number }>;
 
   isUnlocked?: boolean;
   isLearnable?: boolean;

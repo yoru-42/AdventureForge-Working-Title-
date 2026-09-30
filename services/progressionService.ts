@@ -7,7 +7,8 @@ import {
   ProgressionState,
   ProgressionResult,
   CharacterAttribute,
-  Character
+  Character,
+  CampaignPowerParameter
 } from '../types';
 
 /**
@@ -449,6 +450,21 @@ export class ProgressionService {
     const baseGrowth = config.attributeProgression?.baseGrowthPerLevel ?? 2;
     const pointsEarned = levelsGained * baseGrowth;
 
+    // Parameterwachstum anwenden bei gewonnenen Leveln
+    let updatedPowerLevels: Record<string, { value: number; potentialMax: number }> | undefined = undefined;
+    if (levelsGained !== 0 && currentState.campaignPowerLevels) {
+      const scaleMax = config.attributeProgression?.maxAttributeValue ?? 1000;
+      const scaleMin = config.attributeProgression?.minAttributeValue ?? 0;
+      updatedPowerLevels = this.applyLevelUpToPowerLevels(
+        currentState.campaignPowerLevels,
+        levelsGained,
+        config,
+        profileKey,
+        scaleMax,
+        scaleMin
+      );
+    }
+
     const newState: ProgressionState = {
       ...currentState,
       level: currentLvl,
@@ -457,7 +473,8 @@ export class ProgressionService {
       rank: currentRank,
       rankIndex: rankIdx,
       developmentProfile: profileKey,
-      points: (currentState.points ?? 0) + pointsEarned
+      points: (currentState.points ?? 0) + pointsEarned,
+      campaignPowerLevels: updatedPowerLevels || currentState.campaignPowerLevels
     };
 
     return {
@@ -467,7 +484,8 @@ export class ProgressionService {
       levelsGained,
       rankUps,
       levelUpEvents,
-      attributePointsEarned: pointsEarned
+      attributePointsEarned: pointsEarned,
+      updatedPowerLevels
     };
   }
 
@@ -517,14 +535,17 @@ export class ProgressionService {
    * Das individuelle Potenzial schränkt das tatsächliche Wachstum aktuell NICHT ein.
    */
   static applyLevelUpToPowerLevels(
-    powerLevels: Record<string, { value: number; potentialMax: number }>,
+    powerLevels: Record<string, { value: number; potentialMax: number }> = {},
     levelsGained: number,
     config: ProgressionConfig = DEFAULT_PROGRESSION_CONFIG,
     profileType?: DevelopmentProfileType,
     scaleMax: number = 1000,
-    scaleMin: number = 0
+    scaleMin: number = 0,
+    worldPowerSettings?: Record<string, number | CampaignPowerParameter>
   ): Record<string, { value: number; potentialMax: number }> {
-    if (!powerLevels || levelsGained <= 0) return powerLevels || {};
+    if (levelsGained === 0 && powerLevels && Object.keys(powerLevels).length > 0) {
+      return powerLevels;
+    }
 
     const profile = this.getDevelopmentProfile(profileType, config);
     const baseGrowth = config.attributeProgression?.baseGrowthPerLevel ?? 2;
@@ -535,16 +556,33 @@ export class ProgressionService {
     const maxVal = config.attributeProgression?.maxAttributeValue ?? scaleMax;
     const minVal = config.attributeProgression?.minAttributeValue ?? scaleMin;
 
-    const updated: Record<string, { value: number; potentialMax: number }> = {};
+    const updated: Record<string, { value: number; potentialMax: number }> = { ...(powerLevels || {}) };
 
-    Object.entries(powerLevels).forEach(([key, paramData]) => {
+    const settingsSource = worldPowerSettings || {};
+    const settingsKeys = Object.keys(settingsSource);
+    const existingKeys = Object.keys(powerLevels || {});
+    const defaultCategories = ['Stärke', 'Geschicklichkeit', 'Konstitution', 'Intelligenz', 'Willenskraft', 'Magie'];
+
+    const targetKeys = Array.from(
+      new Set([
+        ...existingKeys,
+        ...settingsKeys,
+        ...(existingKeys.length === 0 && settingsKeys.length === 0 ? defaultCategories : [])
+      ])
+    );
+
+    targetKeys.forEach(key => {
+      const paramData = updated[key] || { value: minVal || 10, potentialMax: maxVal };
       const currentVal = typeof paramData.value === 'number' ? paramData.value : minVal;
+      
       let nextVal = Math.round((currentVal + totalGain) * 10) / 10;
       nextVal = Math.min(maxVal, Math.max(minVal, nextVal));
 
+      const paramPotMax = paramData.potentialMax ?? maxVal;
+
       updated[key] = {
         value: nextVal,
-        potentialMax: Math.max(nextVal, paramData.potentialMax ?? maxVal)
+        potentialMax: Math.max(nextVal, paramPotMax)
       };
     });
 

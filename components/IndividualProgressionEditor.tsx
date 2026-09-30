@@ -150,15 +150,92 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
       ? String(values.potential)
       : 'Rang A (Hoch)';
 
-  // Single EP Sync Input
+  // Synchronized Level Change with Parameter Growth
+  const handleLevelChange = (newLevelVal: number) => {
+    const val = Math.max(1, newLevelVal);
+    const deltaLevel = val - currentLevel;
+    let newPowerLevels = powerLevels;
+
+    if (deltaLevel !== 0) {
+      newPowerLevels = ProgressionService.applyLevelUpToPowerLevels(
+        powerLevels,
+        deltaLevel,
+        worldProgressionConfig,
+        values.developmentProfile,
+        maxAttrVal,
+        minAttrVal,
+        worldPowerSettings || world?.campaignPowerSettings
+      );
+    }
+
+    if (onChangeCampaignPowerLevels && deltaLevel !== 0) {
+      onChangeCampaignPowerLevels(newPowerLevels);
+    }
+
+    onChange({
+      level: val,
+      campaignPowerLevels: newPowerLevels
+    });
+  };
+
+  // Single EP Sync Input with Level-Up & Parameter Growth
   const handleXpChange = (newXpVal: number) => {
     const val = Math.max(0, newXpVal);
-    onChange({
-      experiencePoints: val,
-      experience: val,
-      xp: val,
-      experienceText: `${val} / ${calculatedXpRequirement || 100} EP`
-    });
+    const diffXp = val - currentXp;
+
+    if (diffXp > 0) {
+      const currentState: any = {
+        level: currentLevel,
+        xp: currentXp,
+        rank: currentRank,
+        developmentProfile: values.developmentProfile,
+        campaignPowerLevels: powerLevels,
+        levelsPerRank: currentLevelsPerRank,
+        resetLevelOnRankUp: currentResetLevelOnRankUp,
+        epGainMultiplier: epGainMult
+      };
+
+      const result = ProgressionService.applyXpGain(
+        currentState,
+        diffXp,
+        worldProgressionConfig,
+        values.developmentProfile
+      );
+
+      let newPowerLevels = powerLevels;
+      if (result.levelsGained > 0) {
+        newPowerLevels = ProgressionService.applyLevelUpToPowerLevels(
+          powerLevels,
+          result.levelsGained,
+          worldProgressionConfig,
+          values.developmentProfile,
+          maxAttrVal,
+          minAttrVal,
+          worldPowerSettings || world?.campaignPowerSettings
+        );
+      }
+
+      if (onChangeCampaignPowerLevels && result.levelsGained > 0) {
+        onChangeCampaignPowerLevels(newPowerLevels);
+      }
+
+      onChange({
+        level: result.newState.level,
+        xp: result.newState.xp,
+        experiencePoints: result.newState.xp,
+        experience: result.newState.xp,
+        rank: result.newState.rank as CharacterRank,
+        experienceText: `${result.newState.xp} / ${result.newState.xpNeeded || 100} EP`,
+        campaignPowerLevels: newPowerLevels
+      });
+    } else {
+      onChange({
+        experiencePoints: val,
+        experience: val,
+        xp: val,
+        experienceText: `${val} / ${calculatedXpRequirement || 100} EP`
+      });
+    }
   };
 
   // Synchronized Multipliers
@@ -266,7 +343,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
                 value={currentLevel}
                 onChange={e => {
                   const val = Math.max(1, parseInt(e.target.value) || 1);
-                  onChange({ level: val });
+                  handleLevelChange(val);
                 }}
                 className="w-14 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-slate-100 font-bold focus:outline-none focus:border-amber-500"
               />
