@@ -4,7 +4,7 @@ import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentPro
 import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
-import { Dna, BarChart3, Layers, Sliders, Sparkles, Plus, Minus, RotateCcw } from 'lucide-react';
+import { Dna, BarChart3, Layers, Sliders, Plus, Minus, RotateCcw } from 'lucide-react';
 
 export interface CharacterRaceAndStatsSectionProps {
   race: string;
@@ -101,25 +101,43 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   const baseParams = currentRaceDef.baseParameters || HUMAN_BASE_PARAMETERS;
 
   const effectiveConfig = progressionConfig || world?.progressionConfig || DEFAULT_PROGRESSION_CONFIG;
-  const currentLevelsPerRank = levelsPerRank ?? effectiveConfig.levelSystem?.levelsPerRank ?? 10;
+  const rawLevelsPerRank = levelsPerRank ?? effectiveConfig.levelSystem?.levelsPerRank ?? 10;
+  const currentLevelsPerRank = typeof rawLevelsPerRank === 'number' && !isNaN(rawLevelsPerRank) && rawLevelsPerRank > 0
+    ? rawLevelsPerRank
+    : 10;
 
-  // Progression calculations
+  // Safe numerical progression values
+  const safeLevel = typeof level === 'number' && !isNaN(level) && level >= 1 ? Math.floor(level) : 1;
+  const safeXp = typeof xp === 'number' && !isNaN(xp) && xp >= 0 ? Math.floor(xp) : 0;
+
   const activeProfileKey = developmentProfile || 'normal';
-  const xpNeeded = ProgressionService.calculateXpRequirement(level, rank, effectiveConfig, activeProfileKey);
-  const progressPercent = xpNeeded > 0 ? Math.min(100, Math.max(0, Math.round((xp / xpNeeded) * 100))) : 100;
+  const rawXpNeeded = ProgressionService.calculateXpRequirement(safeLevel, rank, effectiveConfig, activeProfileKey);
+  const xpNeeded = typeof rawXpNeeded === 'number' && !isNaN(rawXpNeeded) && rawXpNeeded > 0 ? rawXpNeeded : 100;
+  const rawProgressPercent = xpNeeded > 0 ? Math.round((safeXp / xpNeeded) * 100) : 100;
+  const progressPercent = typeof rawProgressPercent === 'number' && !isNaN(rawProgressPercent)
+    ? Math.min(100, Math.max(0, rawProgressPercent))
+    : 0;
 
   const potNum = typeof potential === 'number' && !isNaN(potential)
     ? potential
     : typeof potential === 'string'
-    ? parseFloat(potential) || 1000
+    ? (parseFloat(potential) || 1000)
     : 1000;
+  const safePotNum = typeof potNum === 'number' && !isNaN(potNum) ? potNum : 1000;
 
   // Percentage values for Entwicklungsrate & Rangbonus
-  const devRatePercent = Math.round((typeof developmentRate === 'number' ? developmentRate : 1.0) * 100);
-  const rankBonusValue = typeof rankGrowthBonus === 'number' ? rankGrowthBonus : 25;
+  const rawDevRate = typeof developmentRate === 'number' && !isNaN(developmentRate)
+    ? developmentRate
+    : (typeof developmentRate === 'string' ? parseFloat(developmentRate) || 1.0 : 1.0);
+  const devRatePercent = Math.round((!isNaN(rawDevRate) ? rawDevRate : 1.0) * 100);
 
-  // Level bis Rangaufstieg calculation (e.g. Level 1 with 10 levels per rank -> 9 remaining)
-  const levelsUntilRankUp = Math.max(0, currentLevelsPerRank - (((level - 1) % currentLevelsPerRank) + 1));
+  const rawRankBonus = typeof rankGrowthBonus === 'number' && !isNaN(rankGrowthBonus)
+    ? rankGrowthBonus
+    : (typeof rankGrowthBonus === 'string' ? parseFloat(rankGrowthBonus) || 25 : 25);
+  const rankBonusValue = !isNaN(rawRankBonus) ? rawRankBonus : 25;
+
+  // Level bis Rangaufstieg calculation
+  const levelsUntilRankUp = Math.max(0, currentLevelsPerRank - (((safeLevel - 1) % currentLevelsPerRank) + 1));
 
   // Parameter List
   const parameterList = useMemo(() => {
@@ -137,22 +155,30 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   }, [worldPowerSettings, characterPowerData]);
 
   // Base growth per parameter from config
-  const baseGrowthPerParam = effectiveConfig.attributeProgression?.baseGrowthPerLevel ?? 2;
+  const rawBaseGrowth = effectiveConfig.attributeProgression?.baseGrowthPerLevel;
+  const baseGrowthPerParam = typeof rawBaseGrowth === 'number' && !isNaN(rawBaseGrowth) && rawBaseGrowth > 0
+    ? rawBaseGrowth
+    : 2;
 
   // Total Budget pro Level (freely adjustable, fallback to parameter count * base growth)
   const defaultBudget = parameterList.length * baseGrowthPerParam;
-  const currentBudget = typeof developmentPointsPerLevel === 'number' && developmentPointsPerLevel > 0
+  const rawDevPoints = typeof developmentPointsPerLevel === 'number' && !isNaN(developmentPointsPerLevel)
     ? developmentPointsPerLevel
+    : (typeof developmentPointsPerLevel === 'string' ? parseFloat(developmentPointsPerLevel) || defaultBudget : defaultBudget);
+  const currentBudget = typeof rawDevPoints === 'number' && !isNaN(rawDevPoints) && rawDevPoints >= 0
+    ? rawDevPoints
     : defaultBudget;
 
   // Allocated points per parameter
   const allocatedPoints: Record<string, number> = useMemo(() => {
     const result: Record<string, number> = {};
     parameterList.forEach(paramName => {
-      if (typeof parameterGrowthPoints?.[paramName] === 'number') {
-        result[paramName] = parameterGrowthPoints[paramName];
-      } else if (typeof parameterGrowthFactors?.[paramName] === 'number') {
-        result[paramName] = Math.max(0, Math.round(parameterGrowthFactors[paramName] * baseGrowthPerParam));
+      const pPoints = parameterGrowthPoints?.[paramName];
+      const pFactors = parameterGrowthFactors?.[paramName];
+      if (typeof pPoints === 'number' && !isNaN(pPoints)) {
+        result[paramName] = Math.max(0, pPoints);
+      } else if (typeof pFactors === 'number' && !isNaN(pFactors)) {
+        result[paramName] = Math.max(0, Math.round(pFactors * baseGrowthPerParam));
       } else {
         result[paramName] = baseGrowthPerParam;
       }
@@ -161,7 +187,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   }, [parameterList, parameterGrowthPoints, parameterGrowthFactors, baseGrowthPerParam]);
 
   const totalSpent = useMemo(() => {
-    return Object.values(allocatedPoints).reduce((sum, val) => sum + val, 0);
+    return Object.values(allocatedPoints).reduce((sum, val) => sum + (typeof val === 'number' && !isNaN(val) ? val : 0), 0);
   }, [allocatedPoints]);
 
   const remainingBudget = currentBudget - totalSpent;
@@ -171,7 +197,9 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     if (!characterPowerData || Object.keys(characterPowerData).length === 0) {
       const initialPowerData: Record<string, { value: number; potentialMax: number }> = {};
       parameterList.forEach(paramName => {
-        const startVal = baseParams[paramName] ?? 10;
+        const startVal = typeof baseParams[paramName] === 'number' && !isNaN(baseParams[paramName])
+          ? baseParams[paramName]
+          : 10;
         initialPowerData[paramName] = { value: startVal, potentialMax: 1000 };
       });
       onCharacterPowerDataChange(initialPowerData);
@@ -201,7 +229,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   };
 
   const handlePointDirectInput = (paramName: string, value: number) => {
-    const validVal = Math.max(0, value);
+    const validVal = isNaN(value) ? 0 : Math.max(0, value);
     const nextPoints = { ...allocatedPoints, [paramName]: validVal };
     onParameterGrowthPointsChange?.(nextPoints);
 
@@ -235,14 +263,15 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 
   const handleCurrentValueChange = (paramName: string, newVal: number) => {
     const currentEntry = characterPowerData?.[paramName];
-    const potMax = typeof currentEntry === 'object' && currentEntry !== null && typeof currentEntry.potentialMax === 'number'
+    const potMax = typeof currentEntry === 'object' && currentEntry !== null && typeof currentEntry.potentialMax === 'number' && !isNaN(currentEntry.potentialMax)
       ? currentEntry.potentialMax
       : 1000;
 
+    const safeVal = isNaN(newVal) ? 0 : Math.max(0, newVal);
     const updated = {
       ...characterPowerData,
       [paramName]: {
-        value: Math.max(0, newVal),
+        value: safeVal,
         potentialMax: potMax
       }
     };
@@ -353,7 +382,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             <input
               type="number"
               min={1}
-              value={level}
+              value={safeLevel}
               onChange={e => {
                 const val = Math.max(1, parseInt(e.target.value) || 1);
                 onLevelChange?.(val);
@@ -362,7 +391,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
             />
             <span className="text-[10px] text-slate-500 mt-0.5 block">
-              Stufe {level}
+              Stufe {safeLevel}
             </span>
           </div>
 
@@ -373,7 +402,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             <input
               type="number"
               min={0}
-              value={xp}
+              value={safeXp}
               onChange={e => {
                 const val = Math.max(0, parseInt(e.target.value) || 0);
                 onXpChange?.(val);
@@ -393,7 +422,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             <input
               type="number"
               min={1}
-              value={potNum}
+              value={safePotNum}
               onChange={e => {
                 const val = Math.max(1, parseInt(e.target.value) || 1000);
                 onPotentialChange?.(val);
@@ -427,7 +456,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           <div className="flex items-center justify-between text-xs font-mono">
             <span className="text-slate-400 text-[11px]">Fortschritt zur nächsten Stufe</span>
             <span className="font-bold text-amber-300 text-xs">
-              {xp} <span className="text-slate-500 font-normal">/ {xpNeeded} EP</span>
+              {safeXp} <span className="text-slate-500 font-normal">/ {xpNeeded} EP</span>
               <span className="ml-2 text-slate-400 font-normal text-[10px]">({progressPercent}%)</span>
             </span>
           </div>
@@ -438,9 +467,9 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             />
           </div>
           <div className="flex items-center justify-between text-[10px] text-slate-500">
-            <span>Aktuelle Stufe: {level}</span>
+            <span>Aktuelle Stufe: {safeLevel}</span>
             <span>
-              {xpNeeded > xp ? `Noch ${xpNeeded - xp} EP bis Stufe ${level + 1}` : 'Stufe aufstiegsbereit'}
+              {xpNeeded > safeXp ? `Noch ${xpNeeded - safeXp} EP bis Stufe ${safeLevel + 1}` : 'Stufe aufstiegsbereit'}
             </span>
           </div>
         </div>
@@ -605,15 +634,20 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             </thead>
             <tbody className="divide-y divide-slate-800/60 text-xs">
               {parameterList.map(paramName => {
-                const baseVal = baseParams[paramName] ?? 10;
+                const baseVal = typeof baseParams[paramName] === 'number' && !isNaN(baseParams[paramName])
+                  ? baseParams[paramName]
+                  : 10;
                 const rawParamData = characterPowerData?.[paramName];
-                const currentVal = typeof rawParamData === 'number'
+                const rawVal = typeof rawParamData === 'number'
                   ? rawParamData
                   : typeof rawParamData?.value === 'number'
                   ? rawParamData.value
-                  : baseVal;
+                  : (typeof rawParamData?.value === 'string' ? parseFloat(rawParamData.value) : baseVal);
+                const currentVal = typeof rawVal === 'number' && !isNaN(rawVal) ? rawVal : baseVal;
 
-                const allocated = allocatedPoints[paramName] ?? baseGrowthPerParam;
+                const allocated = typeof allocatedPoints[paramName] === 'number' && !isNaN(allocatedPoints[paramName])
+                  ? allocatedPoints[paramName]
+                  : baseGrowthPerParam;
 
                 return (
                   <tr

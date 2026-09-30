@@ -111,11 +111,17 @@ export function calculateRpgCharacterStats(
     const cleanP = paramName.trim();
     const matchedKey = categories.find(c => c.toLowerCase() === cleanP.toLowerCase()) || cleanP;
     const data = campaignPowerLevels[matchedKey] || campaignPowerLevels[cleanP];
-    const defaultMin = globalSettings[matchedKey]?.min ?? 10;
-    const defaultMax = globalSettings[matchedKey]?.max ?? 1000;
+    const defaultMin = typeof globalSettings[matchedKey]?.min === 'number' && !isNaN(globalSettings[matchedKey]?.min) ? globalSettings[matchedKey].min : 10;
+    const defaultMax = typeof globalSettings[matchedKey]?.max === 'number' && !isNaN(globalSettings[matchedKey]?.max) ? globalSettings[matchedKey].max : 1000;
+    const valNum = typeof data?.value === 'number' && !isNaN(data.value)
+      ? data.value
+      : (typeof data === 'number' && !isNaN(data) ? data : defaultMin);
+    const potMaxNum = typeof data?.potentialMax === 'number' && !isNaN(data.potentialMax)
+      ? data.potentialMax
+      : defaultMax;
     return {
-      value: data?.value ?? defaultMin,
-      potentialMax: data?.potentialMax ?? defaultMax
+      value: typeof valNum === 'number' && !isNaN(valNum) ? valNum : 10,
+      potentialMax: typeof potMaxNum === 'number' && !isNaN(potMaxNum) ? potMaxNum : 1000
     };
   };
 
