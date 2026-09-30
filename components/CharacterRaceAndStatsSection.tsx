@@ -4,7 +4,8 @@ import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentPro
 import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
-import { Dna, BarChart3, Layers, Sliders, Plus, Minus, RotateCcw } from 'lucide-react';
+import RpgStatusWindow from './RpgStatusWindow';
+import { Dna, BarChart3, Layers, Sliders, Plus, Minus, RotateCcw, Shield } from 'lucide-react';
 
 export interface CharacterRaceAndStatsSectionProps {
   race: string;
@@ -705,6 +706,28 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* 5. KAMPFEIGENSCHAFTEN & STATUS */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-2 px-1">
+          <Shield className="w-4 h-4 text-amber-400" />
+          <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+            Kampfeigenschaften &amp; Status
+          </h3>
+        </div>
+
+        <RpgStatusWindow
+          world={world}
+          worldPowerSettings={worldPowerSettings}
+          campaignPowerLevels={characterPowerData}
+          onChangeCampaignPowerLevels={onCharacterPowerDataChange}
+          rank={rank}
+          level={safeLevel}
+          xp={safeXp}
+          maxXp={xpNeeded}
+          showStatusHeader={false}
+        />
       </div>
     </div>
   );
