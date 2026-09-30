@@ -6,6 +6,8 @@ import { EyeColorEditor } from './EyeColorEditor';
 import { autoCalculateAppearance } from '../utils/appearance';
 import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArchetypesData';
 import { IndividualProgressionEditor } from './IndividualProgressionEditor';
+import { CharacterRaceAndStatsSection } from './CharacterRaceAndStatsSection';
+import { DEFAULT_RACES } from '../services/raceService';
 
 interface Props {
   profile: UserProfile;
@@ -96,52 +98,25 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
         <div className="space-y-6">
           {/* BEREICH 1: RASSE & WERTE */}
           <div className="p-5 bg-slate-950/70 rounded-2xl border border-slate-800 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-dna text-amber-400"></i>
-                <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                  1. Rasse &amp; Werte
-                </h3>
-              </div>
-              <span className="text-[10px] text-slate-500 font-medium">Persönliche Werte &amp; Entwicklungsbasis</span>
-            </div>
-
-            {/* Rasse & Rassemerkmale */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-400 font-bold uppercase block">Rasse</label>
-                <AutoExpandingTextarea 
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 min-h-[38px] font-semibold"
-                  placeholder="z.B. Mensch, Dunkelelf, Tiefling, Kitsune"
-                  value={formData.race || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setFormData(prev => ({
-                      ...prev,
-                      race: val,
-                      appearance: { ...prev.appearance, race: val }
-                    }));
-                  }}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] text-slate-400 font-bold uppercase block">Rassemerkmale</label>
-                <AutoExpandingTextarea 
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 min-h-[38px]"
-                  placeholder="z.B. Spitze Ohren, Katzenohren, Schweif, Schuppen, Hörner oder keine"
-                  value={formData.raceFeatures || ''}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setFormData(prev => ({
-                      ...prev,
-                      raceFeatures: val,
-                      appearance: { ...prev.appearance, raceFeatures: val }
-                    }));
-                  }}
-                />
-              </div>
-            </div>
+            <CharacterRaceAndStatsSection
+              race={formData.race || formData.appearance?.race || 'Mensch'}
+              onRaceChange={val => setFormData(prev => ({ ...prev, race: val, appearance: { ...prev.appearance, race: val } }))}
+              customRaces={DEFAULT_RACES}
+              raceFeatures={formData.raceFeatures || formData.appearance?.raceFeatures || ''}
+              onRaceFeaturesChange={val => setFormData(prev => ({ ...prev, raceFeatures: val, appearance: { ...prev.appearance, raceFeatures: val } }))}
+              origin={(formData as any).origin || (formData.appearance as any)?.origin || ''}
+              onOriginChange={val => setFormData(prev => ({ ...prev, origin: val, appearance: { ...(prev.appearance || {}), origin: val } } as any))}
+              characterPowerData={formData.campaignPowerLevels || (formData as any).campaignPowerData || {}}
+              onCharacterPowerDataChange={newData => setFormData(prev => ({ ...prev, campaignPowerLevels: newData, campaignPowerData: newData }))}
+              level={formData.level ?? 1}
+              onLevelChange={lvl => setFormData(prev => ({ ...prev, level: lvl }))}
+              rank={formData.rank || 'F'}
+              onRankChange={rnk => setFormData(prev => ({ ...prev, rank: rnk }))}
+              potential={typeof formData.potential === 'number' ? formData.potential : 1000}
+              onPotentialChange={pot => setFormData(prev => ({ ...prev, potential: pot }))}
+              xp={formData.xp ?? 0}
+              onXpChange={x => setFormData(prev => ({ ...prev, xp: x }))}
+            />
 
             {/* Wiederverwendbare Progressions- & Wertekomponente */}
             <div className="pt-2 border-t border-slate-800/70">

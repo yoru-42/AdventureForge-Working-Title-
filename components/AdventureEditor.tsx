@@ -44,6 +44,7 @@ import {
 } from '../lib/progressionDefaults';
 import { ProgressionSettingSection } from './ProgressionSettingSection';
 import { IndividualProgressionEditor } from './IndividualProgressionEditor';
+import { CharacterRaceAndStatsSection } from './CharacterRaceAndStatsSection';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { createStandardLoreEntries } from '../lib/standardItemsData';
@@ -4116,50 +4117,36 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     </div>
                   </div>
 
-                  {/* Rasse & Rassemerkmale */}
-                  <div className="bg-slate-900/40 p-5 rounded-2xl border border-slate-800/80 space-y-4">
-                    <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
-                      <i className="fa-solid fa-dna text-amber-400"></i>
-                      <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                        Rasse &amp; Biologische Merkmale
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                          <span className="text-amber-500">◆</span> Rasse
-                          <span className="text-amber-500">*</span>
-                        </label>
-                        <AutoExpandingTextarea 
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner font-semibold"
-                          placeholder="z.B. Mensch, Elf, Vampir, Cyborg, Dämon..." 
-                          value={getAppearanceValue('race') || player.race || 'Mensch'} 
-                          onChange={e => {
-                            const val = e.target.value;
-                            updateAppearanceValue('race', val);
-                            setPlayer(prev => ({ ...prev, race: val }));
-                          }} 
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs text-slate-400 font-bold uppercase tracking-wider">
-                          Spezifische Rassemerkmale / Physische Besonderheiten
-                        </label>
-                        <AutoExpandingTextarea 
-                          className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm outline-none focus:border-amber-500 transition shadow-inner"
-                          placeholder="z.B. Spitze Ohren, Reißzähne, Schwingen, Nachtsicht, Schuppen..." 
-                          value={getAppearanceValue('raceFeatures') || player.raceFeatures || ''} 
-                          onChange={e => {
-                            const val = e.target.value;
-                            updateAppearanceValue('raceFeatures', val);
-                            setPlayer(prev => ({ ...prev, raceFeatures: val }));
-                          }} 
-                        />
-                      </div>
-                    </div>
-                  </div>
+                  {/* Rasse, Spezies, Entwicklungszustand & Kampagnen-Macht-Skala */}
+                  <CharacterRaceAndStatsSection
+                    race={player.race || getAppearanceValue('race') || 'Mensch'}
+                    onRaceChange={val => {
+                      updateAppearanceValue('race', val);
+                      setPlayer(prev => ({ ...prev, race: val }));
+                    }}
+                    customRaces={RaceService.parseRaceLoreEntries(loreDatabase)}
+                    raceFeatures={player.raceFeatures || getAppearanceValue('raceFeatures') || ''}
+                    onRaceFeaturesChange={val => {
+                      updateAppearanceValue('raceFeatures', val);
+                      setPlayer(prev => ({ ...prev, raceFeatures: val }));
+                    }}
+                    origin={(player as any).origin || getAppearanceValue('origin') || ''}
+                    onOriginChange={val => {
+                      updateAppearanceValue('origin', val);
+                      setPlayer(prev => ({ ...prev, origin: val } as any));
+                    }}
+                    worldPowerSettings={world.campaignPowerSettings}
+                    characterPowerData={player.campaignPowerLevels || {}}
+                    onCharacterPowerDataChange={newData => setPlayer(prev => ({ ...prev, campaignPowerLevels: newData }))}
+                    level={player.level ?? 1}
+                    onLevelChange={lvl => setPlayer(prev => ({ ...prev, level: lvl }))}
+                    rank={player.rank || 'F'}
+                    onRankChange={rnk => setPlayer(prev => ({ ...prev, rank: rnk }))}
+                    potential={typeof player.potential === 'number' ? player.potential : (typeof player.potential === 'string' ? parseFloat(player.potential) || 1000 : 1000)}
+                    onPotentialChange={pot => setPlayer(prev => ({ ...prev, potential: pot }))}
+                    xp={player.xp ?? 0}
+                    onXpChange={x => setPlayer(prev => ({ ...prev, xp: x }))}
+                  />
 
                   {/* Macht & Werte (Kampagnen-Skala) */}
                   {/* Wiederverwendbare Progressions- & Wertekomponente */}

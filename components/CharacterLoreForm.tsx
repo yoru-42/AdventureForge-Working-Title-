@@ -32,6 +32,7 @@ import { DEFAULT_RACES, RaceService } from '../services/raceService';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { CharacterInventorySection } from './CharacterInventorySection';
+import { CharacterRaceAndStatsSection } from './CharacterRaceAndStatsSection';
 import { IndividualProgressionEditor } from './IndividualProgressionEditor';
 
 export interface CharacterAbility {
@@ -1959,46 +1960,42 @@ export const CharacterLoreForm: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* Rasse & Rassemerkmale */}
-          <div className="p-5 bg-slate-800/30 rounded-2xl border border-slate-700/80 space-y-4">
-            <div className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2 border-b border-slate-700/50 pb-2">
-              <i className="fa-solid fa-dna text-amber-400"></i>
-              <span>Rasse &amp; Rassemerkmale {activeTransformation ? `(${activeTransformation.transformName || activeTransformation.name})` : ''}</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">Rasse / Spezies</label>
-                <select
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500 cursor-pointer"
-                  value={getAppearanceValue('race') || 'Mensch'}
-                  onChange={e => updateAppearanceValue('race', e.target.value)}
-                >
-                  {RaceService.parseRaceLoreEntries(lore).map(r => (
-                    <option key={r.id || r.name} value={r.name}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-slate-500 mt-1 italic">
-                  {RaceService.getRaceDefinition(getAppearanceValue('race') || 'Mensch', RaceService.parseRaceLoreEntries(lore)).description || 'Biologische Spezies'}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1 uppercase font-bold">
-                  Rassemerkmale (Physische Besonderheiten)
-                </label>
-                <AutoExpandingTextarea 
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none focus:border-amber-500" 
-                  placeholder="z.B. Spitze Ohren, Katzenohren, Schweif, Schuppen, Flügel, Hörner oder 'keine'" 
-                  value={getAppearanceValue('raceFeatures')} 
-                  onChange={e => updateAppearanceValue('raceFeatures', e.target.value)} 
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Physische Merkmale, tierische/dämonische Züge oder Besonderheiten.</p>
-              </div>
-            </div>
-          </div>
+          {/* Rasse, Spezies, Entwicklungszustand & Kampagnen-Macht-Skala */}
+          <CharacterRaceAndStatsSection
+            race={getAppearanceValue('race') || (editForm as any).race || getDetail('race', 'Mensch')}
+            onRaceChange={val => {
+              updateAppearanceValue('race', val);
+              updateDetail('race', val);
+              setEditForm(prev => ({ ...prev, race: val } as any));
+            }}
+            customRaces={RaceService.parseRaceLoreEntries(lore)}
+            raceFeatures={getAppearanceValue('raceFeatures') || getDetail('raceFeatures', '')}
+            onRaceFeaturesChange={val => {
+              updateAppearanceValue('raceFeatures', val);
+              updateDetail('raceFeatures', val);
+            }}
+            origin={getAppearanceValue('origin') || getDetail('origin', '')}
+            onOriginChange={val => {
+              updateAppearanceValue('origin', val);
+              updateDetail('origin', val);
+            }}
+            worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
+            characterPowerData={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
+            onCharacterPowerDataChange={newData => {
+              updateMultipleDetails({
+                campaignPowerData: newData,
+                campaignPowerLevels: newData
+              });
+            }}
+            level={getDetail('level', 1)}
+            onLevelChange={lvl => updateDetail('level', lvl)}
+            rank={getDetail('rank', 'F')}
+            onRankChange={rnk => updateDetail('rank', rnk)}
+            potential={getDetail('potential', 1000)}
+            onPotentialChange={pot => updateDetail('potential', pot)}
+            xp={getDetail('xp', 0)}
+            onXpChange={x => updateDetail('xp', x)}
+          />
 
           {/* Wiederverwendbare Progressions- & Wertekomponente */}
           <IndividualProgressionEditor

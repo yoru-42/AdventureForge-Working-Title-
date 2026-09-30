@@ -372,7 +372,7 @@ export class ProgressionService {
       ? (currentState.rank || String(config.rankSystem?.ranks?.[0] || 'F'))
       : undefined;
 
-    const levelsPerRank = currentState.levelsPerRank || config.levelSystem?.levelsPerRank || 10;
+    const levelsPerRank = currentState.levelsPerRank ?? config.levelSystem?.levelsPerRank ?? 10;
     const resetLevelOnRankUp = currentState.resetLevelOnRankUp ?? config.levelSystem?.resetLevelOnRankUp ?? true;
 
     if (!config.levelSystem?.enabled) {
@@ -456,6 +456,9 @@ export class ProgressionService {
     // Parameterwachstum anwenden bei gewonnenen Leveln oder Rangaufstiegen
     let updatedPowerLevels: Record<string, { value: number; potentialMax: number }> | undefined = undefined;
     const rankUpsCount = rankUps.length;
+    const charRace = currentState.race || 'Mensch';
+    const charRaceFactors = currentState.raceGrowthFactors || RaceService.getRaceGrowthFactors(charRace);
+
     if ((levelsGained !== 0 || rankUpsCount > 0) && currentState.campaignPowerLevels) {
       const scaleMax = config.attributeProgression?.maxAttributeValue ?? 1000;
       const scaleMin = config.attributeProgression?.minAttributeValue ?? 0;
@@ -470,8 +473,8 @@ export class ProgressionService {
         {
           potential: currentState.potential,
           parameterGrowthFactors: (currentState as any).parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
-          raceGrowthFactors: (currentState as any).raceGrowthFactors,
-          race: (currentState as any).race,
+          raceGrowthFactors: charRaceFactors,
+          race: charRace,
           rankUpsCount
         }
       );
@@ -486,6 +489,8 @@ export class ProgressionService {
       rankIndex: rankIdx,
       developmentProfile: profileKey,
       points: (currentState.points ?? 0) + pointsEarned,
+      race: charRace,
+      raceGrowthFactors: charRaceFactors,
       campaignPowerLevels: updatedPowerLevels || currentState.campaignPowerLevels
     };
 
@@ -606,7 +611,12 @@ export class ProgressionService {
     levelsGained: number,
     config: ProgressionConfig = DEFAULT_PROGRESSION_CONFIG,
     profileType?: DevelopmentProfileType,
-    _potentials?: Record<string, number>
+    options?: {
+      race?: string;
+      potential?: number | string;
+      parameterGrowthFactors?: Record<string, number>;
+      raceGrowthFactors?: Record<string, number>;
+    }
   ): CharacterAttribute[] {
     if (!attributes || attributes.length === 0 || levelsGained <= 0) {
       return attributes || [];
@@ -614,18 +624,31 @@ export class ProgressionService {
 
     const profile = this.getDevelopmentProfile(profileType, config);
     const baseGrowth = config.attributeProgression?.baseGrowthPerLevel ?? 2;
-    const growthMult = (config.developmentRate?.attributeGrowthMultiplier ?? 1.0) * (profile.attributeGrowthMultiplier ?? 1.0);
-    const gainPerStat = Math.max(1, Math.round(baseGrowth * growthMult));
-    const totalGain = gainPerStat * levelsGained;
+    const devRateMult = config.developmentRate?.attributeGrowthMultiplier ?? 1.0;
+    const profileMult = profile.attributeGrowthMultiplier ?? 1.0;
 
     const minVal = config.attributeProgression?.minAttributeValue ?? 0;
     const maxVal = config.attributeProgression?.maxAttributeValue ?? 1000;
+    const usePot = config.attributeProgression?.usePotentialForGrowth ?? true;
 
     return attributes.map(attr => {
       const currentVal = typeof attr.value === 'number' ? attr.value : minVal;
-      let nextVal = currentVal + totalGain;
+      const growthPerLevel = this.calculateParameterGrowth({
+        parameterName: attr.name,
+        currentValue: currentVal,
+        baseGrowth,
+        parameterGrowthFactors: options?.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+        raceGrowthFactors: options?.raceGrowthFactors,
+        race: options?.race,
+        potential: options?.potential,
+        developmentRateMultiplier: devRateMult,
+        profileMultiplier: profileMult,
+        rankGrowthMultiplier: config.attributeProgression?.rankGrowthMultiplier ?? 4,
+        isRankUp: false,
+        usePotentialForGrowth: usePot
+      });
 
-      // Die globale Skala ist die absolute Obergrenze
+      let nextVal = currentVal + growthPerLevel * levelsGained;
       nextVal = Math.min(maxVal, Math.max(minVal, nextVal));
 
       return {
