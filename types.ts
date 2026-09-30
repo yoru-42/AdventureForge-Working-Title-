@@ -573,6 +573,10 @@ export interface ProgressionState {
 
   points?: number;
 
+  epGainMultiplier?: number;
+  levelsPerRank?: number;
+  resetLevelOnRankUp?: boolean;
+
   isUnlocked?: boolean;
   isLearnable?: boolean;
 }

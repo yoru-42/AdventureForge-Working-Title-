@@ -55,24 +55,31 @@ export function calculateRpgCharacterStats(
 ): DerivedRpgStats {
   const settingsSource = worldPowerSettings || world?.campaignPowerSettings || EP_DEFAULT_PARAMETERS;
 
-  // 1. Parameter-Definitionen aufbauen
+  // 1. Parameter-Definitionen aufbauen (ohne künstliches 0-100 Limit)
   const globalSettings: Record<string, CampaignPowerParameter> = {};
   Object.entries(settingsSource).forEach(([key, val]) => {
     if (typeof val === 'number') {
+      const maxVal = Math.max(1000, val);
       globalSettings[key] = {
-        min: Math.floor(val * 0.4),
-        max: val,
+        min: 0,
+        max: maxVal,
         levelUpLogic: '',
         scaleMin: 0,
-        scaleMax: 100
+        scaleMax: maxVal
       };
     } else if (val && typeof val === 'object') {
+      const paramMin = typeof val.min === 'number' ? val.min : 0;
+      const paramMax = typeof val.max === 'number' ? val.max : 1000;
+      const sMin = typeof val.scaleMin === 'number' ? val.scaleMin : paramMin;
+      const sMax = typeof val.scaleMax === 'number' ? val.scaleMax : Math.max(1000, paramMax);
+
       globalSettings[key] = {
-        min: typeof val.min === 'number' ? val.min : 10,
-        max: typeof val.max === 'number' ? val.max : 100,
+        min: paramMin,
+        max: paramMax,
         levelUpLogic: typeof val.levelUpLogic === 'string' ? val.levelUpLogic : '',
-        scaleMin: typeof val.scaleMin === 'number' ? val.scaleMin : 0,
-        scaleMax: typeof val.scaleMax === 'number' ? val.scaleMax : 100
+        scaleMin: sMin,
+        scaleMax: sMax,
+        category: val.category
       };
     }
   });
@@ -105,7 +112,7 @@ export function calculateRpgCharacterStats(
     const matchedKey = categories.find(c => c.toLowerCase() === cleanP.toLowerCase()) || cleanP;
     const data = campaignPowerLevels[matchedKey] || campaignPowerLevels[cleanP];
     const defaultMin = globalSettings[matchedKey]?.min ?? 10;
-    const defaultMax = globalSettings[matchedKey]?.max ?? 100;
+    const defaultMax = globalSettings[matchedKey]?.max ?? 1000;
     return {
       value: data?.value ?? defaultMin,
       potentialMax: data?.potentialMax ?? defaultMax
@@ -141,7 +148,7 @@ export function calculateRpgCharacterStats(
     };
   });
 
-  // 3. Dynamische Ressourcenberechnung (OHNE künstliche *10 Skalierung)
+  // 3. Dynamische Ressourcenberechnung (ohne künstliche *10 Skalierung)
   const resourceMap = new Map<string, DerivedResource>();
 
   // A) Gesundheits-Ressource (HP)

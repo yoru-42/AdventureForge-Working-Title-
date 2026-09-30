@@ -1,5 +1,5 @@
 // -*- coding: utf-8 -*-
-import React from 'react';
+import React, { useState } from 'react';
 import { WorldSetting, CampaignPowerParameter } from '../types';
 import { calculateRpgCharacterStats, CharacterPowerData } from '../services/rpgStatService';
 
@@ -28,6 +28,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   maxXp,
   showStatusHeader = false
 }) => {
+  const [editingParam, setEditingParam] = useState<string | null>(null);
+
   const { categories, globalSettings, combatProperties, resources } =
     calculateRpgCharacterStats(campaignPowerLevels, world, worldPowerSettings);
 
@@ -40,7 +42,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
     const current = campaignPowerLevels[cat] || {
       value: globalSettings[cat]?.min ?? 10,
-      potentialMax: globalSettings[cat]?.max ?? 100
+      potentialMax: globalSettings[cat]?.max ?? 1000
     };
 
     let updated = { ...current };
@@ -140,85 +142,101 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
           </div>
         </div>
 
-        {/* Spalte 2: PARAMETER */}
+        {/* Spalte 2: PARAMETER (Kompakte RPG-Anzeige mit optionaler Inline-Bearbeitung) */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-lg p-3 space-y-2.5">
-          <div className="text-[11px] font-mono font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-1">
-            PARAMETER
+          <div className="text-[11px] font-mono font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-1 flex items-center justify-between">
+            <span>PARAMETER</span>
+            {!readOnly && onChangeCampaignPowerLevels && (
+              <span className="text-[9px] text-slate-500 font-normal normal-case">
+                Tippe Parameter zum Bearbeiten
+              </span>
+            )}
           </div>
 
-          <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="space-y-1 font-mono text-xs max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
             {categories.map(cat => {
               const sMin = globalSettings[cat]?.scaleMin ?? 0;
-              const sMax = globalSettings[cat]?.scaleMax ?? 1000;
+              const sMax = globalSettings[cat]?.scaleMax ?? Math.max(1000, campaignPowerLevels[cat]?.potentialMax ?? 1000);
               const charVal = campaignPowerLevels[cat]?.value ?? globalSettings[cat]?.min ?? 10;
-              const charMax = campaignPowerLevels[cat]?.potentialMax ?? globalSettings[cat]?.max ?? 100;
+              const charMax = campaignPowerLevels[cat]?.potentialMax ?? globalSettings[cat]?.max ?? 1000;
+              const isEditing = editingParam === cat && !readOnly && Boolean(onChangeCampaignPowerLevels);
 
               return (
-                <div
-                  key={`param-row-${cat}`}
-                  className="bg-slate-950/60 p-2 rounded border border-slate-800/80 space-y-1"
-                >
-                  <div className="flex items-center justify-between text-xs font-mono">
+                <div key={`param-group-${cat}`} className="space-y-1">
+                  {/* Kompakte Hauptzeile */}
+                  <div
+                    onClick={() => {
+                      if (!readOnly && onChangeCampaignPowerLevels) {
+                        setEditingParam(editingParam === cat ? null : cat);
+                      }
+                    }}
+                    className={`flex items-center justify-between py-1 px-2 rounded select-none transition-colors ${
+                      !readOnly && onChangeCampaignPowerLevels ? 'cursor-pointer hover:bg-slate-950/70' : ''
+                    } ${isEditing ? 'bg-amber-500/10 border border-amber-500/30' : ''}`}
+                  >
                     <span className="font-bold text-slate-200">{cat}</span>
-                    <span className="text-slate-400 text-[11px]">
-                      <span className="text-amber-400 font-bold">{charVal}</span>
-                      <span className="text-slate-600"> / </span>
-                      <span className="text-emerald-400 font-bold">{charMax}</span>
-                    </span>
+                    <div className="flex items-center gap-1 font-bold">
+                      <span className="text-amber-400">{charVal}</span>
+                      <span className="text-slate-600 font-normal">/</span>
+                      <span className="text-emerald-400">{charMax}</span>
+                    </div>
                   </div>
 
-                  {!readOnly && onChangeCampaignPowerLevels && (
-                    <div className="grid grid-cols-2 gap-2 pt-0.5">
-                      <div>
-                        <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
-                          <span>Wert</span>
+                  {/* Inline Editierbereich bei Klick */}
+                  {isEditing && (
+                    <div className="p-2 bg-slate-950/95 border border-slate-800 rounded-lg space-y-2 animate-in fade-in duration-150">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                            <span>Wert</span>
+                            <input
+                              type="number"
+                              min={sMin}
+                              max={sMax}
+                              value={charVal}
+                              onChange={e =>
+                                handleParameterUpdate(cat, 'value', parseInt(e.target.value) || sMin)
+                              }
+                              className="w-14 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-amber-300 text-right font-mono font-bold"
+                            />
+                          </div>
                           <input
-                            type="number"
+                            type="range"
                             min={sMin}
                             max={sMax}
                             value={charVal}
                             onChange={e =>
                               handleParameterUpdate(cat, 'value', parseInt(e.target.value) || sMin)
                             }
-                            className="w-11 bg-slate-900 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-amber-300 text-right font-mono font-bold"
+                            className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-500"
                           />
                         </div>
-                        <input
-                          type="range"
-                          min={sMin}
-                          max={sMax}
-                          value={charVal}
-                          onChange={e =>
-                            handleParameterUpdate(cat, 'value', parseInt(e.target.value) || sMin)
-                          }
-                          className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-amber-500"
-                        />
-                      </div>
 
-                      <div>
-                        <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
-                          <span>Max</span>
+                        <div>
+                          <div className="flex justify-between text-[9px] text-slate-400 mb-0.5">
+                            <span>Potenzial</span>
+                            <input
+                              type="number"
+                              min={sMin}
+                              max={sMax}
+                              value={charMax}
+                              onChange={e =>
+                                handleParameterUpdate(cat, 'potentialMax', parseInt(e.target.value) || sMax)
+                              }
+                              className="w-14 bg-slate-900 border border-slate-700 rounded px-1 py-0.5 text-[10px] text-emerald-300 text-right font-mono font-bold"
+                            />
+                          </div>
                           <input
-                            type="number"
+                            type="range"
                             min={sMin}
                             max={sMax}
                             value={charMax}
                             onChange={e =>
                               handleParameterUpdate(cat, 'potentialMax', parseInt(e.target.value) || sMax)
                             }
-                            className="w-11 bg-slate-900 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-emerald-300 text-right font-mono font-bold"
+                            className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-500"
                           />
                         </div>
-                        <input
-                          type="range"
-                          min={sMin}
-                          max={sMax}
-                          value={charMax}
-                          onChange={e =>
-                            handleParameterUpdate(cat, 'potentialMax', parseInt(e.target.value) || sMax)
-                          }
-                          className="w-full h-1 bg-slate-800 rounded appearance-none cursor-pointer accent-emerald-500"
-                        />
                       </div>
                     </div>
                   )}
