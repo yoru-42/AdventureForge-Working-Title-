@@ -520,6 +520,9 @@ export interface AttributeProgressionConfig {
   enforcePotentialCap: boolean;
   potentialCap?: number;
   allowIndividualPotentialVariance?: boolean;
+  rankGrowthMultiplier?: number;
+  usePotentialForGrowth?: boolean;
+  parameterGrowthFactors?: Record<string, number>;
 }
 
 export interface ProgressionConfig {

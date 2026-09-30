@@ -43,6 +43,8 @@ export interface IndividualProgressionValues {
   };
   campaignPowerLevels?: Record<string, { value: number; potentialMax: number }>;
   campaignPowerData?: any;
+  parameterGrowthFactors?: Record<string, number>;
+  raceGrowthFactors?: Record<string, number>;
 }
 
 interface IndividualProgressionEditorProps {
@@ -124,16 +126,6 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
       ? Math.min(100, Math.max(0, Math.round((currentXp / calculatedXpRequirement) * 100)))
       : 100;
 
-  // Attribute Growth & Base Growth
-  const baseAttrGrowth =
-    values.attributeGrowth?.baseGrowthPerLevel ??
-    worldProgressionConfig?.attributeProgression?.baseGrowthPerLevel ??
-    2;
-  const effectiveGrowth = Math.round(baseAttrGrowth * attrGrowthMult * 10) / 10;
-
-  const currentAutoRankUp = values.autoRankUp ?? worldProgressionConfig?.rankSystem?.autoRankUp ?? true;
-  const currentRankUpReq = values.rankUpRequirements || '';
-
   const minAttrVal = values.attributeGrowth?.minAttributeValue ?? 0;
   const maxAttrVal = values.attributeGrowth?.maxAttributeValue ?? 1000;
 
@@ -150,6 +142,28 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
       ? String(values.potential)
       : 'Rang A (Hoch)';
 
+  // Attribute Growth & Base Growth via ProgressionService
+  const baseAttrGrowth =
+    values.attributeGrowth?.baseGrowthPerLevel ??
+    worldProgressionConfig?.attributeProgression?.baseGrowthPerLevel ??
+    2;
+
+  const sampleGrowth = ProgressionService.calculateParameterGrowth({
+    parameterName: 'Standard',
+    baseGrowth: baseAttrGrowth,
+    parameterGrowthFactors: values.parameterGrowthFactors || worldProgressionConfig?.attributeProgression?.parameterGrowthFactors,
+    raceGrowthFactors: values.raceGrowthFactors,
+    potential: potCapVal,
+    developmentRateMultiplier: epGainMult,
+    profileMultiplier: attrGrowthMult,
+    rankGrowthMultiplier: worldProgressionConfig?.attributeProgression?.rankGrowthMultiplier ?? 4,
+    isRankUp: false,
+    usePotentialForGrowth: worldProgressionConfig?.attributeProgression?.usePotentialForGrowth ?? true
+  });
+
+  const currentAutoRankUp = values.autoRankUp ?? worldProgressionConfig?.rankSystem?.autoRankUp ?? true;
+  const currentRankUpReq = values.rankUpRequirements || '';
+
   // Synchronized Level Change with Parameter Growth
   const handleLevelChange = (newLevelVal: number) => {
     const val = Math.max(1, newLevelVal);
@@ -164,7 +178,12 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
         values.developmentProfile,
         maxAttrVal,
         minAttrVal,
-        worldPowerSettings || world?.campaignPowerSettings
+        worldPowerSettings || world?.campaignPowerSettings,
+        {
+          potential: potCapVal,
+          parameterGrowthFactors: values.parameterGrowthFactors,
+          raceGrowthFactors: values.raceGrowthFactors
+        }
       );
     }
 
@@ -188,11 +207,14 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
         level: currentLevel,
         xp: currentXp,
         rank: currentRank,
+        potential: potCapVal,
         developmentProfile: values.developmentProfile,
         campaignPowerLevels: powerLevels,
         levelsPerRank: currentLevelsPerRank,
         resetLevelOnRankUp: currentResetLevelOnRankUp,
-        epGainMultiplier: epGainMult
+        epGainMultiplier: epGainMult,
+        parameterGrowthFactors: values.parameterGrowthFactors,
+        raceGrowthFactors: values.raceGrowthFactors
       };
 
       const result = ProgressionService.applyXpGain(
@@ -203,7 +225,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
       );
 
       let newPowerLevels = powerLevels;
-      if (result.levelsGained > 0) {
+      if (result.levelsGained > 0 || (result.rankUps && result.rankUps.length > 0)) {
         newPowerLevels = ProgressionService.applyLevelUpToPowerLevels(
           powerLevels,
           result.levelsGained,
@@ -211,11 +233,17 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
           values.developmentProfile,
           maxAttrVal,
           minAttrVal,
-          worldPowerSettings || world?.campaignPowerSettings
+          worldPowerSettings || world?.campaignPowerSettings,
+          {
+            potential: potCapVal,
+            parameterGrowthFactors: values.parameterGrowthFactors,
+            raceGrowthFactors: values.raceGrowthFactors,
+            rankUpsCount: result.rankUps ? result.rankUps.length : 0
+          }
         );
       }
 
-      if (onChangeCampaignPowerLevels && result.levelsGained > 0) {
+      if (onChangeCampaignPowerLevels && (result.levelsGained > 0 || (result.rankUps && result.rankUps.length > 0))) {
         onChangeCampaignPowerLevels(newPowerLevels);
       }
 
@@ -431,7 +459,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
             </span>
             <div className="flex items-center gap-1.5">
               <span className="text-emerald-400 font-bold">
-                +{effectiveGrowth.toString().replace('.', ',')}
+                +{sampleGrowth.toString().replace('.', ',')}
               </span>
               {attrGrowthMult !== 1.0 && (
                 <span className="text-[10px] text-slate-500">

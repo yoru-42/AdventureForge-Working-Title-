@@ -145,6 +145,8 @@ export const DEFAULT_PROGRESSION_CONFIG: ProgressionConfig = {
   },
   attributeProgression: {
     baseGrowthPerLevel: 2,
+    rankGrowthMultiplier: 4,
+    usePotentialForGrowth: true,
     maxAttributeValue: 1000,
     minAttributeValue: 0,
     enforcePotentialCap: false,
@@ -450,9 +452,10 @@ export class ProgressionService {
     const baseGrowth = config.attributeProgression?.baseGrowthPerLevel ?? 2;
     const pointsEarned = levelsGained * baseGrowth;
 
-    // Parameterwachstum anwenden bei gewonnenen Leveln
+    // Parameterwachstum anwenden bei gewonnenen Leveln oder Rangaufstiegen
     let updatedPowerLevels: Record<string, { value: number; potentialMax: number }> | undefined = undefined;
-    if (levelsGained !== 0 && currentState.campaignPowerLevels) {
+    const rankUpsCount = rankUps.length;
+    if ((levelsGained !== 0 || rankUpsCount > 0) && currentState.campaignPowerLevels) {
       const scaleMax = config.attributeProgression?.maxAttributeValue ?? 1000;
       const scaleMin = config.attributeProgression?.minAttributeValue ?? 0;
       updatedPowerLevels = this.applyLevelUpToPowerLevels(
@@ -461,7 +464,13 @@ export class ProgressionService {
         config,
         profileKey,
         scaleMax,
-        scaleMin
+        scaleMin,
+        undefined,
+        {
+          potential: currentState.potential,
+          parameterGrowthFactors: config.attributeProgression?.parameterGrowthFactors,
+          rankUpsCount
+        }
       );
     }
 
@@ -487,6 +496,89 @@ export class ProgressionService {
       attributePointsEarned: pointsEarned,
       updatedPowerLevels
     };
+  }
+
+  /**
+   * Berechnet den individuellen Zuwachs für einen einzelnen Parameter.
+   * Berücksichtigt:
+   * - Basis-Wachstum (baseGrowthPerLevel)
+   * - Parameter-/Rassenfaktor (parameterGrowthFactors / raceGrowthFactors)
+   * - Potenzialfaktor (Potenzial als Wachstumsgeschwindigkeit, NICHT als Cap)
+   * - Globale Entwicklungsrate (developmentRate.attributeGrowthMultiplier)
+   * - Entwicklungsprofil (profile.attributeGrowthMultiplier)
+   * - Rang-Wachstumsfaktor (rankGrowthMultiplier bei Rangaufstieg)
+   */
+  static calculateParameterGrowth(params: {
+    parameterName: string;
+    currentValue?: number;
+    baseGrowth?: number;
+    parameterGrowthFactors?: Record<string, number>;
+    raceGrowthFactors?: Record<string, number>;
+    potential?: number | string;
+    developmentRateMultiplier?: number;
+    profileMultiplier?: number;
+    rankGrowthMultiplier?: number;
+    isRankUp?: boolean;
+    usePotentialForGrowth?: boolean;
+  }): number {
+    const {
+      parameterName,
+      baseGrowth = 2,
+      parameterGrowthFactors = {},
+      raceGrowthFactors = {},
+      potential = 1000,
+      developmentRateMultiplier = 1.0,
+      profileMultiplier = 1.0,
+      rankGrowthMultiplier = 4,
+      isRankUp = false,
+      usePotentialForGrowth = true
+    } = params;
+
+    const pKey = (parameterName || '').trim();
+
+    // 1. Parameter-/Rassenfaktor ermitteln
+    let paramFactor = 1.0;
+    if (parameterGrowthFactors && typeof parameterGrowthFactors[pKey] === 'number') {
+      paramFactor = parameterGrowthFactors[pKey];
+    } else if (raceGrowthFactors && typeof raceGrowthFactors[pKey] === 'number') {
+      paramFactor = raceGrowthFactors[pKey];
+    } else {
+      const lowerKey = pKey.toLowerCase();
+      if (parameterGrowthFactors) {
+        const foundKey = Object.keys(parameterGrowthFactors).find(k => k.toLowerCase() === lowerKey);
+        if (foundKey && typeof parameterGrowthFactors[foundKey] === 'number') {
+          paramFactor = parameterGrowthFactors[foundKey];
+        }
+      }
+      if (paramFactor === 1.0 && raceGrowthFactors) {
+        const foundKey = Object.keys(raceGrowthFactors).find(k => k.toLowerCase() === lowerKey);
+        if (foundKey && typeof raceGrowthFactors[foundKey] === 'number') {
+          paramFactor = raceGrowthFactors[foundKey];
+        }
+      }
+    }
+
+    // 2. Potenzialfaktor berechnen (Potential ist KEINE Obergrenze, sondern beeinflusst die Wachstumsrate)
+    let potentialFactor = 1.0;
+    if (usePotentialForGrowth) {
+      const potNum =
+        typeof potential === 'number' && !isNaN(potential)
+          ? potential
+          : typeof potential === 'string'
+          ? parseFloat(potential) || 1000
+          : 1000;
+      const normPot = potNum <= 10 ? potNum * 100 : potNum;
+      potentialFactor = Math.max(0.2, Math.min(3.0, 1 + (normPot - 1000) / 2000));
+    }
+
+    // 3. Grundformel
+    const baseDevGrowth =
+      baseGrowth * paramFactor * potentialFactor * developmentRateMultiplier * profileMultiplier;
+
+    // 4. Rangfaktor anwenden, falls ein Rangaufstieg verarbeitet wird
+    const rawGrowth = isRankUp ? baseDevGrowth * rankGrowthMultiplier : baseDevGrowth;
+
+    return Math.round(rawGrowth * 100) / 100;
   }
 
   /**
@@ -530,9 +622,9 @@ export class ProgressionService {
   }
 
   /**
-   * Wendet gewonnene Level-Ups auf campaignPowerLevels (Parameter) an.
+   * Wendet gewonnene Level-Ups und Rangaufstiege auf campaignPowerLevels (Parameter) an.
    * Die globale Skala (scaleMax) bestimmt die absolute Obergrenze.
-   * Das individuelle Potenzial schränkt das tatsächliche Wachstum aktuell NICHT ein.
+   * Das individuelle Potenzial schränkt das tatsächliche Wachstum NICHT ein.
    */
   static applyLevelUpToPowerLevels(
     powerLevels: Record<string, { value: number; potentialMax: number }> = {},
@@ -541,17 +633,26 @@ export class ProgressionService {
     profileType?: DevelopmentProfileType,
     scaleMax: number = 1000,
     scaleMin: number = 0,
-    worldPowerSettings?: Record<string, number | CampaignPowerParameter>
+    worldPowerSettings?: Record<string, number | CampaignPowerParameter>,
+    options?: {
+      potential?: number | string;
+      parameterGrowthFactors?: Record<string, number>;
+      raceGrowthFactors?: Record<string, number>;
+      rankUpsCount?: number;
+    }
   ): Record<string, { value: number; potentialMax: number }> {
-    if (levelsGained === 0 && powerLevels && Object.keys(powerLevels).length > 0) {
+    const rankUpsCount = options?.rankUpsCount ?? 0;
+    if (levelsGained === 0 && rankUpsCount === 0 && powerLevels && Object.keys(powerLevels).length > 0) {
       return powerLevels;
     }
 
     const profile = this.getDevelopmentProfile(profileType, config);
     const baseGrowth = config.attributeProgression?.baseGrowthPerLevel ?? 2;
-    const growthMult = (config.developmentRate?.attributeGrowthMultiplier ?? 1.0) * (profile.attributeGrowthMultiplier ?? 1.0);
-    const gainPerStat = Math.round(baseGrowth * growthMult * 10) / 10;
-    const totalGain = gainPerStat * levelsGained;
+    const rankGrowthMult = config.attributeProgression?.rankGrowthMultiplier ?? 4;
+    const usePot = config.attributeProgression?.usePotentialForGrowth ?? true;
+
+    const devRateMult = config.developmentRate?.attributeGrowthMultiplier ?? 1.0;
+    const profileMult = profile.attributeGrowthMultiplier ?? 1.0;
 
     const maxVal = config.attributeProgression?.maxAttributeValue ?? scaleMax;
     const minVal = config.attributeProgression?.minAttributeValue ?? scaleMin;
@@ -573,9 +674,45 @@ export class ProgressionService {
 
     targetKeys.forEach(key => {
       const paramData = updated[key] || { value: minVal || 10, potentialMax: maxVal };
-      const currentVal = typeof paramData.value === 'number' ? paramData.value : minVal;
-      
-      let nextVal = Math.round((currentVal + totalGain) * 10) / 10;
+      let currentVal = typeof paramData.value === 'number' ? paramData.value : minVal;
+
+      // 1. Zuwachs für gewonnene Level
+      if (levelsGained !== 0) {
+        const lvlGrowth = this.calculateParameterGrowth({
+          parameterName: key,
+          currentValue: currentVal,
+          baseGrowth,
+          parameterGrowthFactors: options?.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+          raceGrowthFactors: options?.raceGrowthFactors,
+          potential: options?.potential,
+          developmentRateMultiplier: devRateMult,
+          profileMultiplier: profileMult,
+          rankGrowthMultiplier: rankGrowthMult,
+          isRankUp: false,
+          usePotentialForGrowth: usePot
+        });
+        currentVal += lvlGrowth * levelsGained;
+      }
+
+      // 2. Zuwachs für gewonnene Rangaufstiege
+      if (rankUpsCount > 0) {
+        const rnkGrowth = this.calculateParameterGrowth({
+          parameterName: key,
+          currentValue: currentVal,
+          baseGrowth,
+          parameterGrowthFactors: options?.parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+          raceGrowthFactors: options?.raceGrowthFactors,
+          potential: options?.potential,
+          developmentRateMultiplier: devRateMult,
+          profileMultiplier: profileMult,
+          rankGrowthMultiplier: rankGrowthMult,
+          isRankUp: true,
+          usePotentialForGrowth: usePot
+        });
+        currentVal += rnkGrowth * rankUpsCount;
+      }
+
+      let nextVal = Math.round(currentVal * 100) / 100;
       nextVal = Math.min(maxVal, Math.max(minVal, nextVal));
 
       const paramPotMax = paramData.potentialMax ?? maxVal;

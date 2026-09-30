@@ -857,7 +857,7 @@ export const ProgressionSettingSection: React.FC<ProgressionSettingSectionProps>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Wertsteigerung pro Level
+                  Basis-Wachstum pro Level
                 </label>
                 <input
                   type="number"
@@ -880,24 +880,74 @@ export const ProgressionSettingSection: React.FC<ProgressionSettingSectionProps>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Minimaler Wert
+                  Rang-Wachstumsfaktor
                 </label>
                 <input
                   type="number"
+                  step="0.5"
                   min={0}
-                  value={config.attributeProgression.minAttributeValue ?? 0}
+                  value={config.attributeProgression.rankGrowthMultiplier ?? 4}
                   onChange={e => {
-                    const val = Math.max(0, parseInt(e.target.value) || 0);
+                    const val = Math.max(0, parseFloat(e.target.value) || 4);
                     updateConfig(prev => ({
                       ...prev,
-                      attributeProgression: { ...prev.attributeProgression, minAttributeValue: val }
+                      attributeProgression: { ...prev.attributeProgression, rankGrowthMultiplier: val }
                     }));
                   }}
-                  placeholder="0"
+                  placeholder="4"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
                 />
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
-                  Untergrenze für Attribute
+                  Multiplikator für Zuwachs bei Rangaufstieg
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Potenzial beeinflusst Wachstum
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateConfig(prev => ({
+                        ...prev,
+                        attributeProgression: {
+                          ...prev.attributeProgression,
+                          usePotentialForGrowth: true
+                        }
+                      }))
+                    }
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${
+                      config.attributeProgression.usePotentialForGrowth !== false
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Ja
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateConfig(prev => ({
+                        ...prev,
+                        attributeProgression: {
+                          ...prev.attributeProgression,
+                          usePotentialForGrowth: false
+                        }
+                      }))
+                    }
+                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${
+                      config.attributeProgression.usePotentialForGrowth === false
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Nein
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  Potenzial beschleunigt/verlangsamt Wachstum
                 </span>
               </div>
 
@@ -921,55 +971,6 @@ export const ProgressionSettingSection: React.FC<ProgressionSettingSectionProps>
                 />
                 <span className="text-[10px] text-slate-400 mt-0.5 block">
                   Globale Obergrenze für Attribute
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Potenzialgrenze berücksichtigen
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateConfig(prev => ({
-                        ...prev,
-                        attributeProgression: {
-                          ...prev.attributeProgression,
-                          enforcePotentialCap: true
-                        }
-                      }))
-                    }
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${
-                      config.attributeProgression.enforcePotentialCap
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Ja
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updateConfig(prev => ({
-                        ...prev,
-                        attributeProgression: {
-                          ...prev.attributeProgression,
-                          enforcePotentialCap: false
-                        }
-                      }))
-                    }
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg border transition-all ${
-                      !config.attributeProgression.enforcePotentialCap
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Nein
-                  </button>
-                </div>
-                <span className="text-[10px] text-slate-400 mt-0.5 block">
-                  Kappt Steigerung am individuellen Potenzial
                 </span>
               </div>
             </div>
