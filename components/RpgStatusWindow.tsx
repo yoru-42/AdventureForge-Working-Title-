@@ -54,10 +54,6 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     ? baseGrowthPerParam
     : 2;
 
-  const defaultPersonalMax = typeof characterPotential === 'number' && !isNaN(characterPotential) && characterPotential > 0
-    ? characterPotential
-    : 1000;
-
   // Development Budget Calculations
   const defaultBudget = categories.length * safeBaseGrowth;
   const rawBudget = typeof developmentPointsPerLevel === 'number' && !isNaN(developmentPointsPerLevel)
@@ -108,20 +104,6 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     onParameterGrowthFactorsChange?.(nextFactors);
   };
 
-  const handlePointDirectInput = (paramName: string, value: number) => {
-    if (readOnly) return;
-    const validVal = isNaN(value) ? 0 : Math.max(0, value);
-    const nextPoints = { ...allocatedPoints, [paramName]: validVal };
-    onParameterGrowthPointsChange?.(nextPoints);
-
-    const nextFactors: Record<string, number> = { ...(parameterGrowthFactors || {}) };
-    categories.forEach(p => {
-      const pts = nextPoints[p] ?? safeBaseGrowth;
-      nextFactors[p] = safeBaseGrowth > 0 ? pts / safeBaseGrowth : 1.0;
-    });
-    onParameterGrowthFactorsChange?.(nextFactors);
-  };
-
   const handleResetToEvenBudget = () => {
     if (readOnly) return;
     const count = categories.length;
@@ -143,31 +125,26 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     onParameterGrowthFactorsChange?.(nextFactors);
   };
 
-  const handleParameterUpdate = (cat: string, field: 'value' | 'potentialMax', val: number) => {
+  const handleParameterUpdate = (cat: string, val: number) => {
     if (readOnly || !onChangeCampaignPowerLevels) return;
 
-    const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat]) && baseParameters[cat] > 0
+    const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
       ? baseParameters[cat]
       : 10;
 
-    const current = campaignPowerLevels[cat] || {
-      value: baseVal,
-      potentialMax: defaultPersonalMax
-    };
+    const current = campaignPowerLevels[cat];
+    const currentPMax = typeof current === 'object' && typeof current?.potentialMax === 'number'
+      ? current.potentialMax
+      : (typeof characterPotential === 'number' && characterPotential > 0 ? characterPotential : 1000);
 
     const sMin = 0;
     const sMax = globalSettings[cat]?.scaleMax ?? 100000;
     const clampedVal = Math.max(sMin, Math.min(sMax, isNaN(val) ? sMin : val));
 
-    let updated = { ...current };
-    if (field === 'value') {
-      updated.value = Math.max(0, clampedVal);
-      if (updated.value > updated.potentialMax) {
-        updated.potentialMax = updated.value;
-      }
-    } else {
-      updated.potentialMax = Math.max(1, clampedVal);
-    }
+    const updated = {
+      value: clampedVal,
+      potentialMax: currentPMax
+    };
 
     onChangeCampaignPowerLevels({
       ...campaignPowerLevels,
@@ -285,7 +262,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
             </span>
             {hasProgressionControls && !readOnly && (
               <div className="flex items-center gap-2 text-[10px] font-mono">
-                <span className="text-amber-300 font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                <span className="text-amber-300 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
                   {currentBudget} Pkt.
                 </span>
                 <span className={`px-1.5 py-0.5 rounded font-bold border ${
@@ -310,28 +287,28 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
             )}
           </div>
 
-          {/* Parameter-Liste als RPG-Status */}
+          {/* Parameter-Liste als RPG-Status: Stärke 42 / 1000 ▲ +4 */}
           <div className="space-y-1.5 font-mono text-xs max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
             {categories.map(cat => {
-              const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat]) && baseParameters[cat] > 0
+              const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
                 ? baseParameters[cat]
                 : (globalSettings[cat]?.min && globalSettings[cat].min > 0 ? globalSettings[cat].min : 10);
 
               const rawEntry = campaignPowerLevels[cat];
               const rawVal = typeof rawEntry === 'number'
                 ? rawEntry
-                : (typeof rawEntry?.value === 'number' ? rawEntry.value : undefined);
-              const charVal = typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 0
+                : (rawEntry && typeof rawEntry === 'object' && typeof rawEntry.value === 'number' ? rawEntry.value : undefined);
+
+              const charVal = rawVal !== undefined && !isNaN(rawVal)
                 ? rawVal
                 : baseVal;
 
-              const rawMax = typeof rawEntry?.potentialMax === 'number' ? rawEntry.potentialMax : undefined;
-              const charMax = typeof rawMax === 'number' && !isNaN(rawMax) && rawMax > 0
-                ? rawMax
-                : defaultPersonalMax;
+              const scaleMax = typeof globalSettings[cat]?.scaleMax === 'number' && globalSettings[cat].scaleMax > 0
+                ? globalSettings[cat].scaleMax
+                : 1000;
 
               const allocated = allocatedPoints[cat] ?? safeBaseGrowth;
-              const ratioPercent = charMax > 0 ? Math.min(100, Math.max(0, Math.round((charVal / charMax) * 100))) : 0;
+              const ratioPercent = scaleMax > 0 ? Math.min(100, Math.max(0, Math.round((charVal / scaleMax) * 100))) : 0;
 
               return (
                 <div
@@ -351,14 +328,14 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                     </div>
                   </div>
 
-                  {/* Aktueller Wert & Persönliches Potenzial */}
+                  {/* Aktueller Wert & Globale Skala: 42 / 1000 */}
                   <div className="flex items-center gap-1 shrink-0 font-mono text-xs">
                     {!readOnly && onChangeCampaignPowerLevels ? (
                       <input
                         type="number"
                         min={0}
                         value={charVal}
-                        onChange={e => handleParameterUpdate(cat, 'value', parseInt(e.target.value) || 0)}
+                        onChange={e => handleParameterUpdate(cat, parseInt(e.target.value) || 0)}
                         title="Aktueller Wert"
                         className="w-12 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded px-1 py-0.5 text-center font-bold text-amber-300 text-xs"
                       />
@@ -366,23 +343,10 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                       <span className="font-bold text-amber-300 text-xs px-1">{charVal}</span>
                     )}
 
-                    <span className="text-slate-600 font-bold">/</span>
-
-                    {!readOnly && onChangeCampaignPowerLevels ? (
-                      <input
-                        type="number"
-                        min={0}
-                        value={charMax}
-                        onChange={e => handleParameterUpdate(cat, 'potentialMax', parseInt(e.target.value) || 0)}
-                        title="Persönliches Potenzial / Maximum"
-                        className="w-14 bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded px-1 py-0.5 text-center text-slate-400 hover:text-slate-200 text-xs"
-                      />
-                    ) : (
-                      <span className="text-slate-400 text-xs px-1">{charMax}</span>
-                    )}
+                    <span className="text-slate-500 text-xs font-normal">/ {scaleMax}</span>
                   </div>
 
-                  {/* Geplante Entwicklung pro Level mit Stepper */}
+                  {/* Geplante Entwicklung pro Level mit Stepper: ▲ +X */}
                   <div className="flex items-center justify-end shrink-0 pl-1">
                     {hasProgressionControls && !readOnly ? (
                       <div className="inline-flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-md p-0.5">

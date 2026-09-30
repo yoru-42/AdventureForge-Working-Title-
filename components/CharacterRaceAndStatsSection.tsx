@@ -182,7 +182,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 
       if (existing !== undefined && existing !== null) {
         if (typeof existing === 'number') {
-          const val = existing > 0 ? existing : raceBaseVal;
+          const val = !isNaN(existing) ? existing : raceBaseVal;
           updatedPowerData[paramName] = {
             value: val,
             potentialMax: defaultCharPot
@@ -190,11 +190,11 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           if (val !== existing) needsUpdate = true;
         } else if (typeof existing === 'object') {
           const rawVal = existing.value;
-          const val = typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 0
+          const val = typeof rawVal === 'number' && !isNaN(rawVal)
             ? rawVal
             : raceBaseVal;
           const rawPMax = existing.potentialMax;
-          const pMax = typeof rawPMax === 'number' && !isNaN(rawPMax) && rawPMax > 0
+          const pMax = typeof rawPMax === 'number' && !isNaN(rawPMax)
             ? rawPMax
             : defaultCharPot;
 
