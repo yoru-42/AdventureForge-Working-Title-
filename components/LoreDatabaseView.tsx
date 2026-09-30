@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { LoreEntry, LoreCategory, CharacterPowerSource, Territory, FactionMember } from '../types';
 import { GeminiService } from '../services/geminiService';
 import { autoCalculateAppearance } from '../utils/appearance';
-import RpgStatusWindow from './RpgStatusWindow';
 import { LocationSelector } from './LocationSelector';
 import { CampaignPowerParameter } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';

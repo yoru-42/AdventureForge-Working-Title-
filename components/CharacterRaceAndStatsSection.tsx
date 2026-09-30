@@ -5,9 +5,9 @@ import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '
 import { DEFAULT_RACES, RaceService, RaceDefinition } from '../services/raceService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
-import { Dna, BarChart3, Layers, Info } from 'lucide-react';
+import { Dna, BarChart3, Layers, Info, TrendingUp, Award, Zap, ShieldCheck } from 'lucide-react';
 
-interface CharacterRaceAndStatsSectionProps {
+export interface CharacterRaceAndStatsSectionProps {
   race: string;
   onRaceChange: (val: string) => void;
   customRaces?: RaceDefinition[];
@@ -64,8 +64,49 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   const currentRaceDef = RaceService.getRaceDefinition(currentRace, availableRaces);
   const effectiveConfig = progressionConfig || world?.progressionConfig || DEFAULT_PROGRESSION_CONFIG;
   const currentLevelsPerRank = levelsPerRank ?? effectiveConfig.levelSystem?.levelsPerRank ?? 10;
+  const resetLevelOnRankUp = effectiveConfig.levelSystem?.resetLevelOnRankUp ?? true;
+
+  // Progression & EP Calculations
   const xpNeeded = ProgressionService.calculateXpRequirement(level, rank, effectiveConfig, developmentProfile);
   const progressPercent = xpNeeded > 0 ? Math.min(100, Math.max(0, Math.round((xp / xpNeeded) * 100))) : 100;
+
+  // Rank Index & Next Rank Calculations
+  const ranks = effectiveConfig.rankSystem?.ranks || STANDARD_RANKS;
+  const rankIdx = ProgressionService.getRankIndex(rank, effectiveConfig);
+  const isMaxRank = rankIdx >= ranks.length - 1;
+  const nextRank = isMaxRank ? 'Maximaler Rang' : String(ranks[rankIdx + 1]);
+
+  // Levels & XP to Rank Up
+  const currentRankMaxLevel = resetLevelOnRankUp
+    ? currentLevelsPerRank
+    : (rankIdx + 1) * currentLevelsPerRank;
+
+  const levelsToRankUp = isMaxRank ? 0 : Math.max(0, currentRankMaxLevel - level);
+
+  let xpToRankUp = 0;
+  if (!isMaxRank) {
+    xpToRankUp = Math.max(0, xpNeeded - xp);
+    for (let lvl = level + 1; lvl <= currentRankMaxLevel; lvl++) {
+      xpToRankUp += ProgressionService.calculateXpRequirement(lvl, rank, effectiveConfig, developmentProfile);
+    }
+  }
+
+  // Rank Up Check & Conditions
+  const rankCheck = ProgressionService.checkRankUpConditions(rank, level, xp, effectiveConfig, currentLevelsPerRank);
+
+  // Wertsteigerung (Stat Growth) calculation preview
+  const baseGrowth = effectiveConfig.attributeProgression?.baseGrowthPerLevel ?? 2;
+  const rankGrowthMultiplier = effectiveConfig.attributeProgression?.rankGrowthMultiplier ?? 4;
+  const profile = ProgressionService.getDevelopmentProfile(developmentProfile, effectiveConfig);
+  
+  const potNum = typeof potential === 'number' && !isNaN(potential)
+    ? potential
+    : typeof potential === 'string'
+    ? parseFloat(potential) || 1000
+    : 1000;
+  const normPot = potNum <= 10 ? potNum * 100 : potNum;
+  const potentialFactor = Math.max(0.2, Math.min(3.0, 1 + (normPot - 1000) / 2000));
+  const potentialPercentOffset = Math.round((potentialFactor - 1) * 100);
 
   return (
     <div className="space-y-6">
@@ -142,6 +183,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           </h3>
         </div>
 
+        {/* Top Grid: Rang, Level, EP, Potenzial */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-[11px] font-semibold text-slate-300 mb-1">
@@ -224,7 +266,66 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           </div>
         </div>
 
-        {/* EP-Fortschrittsbalken / nächste Stufe */}
+        {/* Rangaufstiegs-Übersicht: Nächster Rang, Level bis Rangaufstieg, EP bis Rangaufstieg */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-xl">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+              <Award className="w-4 h-4 text-amber-400" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Nächster Rang</span>
+              <span className="text-xs font-mono font-bold text-slate-100">
+                {isMaxRank ? 'Maximaler Rang (S)' : `Rang ${nextRank}`}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+              <Zap className="w-4 h-4 text-blue-400" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">Level bis Rangaufstieg</span>
+              <span className="text-xs font-mono font-bold text-slate-100">
+                {isMaxRank
+                  ? 'Maximal erreicht'
+                  : levelsToRankUp === 0
+                  ? 'Bereit für Aufstieg'
+                  : `${levelsToRankUp} ${levelsToRankUp === 1 ? 'Stufe' : 'Stufen'}`}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 block">EP bis Rangaufstieg</span>
+              <span className="text-xs font-mono font-bold text-slate-100">
+                {isMaxRank
+                  ? '—'
+                  : levelsToRankUp === 0 && rankCheck.canRankUp
+                  ? 'Erreicht'
+                  : `${xpToRankUp.toLocaleString()} EP`}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Rangaufstiegsbedingung / Status-Hinweis */}
+        <div className="text-[11px] px-3.5 py-2 rounded-lg bg-slate-950/40 border border-slate-800/60 flex items-center justify-between">
+          <span className="text-slate-400 font-medium">Rangaufstiegsbedingung:</span>
+          <span className={`font-semibold ${rankCheck.canRankUp ? 'text-emerald-400' : 'text-slate-300'}`}>
+            {isMaxRank
+              ? 'Höchste Rangstufe erreicht'
+              : rankCheck.canRankUp
+              ? 'Bedingungen erfüllt – Rangaufstieg bereit'
+              : rankCheck.reason || `Erfordert Stufe ${currentRankMaxLevel}${effectiveConfig.rankSystem?.minXpForRankUp ? ` und min. ${effectiveConfig.rankSystem.minXpForRankUp} EP` : ''}`}
+          </span>
+        </div>
+
+        {/* EP-Fortschrittsbalken */}
         <div className="pt-2 border-t border-slate-800/60 space-y-1.5">
           <div className="flex items-center justify-between text-xs font-mono">
             <span className="text-slate-400 text-[11px]">EP-Fortschritt / nächste Stufe</span>
@@ -238,6 +339,49 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               className="h-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 rounded-full transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-slate-500">
+            <span>Aktuelle Stufe: {level}</span>
+            <span>
+              {xpNeeded > xp ? `Noch ${xpNeeded - xp} EP bis Stufe ${level + 1}` : 'Stufe aufstiegsbereit'}
+            </span>
+          </div>
+        </div>
+
+        {/* Wertsteigerung / Persönliche Werteentwicklung */}
+        <div className="pt-3 border-t border-slate-800/60 space-y-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200 uppercase tracking-wider">
+            <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+            <span>Wertsteigerung &amp; Entwicklung</span>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <span className="text-[10px] text-slate-400 block uppercase font-medium">Basis pro Level</span>
+              <span className="text-slate-200 font-mono font-bold">+{baseGrowth} Punkte</span>
+            </div>
+            
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <span className="text-[10px] text-slate-400 block uppercase font-medium">Rang-Schub</span>
+              <span className="text-slate-200 font-mono font-bold">×{rankGrowthMultiplier}</span>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <span className="text-[10px] text-slate-400 block uppercase font-medium">Potenzial-Faktor</span>
+              <span className="text-slate-200 font-mono font-bold">
+                ×{potentialFactor.toFixed(2)}{' '}
+                <span className="text-[10px] text-amber-400/90 font-normal">
+                  ({potentialPercentOffset >= 0 ? `+${potentialPercentOffset}` : potentialPercentOffset}%)
+                </span>
+              </span>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <span className="text-[10px] text-slate-400 block uppercase font-medium">Entwicklungsprofil</span>
+              <span className="text-slate-200 font-medium truncate block" title={profile.label}>
+                {profile.label}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -272,4 +416,3 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 };
 
 export default CharacterRaceAndStatsSection;
-
