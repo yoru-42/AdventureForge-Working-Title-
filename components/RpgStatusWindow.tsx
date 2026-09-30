@@ -16,6 +16,7 @@ export interface RpgStatusWindowProps {
   maxXp?: number;
   showStatusHeader?: boolean;
   baseParameters?: Record<string, number>;
+  characterPotential?: number;
   developmentPointsPerLevel?: number;
   onDevelopmentPointsPerLevelChange?: (budget: number) => void;
   parameterGrowthPoints?: Record<string, number>;
@@ -37,6 +38,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   maxXp,
   showStatusHeader = false,
   baseParameters = {},
+  characterPotential,
   developmentPointsPerLevel,
   onDevelopmentPointsPerLevelChange,
   parameterGrowthPoints = {},
@@ -51,6 +53,10 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   const safeBaseGrowth = typeof baseGrowthPerParam === 'number' && !isNaN(baseGrowthPerParam) && baseGrowthPerParam > 0
     ? baseGrowthPerParam
     : 2;
+
+  const defaultPersonalMax = typeof characterPotential === 'number' && !isNaN(characterPotential) && characterPotential > 0
+    ? characterPotential
+    : 1000;
 
   // Development Budget Calculations
   const defaultBudget = categories.length * safeBaseGrowth;
@@ -140,23 +146,27 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   const handleParameterUpdate = (cat: string, field: 'value' | 'potentialMax', val: number) => {
     if (readOnly || !onChangeCampaignPowerLevels) return;
 
-    const sMin = globalSettings[cat]?.scaleMin ?? 0;
-    const sMax = globalSettings[cat]?.scaleMax ?? 10000;
-    const clampedVal = Math.max(sMin, Math.min(sMax, isNaN(val) ? sMin : val));
+    const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat]) && baseParameters[cat] > 0
+      ? baseParameters[cat]
+      : 10;
 
     const current = campaignPowerLevels[cat] || {
-      value: baseParameters[cat] ?? globalSettings[cat]?.min ?? 10,
-      potentialMax: globalSettings[cat]?.max ?? 1000
+      value: baseVal,
+      potentialMax: defaultPersonalMax
     };
+
+    const sMin = 0;
+    const sMax = globalSettings[cat]?.scaleMax ?? 100000;
+    const clampedVal = Math.max(sMin, Math.min(sMax, isNaN(val) ? sMin : val));
 
     let updated = { ...current };
     if (field === 'value') {
-      updated.value = clampedVal;
+      updated.value = Math.max(0, clampedVal);
       if (updated.value > updated.potentialMax) {
         updated.potentialMax = updated.value;
       }
     } else {
-      updated.potentialMax = clampedVal;
+      updated.potentialMax = Math.max(1, clampedVal);
     }
 
     onChangeCampaignPowerLevels({
@@ -275,7 +285,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
             </span>
             {hasProgressionControls && !readOnly && (
               <div className="flex items-center gap-2 text-[10px] font-mono">
-                <span className="text-amber-300 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                <span className="text-amber-300 font-bold bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
                   {currentBudget} Pkt.
                 </span>
                 <span className={`px-1.5 py-0.5 rounded font-bold border ${
@@ -303,15 +313,22 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
           {/* Parameter-Liste als RPG-Status */}
           <div className="space-y-1.5 font-mono text-xs max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
             {categories.map(cat => {
-              const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
+              const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat]) && baseParameters[cat] > 0
                 ? baseParameters[cat]
-                : (globalSettings[cat]?.min ?? 10);
-              const charVal = typeof campaignPowerLevels[cat]?.value === 'number' && !isNaN(campaignPowerLevels[cat].value)
-                ? campaignPowerLevels[cat].value
+                : (globalSettings[cat]?.min && globalSettings[cat].min > 0 ? globalSettings[cat].min : 10);
+
+              const rawEntry = campaignPowerLevels[cat];
+              const rawVal = typeof rawEntry === 'number'
+                ? rawEntry
+                : (typeof rawEntry?.value === 'number' ? rawEntry.value : undefined);
+              const charVal = typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 0
+                ? rawVal
                 : baseVal;
-              const charMax = typeof campaignPowerLevels[cat]?.potentialMax === 'number' && !isNaN(campaignPowerLevels[cat].potentialMax)
-                ? campaignPowerLevels[cat].potentialMax
-                : (globalSettings[cat]?.max ?? 1000);
+
+              const rawMax = typeof rawEntry?.potentialMax === 'number' ? rawEntry.potentialMax : undefined;
+              const charMax = typeof rawMax === 'number' && !isNaN(rawMax) && rawMax > 0
+                ? rawMax
+                : defaultPersonalMax;
 
               const allocated = allocatedPoints[cat] ?? safeBaseGrowth;
               const ratioPercent = charMax > 0 ? Math.min(100, Math.max(0, Math.round((charVal / charMax) * 100))) : 0;

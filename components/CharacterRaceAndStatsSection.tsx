@@ -172,30 +172,39 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     const currentData = characterPowerData || {};
     let needsUpdate = false;
     const updatedPowerData: Record<string, { value: number; potentialMax: number }> = {};
+    const defaultCharPot = safePotNum || 1000;
 
     parameterList.forEach(paramName => {
       const existing = currentData[paramName];
+      const raceBaseVal = typeof baseParams[paramName] === 'number' && !isNaN(baseParams[paramName])
+        ? baseParams[paramName]
+        : 10;
+
       if (existing !== undefined && existing !== null) {
         if (typeof existing === 'number') {
+          const val = existing > 0 ? existing : raceBaseVal;
           updatedPowerData[paramName] = {
-            value: !isNaN(existing) ? existing : (baseParams[paramName] ?? 10),
-            potentialMax: 1000
+            value: val,
+            potentialMax: defaultCharPot
           };
-          needsUpdate = true;
+          if (val !== existing) needsUpdate = true;
         } else if (typeof existing === 'object') {
-          const val = typeof existing.value === 'number' && !isNaN(existing.value)
-            ? existing.value
-            : (baseParams[paramName] ?? 10);
-          const pMax = typeof existing.potentialMax === 'number' && !isNaN(existing.potentialMax)
-            ? existing.potentialMax
-            : 1000;
+          const rawVal = existing.value;
+          const val = typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 0
+            ? rawVal
+            : raceBaseVal;
+          const rawPMax = existing.potentialMax;
+          const pMax = typeof rawPMax === 'number' && !isNaN(rawPMax) && rawPMax > 0
+            ? rawPMax
+            : defaultCharPot;
+
+          if (val !== rawVal || pMax !== rawPMax) {
+            needsUpdate = true;
+          }
           updatedPowerData[paramName] = { value: val, potentialMax: pMax };
         }
       } else {
-        const startVal = typeof baseParams[paramName] === 'number' && !isNaN(baseParams[paramName])
-          ? baseParams[paramName]
-          : 10;
-        updatedPowerData[paramName] = { value: startVal, potentialMax: 1000 };
+        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: defaultCharPot };
         needsUpdate = true;
       }
     });
@@ -203,7 +212,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     if (needsUpdate || Object.keys(currentData).length === 0) {
       onCharacterPowerDataChange(updatedPowerData);
     }
-  }, [characterPowerData, parameterList, baseParams, onCharacterPowerDataChange]);
+  }, [characterPowerData, parameterList, baseParams, safePotNum, onCharacterPowerDataChange]);
 
   return (
     <div className="space-y-6">
@@ -485,6 +494,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           maxXp={xpNeeded}
           showStatusHeader={false}
           baseParameters={baseParams}
+          characterPotential={safePotNum}
           developmentPointsPerLevel={currentBudget}
           onDevelopmentPointsPerLevelChange={onDevelopmentPointsPerLevelChange}
           parameterGrowthPoints={parameterGrowthPoints}

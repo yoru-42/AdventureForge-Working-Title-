@@ -70,16 +70,16 @@ export function calculateRpgCharacterStats(
     if (typeof val === 'number') {
       const maxVal = Math.max(1000, val);
       globalSettings[key] = {
-        min: 0,
+        min: 10,
         max: maxVal,
         levelUpLogic: '',
         scaleMin: 0,
         scaleMax: maxVal
       };
     } else if (val && typeof val === 'object') {
-      const paramMin = typeof val.min === 'number' ? val.min : 0;
-      const paramMax = typeof val.max === 'number' ? val.max : 1000;
-      const sMin = typeof val.scaleMin === 'number' ? val.scaleMin : paramMin;
+      const paramMin = typeof val.min === 'number' && val.min > 0 ? val.min : 10;
+      const paramMax = typeof val.max === 'number' && val.max > 0 ? val.max : 1000;
+      const sMin = typeof val.scaleMin === 'number' ? val.scaleMin : 0;
       const sMax = typeof val.scaleMax === 'number' ? val.scaleMax : Math.max(1000, paramMax);
 
       globalSettings[key] = {
@@ -148,17 +148,26 @@ export function calculateRpgCharacterStats(
     const cleanP = paramName.trim();
     const matchedKey = categories.find(c => c.toLowerCase() === cleanP.toLowerCase()) || cleanP;
     const data = campaignPowerLevels[matchedKey] || campaignPowerLevels[cleanP];
-    const defaultMin = typeof globalSettings[matchedKey]?.min === 'number' && !isNaN(globalSettings[matchedKey]?.min) ? globalSettings[matchedKey].min : 10;
-    const defaultMax = typeof globalSettings[matchedKey]?.max === 'number' && !isNaN(globalSettings[matchedKey]?.max) ? globalSettings[matchedKey].max : 1000;
-    const valNum = typeof data?.value === 'number' && !isNaN(data.value)
-      ? data.value
-      : (typeof data === 'number' && !isNaN(data) ? data : defaultMin);
-    const potMaxNum = typeof data?.potentialMax === 'number' && !isNaN(data.potentialMax)
-      ? data.potentialMax
+    const defaultMin = typeof globalSettings[matchedKey]?.min === 'number' && !isNaN(globalSettings[matchedKey]?.min) && globalSettings[matchedKey].min > 0
+      ? globalSettings[matchedKey].min
+      : 10;
+    const defaultMax = typeof globalSettings[matchedKey]?.max === 'number' && !isNaN(globalSettings[matchedKey]?.max) && globalSettings[matchedKey].max > 0
+      ? globalSettings[matchedKey].max
+      : 1000;
+
+    const rawVal = typeof data === 'number' ? data : (typeof data?.value === 'number' ? data.value : undefined);
+    const valNum = typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 0
+      ? rawVal
+      : defaultMin;
+
+    const rawMax = typeof data?.potentialMax === 'number' ? data.potentialMax : undefined;
+    const potMaxNum = typeof rawMax === 'number' && !isNaN(rawMax) && rawMax > 0
+      ? rawMax
       : defaultMax;
+
     return {
-      value: typeof valNum === 'number' && !isNaN(valNum) ? valNum : 10,
-      potentialMax: typeof potMaxNum === 'number' && !isNaN(potMaxNum) ? potMaxNum : 1000
+      value: valNum,
+      potentialMax: potMaxNum
     };
   };
 
