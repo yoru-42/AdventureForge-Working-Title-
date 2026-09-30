@@ -33,7 +33,6 @@ import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { CharacterInventorySection } from './CharacterInventorySection';
 import { CharacterRaceAndStatsSection } from './CharacterRaceAndStatsSection';
-import { IndividualProgressionEditor } from './IndividualProgressionEditor';
 
 export interface CharacterAbility {
   id: string;
@@ -1979,6 +1978,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
               updateAppearanceValue('origin', val);
               updateDetail('origin', val);
             }}
+            world={world}
+            progressionConfig={world?.progressionConfig}
             worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
             characterPowerData={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
             onCharacterPowerDataChange={newData => {
@@ -1995,45 +1996,8 @@ export const CharacterLoreForm: React.FC<Props> = ({
             onPotentialChange={pot => updateDetail('potential', pot)}
             xp={getDetail('xp', 0)}
             onXpChange={x => updateDetail('xp', x)}
-          />
-
-          {/* Wiederverwendbare Progressions- & Wertekomponente */}
-          <IndividualProgressionEditor
-            progressionLogic={world?.techniqueProgressionLogic || 'ep'}
-            worldProgressionConfig={world?.progressionConfig}
-            world={world}
-            worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
-            campaignPowerLevels={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
-            onChangeCampaignPowerLevels={newData => {
-              updateMultipleDetails({
-                campaignPowerData: newData,
-                campaignPowerLevels: newData
-              });
-            }}
-            values={{
-              rank: getDetail('rank', 'F'),
-              level: getDetail('level', 1),
-              xp: getDetail('xp', 0),
-              experience: getDetail('experience', 0),
-              experiencePoints: getDetail('experiencePoints', 0),
-              experienceText: getDetail('experienceText', ''),
-              potential: getDetail('potential', 100),
-              potentialCap: getDetail('potentialCap', 1000),
-              enforcePotentialCap: getDetail('enforcePotentialCap', true),
-              developmentProfile: getDetail('developmentProfile', 'normal'),
-              rankUpRequirements: getDetail('rankUpRequirements', ''),
-              levelsPerRank: getDetail('levelsPerRank', 10),
-              resetLevelOnRankUp: getDetail('resetLevelOnRankUp', true),
-              autoRankUp: getDetail('autoRankUp', true),
-              minXpForRankUp: getDetail('minXpForRankUp', 0),
-              requiresMaxLevelForRankUp: getDetail('requiresMaxLevelForRankUp', true),
-              developmentRate: getDetail('developmentRate', undefined),
-              attributeGrowth: getDetail('attributeGrowth', undefined),
-              epRequirement: getDetail('epRequirement', undefined),
-              race: getAppearanceValue('race') || getDetail('race', 'Mensch'),
-              campaignPowerLevels: editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}
-            }}
-            onChange={updates => updateMultipleDetails(updates)}
+            developmentProfile={getDetail('developmentProfile', 'normal')}
+            levelsPerRank={getDetail('levelsPerRank')}
           />
         </div>
       )}

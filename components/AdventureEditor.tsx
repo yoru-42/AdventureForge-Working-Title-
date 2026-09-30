@@ -43,7 +43,6 @@ import {
   createEpDefaultWorldSettings
 } from '../lib/progressionDefaults';
 import { ProgressionSettingSection } from './ProgressionSettingSection';
-import { IndividualProgressionEditor } from './IndividualProgressionEditor';
 import { CharacterRaceAndStatsSection } from './CharacterRaceAndStatsSection';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
@@ -4135,6 +4134,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       updateAppearanceValue('origin', val);
                       setPlayer(prev => ({ ...prev, origin: val } as any));
                     }}
+                    world={world}
+                    progressionConfig={world.progressionConfig}
                     worldPowerSettings={world.campaignPowerSettings}
                     characterPowerData={player.campaignPowerLevels || {}}
                     onCharacterPowerDataChange={newData => setPlayer(prev => ({ ...prev, campaignPowerLevels: newData }))}
@@ -4146,41 +4147,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     onPotentialChange={pot => setPlayer(prev => ({ ...prev, potential: pot }))}
                     xp={player.xp ?? 0}
                     onXpChange={x => setPlayer(prev => ({ ...prev, xp: x }))}
-                  />
-
-                  {/* Macht & Werte (Kampagnen-Skala) */}
-                  {/* Wiederverwendbare Progressions- & Wertekomponente */}
-                  <IndividualProgressionEditor
-                    progressionLogic={world.techniqueProgressionLogic || 'ep'}
-                    worldProgressionConfig={world.progressionConfig}
-                    world={world}
-                    worldPowerSettings={world.campaignPowerSettings}
-                    campaignPowerLevels={player.campaignPowerLevels || {}}
-                    onChangeCampaignPowerLevels={(newData) => setPlayer(prev => ({ ...prev, campaignPowerLevels: newData }))}
-                    values={{
-                      rank: player.rank,
-                      level: player.level,
-                      xp: player.xp,
-                      experience: player.experience,
-                      experiencePoints: player.experiencePoints,
-                      experienceText: player.experienceText,
-                      potential: player.potential,
-                      potentialCap: player.potentialCap,
-                      enforcePotentialCap: player.enforcePotentialCap,
-                      developmentProfile: player.developmentProfile,
-                      rankUpRequirements: player.rankUpRequirements,
-                      levelsPerRank: player.levelsPerRank,
-                      resetLevelOnRankUp: player.resetLevelOnRankUp,
-                      autoRankUp: player.autoRankUp,
-                      minXpForRankUp: player.minXpForRankUp,
-                      requiresMaxLevelForRankUp: player.requiresMaxLevelForRankUp,
-                      developmentRate: player.developmentRate,
-                      attributeGrowth: player.attributeGrowth,
-                      epRequirement: player.epRequirement,
-                      race: player.race || player.appearance?.race || 'Mensch',
-                      campaignPowerLevels: player.campaignPowerLevels || {}
-                    }}
-                    onChange={updates => setPlayer(prev => ({ ...prev, ...updates }))}
+                    developmentProfile={player.developmentProfile}
+                    levelsPerRank={player.levelsPerRank}
                   />
                 </div>
               )}

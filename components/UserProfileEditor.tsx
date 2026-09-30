@@ -5,7 +5,6 @@ import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { EyeColorEditor } from './EyeColorEditor';
 import { autoCalculateAppearance } from '../utils/appearance';
 import { PERSONALITY_ARCHETYPES, applyArchetypeToTraits } from './personalityArchetypesData';
-import { IndividualProgressionEditor } from './IndividualProgressionEditor';
 import { CharacterRaceAndStatsSection } from './CharacterRaceAndStatsSection';
 import { DEFAULT_RACES } from '../services/raceService';
 
@@ -116,42 +115,9 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
               onPotentialChange={pot => setFormData(prev => ({ ...prev, potential: pot }))}
               xp={formData.xp ?? 0}
               onXpChange={x => setFormData(prev => ({ ...prev, xp: x }))}
+              developmentProfile={formData.developmentProfile}
+              levelsPerRank={formData.levelsPerRank}
             />
-
-            {/* Wiederverwendbare Progressions- & Wertekomponente */}
-            <div className="pt-2 border-t border-slate-800/70">
-              <IndividualProgressionEditor
-                progressionLogic="ep"
-                values={{
-                  rank: formData.rank,
-                  level: formData.level,
-                  xp: formData.xp,
-                  experience: formData.experience,
-                  experiencePoints: formData.experiencePoints,
-                  experienceText: formData.experienceText,
-                  potential: formData.potential,
-                  potentialCap: formData.potentialCap,
-                  enforcePotentialCap: formData.enforcePotentialCap,
-                  developmentProfile: formData.developmentProfile,
-                  rankUpRequirements: formData.rankUpRequirements,
-                  levelsPerRank: formData.levelsPerRank,
-                  resetLevelOnRankUp: formData.resetLevelOnRankUp,
-                  autoRankUp: formData.autoRankUp,
-                  minXpForRankUp: formData.minXpForRankUp,
-                  requiresMaxLevelForRankUp: formData.requiresMaxLevelForRankUp,
-                  developmentRate: formData.developmentRate,
-                  attributeGrowth: formData.attributeGrowth,
-                  epRequirement: formData.epRequirement,
-                  race: formData.race || 'Mensch',
-                  campaignPowerLevels: formData.campaignPowerLevels || (formData as any).campaignPowerData
-                }}
-                onChange={updates => setFormData(prev => ({
-                  ...prev,
-                  ...updates,
-                  campaignPowerLevels: updates.campaignPowerLevels || prev.campaignPowerLevels
-                }))}
-              />
-            </div>
           </div>
 
           {/* BEREICH 2: PROFIL & AUSSEHEN */}

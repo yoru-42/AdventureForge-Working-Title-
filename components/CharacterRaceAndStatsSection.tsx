@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 import React from 'react';
-import { CampaignPowerParameter, CharacterRank } from '../types';
-import { STANDARD_RANKS } from '../services/progressionService';
+import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentProfileType } from '../types';
+import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { DEFAULT_RACES, RaceService, RaceDefinition } from '../services/raceService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
@@ -15,6 +15,7 @@ interface CharacterRaceAndStatsSectionProps {
   onRaceFeaturesChange?: (val: string) => void;
   origin?: string;
   onOriginChange?: (val: string) => void;
+  world?: WorldSetting;
   worldPowerSettings?: Record<string, number | CampaignPowerParameter>;
   characterPowerData?: any;
   onCharacterPowerDataChange: (newData: any) => void;
@@ -26,6 +27,9 @@ interface CharacterRaceAndStatsSectionProps {
   onPotentialChange?: (pot: number) => void;
   xp?: number;
   onXpChange?: (xp: number) => void;
+  developmentProfile?: DevelopmentProfileType;
+  progressionConfig?: ProgressionConfig;
+  levelsPerRank?: number;
 }
 
 export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSectionProps> = ({
@@ -36,6 +40,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   onRaceFeaturesChange,
   origin = '',
   onOriginChange,
+  world,
   worldPowerSettings = {},
   characterPowerData = {},
   onCharacterPowerDataChange,
@@ -46,7 +51,10 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   potential = 1000,
   onPotentialChange,
   xp = 0,
-  onXpChange
+  onXpChange,
+  developmentProfile,
+  progressionConfig,
+  levelsPerRank
 }) => {
   const currentRace = race || 'Mensch';
   const availableRaces = customRaces && customRaces.length > 0
@@ -54,26 +62,25 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     : DEFAULT_RACES;
 
   const currentRaceDef = RaceService.getRaceDefinition(currentRace, availableRaces);
+  const effectiveConfig = progressionConfig || world?.progressionConfig || DEFAULT_PROGRESSION_CONFIG;
+  const currentLevelsPerRank = levelsPerRank ?? effectiveConfig.levelSystem?.levelsPerRank ?? 10;
+  const xpNeeded = ProgressionService.calculateXpRequirement(level, rank, effectiveConfig, developmentProfile);
+  const progressPercent = xpNeeded > 0 ? Math.min(100, Math.max(0, Math.round((xp / xpNeeded) * 100))) : 100;
 
   return (
     <div className="space-y-6">
-      {/* 1. Rasse & grundlegende Eigenschaften */}
+      {/* 1. RASSE & EIGENSCHAFTEN */}
       <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-          <Dna className="w-5 h-5 text-amber-400" />
-          <div>
-            <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
-              Rasse &amp; grundlegende Eigenschaften
-            </h4>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Definiert die biologische Spezies, Herkunft und physiologische Besonderheiten dieser Figur.
-            </p>
-          </div>
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-2.5">
+          <Dna className="w-4 h-4 text-amber-400" />
+          <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+            Rasse &amp; Eigenschaften
+          </h3>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
               Rasse / Spezies
             </label>
             <select
@@ -87,14 +94,14 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                 </option>
               ))}
             </select>
-            <span className="text-[10px] text-slate-400 mt-1 block leading-relaxed italic">
+            <p className="text-[10px] text-slate-400 mt-1 italic leading-relaxed">
               {currentRaceDef.description || 'Biologische Spezies'}
-            </span>
+            </p>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Besondere Rassenmerkmale
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              Rassenmerkmale
             </label>
             <AutoExpandingTextarea
               minRows={1}
@@ -103,13 +110,13 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               placeholder="z. B. Spitze Ohren, Dämmersicht, Hornansatz"
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
             />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
               Anatomische oder visuelle Eigenheiten
             </span>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
               Herkunft / Volk
             </label>
             <AutoExpandingTextarea
@@ -119,31 +126,46 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               placeholder="z. B. Eisiges Nordland, Hochgebirge"
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
             />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
               Heimatland oder Kulturkreis
             </span>
           </div>
         </div>
       </div>
 
-      {/* 2. Individueller Entwicklungszustand */}
+      {/* 2. PROGRESSION */}
       <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-          <Layers className="w-5 h-5 text-amber-400" />
-          <div>
-            <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
-              Individueller Entwicklungszustand
-            </h4>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Gibt an, wo diese konkrete Figur aktuell steht. Die globale Progressionsregel bestimmt, wie Fortschritt erzielt wird.
-            </p>
-          </div>
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-2.5">
+          <Layers className="w-4 h-4 text-amber-400" />
+          <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+            Progression
+          </h3>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Aktuelles Level
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              Rang
+            </label>
+            <select
+              value={rank || 'F'}
+              onChange={e => onRankChange?.(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold cursor-pointer"
+            >
+              {STANDARD_RANKS.map(r => (
+                <option key={`char-rank-${r}`} value={r}>
+                  Rang {r}
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
+              Gesamteinstufung
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              Level
             </label>
             <input
               type="number"
@@ -154,55 +176,15 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                 onLevelChange?.(val);
               }}
               placeholder="1"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
             />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Fortschrittsstufe
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
+              Stufe {level} / {currentLevelsPerRank} (pro Rang)
             </span>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Rang
-            </label>
-            <select
-              value={rank || 'F'}
-              onChange={e => onRankChange?.(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
-            >
-              {STANDARD_RANKS.map(r => (
-                <option key={`char-rank-${r}`} value={r}>
-                  Rang {r}
-                </option>
-              ))}
-            </select>
-            <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Gesamteinstufung
-            </span>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Individuelles Potenzial
-            </label>
-            <input
-              type="number"
-              min={1}
-              value={potential}
-              onChange={e => {
-                const val = Math.max(1, parseInt(e.target.value) || 1000);
-                onPotentialChange?.(val);
-              }}
-              placeholder="1000"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
-            />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Beeinflusst die Wachstumsgeschwindigkeit
-            </span>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
               Erfahrungspunkte (EP)
             </label>
             <input
@@ -214,33 +196,64 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                 onXpChange?.(val);
               }}
               placeholder="0"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
             />
-            <span className="text-[10px] text-slate-400 mt-0.5 block">
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
               Aktuell angesammelte EP
             </span>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              Individuelles Potenzial
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={potential}
+              onChange={e => {
+                const val = Math.max(1, parseInt(e.target.value) || 1000);
+                onPotentialChange?.(val);
+              }}
+              placeholder="1000"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
+            />
+            <span className="text-[10px] text-slate-400 mt-0.5 block leading-tight">
+              Beeinflusst die Wachstumsgeschwindigkeit
+            </span>
+          </div>
+        </div>
+
+        {/* EP-Fortschrittsbalken / nächste Stufe */}
+        <div className="pt-2 border-t border-slate-800/60 space-y-1.5">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-slate-400 text-[11px]">EP-Fortschritt / nächste Stufe</span>
+            <span className="font-bold text-amber-300 text-xs">
+              {xp} <span className="text-slate-500 font-normal">/ {xpNeeded} EP</span>
+              <span className="ml-2 text-slate-400 font-normal text-[10px]">({progressPercent}%)</span>
+            </span>
+          </div>
+          <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80 p-0.5">
+            <div
+              className="h-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 rounded-full transition-all duration-300"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
         </div>
       </div>
 
-      {/* 3. Macht & Werte (Kampagnen-Skala) */}
-      <div className="bg-slate-900/60 p-5 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-amber-400" />
-            <div>
-              <h4 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
-                Macht &amp; Werte (Kampagnen-Skala)
-              </h4>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Konkrete Einstufung der Attribute innerhalb der für die Kampagne definierten Skalen.
-              </p>
-            </div>
-          </div>
+      {/* 3. KAMPFEIGENSCHAFTEN & PARAMETER */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 border-b border-slate-800 pb-2 px-1">
+          <BarChart3 className="w-4 h-4 text-amber-400" />
+          <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+            Kampfeigenschaften &amp; Parameter
+          </h3>
         </div>
 
         {worldPowerSettings && Object.keys(worldPowerSettings).length > 0 ? (
           <RpgStatusWindow
+            world={world}
             worldPowerSettings={worldPowerSettings}
             campaignPowerLevels={characterPowerData}
             onChangeCampaignPowerLevels={onCharacterPowerDataChange}
@@ -259,3 +272,4 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 };
 
 export default CharacterRaceAndStatsSection;
+
