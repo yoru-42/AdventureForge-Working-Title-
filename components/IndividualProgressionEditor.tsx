@@ -71,7 +71,7 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
   const isEpLogic = progressionLogic === 'ep';
 
   // Current values
-  const currentRank = values.rank || 'F';
+  const currentRank = values.rank || worldProgressionConfig?.rankSystem?.startRank || 'F';
   const currentLevel = values.level !== undefined ? values.level : 1;
   const currentXp =
     values.experiencePoints !== undefined
@@ -87,27 +87,53 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
     (typeof values.campaignPowerData === 'object' ? values.campaignPowerData : {}) ||
     {};
 
-  // Multipliers
-  const epGainMult = values.developmentRate?.epGainMultiplier ?? 1.0;
-  const attrGrowthMult = values.developmentRate?.attributeGrowthMultiplier ?? 1.0;
+  // Multipliers & Progression values from ProgressionService
+  const epGainMult =
+    values.developmentRate?.epGainMultiplier ??
+    worldProgressionConfig?.developmentRate?.epGainMultiplier ??
+    1.0;
+  const attrGrowthMult =
+    values.developmentRate?.attributeGrowthMultiplier ??
+    worldProgressionConfig?.developmentRate?.attributeGrowthMultiplier ??
+    1.0;
 
-  // Calculated requirement from global rule
+  // Ranks & Next Rank
+  const ranks = worldProgressionConfig?.rankSystem?.ranks || STANDARD_RANKS;
+  const rankIdx = ProgressionService.getRankIndex(currentRank, worldProgressionConfig);
+  const nextRank = rankIdx < ranks.length - 1 ? String(ranks[rankIdx + 1]) : undefined;
+
+  // Levels per rank & Max level of current rank
+  const currentLevelsPerRank =
+    values.levelsPerRank ?? worldProgressionConfig?.levelSystem?.levelsPerRank ?? 10;
+  const currentResetLevelOnRankUp =
+    values.resetLevelOnRankUp ?? worldProgressionConfig?.levelSystem?.resetLevelOnRankUp ?? true;
+
+  const maxLevelForCurrentRank = currentResetLevelOnRankUp
+    ? currentLevelsPerRank
+    : (rankIdx + 1) * currentLevelsPerRank;
+
+  // Calculated requirement from global rule via ProgressionService
   const calculatedXpRequirement = ProgressionService.calculateXpRequirement(
     currentLevel,
     currentRank,
     worldProgressionConfig
   );
 
-  // Rank & Level settings
-  const currentLevelsPerRank = values.levelsPerRank ?? 10;
-  const currentResetLevelOnRankUp = values.resetLevelOnRankUp ?? true;
-  const currentAutoRankUp = values.autoRankUp ?? true;
-  const currentMinXpForRankUp = values.minXpForRankUp ?? 0;
-  const currentRequiresMaxLevel = values.requiresMaxLevelForRankUp ?? true;
+  const xpPercent =
+    calculatedXpRequirement > 0
+      ? Math.min(100, Math.max(0, Math.round((currentXp / calculatedXpRequirement) * 100)))
+      : 100;
+
+  // Attribute Growth & Base Growth
+  const baseAttrGrowth =
+    values.attributeGrowth?.baseGrowthPerLevel ??
+    worldProgressionConfig?.attributeProgression?.baseGrowthPerLevel ??
+    2;
+  const effectiveGrowth = Math.round(baseAttrGrowth * attrGrowthMult * 10) / 10;
+
+  const currentAutoRankUp = values.autoRankUp ?? worldProgressionConfig?.rankSystem?.autoRankUp ?? true;
   const currentRankUpReq = values.rankUpRequirements || '';
 
-  // Attribute Growth & Potential
-  const baseAttrGrowth = values.attributeGrowth?.baseGrowthPerLevel ?? 2;
   const minAttrVal = values.attributeGrowth?.minAttributeValue ?? 0;
   const maxAttrVal = values.attributeGrowth?.maxAttributeValue ?? 1000;
 
@@ -197,223 +223,204 @@ export const IndividualProgressionEditor: React.FC<IndividualProgressionEditorPr
   };
 
   return (
-    <div className="space-y-3.5 animate-in fade-in duration-200">
-      {/* 1. Kompaktes RPG Status-Feld Oben (RANG / LEVEL / EP) */}
-      {isEpLogic && (
-        <div className="bg-slate-950/90 p-3 rounded-xl border border-slate-800 shadow-sm">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 items-center font-mono">
-            <div>
-              <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">
-                RANG
-              </span>
-              <select
-                value={currentRank}
-                onChange={e => onChange({ rank: e.target.value as CharacterRank })}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-amber-400 focus:outline-none focus:border-amber-500 font-bold cursor-pointer"
-              >
-                {STANDARD_RANKS.map(r => (
-                  <option key={`rank-opt-${r}`} value={r}>
-                    Rang {r}
-                  </option>
-                ))}
-              </select>
-            </div>
+    <div className="space-y-4 animate-in fade-in duration-200 font-mono">
+      {/* 1. PROGRESSION (RPG-Status-Hauptanzeige) */}
+      <div className="bg-slate-950/90 p-4 rounded-xl border border-slate-800 space-y-3.5 shadow-xl">
+        <div className="text-xs font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-2 flex items-center justify-between">
+          <span>PROGRESSION</span>
+          <span className="text-[10px] text-slate-500 font-normal normal-case">
+            Charakter-Status &amp; Entwicklung
+          </span>
+        </div>
 
-            <div>
-              <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">
-                LEVEL
-              </span>
+        {/* Core Status Grid: Rang, Level, EP, Nächster Rang */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/80 p-3 rounded-lg border border-slate-800/80 text-xs">
+          {/* Rang */}
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase">
+              Rang
+            </span>
+            <select
+              value={currentRank}
+              onChange={e => onChange({ rank: e.target.value as CharacterRank })}
+              className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-amber-400 font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              {ranks.map(r => (
+                <option key={`rank-opt-${r}`} value={r}>
+                  Rang {r}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Level */}
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase">
+              Level
+            </span>
+            <div className="flex items-center gap-1.5 pt-0.5">
               <input
                 type="number"
                 min={1}
-                max={999}
+                max={9999}
                 value={currentLevel}
                 onChange={e => {
                   const val = Math.max(1, parseInt(e.target.value) || 1);
                   onChange({ level: val });
                 }}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-bold"
+                className="w-14 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-slate-100 font-bold focus:outline-none focus:border-amber-500"
               />
+              <span className="text-slate-600 font-normal">/</span>
+              <span className="text-slate-200 font-bold">{maxLevelForCurrentRank}</span>
             </div>
+          </div>
 
-            <div>
-              <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">
-                EP
-              </span>
+          {/* EP */}
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase">
+              EP
+            </span>
+            <div className="flex items-center gap-1.5 pt-0.5">
               <input
                 type="number"
                 min={0}
                 value={currentXp}
                 onChange={e => handleXpChange(parseInt(e.target.value) || 0)}
-                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-amber-300 focus:outline-none focus:border-amber-500 font-bold"
+                className="w-20 bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500"
               />
+              <span className="text-slate-600 font-normal">/</span>
+              <span className="text-amber-400 font-bold">{calculatedXpRequirement}</span>
             </div>
+          </div>
 
-            <div>
-              <span className="block text-[9px] font-bold text-slate-500 uppercase mb-0.5">
-                NÄCHSTER LEVEL
-              </span>
-              <div className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-amber-400 font-bold">
-                {calculatedXpRequirement || 100} EP
-              </div>
+          {/* Nächster Rang */}
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase">
+              Nächster Rang
+            </span>
+            <div className="px-2.5 py-1 bg-slate-950 border border-slate-800 rounded text-xs font-bold text-emerald-400 inline-block mt-0.5">
+              {nextRank ? `Rang ${nextRank}` : 'Maximaler Rang'}
             </div>
           </div>
         </div>
-      )}
 
-      {/* 2. RPG Status-Fenster (Wiederverwendbare zentralisierte Komponente) */}
+        {/* EP-Fortschrittsbalken */}
+        {isEpLogic && (
+          <div className="space-y-1.5 bg-slate-900/60 p-3 rounded-lg border border-slate-800/80">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">
+                Fortschritt zum nächsten Level
+              </span>
+              <span className="text-xs font-bold text-amber-400">
+                {currentXp} / {calculatedXpRequirement} EP ({xpPercent}%)
+              </span>
+            </div>
+            <div className="w-full h-2.5 bg-slate-950 rounded-full border border-slate-800 overflow-hidden p-0.5">
+              <div
+                className="h-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-400 rounded-full transition-all duration-300"
+                style={{ width: `${xpPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Stat-Modifikatoren: EP-Gewinn & Wertsteigerung */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs bg-slate-900/60 p-3 rounded-lg border border-slate-800/80">
+          {/* EP-Gewinn */}
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase">
+              EP-Gewinn
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-amber-300 font-bold">
+                ×{epGainMult.toString().replace('.', ',')}
+              </span>
+              <input
+                type="number"
+                step="0.05"
+                min={0.1}
+                max={10.0}
+                value={epGainMult}
+                onChange={e => handleEpGainMultChange(parseFloat(e.target.value) || 1.0)}
+                className="w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-slate-200 font-bold outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          {/* Wertsteigerung */}
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase">
+              Wertsteigerung
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-emerald-400 font-bold">
+                +{effectiveGrowth.toString().replace('.', ',')}
+              </span>
+              {attrGrowthMult !== 1.0 && (
+                <span className="text-[10px] text-slate-500">
+                  (Basis +{baseAttrGrowth} × {attrGrowthMult})
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Max Level pro Rang */}
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase">
+              Max. Level pro Rang
+            </span>
+            <input
+              type="number"
+              min={1}
+              value={currentLevelsPerRank}
+              onChange={e => {
+                const val = Math.max(1, parseInt(e.target.value) || 10);
+                onChange({ levelsPerRank: val });
+              }}
+              className="w-16 bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-slate-200 font-bold outline-none focus:border-amber-500"
+            />
+          </div>
+
+          {/* Level Reset bei Rangaufstieg */}
+          <div className="space-y-1">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase">
+              Aufstieg-Reset
+            </span>
+            <button
+              type="button"
+              onClick={() => onChange({ resetLevelOnRankUp: !currentResetLevelOnRankUp })}
+              className={`px-2 py-1 text-[10px] font-bold rounded border transition-all ${
+                currentResetLevelOnRankUp
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                  : 'bg-slate-950 border-slate-800 text-slate-500'
+              }`}
+            >
+              {currentResetLevelOnRankUp ? 'Reset auf 1' : 'Level behalten'}
+            </button>
+          </div>
+        </div>
+
+        {/* Rangbedingungen & Notizen */}
+        <div className="space-y-1 pt-1 border-t border-slate-800/80">
+          <span className="block text-[10px] font-bold text-slate-500 uppercase">
+            Rangbedingungen / Notizen
+          </span>
+          <AutoExpandingTextarea
+            className="w-full bg-slate-950 border border-slate-800 rounded p-2 text-slate-200 text-xs font-mono outline-none focus:border-amber-500"
+            placeholder="Optionale Prüfungsnotizen oder Aufstiegsbedingungen..."
+            value={currentRankUpReq}
+            onChange={e => onChange({ rankUpRequirements: e.target.value })}
+          />
+        </div>
+      </div>
+
+      {/* 2. RPG Status-Fenster (Kampfeigenschaften & Parameter) */}
       <RpgStatusWindow
         world={world}
         worldPowerSettings={worldPowerSettings || world?.campaignPowerSettings}
         campaignPowerLevels={powerLevels}
         onChangeCampaignPowerLevels={handlePowerLevelsChange}
       />
-
-      {/* 3. PROGRESSION (Kompakte persönliche Entwicklung) */}
-      <div className="bg-slate-950/90 p-3.5 rounded-xl border border-slate-800 space-y-3">
-        <div className="text-[11px] font-mono font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-1">
-          PROGRESSION
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          {/* EP-Gewinn */}
-          {isEpLogic && (
-            <div className="space-y-1">
-              <span className="block text-[10px] text-slate-400 font-medium">EP-Gewinn</span>
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  step="0.05"
-                  min={0.1}
-                  max={10.0}
-                  value={epGainMult}
-                  onChange={e => handleEpGainMultChange(parseFloat(e.target.value) || 1.0)}
-                  className="w-16 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 font-bold outline-none focus:border-amber-500"
-                />
-                <div className="flex gap-0.5">
-                  {[0.5, 1.0, 1.5, 2.0].map(mult => (
-                    <button
-                      key={`mult-${mult}`}
-                      type="button"
-                      onClick={() => handleEpGainMultChange(mult)}
-                      className={`px-1.5 py-1 text-[9px] font-bold rounded border transition-all ${
-                        Math.abs(epGainMult - mult) < 0.01
-                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
-                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      {mult}×
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Wertsteigerung */}
-          <div className="space-y-1">
-            <span className="block text-[10px] text-slate-400 font-medium">Wertsteigerung</span>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                step="0.05"
-                min={0.1}
-                max={10.0}
-                value={attrGrowthMult}
-                onChange={e => handleAttrGrowthMultChange(parseFloat(e.target.value) || 1.0)}
-                className="w-16 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 font-bold outline-none focus:border-amber-500"
-              />
-              <span className="text-[10px] text-slate-500 font-mono">Multiplikator</span>
-            </div>
-          </div>
-
-          {/* Potenzial */}
-          <div className="space-y-1">
-            <span className="block text-[10px] text-slate-400 font-medium">Potenzial-Cap</span>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={1}
-                value={potCapVal}
-                onChange={e => handlePotentialCapChange(parseInt(e.target.value) || 1000)}
-                className="w-20 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 font-bold outline-none focus:border-amber-500"
-              />
-              <button
-                type="button"
-                onClick={() => handlePotentialEnforcementChange(!enforcePotCap)}
-                className={`px-2 py-1 text-[10px] font-bold rounded border transition-all ${
-                  enforcePotCap
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                    : 'bg-slate-900 border-slate-800 text-slate-500'
-                }`}
-              >
-                {enforcePotCap ? 'Aktiv' : 'Inaktiv'}
-              </button>
-            </div>
-          </div>
-
-          {/* Einstufung */}
-          <div className="space-y-1">
-            <span className="block text-[10px] text-slate-400 font-medium">Potenzial-Einstufung</span>
-            <input
-              type="text"
-              value={potentialText}
-              onChange={e => onChange({ potential: e.target.value })}
-              placeholder="z.B. Rang A"
-              className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-amber-500"
-            />
-          </div>
-        </div>
-
-        {/* Rangaufstieg (bei EP-Logik) */}
-        {isEpLogic && (
-          <div className="pt-2 border-t border-slate-800/80 space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400 font-medium">Auto-Aufstieg:</span>
-                <button
-                  type="button"
-                  onClick={() => onChange({ autoRankUp: !currentAutoRankUp })}
-                  className={`px-2 py-0.5 text-[10px] font-bold rounded border transition-all ${
-                    currentAutoRankUp
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : 'bg-slate-900 border-slate-800 text-slate-500'
-                  }`}
-                >
-                  {currentAutoRankUp ? 'Automatisch' : 'Manuell'}
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400 font-medium">Level bei Aufstieg:</span>
-                <button
-                  type="button"
-                  onClick={() => onChange({ resetLevelOnRankUp: !currentResetLevelOnRankUp })}
-                  className={`px-2 py-0.5 text-[10px] font-bold rounded border transition-all ${
-                    currentResetLevelOnRankUp
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                      : 'bg-slate-900 border-slate-800 text-slate-500'
-                  }`}
-                >
-                  {currentResetLevelOnRankUp ? 'Reset auf 1' : 'Level behalten'}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <span className="block text-[10px] text-slate-400 font-medium mb-1">
-                Rangbedingungen
-              </span>
-              <AutoExpandingTextarea
-                className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-slate-200 text-xs outline-none focus:border-amber-500"
-                placeholder="Optionale Prüfungsnotizen oder Aufstiegsbedingungen..."
-                value={currentRankUpReq}
-                onChange={e => onChange({ rankUpRequirements: e.target.value })}
-              />
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 };
