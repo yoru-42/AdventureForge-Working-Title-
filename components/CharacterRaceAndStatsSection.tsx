@@ -171,7 +171,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   useEffect(() => {
     const currentData = characterPowerData || {};
     let needsUpdate = false;
-    const updatedPowerData: Record<string, { value: number; xp?: number }> = {};
+    const updatedPowerData: Record<string, { value: number; potentialMax?: number; xp?: number }> = {};
 
     // One-time check for legacy broken Level 1 zeroed datasets
     const isLegacyZeroedLevel1 = (
@@ -192,12 +192,12 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         : 10;
 
       if (isLegacyZeroedLevel1 && STANDARD_PARAMETERS.includes(paramName)) {
-        updatedPowerData[paramName] = { value: raceBaseVal };
+        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: safePotNum };
         needsUpdate = true;
       } else if (existing !== undefined && existing !== null) {
         if (typeof existing === 'number') {
           const val = !isNaN(existing) ? existing : raceBaseVal;
-          updatedPowerData[paramName] = { value: val };
+          updatedPowerData[paramName] = { value: val, potentialMax: safePotNum };
           if (val !== existing) needsUpdate = true;
         } else if (typeof existing === 'object') {
           const rawVal = existing.value;
@@ -206,16 +206,21 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             : raceBaseVal;
 
           const existingXp = existing.xp;
-          if (val !== rawVal || existing.potentialMax !== undefined) {
+          const existingPotMax = typeof existing.potentialMax === 'number' && !isNaN(existing.potentialMax)
+            ? existing.potentialMax
+            : safePotNum;
+
+          if (val !== rawVal || existing.potentialMax !== existingPotMax) {
             needsUpdate = true;
           }
           updatedPowerData[paramName] = {
             value: val,
+            potentialMax: existingPotMax,
             ...(existingXp !== undefined ? { xp: existingXp } : {})
           };
         }
       } else {
-        updatedPowerData[paramName] = { value: raceBaseVal };
+        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: safePotNum };
         needsUpdate = true;
       }
     });

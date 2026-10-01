@@ -2,7 +2,8 @@
 import React, { useMemo, useState } from 'react';
 import { WorldSetting, CampaignPowerParameter } from '../types';
 import { calculateRpgCharacterStats, CharacterPowerData } from '../services/rpgStatService';
-import { Plus, Minus, RotateCcw, Sliders, Shield, Zap, X } from 'lucide-react';
+import { ProgressionService } from '../services/progressionService';
+import { Shield, ChevronUp, ChevronDown } from 'lucide-react';
 
 export interface RpgStatusWindowProps {
   world?: WorldSetting;
@@ -47,8 +48,6 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   onParameterGrowthFactorsChange,
   baseGrowthPerParam = 2
 }) => {
-  const [isPointModalOpen, setIsPointModalOpen] = useState(false);
-
   const { categories, globalSettings, combatProperties, hpResource, powerSources, resources } =
     calculateRpgCharacterStats(campaignPowerLevels, world, worldPowerSettings);
 
@@ -127,23 +126,48 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     onParameterGrowthFactorsChange?.(nextFactors);
   };
 
-  const handleParameterUpdate = (cat: string, val: number) => {
+  const handleParameterUpdate = (cat: string, newCharVal?: number, newPotMax?: number) => {
     if (readOnly || !onChangeCampaignPowerLevels) return;
 
     const current = campaignPowerLevels[cat];
     const sMin = 0;
     const sMax = globalSettings[cat]?.scaleMax ?? 100000;
-    const clampedVal = Math.max(sMin, Math.min(sMax, isNaN(val) ? sMin : val));
+
+    const currentVal = typeof current === 'object' && current !== null && typeof current.value === 'number'
+      ? current.value
+      : (typeof current === 'number' ? current : 10);
+
+    const currentPot = typeof current === 'object' && current !== null && typeof current.potentialMax === 'number'
+      ? current.potentialMax
+      : (characterPotential || globalSettings[cat]?.max || 1000);
+
+    const finalVal = newCharVal !== undefined ? Math.max(sMin, Math.min(sMax, isNaN(newCharVal) ? sMin : newCharVal)) : currentVal;
+    const finalPot = newPotMax !== undefined ? Math.max(finalVal, isNaN(newPotMax) ? finalVal : newPotMax) : currentPot;
 
     const updated = typeof current === 'object' && current !== null
-      ? { ...current, value: clampedVal }
-      : { value: clampedVal };
-
-    delete (updated as any).potentialMax;
+      ? { ...current, value: finalVal, potentialMax: finalPot }
+      : { value: finalVal, potentialMax: finalPot };
 
     onChangeCampaignPowerLevels({
       ...campaignPowerLevels,
       [cat]: updated
+    });
+  };
+
+  const handleResourceUpdate = (resId: string, resName: string, newVal: number) => {
+    if (readOnly || !onChangeCampaignPowerLevels) return;
+
+    const targetKey = resId || resName;
+    const current = campaignPowerLevels[targetKey] || campaignPowerLevels[resName];
+    const safeVal = Math.max(0, newVal);
+
+    const updated = typeof current === 'object' && current !== null
+      ? { ...current, value: safeVal }
+      : { value: safeVal };
+
+    onChangeCampaignPowerLevels({
+      ...campaignPowerLevels,
+      [targetKey]: updated
     });
   };
 
@@ -180,9 +204,9 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       )}
 
       {/* 2 Spalten: KAMPFEIGENSCHAFTEN & PARAMETER */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {/* Spalte 1: KAMPFEIGENSCHAFTEN */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 space-y-3">
+        <div className="space-y-3">
           <div className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-1.5 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Shield className="w-3.5 h-3.5 text-amber-400" />
@@ -209,12 +233,34 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-200">{res.name}</span>
-                    <span className="font-bold text-slate-100">
-                      <span className={isHp ? 'text-emerald-300' : isMp ? 'text-cyan-300' : 'text-amber-300'}>
-                        {res.value}
+                    <div className="flex items-center gap-2">
+                      {!readOnly && (
+                        <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded px-1 py-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleResourceUpdate(res.id, res.name, res.value - 1)}
+                            className="p-0.5 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded transition-colors cursor-pointer"
+                            title={`${res.name} verringern (-1)`}
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleResourceUpdate(res.id, res.name, res.value + 1)}
+                            className="p-0.5 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded transition-colors cursor-pointer"
+                            title={`${res.name} erhöhen (+1)`}
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      <span className="font-bold text-slate-100">
+                        <span className={isHp ? 'text-emerald-300' : isMp ? 'text-cyan-300' : 'text-amber-300'}>
+                          {res.value}
+                        </span>
+                        <span className="text-slate-500 font-normal"> / {res.max}</span>
                       </span>
-                      <span className="text-slate-500 font-normal"> / {res.max}</span>
-                    </span>
+                    </div>
                   </div>
                   <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60 p-0.5">
                     <div
@@ -253,8 +299,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
           </div>
         </div>
 
-        {/* Spalte 2: PARAMETER (Klare Zahlen ohne Skala-Maximum) */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 space-y-3">
+        {/* Spalte 2: PARAMETER */}
+        <div className="space-y-3">
           <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
             <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider">
               PARAMETER
@@ -262,8 +308,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
             <span className="text-[10px] font-mono text-slate-500">Charakter-Grundwerte</span>
           </div>
 
-          {/* Parameter-Liste: Stärke 10 */}
-          <div className="space-y-1.5 font-mono text-xs">
+          {/* Parameter-Liste: Stärke 42 / 780 ▲ +2,40 */}
+          <div className="space-y-1 font-mono text-xs pt-1">
             {categories.map(cat => {
               const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
                 ? baseParameters[cat]
@@ -274,160 +320,86 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 ? rawEntry
                 : (rawEntry && typeof rawEntry === 'object' && typeof rawEntry.value === 'number' ? rawEntry.value : undefined);
 
-              const charVal = rawVal !== undefined && !isNaN(rawVal)
-                ? rawVal
-                : baseVal;
+              const rawPotMax = typeof rawEntry === 'object' && rawEntry !== null && typeof rawEntry.potentialMax === 'number'
+                ? rawEntry.potentialMax
+                : undefined;
+
+              const charVal = rawVal !== undefined && !isNaN(rawVal) ? rawVal : baseVal;
+              const charPotMax = rawPotMax !== undefined && !isNaN(rawPotMax)
+                ? rawPotMax
+                : (characterPotential || globalSettings[cat]?.max || 1000);
+
+              const paramSetting = world?.campaignPowerSettings?.[cat];
+              const paramGrowthFactor = typeof paramSetting === 'object' && paramSetting !== null && 'growthFactor' in paramSetting && typeof (paramSetting as any).growthFactor === 'number'
+                ? (paramSetting as any).growthFactor
+                : undefined;
+
+              // Berechne Entwicklungszuwachs pro Level
+              const growthPerLevel = ProgressionService.calculateParameterGrowth({
+                parameterName: cat,
+                currentValue: charVal,
+                baseGrowth: safeBaseGrowth,
+                parameterGrowthFactors,
+                parameterGrowthPoints: allocatedPoints,
+                raceGrowthFactors: paramGrowthFactor !== undefined ? { [cat]: paramGrowthFactor } : undefined,
+                potential: characterPotential,
+                developmentRateMultiplier: 1.0,
+                profileMultiplier: 1.0,
+                rankGrowthMultiplier: 1.0,
+                isRankUp: false,
+                usePotentialForGrowth: true
+              });
+
+              const growthFormatted = growthPerLevel.toFixed(2).replace('.', ',');
 
               return (
                 <div
                   key={`param-row-${cat}`}
-                  className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 transition-colors"
+                  className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-950/60 transition-colors font-mono text-xs border border-transparent hover:border-slate-800/50"
                 >
                   {/* Parameter Name */}
-                  <div className="flex-1 min-w-[110px]">
-                    <span className="font-bold text-slate-200 block truncate" title={cat}>
+                  <div className="flex-1 min-w-[90px] truncate pr-2">
+                    <span className="font-bold text-slate-200 truncate" title={cat}>
                       {cat}
                     </span>
                   </div>
 
-                  {/* Aktueller Wert als feste Zahl */}
-                  <div className="flex items-center gap-1 shrink-0 font-mono text-xs">
-                    {!readOnly && onChangeCampaignPowerLevels ? (
-                      <input
-                        type="number"
-                        min={0}
-                        value={charVal}
-                        onChange={e => handleParameterUpdate(cat, parseInt(e.target.value) || 0)}
-                        title="Aktueller Wert"
-                        className="w-16 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded px-2 py-0.5 text-center font-bold text-amber-300 text-xs"
-                      />
-                    ) : (
-                      <span className="font-bold text-amber-300 text-xs px-2">{charVal}</span>
+                  {/* Aktueller Wert / Individueller Maximalwert & Pfeilbuttons */}
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    {!readOnly && (
+                      <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded px-1 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleParameterUpdate(cat, charVal - 1)}
+                          className="p-0.5 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded transition-colors cursor-pointer"
+                          title={`${cat} verringern (-1)`}
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleParameterUpdate(cat, charVal + 1)}
+                          className="p-0.5 hover:bg-slate-800 text-slate-400 hover:text-amber-400 rounded transition-colors cursor-pointer"
+                          title={`${cat} erhöhen (+1)`}
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
+
+                    <div className="text-amber-300 font-bold text-xs shrink-0 flex items-center gap-1 min-w-[55px] justify-end">
+                      <span>{charVal}</span>
+                      <span className="text-slate-600 font-normal text-[10px]">
+                        / {charPotMax}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
-
-          {/* Separater Button für Entwicklungspunkte */}
-          {hasProgressionControls && !readOnly && (
-            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setIsPointModalOpen(true)}
-                className="w-full bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 hover:border-amber-500/50 rounded-lg py-2 px-3 text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-amber-500/10"
-              >
-                <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                <span>Punkte verteilen</span>
-                <span className="bg-slate-950 text-slate-300 font-normal px-2 py-0.5 rounded text-[10px] ml-1">
-                  ({totalSpent}/{currentBudget})
-                </span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
-
-
-
-      {/* COMPACT DIALOG / MODAL FOR ENTWICKLUNGSPUNKTE VERTEILEN */}
-      {isPointModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 text-slate-100">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-xs font-bold font-mono text-amber-400 uppercase tracking-wider flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-amber-400" />
-                <span>Entwicklung pro Level verteilen</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsPointModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs flex items-center justify-between">
-              <span className="text-slate-400">Entwicklung pro Level:</span>
-              <span className="font-bold text-amber-300 text-sm">{currentBudget} Punkte</span>
-            </div>
-
-            {/* Parameter Punkt-Verteilung mit + / - */}
-            <div className="space-y-2 font-mono text-xs max-h-[55vh] overflow-y-auto pr-1 custom-scrollbar">
-              {categories.map(cat => {
-                const allocated = allocatedPoints[cat] ?? safeBaseGrowth;
-                return (
-                  <div
-                    key={`modal-param-${cat}`}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 transition-colors"
-                  >
-                    <span className="font-bold text-slate-200">{cat}</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled={allocated <= 0}
-                        onClick={() => handlePointChange(cat, -1)}
-                        className="w-7 h-7 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-20 disabled:pointer-events-none flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
-                        title="Punkt entfernen"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="w-8 text-center font-bold text-amber-300 text-sm">
-                        {allocated}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={remainingBudget <= 0}
-                        onClick={() => handlePointChange(cat, 1)}
-                        className="w-7 h-7 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-20 disabled:pointer-events-none flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
-                        title="Punkt hinzufügen"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between border-t border-slate-800 pt-3 font-mono text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400">Vergeben:</span>
-                <span className={`font-bold px-2 py-0.5 rounded ${
-                  remainingBudget === 0
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                    : remainingBudget > 0
-                    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
-                    : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                }`}>
-                  {totalSpent} / {currentBudget}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleResetToEvenBudget}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                  title="Gleichmäßig verteilen"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Gleich</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsPointModalOpen(false)}
-                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  Fertig
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

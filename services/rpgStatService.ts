@@ -217,10 +217,19 @@ export function calculateRpgCharacterStats(
   });
 
   const avgHealthParam = healthCount > 0 ? (healthSum / healthCount) : 10;
-  // Basiswert 30 bei Parameter = 10 (Mensch Level 1 Standard)
-  const hpVal = Math.max(1, Math.round(30 * (avgHealthParam / 10)));
-  const hpMax = 9999; // Technische globale Skala für Kampfeigenschaft HP
+  const computedHpVal = Math.max(1, Math.round(30 * (avgHealthParam / 10)));
   const healthLabel = world?.healthLabel || 'Gesundheit (HP)';
+
+  // Prüfe auf direkte Überschreibung im Charakter-Datenobjekt (z.B. durch Pfeilbuttons)
+  const hpOverrideKey = ['hp', healthLabel, 'Gesundheit (HP)'].find(k => campaignPowerLevels[k] !== undefined);
+  let customHpVal: number | undefined = undefined;
+  if (hpOverrideKey) {
+    const entry = campaignPowerLevels[hpOverrideKey];
+    customHpVal = typeof entry === 'number' ? entry : entry?.value;
+  }
+
+  const hpVal = customHpVal !== undefined && !isNaN(customHpVal) ? customHpVal : computedHpVal;
+  const hpMax = 9999; // Technische globale Skala für Kampfeigenschaft HP
 
   const hpResource: DerivedResource = {
     id: 'hp',
@@ -249,16 +258,26 @@ export function calculateRpgCharacterStats(
       resCount++;
     });
 
-    const resVal = resCount > 0 ? Math.round(resSum / resCount) : res.baseMax || 100;
-    const resMax = resCount > 0 ? Math.round(resMaxSum / resCount) : res.baseMax || 1000;
+    const defaultResVal = resCount > 0 ? Math.round(resSum / resCount) : res.baseMax || 100;
+    const defaultResMax = resCount > 0 ? Math.round(resMaxSum / resCount) : res.baseMax || 1000;
     const resId = res.id || `cost-${(res.name || 'mp').toLowerCase()}`;
+
+    // Prüfe auf direkte Überschreibung im Charakter-Datenobjekt
+    const resOverrideKey = [resId, res.name].find(k => k && campaignPowerLevels[k] !== undefined);
+    let customResVal: number | undefined = undefined;
+    if (resOverrideKey) {
+      const entry = campaignPowerLevels[resOverrideKey];
+      customResVal = typeof entry === 'number' ? entry : entry?.value;
+    }
+
+    const resVal = customResVal !== undefined && !isNaN(customResVal) ? customResVal : defaultResVal;
 
     if (!costResourcesMap.has(resId)) {
       costResourcesMap.set(resId, {
         id: resId,
         name: res.name || 'MP',
         value: resVal,
-        max: resMax
+        max: defaultResMax
       });
     }
   });

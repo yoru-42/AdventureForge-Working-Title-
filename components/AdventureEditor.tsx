@@ -1197,7 +1197,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         if (item.parameterName) {
           levels[item.parameterName] = {
             value: item.value !== undefined ? item.value : 10,
-            potentialMax: item.potentialMax !== undefined ? item.potentialMax : 80,
+            potentialMax: item.potentialMax !== undefined ? item.potentialMax : 1000,
             xp: 0
           };
         }
@@ -1206,7 +1206,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       Object.entries(charData.campaignPowerLevels).forEach(([k, v]: [string, any]) => {
         levels[k] = {
           value: v?.value !== undefined ? v.value : 10,
-          potentialMax: v?.potentialMax !== undefined ? v.potentialMax : 80,
+          potentialMax: v?.potentialMax !== undefined ? v.potentialMax : 1000,
           xp: v?.xp || 0
         };
       });
