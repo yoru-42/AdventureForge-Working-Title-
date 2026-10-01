@@ -6166,7 +6166,7 @@ Erstelle ein vollständiges Profil für diesen namenlosen Gegner/Kreaturentyp mi
           personalityArchetype: { type: Type.STRING, description: "Der passende Persönlichkeits-Archetyp oder Typus (z.B. Tsundere, Kuudere, Dandere, Deredere, Yandere, Kamidere, Himedere, Bakadere, Mayadere, Oujidere, Sadodere, Yangire, Bokukko, Nyandere, Chuunibyou, Dojikko, Gyaru, Tomboy, Yamato Nadeshiko, Genki, Kuudere-Typ, Ojou-sama, Femme Fatale, Anti-Held, Mentor, Trickster, Beschützer, Stratege, Rebell, Loyaler Ritter, Einzelgänger, Idealist, Melancholiker, Exzentriker) oder '-' falls neutral." },
           personalityTraits: this.getPersonalityTraitsSchema(),
           currentSituation: { type: Type.STRING, description: "Was macht die Person zum aktuellen Zeitpunkt?" },
-          gender: { type: Type.STRING, description: "Geschlecht (MUSS exakt einer dieser Werte sein: 'Männlich', 'Weiblich', 'Divers', 'Nicht-Binär', 'Androgyn', 'Unbekannt')." },
+          gender: { type: Type.STRING, description: "Geschlecht (MUSS exakt einer dieser Werte sein: 'Männlich', 'Weiblich', 'Geschlechtslos', 'Futanari')." },
           age: { type: Type.STRING, description: "Alter als Zahl oder Angabe (z. B. '23', 'Über 100')." },
           build: { type: Type.STRING, description: "Körperbau (MUSS exakt einer dieser Werte sein: 'Schlank', 'Sportlich', 'Muskulös', 'Kräftig', 'Zierlich', 'Drahtig', 'Kurvig', 'Stämmig', 'Hager', 'Unbekannt')." },
           hairColor: { type: Type.STRING, description: "Haare (z. B. 'Langes, silbernes Haar' oder 'Kurze schwarze Locken')." },

@@ -914,9 +914,10 @@ export const BodyConditionsManager: React.FC<BodyConditionsManagerProps> = ({
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-[11px] text-slate-200 outline-none"
                     >
                       <option value="">(Unverändert)</option>
-                      <option value="Weiblich">Weiblich</option>
                       <option value="Männlich">Männlich</option>
-                      <option value="Androgyn">Androgyn</option>
+                      <option value="Weiblich">Weiblich</option>
+                      <option value="Geschlechtslos">Geschlechtslos</option>
+                      <option value="Futanari">Futanari</option>
                     </select>
                   </div>
 

@@ -90,7 +90,7 @@ export interface BodyCondition {
   isRestraint?: boolean;
 
   // Physische & visuelle Körper-Modifikatoren
-  overrideGender?: 'Männlich' | 'Weiblich' | 'Androgyn' | 'Hermaphrodit' | 'Keines' | string;
+  overrideGender?: 'Männlich' | 'Weiblich' | 'Geschlechtslos' | 'Futanari' | string;
   overrideRace?: string;
   overrideRaceFeatures?: string;
   heightModifierCm?: number; // z.B. +15cm oder -40cm (Schrumpffluch)

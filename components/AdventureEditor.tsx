@@ -62,7 +62,7 @@ interface Props {
   userProfile?: UserProfile;
 }
 
-const GENDER_OPTIONS = ["Männlich", "Weiblich", "Divers", "Nicht-Binär", "Androgyn", "Unbekannt"];
+const GENDER_OPTIONS = ["Männlich", "Weiblich", "Geschlechtslos", "Futanari"];
 const BUILD_OPTIONS = ["Schlank", "Sportlich", "Muskulös", "Kräftig", "Zierlich", "Drahtig", "Kurvig", "Stämmig", "Hager"];
 const CUP_SIZE_OPTIONS = ["-", "AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"];
 const RANK_OPTIONS = ['EX', 'SSS', 'SS', 'S', 'A', 'B', 'C', 'D', 'E', 'F', 'Unbekannt'];
@@ -4609,7 +4609,12 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
                     <label className="text-[10px] text-slate-500 block mb-1 uppercase font-bold">Geschlecht</label>
-                    <select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none" value={getAppearanceValue('gender') ? getAppearanceValue('gender').charAt(0).toUpperCase() + getAppearanceValue('gender').slice(1).toLowerCase() : 'Weiblich'} onChange={e => updateAppearanceValue('gender', e.target.value)}>
+                    <select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-xs outline-none" value={(() => {
+                      const g = getAppearanceValue('gender');
+                      if (g && GENDER_OPTIONS.includes(g)) return g;
+                      if (g === 'Divers' || g === 'Nicht-Binär' || g === 'Androgyn' || g === 'Unbekannt') return 'Geschlechtslos';
+                      return g || 'Weiblich';
+                    })()} onChange={e => updateAppearanceValue('gender', e.target.value)}>
                       {GENDER_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                     </select>
                   </div>

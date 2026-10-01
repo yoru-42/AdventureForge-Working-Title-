@@ -39,7 +39,7 @@ interface Props {
 
 const CATEGORIES: (LoreCategory | 'Verhüllung')[] = ['Charaktere', 'Rassen', 'Verhüllung', 'Fraktionen', 'Gegenstände', 'Verbotenes Wissen', 'Story & Quests', 'Weltregeln', 'Gegner', 'Zeitlinie'];
 
-const GENDER_OPTIONS = ["Männlich", "Weiblich", "Divers", "Nicht-Binär", "Androgyn", "Unbekannt"];
+const GENDER_OPTIONS = ["Männlich", "Weiblich", "Geschlechtslos", "Futanari"];
 const BUILD_OPTIONS = ["Schlank", "Sportlich", "Muskulös", "Kräftig", "Zierlich", "Drahtig", "Kurvig", "Stämmig", "Hager", "Unbekannt"];
 const CUP_SIZE_OPTIONS = ["-", "AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"];
 

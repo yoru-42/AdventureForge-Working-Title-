@@ -14,7 +14,7 @@ interface Props {
   onCancel: () => void;
 }
 
-const GENDER_OPTIONS = ["Männlich", "Weiblich", "Divers", "Androgyn", "Nicht-Binär", "Unbekannt"];
+const GENDER_OPTIONS = ["Männlich", "Weiblich", "Geschlechtslos", "Futanari"];
 const BUILD_OPTIONS = ["Schlank", "Sportlich", "Muskulös", "Kräftig", "Zierlich", "Kurvig", "Drahtig", "Stämmig", "Hager"];
 const CUP_SIZE_OPTIONS = ["-", "AA", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"];
 
@@ -181,7 +181,7 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
                 <label className="text-[10px] text-slate-400 font-bold uppercase block">Geschlecht</label>
                 <select 
                   className="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-white text-xs outline-none focus:border-amber-500 cursor-pointer"
-                  value={formData.appearance.gender || 'Weiblich'}
+                  value={GENDER_OPTIONS.includes(formData.appearance.gender || '') ? formData.appearance.gender : (formData.appearance.gender === 'Divers' || formData.appearance.gender === 'Nicht-Binär' || formData.appearance.gender === 'Androgyn' || formData.appearance.gender === 'Unbekannt' ? 'Geschlechtslos' : (formData.appearance.gender || 'Weiblich'))}
                   onChange={e => handleAppearanceChange('gender', e.target.value)}
                 >
                   {GENDER_OPTIONS.map(g => (

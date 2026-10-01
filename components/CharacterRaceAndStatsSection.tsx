@@ -55,7 +55,7 @@ export interface CharacterRaceAndStatsSectionProps {
   onLevelsPerRankChange?: (val: number) => void;
 }
 
-export const CHARACTER_GENDER_OPTIONS = ['Männlich', 'Weiblich', 'Divers', 'Nicht-Binär', 'Androgyn', 'Futanari', 'Unbekannt'];
+export const CHARACTER_GENDER_OPTIONS = ['Männlich', 'Weiblich', 'Geschlechtslos', 'Futanari'];
 export const CHARACTER_BUILD_OPTIONS = ['Schlank', 'Sportlich', 'Muskulös', 'Kräftig', 'Zierlich', 'Drahtig', 'Kurvig', 'Stämmig', 'Hager', 'Unbekannt'];
 
 const PROFILE_OPTIONS: { value: DevelopmentProfileType; label: string; desc: string }[] = [
@@ -474,7 +474,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               Geschlecht
             </label>
             <select
-              value={gender || 'Unbekannt'}
+              value={CHARACTER_GENDER_OPTIONS.includes(gender || '') ? gender : (gender === 'Divers' || gender === 'Nicht-Binär' || gender === 'Androgyn' || gender === 'Unbekannt' ? 'Geschlechtslos' : (gender || 'Weiblich'))}
               onChange={e => onGenderChange?.(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
             >
