@@ -679,7 +679,7 @@ export class ProgressionService {
     // 6. Rangfaktor anwenden
     let effectiveRankMult = rankGrowthMultiplier;
     if (typeof rankGrowthBonus === 'number') {
-      effectiveRankMult = 1 + rankGrowthBonus / 100;
+      effectiveRankMult = rankGrowthMultiplier * (1 + rankGrowthBonus / 100);
     }
     const rawGrowth = isRankUp ? baseDevGrowth * effectiveRankMult : baseDevGrowth;
 

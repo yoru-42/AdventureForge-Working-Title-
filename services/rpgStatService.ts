@@ -57,6 +57,8 @@ export interface IndividualMaxCalculationOptions {
   world?: WorldSetting;
   worldPowerSettings?: Record<string, number | CampaignPowerParameter>;
   baseParameters?: Record<string, number>;
+  rank?: string;
+  rankGrowthBonus?: number;
 }
 
 /**
@@ -79,7 +81,9 @@ export function calculateIndividualParameterMax(options: IndividualMaxCalculatio
     parameterPotentialPercentages,
     world,
     worldPowerSettings,
-    baseParameters
+    baseParameters,
+    rank,
+    rankGrowthBonus
   } = options;
 
   // 1. Rassendefinition & Basisparameter
@@ -255,8 +259,21 @@ export function calculateIndividualParameterMax(options: IndividualMaxCalculatio
     baseMax * (baseParamVal / 10) * raceGrowthFactor * statureModifier * genderModifier * potentialModifier
   );
 
+  // 8. Rang-Einfluss auf das Potenzial (potentialMax)
+  let finalMax = calculatedMax;
+  if (rank) {
+    const rankIndex = ProgressionService.getRankIndex(rank, world?.progressionConfig);
+    if (rankIndex > 0) {
+      const safeRankGrowthBonus = typeof rankGrowthBonus === 'number' && !isNaN(rankGrowthBonus)
+        ? rankGrowthBonus
+        : 25;
+      const rankBonusMultiplier = 1 + (safeRankGrowthBonus / 100) * rankIndex;
+      finalMax = Math.round(calculatedMax * rankBonusMultiplier);
+    }
+  }
+
   // Stelle sicher, dass das Maximum mindestens dem Basiswert entspricht und >= 1 ist
-  return Math.max(1, baseParamVal, calculatedMax);
+  return Math.max(1, baseParamVal, finalMax);
 }
 
 /**
@@ -323,6 +340,8 @@ export interface DerivedResource {
   name: string;
   value: number;
   max: number;
+  unscaledValue?: number;
+  unscaledMax?: number;
 }
 
 export interface DerivedRpgStats {
@@ -478,7 +497,9 @@ export function calculateRpgCharacterStats(
       parameterPotentialPercentages: options?.parameterPotentialPercentages,
       world,
       worldPowerSettings,
-      baseParameters: options?.baseParameters
+      baseParameters: options?.baseParameters,
+      rank: options?.rank,
+      rankGrowthBonus: options?.rankGrowthBonus
     });
 
     const rawMax = data && typeof data === 'object' && typeof data?.potentialMax === 'number' ? data.potentialMax : undefined;
@@ -587,6 +608,15 @@ export function calculateRpgCharacterStats(
   // 3. Dynamische Ressourcenberechnung (Gesundheit / HP + Kosten-Ressourcen wie MP, SP)
   const costResourcesMap = new Map<string, DerivedResource>();
 
+  const effRank = options?.rank || 'F';
+  const effConfig = options?.progressionConfig || world?.progressionConfig;
+  const rankIndex = ProgressionService.getRankIndex(effRank, effConfig);
+  const safeRankGrowthBonus = typeof options?.rankGrowthBonus === 'number' && !isNaN(options.rankGrowthBonus)
+    ? options.rankGrowthBonus
+    : 25;
+  
+  const rankBonusMultiplier = 1 + (safeRankGrowthBonus / 100) * rankIndex;
+
   // A) Gesundheits-Ressource (HP): Mensch-Basiswert = 30 bei Parameter-Durchschnitt = 10
   let healthSum = 0;
   let healthMaxSum = 0;
@@ -606,8 +636,12 @@ export function calculateRpgCharacterStats(
 
   const avgHealthParam = healthCount > 0 ? (healthSum / healthCount) : 10;
   const avgHealthParamMax = healthCount > 0 ? (healthMaxSum / healthCount) : 100;
-  const computedHpVal = Math.max(1, Math.round(30 * (avgHealthParam / 10)));
-  const computedHpMax = Math.max(computedHpVal, Math.max(1, Math.round(30 * (avgHealthParamMax / 10))));
+  
+  const baseHpVal = Math.max(1, Math.round(30 * (avgHealthParam / 10)));
+  const baseHpMax = Math.max(baseHpVal, Math.max(1, Math.round(30 * (avgHealthParamMax / 10))));
+
+  const computedHpVal = Math.round(baseHpVal * rankBonusMultiplier);
+  const computedHpMax = Math.round(baseHpMax * rankBonusMultiplier);
   const healthLabel = world?.healthLabel || 'Gesundheit (HP)';
 
   // Prüfe auf direkte Überschreibung des aktuellen Werts im Charakter-Datenobjekt (z.B. durch Pfeilbuttons)
@@ -624,13 +658,15 @@ export function calculateRpgCharacterStats(
   // HP-Maximum ist immer das aktuell aus dem individuellen Konstitutionsmaximum berechnete Limit
   const hpMax = computedHpMax;
   // Der aktuelle HP-Wert darf das individuelle HP-Maximum nicht überschreiten
-  const hpVal = Math.min(hpMax, Math.max(1, customHpVal !== undefined ? customHpVal : computedHpVal));
+  const hpVal = Math.min(hpMax, Math.max(1, customHpVal !== undefined ? Math.round(customHpVal * rankBonusMultiplier) : computedHpVal));
 
   const hpResource: DerivedResource = {
     id: 'hp',
     name: healthLabel,
     value: hpVal,
-    max: hpMax
+    max: hpMax,
+    unscaledValue: customHpVal !== undefined ? customHpVal : baseHpVal,
+    unscaledMax: baseHpMax
   };
 
   // B) Kosten-Ressourcen (MP, SP etc.) - gehören direkt zu Kampfeigenschaften
@@ -655,6 +691,9 @@ export function calculateRpgCharacterStats(
 
     const defaultResVal = resCount > 0 ? Math.max(1, Math.round(resSum / resCount)) : Math.max(1, res.baseMax || 100);
     const defaultResMax = resCount > 0 ? Math.max(defaultResVal, Math.round(resMaxSum / resCount)) : Math.max(1, res.baseMax || 100);
+    
+    const computedResVal = Math.round(defaultResVal * rankBonusMultiplier);
+    const computedResMax = Math.round(defaultResMax * rankBonusMultiplier);
     const resId = res.id || `cost-${(res.name || 'mp').toLowerCase()}`;
 
     // Prüfe auf direkten aktuellen Wert im Charakter-Datenobjekt
@@ -669,16 +708,18 @@ export function calculateRpgCharacterStats(
     }
 
     // Ressourcen-Maximum basiert direkt auf dem berechneten individuellen Maximum der Quellparameter
-    const resMax = defaultResMax;
+    const resMax = computedResMax;
     // Der aktuelle Wert wird durch das berechnete Maximum begrenzt
-    const resVal = Math.min(resMax, Math.max(1, customResVal !== undefined ? customResVal : defaultResVal));
+    const resVal = Math.min(resMax, Math.max(1, customResVal !== undefined ? Math.round(customResVal * rankBonusMultiplier) : computedResVal));
 
     if (!costResourcesMap.has(resId)) {
       costResourcesMap.set(resId, {
         id: resId,
         name: res.name || 'MP',
         value: resVal,
-        max: resMax
+        max: resMax,
+        unscaledValue: customResVal !== undefined ? customResVal : defaultResVal,
+        unscaledMax: defaultResMax
       });
     }
   });

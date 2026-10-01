@@ -322,7 +322,9 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       parameterPotentialPercentages,
       world,
       worldPowerSettings,
-      baseParameters
+      baseParameters,
+      rank,
+      rankGrowthBonus
     });
 
     // Regel 1: Das berechnete Maximum gilt immer und wird nicht von alten Werten blockiert
@@ -370,10 +372,14 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     const targetKey = resId || resName;
     const current = currentLevels[targetKey] || currentLevels[resName];
 
-    // Verwende den aktuellen abgeleiteten Ressourcen-Wert als sicheren Ausgangspunkt
+    // Verwende den aktuellen abgeleiteten unskalierten Ressourcen-Wert als sicheren Ausgangspunkt
     const matchedRes = resources.find(r => r.id === resId || r.name === resName);
-    const fallbackVal = matchedRes ? matchedRes.value : (resId === 'hp' ? 30 : 10);
-    const maxVal = matchedRes ? matchedRes.max : 1000;
+    const fallbackVal = matchedRes 
+      ? (typeof matchedRes.unscaledValue === 'number' ? matchedRes.unscaledValue : matchedRes.value)
+      : (resId === 'hp' ? 30 : 10);
+    const maxVal = matchedRes 
+      ? (typeof matchedRes.unscaledMax === 'number' ? matchedRes.unscaledMax : matchedRes.max)
+      : 1000;
 
     const currentVal = typeof current === 'object' && current !== null && typeof current.value === 'number'
       ? current.value
@@ -433,7 +439,9 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
         parameterPotentialPercentages,
         world,
         worldPowerSettings,
-        baseParameters
+        baseParameters,
+        rank: effRank,
+        rankGrowthBonus
       });
 
       const progVal = ProgressionService.calculateParameterValueForLevel({
@@ -646,7 +654,9 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 parameterPotentialPercentages,
                 world,
                 worldPowerSettings,
-                baseParameters
+                baseParameters,
+                rank,
+                rankGrowthBonus
               });
 
               const charVal = resolvedPowerData[cat]?.value ?? (rawVal !== undefined && !isNaN(rawVal) ? rawVal : baseVal);

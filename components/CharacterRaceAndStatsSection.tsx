@@ -3,7 +3,7 @@ import React, { useMemo, useEffect } from 'react';
 import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentProfileType } from '../types';
 import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
-import { isResourceKey, calculateIndividualParameterMax } from '../services/rpgStatService';
+import { isResourceKey, calculateIndividualParameterMax, calculateRpgCharacterStats } from '../services/rpgStatService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
 import { Dna, Layers, Sliders, Shield, Zap } from 'lucide-react';
@@ -328,7 +328,9 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         parameterPotentialPercentages,
         world,
         worldPowerSettings,
-        baseParameters: baseParams
+        baseParameters: baseParams,
+        rank: rank || 'F',
+        rankGrowthBonus: rankBonusValue
       });
 
       // REGEL 3: Berechne den aktuellen Parameterwert aus Level, EP, Rasse und Progressionsregeln
@@ -403,6 +405,51 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           updatedPowerData[k] = currentData[k];
         }
       }
+    });
+
+    // Create a clean copy of parameters for resource calculation by removing resource overrides
+    const paramsOnlyData: Record<string, any> = {};
+    Object.keys(updatedPowerData).forEach(k => {
+      if (!isResourceKey(k, world)) {
+        paramsOnlyData[k] = updatedPowerData[k];
+      }
+    });
+
+    // Berechne die dynamischen Kampfressourcen (HP, MP, SP) basierend auf den neuen Parameter-Zuwächsen neu
+    const derivedStats = calculateRpgCharacterStats(paramsOnlyData, world, worldPowerSettings, currentRace, customRaces, {
+      gender,
+      stature: effectiveStature,
+      build: effectiveBuild,
+      potential: safePotPercent,
+      parameterPotentialPercentages,
+      level: safeLevel,
+      rank: rank || 'F',
+      progressionConfig: effectiveConfig,
+      parameterGrowthFactors,
+      parameterGrowthPoints,
+      developmentRate: rawDevRate,
+      rankGrowthBonus: rankBonusValue,
+      levelsPerRank: currentLevelsPerRank,
+      baseGrowthPerLevel: baseGrowthPerParam
+    });
+
+    derivedStats.resources.forEach(res => {
+      const activeKey = [res.id, res.name].find(k => k && currentData[k] !== undefined) || res.name;
+      const defaultVal = res.unscaledValue ?? res.value;
+      const defaultMax = res.unscaledMax ?? res.max;
+      
+      const existing = updatedPowerData[activeKey];
+      const existingVal = typeof existing === 'object' ? existing?.value : (typeof existing === 'number' ? existing : undefined);
+      const existingMax = typeof existing === 'object' ? existing?.potentialMax : undefined;
+
+      if (existingVal !== defaultVal || existingMax !== defaultMax) {
+        needsUpdate = true;
+      }
+
+      updatedPowerData[activeKey] = {
+        value: defaultVal,
+        potentialMax: defaultMax
+      };
     });
 
     const currentFree = (currentData as any)?._freePoints;

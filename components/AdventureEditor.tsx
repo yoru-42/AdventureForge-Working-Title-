@@ -1208,7 +1208,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
             build: charBuild,
             potentialPercent: charPot,
             parameterPotentialPercentages: charData.parameterPotentialPercentages,
-            world
+            world,
+            rank: charData.rank,
+            rankGrowthBonus: charData.rankGrowthBonus
           });
 
           levels[item.parameterName] = {
@@ -1227,7 +1229,9 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           build: charBuild,
           potentialPercent: charPot,
           parameterPotentialPercentages: charData.parameterPotentialPercentages,
-          world
+          world,
+          rank: charData.rank,
+          rankGrowthBonus: charData.rankGrowthBonus
         });
 
         const rawVal = v?.value !== undefined ? v.value : (typeof v === 'number' ? v : 10);
