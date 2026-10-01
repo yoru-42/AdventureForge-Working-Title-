@@ -117,8 +117,8 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
               onRankChange={rnk => setFormData(prev => ({ ...prev, rank: rnk }))}
               potential={typeof formData.potential === 'number' ? formData.potential : 100}
               onPotentialChange={pot => setFormData(prev => ({ ...prev, potential: pot }))}
-              parameterPotentialPercentages={(formData as any).parameterPotentialPercentages}
-              onParameterPotentialPercentagesChange={percentages => setFormData(prev => ({ ...prev, parameterPotentialPercentages: percentages } as any))}
+              parameterPotentialPercentages={formData.parameterPotentialPercentages}
+              onParameterPotentialPercentagesChange={percentages => setFormData(prev => ({ ...prev, parameterPotentialPercentages: percentages }))}
               xp={formData.xp ?? 0}
               onXpChange={x => setFormData(prev => ({ ...prev, xp: x }))}
               developmentProfile={formData.developmentProfile || 'normal'}

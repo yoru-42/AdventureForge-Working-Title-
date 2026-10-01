@@ -1201,44 +1201,39 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     if (charData.campaignPowerLevelsList && Array.isArray(charData.campaignPowerLevelsList)) {
       charData.campaignPowerLevelsList.forEach((item: any) => {
         if (item.parameterName) {
-          const rawPot = typeof item.potentialMax === 'number' ? item.potentialMax : undefined;
           const indMax = calculateIndividualParameterMax({
             paramName: item.parameterName,
             race: charRace,
             gender: charGender,
             build: charBuild,
             potentialPercent: charPot,
+            parameterPotentialPercentages: charData.parameterPotentialPercentages,
             world
           });
-          const effectivePot = (rawPot !== undefined && rawPot !== 1000 && rawPot !== 9999 && rawPot !== 100000 && rawPot > 0)
-            ? rawPot
-            : indMax;
 
           levels[item.parameterName] = {
-            value: item.value !== undefined ? item.value : 10,
-            potentialMax: effectivePot,
+            value: item.value !== undefined ? Math.min(item.value, indMax) : 10,
+            potentialMax: indMax,
             xp: 0
           };
         }
       });
     } else if (charData.campaignPowerLevels) {
       Object.entries(charData.campaignPowerLevels).forEach(([k, v]: [string, any]) => {
-        const rawPot = typeof v === 'object' && typeof v?.potentialMax === 'number' ? v.potentialMax : undefined;
         const indMax = calculateIndividualParameterMax({
           paramName: k,
           race: charRace,
           gender: charGender,
           build: charBuild,
           potentialPercent: charPot,
+          parameterPotentialPercentages: charData.parameterPotentialPercentages,
           world
         });
-        const effectivePot = (rawPot !== undefined && rawPot !== 1000 && rawPot !== 9999 && rawPot !== 100000 && rawPot > 0)
-          ? rawPot
-          : indMax;
 
+        const rawVal = v?.value !== undefined ? v.value : (typeof v === 'number' ? v : 10);
         levels[k] = {
-          value: v?.value !== undefined ? v.value : (typeof v === 'number' ? v : 10),
-          potentialMax: effectivePot,
+          value: Math.min(rawVal, indMax),
+          potentialMax: indMax,
           xp: v?.xp || 0
         };
       });
@@ -4327,8 +4322,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     onRankChange={rnk => setPlayer(prev => ({ ...prev, rank: rnk }))}
                     potential={typeof player.potential === 'number' ? player.potential : (typeof player.potential === 'string' ? parseFloat(player.potential) || 100 : 100)}
                     onPotentialChange={pot => setPlayer(prev => ({ ...prev, potential: pot }))}
-                    parameterPotentialPercentages={(player as any).parameterPotentialPercentages}
-                    onParameterPotentialPercentagesChange={percentages => setPlayer(prev => ({ ...prev, parameterPotentialPercentages: percentages } as any))}
+                    parameterPotentialPercentages={player.parameterPotentialPercentages}
+                    onParameterPotentialPercentagesChange={percentages => setPlayer(prev => ({ ...prev, parameterPotentialPercentages: percentages }))}
                     xp={player.xp ?? 0}
                     onXpChange={x => setPlayer(prev => ({ ...prev, xp: x }))}
                     developmentProfile={player.developmentProfile || 'normal'}

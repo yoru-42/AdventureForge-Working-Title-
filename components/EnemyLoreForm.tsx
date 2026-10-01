@@ -1028,6 +1028,13 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
             <RpgStatusWindow
               world={world}
               worldPowerSettings={effectivePowerSettings}
+              race={editForm.race || editForm.details?.race || 'Mensch'}
+              customRaces={world?.customRaces}
+              gender={editForm.gender || editForm.appearance?.gender || editForm.details?.gender}
+              build={editForm.build || editForm.appearance?.build || editForm.details?.build || editForm.details?.stature}
+              stature={editForm.build || editForm.appearance?.build || editForm.details?.build || editForm.details?.stature}
+              characterPotential={editForm.potential || editForm.details?.potential || 100}
+              parameterPotentialPercentages={editForm.parameterPotentialPercentages || editForm.details?.parameterPotentialPercentages}
               campaignPowerLevels={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
               onChangeCampaignPowerLevels={newData => {
                 updateDetail('campaignPowerData', newData);

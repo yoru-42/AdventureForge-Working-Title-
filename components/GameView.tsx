@@ -7128,7 +7128,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       healthPowerNames.forEach(name => {
         const hLevel = resetAdventure.player.campaignPowerLevels?.[name];
         if (hLevel) {
-          sumVal += hLevel.value !== undefined ? hLevel.value : (hLevel.potentialMax !== undefined ? hLevel.potentialMax : 100);
+          sumVal += hLevel.potentialMax !== undefined ? hLevel.potentialMax : (hLevel.value !== undefined ? hLevel.value : 100);
         }
       });
       if (sumVal > 0) {
@@ -7136,7 +7136,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       }
     } else if (healthPowerName && resetAdventure.player.campaignPowerLevels?.[healthPowerName]) {
       const hLevel = resetAdventure.player.campaignPowerLevels[healthPowerName];
-      maxHp = hLevel.value !== undefined ? hLevel.value : (hLevel.potentialMax !== undefined ? hLevel.potentialMax : maxHp);
+      maxHp = hLevel.potentialMax !== undefined ? hLevel.potentialMax : (hLevel.value !== undefined ? hLevel.value : maxHp);
     }
 
     const costResources = resetAdventure.world.costResources || [];
@@ -7148,7 +7148,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       const primaryRes = costResources[0];
       if (primaryRes.radarPowerName && resetAdventure.player.campaignPowerLevels?.[primaryRes.radarPowerName]) {
         const cLevel = resetAdventure.player.campaignPowerLevels[primaryRes.radarPowerName];
-        maxMp = cLevel.value !== undefined ? cLevel.value : (cLevel.potentialMax !== undefined ? cLevel.potentialMax : (primaryRes.baseMax ?? 100));
+        maxMp = cLevel.potentialMax !== undefined ? cLevel.potentialMax : (cLevel.value !== undefined ? cLevel.value : (primaryRes.baseMax ?? 100));
       } else {
         maxMp = primaryRes.baseMax ?? 100;
       }
@@ -7157,7 +7157,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       costPowerNames.forEach(name => {
         const cLevel = resetAdventure.player.campaignPowerLevels?.[name];
         if (cLevel) {
-          sumVal += cLevel.value !== undefined ? cLevel.value : (cLevel.potentialMax !== undefined ? cLevel.potentialMax : 100);
+          sumVal += cLevel.potentialMax !== undefined ? cLevel.potentialMax : (cLevel.value !== undefined ? cLevel.value : 100);
         }
       });
       if (sumVal > 0) {
@@ -7165,7 +7165,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       }
     } else if (costPowerName && resetAdventure.player.campaignPowerLevels?.[costPowerName]) {
       const cLevel = resetAdventure.player.campaignPowerLevels[costPowerName];
-      maxMp = cLevel.value !== undefined ? cLevel.value : (cLevel.potentialMax !== undefined ? cLevel.potentialMax : maxMp);
+      maxMp = cLevel.potentialMax !== undefined ? cLevel.potentialMax : (cLevel.value !== undefined ? cLevel.value : maxMp);
     }
 
     // Reset combat states locally and fully heal

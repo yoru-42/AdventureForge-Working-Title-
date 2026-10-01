@@ -133,18 +133,26 @@ export function calculateIndividualParameterMax(options: IndividualMaxCalculatio
     genderModifier = (world as any).genderFactors[effectiveGender][paramName];
   }
 
-  // 6. Individuelles Potential (0–200%, Standard: 100%)
+  // 6. Individuelles Potential (0–100% bzw. bis zu 200%, Standard: 100%)
   let rawPotential = 100;
-  if (parameterPotentialPercentages && typeof parameterPotentialPercentages[paramName] === 'number') {
-    rawPotential = parameterPotentialPercentages[paramName];
+  if (parameterPotentialPercentages) {
+    if (typeof parameterPotentialPercentages[paramName] === 'number') {
+      rawPotential = parameterPotentialPercentages[paramName];
+    } else {
+      const lowerKey = paramName.toLowerCase();
+      const foundKey = Object.keys(parameterPotentialPercentages).find(k => k.toLowerCase() === lowerKey);
+      if (foundKey && typeof parameterPotentialPercentages[foundKey] === 'number') {
+        rawPotential = parameterPotentialPercentages[foundKey];
+      }
+    }
   } else if (typeof potentialPercent === 'number' && !isNaN(potentialPercent)) {
     rawPotential = potentialPercent;
   }
 
-  // Normalisiere Potential (falls alte >200 Werte wie 1000 übergeben wurden)
+  // Normalisiere Potential (0–100% bzw. bis zu 200%, alte >200 Legacy-Werte wie 1000 normalisieren)
   const cleanPotentialPercent = rawPotential > 200
     ? Math.max(1, Math.round(rawPotential / 10))
-    : Math.max(1, rawPotential);
+    : Math.max(0, rawPotential);
   const potentialModifier = cleanPotentialPercent / 100;
 
   // 7. Formel: Base Maximum * (BaseParam / 10) * Race Growth Factor * Stature Modifier * Gender Modifier * Potential Modifier
@@ -229,6 +237,7 @@ export interface DerivedRpgStats {
   resources: DerivedResource[];
   hpResource: DerivedResource;
   powerSources: DerivedResource[];
+  resolvedPowerData: Record<string, { value: number; potentialMax: number }>;
 }
 
 /**
@@ -335,6 +344,8 @@ export function calculateRpgCharacterStats(
       ? world.healthPowerNames
       : EP_DEFAULT_HEALTH_NAMES;
 
+  const resolvedPowerData: Record<string, { value: number; potentialMax: number }> = {};
+
   // Hilfsfunktion zum Abrufen von Parameterwerten des Charakters inklusive berechnetem individuellem Maximum
   const getParamData = (paramName: string) => {
     const cleanP = paramName.trim();
@@ -349,7 +360,7 @@ export function calculateRpgCharacterStats(
       ? rawVal
       : defaultMin;
 
-    // Berechne das individuelle Maximum für diesen Parameter
+    // Berechne das individuelle Maximum für diesen Parameter aus aktueller Rasse, Statur, Geschlecht und Potential
     const calculatedIndividualMax = calculateIndividualParameterMax({
       paramName: matchedKey,
       race,
@@ -366,16 +377,24 @@ export function calculateRpgCharacterStats(
     });
 
     const rawMax = data && typeof data === 'object' && typeof data?.potentialMax === 'number' ? data.potentialMax : undefined;
-    // Wenn rawMax ein alter Standard-Fallback ist (1000, 9999, 100000) oder fehlt, nutze das berechnete Maximum
-    const potMaxNum = (typeof rawMax === 'number' && !isNaN(rawMax) && rawMax !== 1000 && rawMax !== 9999 && rawMax !== 100000 && rawMax > 0)
-      ? rawMax
-      : calculatedIndividualMax;
 
-    return {
+    // REGEL 1: potentialMax ist ein berechneter Wert aus der aktuellen Charakterkonfiguration!
+    // Alte gespeicherte Werte dürfen die aktuelle Berechnung niemals blockieren.
+    // rawMax dient nur als Migrationshilfe, falls calculatedIndividualMax fehlt oder <= 0 ist.
+    const potMaxNum = (typeof calculatedIndividualMax === 'number' && !isNaN(calculatedIndividualMax) && calculatedIndividualMax > 0)
+      ? calculatedIndividualMax
+      : (typeof rawMax === 'number' && !isNaN(rawMax) && rawMax > 0 && rawMax !== 1000 && rawMax !== 9999 && rawMax !== 100000 ? rawMax : 100);
+
+    const result = {
       value: valNum,
       potentialMax: potMaxNum
     };
+    resolvedPowerData[matchedKey] = result;
+    return result;
   };
+
+  // Stelle sicher, dass alle Kategorien aufgelöst werden
+  categories.forEach(cat => getParamData(cat));
 
   // 2. Berechnung der Kampfeigenschaften
   const combatProperties: DerivedCombatProperty[] = statAllocations.map(alloc => {
@@ -432,24 +451,21 @@ export function calculateRpgCharacterStats(
   const computedHpMax = Math.max(computedHpVal, Math.max(1, Math.round(30 * (avgHealthParamMax / 10))));
   const healthLabel = world?.healthLabel || 'Gesundheit (HP)';
 
-  // Prüfe auf direkte Überschreibung im Charakter-Datenobjekt (z.B. durch Pfeilbuttons)
+  // Prüfe auf direkte Überschreibung des aktuellen Werts im Charakter-Datenobjekt (z.B. durch Pfeilbuttons)
   const hpOverrideKey = ['hp', healthLabel, 'Gesundheit (HP)'].find(k => campaignPowerLevels[k] !== undefined);
   let customHpVal: number | undefined = undefined;
-  let customHpMax: number | undefined = undefined;
   if (hpOverrideKey) {
     const entry = campaignPowerLevels[hpOverrideKey];
     const parsedVal = typeof entry === 'number' ? entry : entry?.value;
     if (typeof parsedVal === 'number' && !isNaN(parsedVal) && parsedVal >= 1) {
       customHpVal = parsedVal;
     }
-    const parsedMax = typeof entry === 'object' ? entry?.potentialMax : undefined;
-    if (typeof parsedMax === 'number' && !isNaN(parsedMax) && parsedMax !== 9999 && parsedMax !== 1000 && parsedMax >= 1) {
-      customHpMax = parsedMax;
-    }
   }
 
-  const hpVal = Math.max(1, customHpVal !== undefined ? customHpVal : computedHpVal);
-  const hpMax = Math.max(hpVal, customHpMax !== undefined ? customHpMax : computedHpMax);
+  // HP-Maximum ist immer das aktuell aus dem individuellen Konstitutionsmaximum berechnete Limit
+  const hpMax = computedHpMax;
+  // Der aktuelle HP-Wert darf das individuelle HP-Maximum nicht überschreiten
+  const hpVal = Math.min(hpMax, Math.max(1, customHpVal !== undefined ? customHpVal : computedHpVal));
 
   const hpResource: DerivedResource = {
     id: 'hp',
@@ -482,24 +498,21 @@ export function calculateRpgCharacterStats(
     const defaultResMax = resCount > 0 ? Math.max(defaultResVal, Math.round(resMaxSum / resCount)) : Math.max(1, res.baseMax || 100);
     const resId = res.id || `cost-${(res.name || 'mp').toLowerCase()}`;
 
-    // Prüfe auf direkte Überschreibung im Charakter-Datenobjekt
+    // Prüfe auf direkten aktuellen Wert im Charakter-Datenobjekt
     const resOverrideKey = [resId, res.name].find(k => k && campaignPowerLevels[k] !== undefined);
     let customResVal: number | undefined = undefined;
-    let customResMax: number | undefined = undefined;
     if (resOverrideKey) {
       const entry = campaignPowerLevels[resOverrideKey];
       const parsedVal = typeof entry === 'number' ? entry : entry?.value;
       if (typeof parsedVal === 'number' && !isNaN(parsedVal) && parsedVal >= 1) {
         customResVal = parsedVal;
       }
-      const parsedMax = typeof entry === 'object' ? entry?.potentialMax : undefined;
-      if (typeof parsedMax === 'number' && !isNaN(parsedMax) && parsedMax !== 1000 && parsedMax !== 9999 && parsedMax >= 1) {
-        customResMax = parsedMax;
-      }
     }
 
-    const resVal = Math.max(1, customResVal !== undefined ? customResVal : defaultResVal);
-    const resMax = Math.max(resVal, customResMax !== undefined ? customResMax : defaultResMax);
+    // Ressourcen-Maximum basiert direkt auf dem berechneten individuellen Maximum der Quellparameter
+    const resMax = defaultResMax;
+    // Der aktuelle Wert wird durch das berechnete Maximum begrenzt
+    const resVal = Math.min(resMax, Math.max(1, customResVal !== undefined ? customResVal : defaultResVal));
 
     if (!costResourcesMap.has(resId)) {
       costResourcesMap.set(resId, {
@@ -519,6 +532,7 @@ export function calculateRpgCharacterStats(
     combatProperties,
     resources: [hpResource, ...costResourcesList],
     hpResource,
-    powerSources: costResourcesList
+    powerSources: costResourcesList,
+    resolvedPowerData
   };
 }

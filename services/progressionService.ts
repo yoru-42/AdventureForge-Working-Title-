@@ -811,14 +811,17 @@ export class ProgressionService {
         currentVal += rnkGrowth * rankUpsCount;
       }
 
-      let nextVal = Math.round(currentVal * 100) / 100;
-      nextVal = Math.min(maxVal, Math.max(minVal, nextVal));
+      const paramPotMax = typeof paramData.potentialMax === 'number' && paramData.potentialMax > 0 && paramData.potentialMax !== 1000 && paramData.potentialMax !== 9999 && paramData.potentialMax !== 100000
+        ? paramData.potentialMax
+        : maxVal;
 
-      const paramPotMax = paramData.potentialMax ?? maxVal;
+      let nextVal = Math.round(currentVal * 100) / 100;
+      // Begrenzung durch individuelles potentialMax (Regeln 7, 8, 16)
+      nextVal = Math.min(paramPotMax, Math.max(minVal, nextVal));
 
       updated[key] = {
         value: nextVal,
-        potentialMax: Math.max(nextVal, paramPotMax)
+        potentialMax: paramPotMax
       };
     });
 

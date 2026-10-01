@@ -315,18 +315,14 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           needsUpdate = true;
         } else if (typeof existing === 'object') {
           const rawVal = existing.value;
-          const val = (typeof rawVal === 'number' && !isNaN(rawVal))
+          let val = (typeof rawVal === 'number' && !isNaN(rawVal))
             ? Math.max(1, rawVal)
             : raceBaseVal;
 
           const existingXp = existing.xp;
-          const rawPot = typeof existing.potentialMax === 'number' && !isNaN(existing.potentialMax)
-            ? existing.potentialMax
-            : undefined;
-
-          const effectivePotMax = (rawPot !== undefined && rawPot !== 1000 && rawPot !== 9999 && rawPot !== 100000 && rawPot > 0)
-            ? rawPot
-            : indMax;
+          // Regel 1: potentialMax ist ein berechneter Wert aus der aktuellen Charakterkonfiguration!
+          const effectivePotMax = indMax;
+          val = Math.min(val, effectivePotMax);
 
           if (val !== rawVal || existing.potentialMax !== effectivePotMax) {
             needsUpdate = true;
@@ -781,6 +777,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           baseParameters={baseParams}
           characterPotential={safePotPercent}
           parameterPotentialPercentages={parameterPotentialPercentages}
+          onParameterPotentialPercentagesChange={onParameterPotentialPercentagesChange}
           developmentPointsPerLevel={currentBudget}
           onDevelopmentPointsPerLevelChange={onDevelopmentPointsPerLevelChange}
           parameterGrowthPoints={parameterGrowthPoints}

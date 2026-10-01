@@ -131,6 +131,7 @@ export interface RpgStatusWindowProps {
   baseParameters?: Record<string, number>;
   characterPotential?: number;
   parameterPotentialPercentages?: Record<string, number>;
+  onParameterPotentialPercentagesChange?: (percentages: Record<string, number>) => void;
   developmentPointsPerLevel?: number;
   onDevelopmentPointsPerLevelChange?: (budget: number) => void;
   parameterGrowthPoints?: Record<string, number>;
@@ -160,6 +161,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   baseParameters = {},
   characterPotential = 100,
   parameterPotentialPercentages,
+  onParameterPotentialPercentagesChange,
   developmentPointsPerLevel,
   onDevelopmentPointsPerLevelChange,
   parameterGrowthPoints = {},
@@ -168,7 +170,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   onParameterGrowthFactorsChange,
   baseGrowthPerParam = 2
 }) => {
-  const { categories, globalSettings, combatProperties, hpResource, powerSources, resources } =
+  const { categories, globalSettings, combatProperties, hpResource, powerSources, resources, resolvedPowerData } =
     calculateRpgCharacterStats(campaignPowerLevels, world, worldPowerSettings, race, customRaces, {
       body,
       gender,
@@ -284,7 +286,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       ? current.value
       : (typeof current === 'number' ? current : baseVal);
 
-    // Berechne das individuelle Maximum für diesen Parameter
+    // Berechne das individuelle Maximum für diesen Parameter aus der aktuellen Charakterkonfiguration
     const calculatedMax = calculateIndividualParameterMax({
       paramName: cat,
       race,
@@ -300,12 +302,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       baseParameters
     });
 
-    const rawPot = typeof current === 'object' && current !== null && typeof current.potentialMax === 'number'
-      ? current.potentialMax
-      : undefined;
-    const currentPot = (rawPot !== undefined && rawPot !== 1000 && rawPot !== 9999 && rawPot !== 100000 && rawPot > 0)
-      ? rawPot
-      : calculatedMax;
+    // Regel 1: Das berechnete Maximum gilt immer und wird nicht von alten Werten blockiert
+    const currentPot = calculatedMax;
 
     const rawCurFree = (currentLevels as any)?._freePoints;
     const currentFreePoints = typeof rawCurFree === 'number' && !isNaN(rawCurFree) && rawCurFree >= 0
@@ -589,14 +587,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 baseParameters
               });
 
-              const rawPotMax = typeof rawEntry === 'object' && rawEntry !== null && typeof rawEntry.potentialMax === 'number'
-                ? rawEntry.potentialMax
-                : undefined;
-
-              const charVal = rawVal !== undefined && !isNaN(rawVal) ? rawVal : baseVal;
-              const charPotMax = (rawPotMax !== undefined && rawPotMax !== 1000 && rawPotMax !== 9999 && rawPotMax !== 100000 && rawPotMax > 0)
-                ? rawPotMax
-                : calculatedMax;
+              const charVal = resolvedPowerData[cat]?.value ?? (rawVal !== undefined && !isNaN(rawVal) ? rawVal : baseVal);
+              const charPotMax = resolvedPowerData[cat]?.potentialMax ?? calculatedMax;
 
               const isAtMax = charVal >= charPotMax;
 
