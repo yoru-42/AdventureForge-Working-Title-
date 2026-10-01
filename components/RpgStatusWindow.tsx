@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { WorldSetting, CampaignPowerParameter } from '../types';
+import { WorldSetting, CampaignPowerParameter, ProgressionConfig, DevelopmentProfileType } from '../types';
 import { calculateRpgCharacterStats, calculateIndividualParameterMax, CharacterPowerData } from '../services/rpgStatService';
 import { ProgressionService } from '../services/progressionService';
 import { RaceService, RaceDefinition } from '../services/raceService';
@@ -139,6 +139,11 @@ export interface RpgStatusWindowProps {
   parameterGrowthFactors?: Record<string, number>;
   onParameterGrowthFactorsChange?: (factors: Record<string, number>) => void;
   baseGrowthPerParam?: number;
+  progressionConfig?: ProgressionConfig;
+  developmentProfile?: DevelopmentProfileType;
+  developmentRate?: number;
+  rankGrowthBonus?: number;
+  levelsPerRank?: number;
 }
 
 export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
@@ -168,8 +173,17 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   onParameterGrowthPointsChange,
   parameterGrowthFactors = {},
   onParameterGrowthFactorsChange,
-  baseGrowthPerParam = 2
+  baseGrowthPerParam = 2,
+  progressionConfig,
+  developmentProfile,
+  developmentRate,
+  rankGrowthBonus,
+  levelsPerRank
 }) => {
+  const safeBaseGrowth = typeof baseGrowthPerParam === 'number' && !isNaN(baseGrowthPerParam) && baseGrowthPerParam > 0
+    ? baseGrowthPerParam
+    : 2;
+
   const { categories, globalSettings, combatProperties, hpResource, powerSources, resources, resolvedPowerData } =
     calculateRpgCharacterStats(campaignPowerLevels, world, worldPowerSettings, race, customRaces, {
       body,
@@ -178,12 +192,20 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       build,
       potential: characterPotential,
       parameterPotentialPercentages,
-      baseParameters
+      baseParameters,
+      level,
+      xp,
+      rank,
+      progressionConfig,
+      parameterGrowthFactors,
+      parameterGrowthPoints,
+      developmentPointsPerLevel,
+      baseGrowthPerLevel: safeBaseGrowth,
+      developmentRate,
+      developmentProfile,
+      rankGrowthBonus,
+      levelsPerRank
     });
-
-  const safeBaseGrowth = typeof baseGrowthPerParam === 'number' && !isNaN(baseGrowthPerParam) && baseGrowthPerParam > 0
-    ? baseGrowthPerParam
-    : 2;
 
   // Development Budget & Rassen-Standardpunkte (Mensch = 5)
   const raceNameStr = typeof race === 'string' ? race : (race?.name || 'Mensch');
@@ -320,6 +342,12 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
     const nextFreePoints = delta > 0 ? Math.max(0, currentFreePoints - 1) : currentFreePoints + 1;
 
+    const currentManual = (currentLevels as any)?._manualPoints || {};
+    const nextManual = {
+      ...currentManual,
+      [cat]: Math.max(0, (currentManual[cat] || 0) + delta)
+    };
+
     const updated = typeof current === 'object' && current !== null
       ? { ...current, value: newVal, potentialMax: currentPot }
       : { value: newVal, potentialMax: currentPot };
@@ -327,7 +355,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     const nextLevels = {
       ...currentLevels,
       [cat]: updated,
-      _freePoints: nextFreePoints
+      _freePoints: nextFreePoints,
+      _manualPoints: nextManual
     };
 
     latestPowerLevelsRef.current = nextLevels;
@@ -381,10 +410,17 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     if (readOnly || !onChangeCampaignPowerLevels) return;
 
     const resetLevels: CharacterPowerData = {};
+    const effLevel = typeof level === 'number' && !isNaN(level) && level >= 1 ? Math.floor(level) : 1;
+    const effRank = rank || 'F';
+    const effConfig = progressionConfig || world?.progressionConfig;
+    const effProfile = developmentProfile || 'normal';
+    const raceStr = typeof race === 'string' ? race : (race?.name || 'Mensch');
+
     categories.forEach(cat => {
       const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
         ? baseParameters[cat]
-        : (globalSettings[cat]?.min && globalSettings[cat].min > 0 ? globalSettings[cat].min : 10);
+        : (RaceService.getBaseParameters(raceStr, customRaces)[cat] || (globalSettings[cat]?.min && globalSettings[cat].min > 0 ? globalSettings[cat].min : 10));
+
       const indMax = calculateIndividualParameterMax({
         paramName: cat,
         race,
@@ -399,14 +435,39 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
         worldPowerSettings,
         baseParameters
       });
-      resetLevels[cat] = { value: baseVal, potentialMax: indMax };
+
+      const progVal = ProgressionService.calculateParameterValueForLevel({
+        parameterName: cat,
+        baseValue: baseVal,
+        level: effLevel,
+        rank: effRank,
+        xp,
+        config: effConfig,
+        profileType: effProfile,
+        race: raceStr,
+        customRaces,
+        potential: characterPotential,
+        parameterPotentialPercentages,
+        parameterGrowthPoints,
+        parameterGrowthFactors,
+        developmentRateMultiplier: developmentRate,
+        rankGrowthBonus,
+        levelsPerRank,
+        baseGrowthPerLevel: safeBaseGrowth,
+        potentialMax: indMax,
+        minValue: 1,
+        manualDelta: 0
+      });
+
+      resetLevels[cat] = { value: progVal, potentialMax: indMax };
     });
 
     resetLevels._freePoints = raceDefaultFreePoints;
+    (resetLevels as any)._manualPoints = {};
 
     latestPowerLevelsRef.current = resetLevels;
     onChangeCampaignPowerLevels(resetLevels);
-  }, [readOnly, onChangeCampaignPowerLevels, categories, baseParameters, globalSettings, characterPotential, parameterPotentialPercentages, raceDefaultFreePoints, race, customRaces, body, gender, stature, build, world, worldPowerSettings]);
+  }, [readOnly, onChangeCampaignPowerLevels, categories, baseParameters, globalSettings, characterPotential, parameterPotentialPercentages, raceDefaultFreePoints, race, customRaces, body, gender, stature, build, world, worldPowerSettings, level, rank, xp, progressionConfig, developmentProfile, developmentRate, rankGrowthBonus, levelsPerRank, safeBaseGrowth, parameterGrowthPoints, parameterGrowthFactors]);
 
   const hasProgressionControls = Boolean(onParameterGrowthPointsChange || onParameterGrowthFactorsChange);
 

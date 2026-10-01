@@ -312,36 +312,64 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         baseParameters: baseParams
       });
 
+      // REGEL 3: Berechne den aktuellen Parameterwert aus Level, EP, Rasse und Progressionsregeln
+      const baselineProgressionVal = ProgressionService.calculateParameterValueForLevel({
+        parameterName: paramName,
+        baseValue: raceBaseVal,
+        level: safeLevel,
+        rank: rank || 'F',
+        xp: safeXp,
+        config: effectiveConfig,
+        profileType: activeProfileKey,
+        race: currentRace,
+        customRaces,
+        potential: safePotPercent,
+        parameterPotentialPercentages,
+        parameterGrowthPoints,
+        parameterGrowthFactors,
+        developmentRateMultiplier: rawDevRate,
+        rankGrowthBonus: rankBonusValue,
+        levelsPerRank: currentLevelsPerRank,
+        baseGrowthPerLevel: baseGrowthPerParam,
+        potentialMax: indMax,
+        minValue: 1,
+        manualDelta: 0
+      });
+
       if (isLegacyBrokenDataset && STANDARD_PARAMETERS.includes(paramName)) {
-        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: indMax };
+        updatedPowerData[paramName] = { value: baselineProgressionVal, potentialMax: indMax };
         needsUpdate = true;
       } else if (existing !== undefined && existing !== null) {
-        if (typeof existing === 'number') {
-          const val = !isNaN(existing) ? Math.min(Math.max(1, existing), indMax) : raceBaseVal;
-          updatedPowerData[paramName] = { value: val, potentialMax: indMax };
-          needsUpdate = true;
-        } else if (typeof existing === 'object') {
-          const rawVal = existing.value;
-          let val = (typeof rawVal === 'number' && !isNaN(rawVal))
-            ? Math.max(1, rawVal)
-            : raceBaseVal;
-
-          const existingXp = existing.xp;
-          // Regel 1 & 4: potentialMax ist ein berechneter Wert aus der aktuellen Charakterkonfiguration!
-          const effectivePotMax = indMax;
-          val = Math.min(val, effectivePotMax);
-
-          if (val !== rawVal || existing.potentialMax !== effectivePotMax) {
-            needsUpdate = true;
+        let manualBonus = 0;
+        const manualObj = (currentData as any)?._manualPoints;
+        if (manualObj && typeof manualObj[paramName] === 'number' && !isNaN(manualObj[paramName])) {
+          manualBonus = manualObj[paramName];
+        } else {
+          const rawExisting = typeof existing === 'number' ? existing : existing.value;
+          if (typeof rawExisting === 'number' && !isNaN(rawExisting) && rawExisting > baselineProgressionVal) {
+            manualBonus = rawExisting - baselineProgressionVal;
           }
-          updatedPowerData[paramName] = {
-            value: val,
-            potentialMax: effectivePotMax,
-            ...(existingXp !== undefined ? { xp: existingXp } : {})
-          };
         }
+
+        let val = baselineProgressionVal + manualBonus;
+        // Regel 1 & 4: potentialMax ist ein berechneter Wert aus der aktuellen Charakterkonfiguration!
+        val = Math.min(val, indMax);
+
+        const existingXp = typeof existing === 'object' ? existing.xp : undefined;
+        const rawVal = typeof existing === 'object' ? existing.value : (typeof existing === 'number' ? existing : undefined);
+        const existingPotMax = typeof existing === 'object' ? existing.potentialMax : undefined;
+
+        if (val !== rawVal || existingPotMax !== indMax) {
+          needsUpdate = true;
+        }
+
+        updatedPowerData[paramName] = {
+          value: val,
+          potentialMax: indMax,
+          ...(existingXp !== undefined ? { xp: existingXp } : {})
+        };
       } else {
-        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: indMax };
+        updatedPowerData[paramName] = { value: baselineProgressionVal, potentialMax: indMax };
         needsUpdate = true;
       }
     });
@@ -364,6 +392,11 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
       needsUpdate = true;
     } else {
       (updatedPowerData as any)._freePoints = currentFree;
+    }
+
+    const currentManualPoints = (currentData as any)?._manualPoints;
+    if (currentManualPoints && !isLegacyBrokenDataset) {
+      (updatedPowerData as any)._manualPoints = currentManualPoints;
     }
 
     if (needsUpdate) {
@@ -392,7 +425,16 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     world,
     worldPowerSettings,
     isHuman,
-    currentBudget
+    currentBudget,
+    rank,
+    effectiveConfig,
+    activeProfileKey,
+    parameterGrowthPoints,
+    parameterGrowthFactors,
+    rawDevRate,
+    rankBonusValue,
+    currentLevelsPerRank,
+    baseGrowthPerParam
   ]);
 
   return (
@@ -781,9 +823,24 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           </div>
           <div className="flex items-center justify-between text-[10px] text-slate-500">
             <span>Aktuelle Stufe: {safeLevel}</span>
-            <span>
-              {xpNeeded > safeXp ? `Noch ${xpNeeded - safeXp} EP bis Stufe ${safeLevel + 1}` : 'Stufe aufstiegsbereit'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span>
+                {xpNeeded > safeXp ? `Noch ${xpNeeded - safeXp} EP bis Stufe ${safeLevel + 1}` : 'Stufe aufstiegsbereit'}
+              </span>
+              {safeXp >= xpNeeded && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextXp = Math.max(0, safeXp - xpNeeded);
+                    onXpChange?.(nextXp);
+                    onLevelChange?.(safeLevel + 1);
+                  }}
+                  className="px-2 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] rounded transition-colors shadow-sm cursor-pointer"
+                >
+                  Stufe aufsteigen (+1 Level)
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -823,6 +880,11 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           parameterGrowthFactors={parameterGrowthFactors}
           onParameterGrowthFactorsChange={onParameterGrowthFactorsChange}
           baseGrowthPerParam={baseGrowthPerParam}
+          progressionConfig={effectiveConfig}
+          developmentProfile={activeProfileKey}
+          developmentRate={rawDevRate}
+          rankGrowthBonus={rankBonusValue}
+          levelsPerRank={currentLevelsPerRank}
         />
       </div>
     </div>

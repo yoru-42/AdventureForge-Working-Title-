@@ -10,7 +10,7 @@ import {
   Character,
   CampaignPowerParameter
 } from '../types';
-import RaceService from './raceService';
+import RaceService, { RaceDefinition } from './raceService';
 
 /**
  * Standard-Rangfolge im AdventureForge-System: F -> E -> D -> C -> B -> A -> S
@@ -551,7 +551,9 @@ export class ProgressionService {
     parameterGrowthFactors?: Record<string, number>;
     raceGrowthFactors?: Record<string, number>;
     race?: string;
+    customRaces?: RaceDefinition[];
     potential?: number | string;
+    parameterPotentialPercentages?: Record<string, number>;
     developmentRateMultiplier?: number;
     profileMultiplier?: number;
     rankGrowthMultiplier?: number;
@@ -566,7 +568,9 @@ export class ProgressionService {
       parameterGrowthFactors = {},
       raceGrowthFactors,
       race,
+      customRaces,
       potential = 1000,
+      parameterPotentialPercentages,
       developmentRateMultiplier = 1.0,
       profileMultiplier = 1.0,
       rankGrowthMultiplier = 4,
@@ -580,7 +584,7 @@ export class ProgressionService {
     // 1. Rassenfaktoren bestimmen (Fallback: Mensch)
     const effectiveRaceFactors =
       raceGrowthFactors ||
-      RaceService.getRaceGrowthFactors(race || 'Mensch');
+      RaceService.getRaceGrowthFactors(race || 'Mensch', customRaces);
 
     // 2. Punkt- oder Faktor-Wachstum ermitteln
     let effectivePointBase = baseGrowth;
@@ -618,16 +622,33 @@ export class ProgressionService {
       }
     }
 
-    // 4. Potenzialfaktor berechnen
+    // 4. Potenzialfaktor berechnen (bevorzugt individuelles Parameter-Potential, falls vorhanden)
     let potentialFactor = 1.0;
     if (usePotentialForGrowth) {
-      const potNum =
-        typeof potential === 'number' && !isNaN(potential)
-          ? potential
-          : typeof potential === 'string'
-          ? parseFloat(potential) || 100
-          : 100;
-      const potPercent = potNum > 200 ? potNum / 10 : potNum;
+      let rawPot: number | undefined = undefined;
+      if (parameterPotentialPercentages) {
+        if (typeof parameterPotentialPercentages[pKey] === 'number') {
+          rawPot = parameterPotentialPercentages[pKey];
+        } else {
+          const lowerKey = pKey.toLowerCase();
+          const found = Object.keys(parameterPotentialPercentages).find(k => k.toLowerCase() === lowerKey);
+          if (found && typeof parameterPotentialPercentages[found] === 'number') {
+            rawPot = parameterPotentialPercentages[found];
+          }
+        }
+      }
+
+      if (rawPot === undefined) {
+        const potNum =
+          typeof potential === 'number' && !isNaN(potential)
+            ? potential
+            : typeof potential === 'string'
+            ? parseFloat(potential) || 100
+            : 100;
+        rawPot = potNum;
+      }
+
+      const potPercent = rawPot > 200 ? rawPot / 10 : rawPot;
       potentialFactor = Math.max(0.01, Math.min(3.0, potPercent / 100));
     }
 
@@ -643,6 +664,134 @@ export class ProgressionService {
     const rawGrowth = isRankUp ? baseDevGrowth * effectiveRankMult : baseDevGrowth;
 
     return Math.round(rawGrowth * 100) / 100;
+  }
+
+  /**
+   * Berechnet den aktuellen Parameterwert aus Basiswert, Level, Rang, Entwicklungspunkten und Wachstumsregeln.
+   * Verbindet Level und EP mit der bestehenden Parameter-Progression, ohne das individuelle Maximum anzutasten.
+   */
+  static calculateParameterValueForLevel(params: {
+    parameterName: string;
+    baseValue: number;
+    level?: number;
+    rank?: string;
+    xp?: number;
+    config?: ProgressionConfig;
+    profileType?: DevelopmentProfileType;
+    race?: string;
+    customRaces?: RaceDefinition[];
+    potential?: number | string;
+    parameterPotentialPercentages?: Record<string, number>;
+    parameterGrowthPoints?: Record<string, number>;
+    parameterGrowthFactors?: Record<string, number>;
+    developmentRateMultiplier?: number;
+    rankGrowthBonus?: number;
+    rankGrowthMultiplier?: number;
+    levelsPerRank?: number;
+    baseGrowthPerLevel?: number;
+    potentialMax?: number;
+    minValue?: number;
+    manualDelta?: number;
+  }): number {
+    const {
+      parameterName,
+      baseValue,
+      level = 1,
+      rank = 'F',
+      config = DEFAULT_PROGRESSION_CONFIG,
+      profileType = 'normal',
+      race = 'Mensch',
+      customRaces,
+      potential = 100,
+      parameterPotentialPercentages,
+      parameterGrowthPoints,
+      parameterGrowthFactors,
+      developmentRateMultiplier = 1.0,
+      rankGrowthBonus = 25,
+      rankGrowthMultiplier,
+      levelsPerRank: levelsPerRankProp,
+      baseGrowthPerLevel,
+      potentialMax,
+      minValue = 1,
+      manualDelta = 0
+    } = params;
+
+    const safeLevel = Math.max(1, Math.floor(level));
+    const effectiveLevelsPerRank = levelsPerRankProp ?? config.levelSystem?.levelsPerRank ?? 10;
+    const resetLevelOnRankUp = config.levelSystem?.resetLevelOnRankUp ?? true;
+    const rankIndex = this.getRankIndex(rank, config);
+
+    let totalLevelsGained = 0;
+    let rankUpsCount = 0;
+
+    if (config.rankSystem?.enabled && rankIndex > 0) {
+      rankUpsCount = rankIndex;
+      if (resetLevelOnRankUp) {
+        totalLevelsGained = rankIndex * effectiveLevelsPerRank + (safeLevel - 1);
+      } else {
+        totalLevelsGained = Math.max(0, safeLevel - 1);
+      }
+    } else {
+      totalLevelsGained = Math.max(0, safeLevel - 1);
+    }
+
+    const effectiveBaseGrowth = typeof baseGrowthPerLevel === 'number' && !isNaN(baseGrowthPerLevel) && baseGrowthPerLevel > 0
+      ? baseGrowthPerLevel
+      : (config.attributeProgression?.baseGrowthPerLevel ?? 2);
+
+    const profile = this.getDevelopmentProfile(profileType, config);
+    const profileMult = profile.attributeGrowthMultiplier ?? 1.0;
+    const devRateMult = typeof developmentRateMultiplier === 'number' && !isNaN(developmentRateMultiplier)
+      ? developmentRateMultiplier
+      : (config.developmentRate?.attributeGrowthMultiplier ?? 1.0);
+
+    const lvlGrowth = this.calculateParameterGrowth({
+      parameterName,
+      baseGrowth: effectiveBaseGrowth,
+      parameterGrowthPoints,
+      parameterGrowthFactors: parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+      race,
+      customRaces,
+      potential,
+      parameterPotentialPercentages,
+      developmentRateMultiplier: devRateMult,
+      profileMultiplier: profileMult,
+      rankGrowthMultiplier: rankGrowthMultiplier ?? config.attributeProgression?.rankGrowthMultiplier ?? 4,
+      rankGrowthBonus,
+      isRankUp: false,
+      usePotentialForGrowth: config.attributeProgression?.usePotentialForGrowth ?? true
+    });
+
+    let rankGrowth = 0;
+    if (rankUpsCount > 0) {
+      const rnkGrowthUnit = this.calculateParameterGrowth({
+        parameterName,
+        baseGrowth: effectiveBaseGrowth,
+        parameterGrowthPoints,
+        parameterGrowthFactors: parameterGrowthFactors || config.attributeProgression?.parameterGrowthFactors,
+        race,
+        customRaces,
+        potential,
+        parameterPotentialPercentages,
+        developmentRateMultiplier: devRateMult,
+        profileMultiplier: profileMult,
+        rankGrowthMultiplier: rankGrowthMultiplier ?? config.attributeProgression?.rankGrowthMultiplier ?? 4,
+        rankGrowthBonus,
+        isRankUp: true,
+        usePotentialForGrowth: config.attributeProgression?.usePotentialForGrowth ?? true
+      });
+      rankGrowth = rankUpsCount * rnkGrowthUnit;
+    }
+
+    const progressionGain = Math.round((totalLevelsGained * lvlGrowth + rankGrowth) * 100) / 100;
+    let finalValue = Math.round(baseValue + progressionGain + manualDelta);
+
+    if (typeof potentialMax === 'number' && !isNaN(potentialMax) && potentialMax > 0) {
+      finalValue = Math.min(potentialMax, finalValue);
+    }
+    finalValue = Math.max(minValue, finalValue);
+
+    return finalValue;
   }
 
   /**
@@ -724,10 +873,12 @@ export class ProgressionService {
     worldPowerSettings?: Record<string, number | CampaignPowerParameter>,
     options?: {
       potential?: number | string;
+      parameterPotentialPercentages?: Record<string, number>;
       parameterGrowthFactors?: Record<string, number>;
       parameterGrowthPoints?: Record<string, number>;
       raceGrowthFactors?: Record<string, number>;
       race?: string;
+      customRaces?: RaceDefinition[];
       rankUpsCount?: number;
       developmentRateMultiplier?: number;
       rankGrowthBonus?: number;
@@ -779,7 +930,9 @@ export class ProgressionService {
           parameterGrowthPoints: options?.parameterGrowthPoints,
           raceGrowthFactors: options?.raceGrowthFactors,
           race: options?.race,
+          customRaces: options?.customRaces,
           potential: options?.potential,
+          parameterPotentialPercentages: options?.parameterPotentialPercentages,
           developmentRateMultiplier: devRateMult,
           profileMultiplier: profileMult,
           rankGrowthMultiplier: rankGrowthMult,
@@ -800,7 +953,9 @@ export class ProgressionService {
           parameterGrowthPoints: options?.parameterGrowthPoints,
           raceGrowthFactors: options?.raceGrowthFactors,
           race: options?.race,
+          customRaces: options?.customRaces,
           potential: options?.potential,
+          parameterPotentialPercentages: options?.parameterPotentialPercentages,
           developmentRateMultiplier: devRateMult,
           profileMultiplier: profileMult,
           rankGrowthMultiplier: rankGrowthMult,

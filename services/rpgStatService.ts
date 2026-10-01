@@ -4,7 +4,9 @@ import {
   CampaignPowerParameter,
   CustomStatAllocation,
   CostResource,
-  CustomResourceMapping
+  CustomResourceMapping,
+  ProgressionConfig,
+  DevelopmentProfileType
 } from '../types';
 import {
   EP_DEFAULT_PARAMETERS,
@@ -14,6 +16,7 @@ import {
   EP_DEFAULT_HEALTH_NAMES
 } from '../lib/progressionDefaults';
 import { RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from './raceService';
+import { ProgressionService } from './progressionService';
 
 export interface CharacterPowerData {
   [key: string]: {
@@ -82,7 +85,7 @@ export function calculateIndividualParameterMax(options: IndividualMaxCalculatio
   // 1. Rassendefinition & Basisparameter
   const raceDef = typeof race === 'object' && race !== null
     ? race
-    : RaceService.getRaceDefinition(race, customRaces);
+    : RaceService.getRaceDefinition(typeof race === 'string' ? race : undefined, customRaces);
 
   const effectiveBaseParams = baseParameters || raceDef.baseParameters || HUMAN_BASE_PARAMETERS;
   const rawBaseParam = effectiveBaseParams[paramName];
@@ -357,6 +360,19 @@ export function calculateRpgCharacterStats(
     potential?: number | string;
     parameterPotentialPercentages?: Record<string, number>;
     baseParameters?: Record<string, number>;
+    level?: number;
+    xp?: number;
+    rank?: string;
+    progressionConfig?: ProgressionConfig;
+    parameterGrowthFactors?: Record<string, number>;
+    parameterGrowthPoints?: Record<string, number>;
+    developmentPointsPerLevel?: number;
+    baseGrowthPerLevel?: number;
+    developmentRate?: number;
+    developmentProfile?: DevelopmentProfileType;
+    rankGrowthBonus?: number;
+    rankGrowthMultiplier?: number;
+    levelsPerRank?: number;
   }
 ): DerivedRpgStats {
   const settingsSource = worldPowerSettings || world?.campaignPowerSettings || EP_DEFAULT_PARAMETERS;
@@ -448,9 +464,6 @@ export function calculateRpgCharacterStats(
       : 10;
 
     const rawVal = typeof data === 'number' ? data : (data && typeof data?.value === 'number' ? data.value : undefined);
-    const valNum = (typeof rawVal === 'number' && !isNaN(rawVal))
-      ? rawVal
-      : defaultMin;
 
     // Berechne das individuelle Maximum für diesen Parameter aus aktueller Rasse, Statur, Geschlecht und Potential
     const calculatedIndividualMax = calculateIndividualParameterMax({
@@ -477,8 +490,59 @@ export function calculateRpgCharacterStats(
       ? calculatedIndividualMax
       : (typeof rawMax === 'number' && !isNaN(rawMax) && rawMax > 0 && rawMax !== 1000 && rawMax !== 9999 && rawMax !== 100000 ? rawMax : 100);
 
+    // REGEL 3: Berechne den aktuellen Parameterwert aus Level, EP, Rasse und Progressionsregeln
+    const raceStr = typeof race === 'string' ? race : (race?.name || 'Mensch');
+    const defaultRaceBase = typeof options?.baseParameters?.[matchedKey] === 'number' && !isNaN(options.baseParameters[matchedKey])
+      ? options.baseParameters[matchedKey]
+      : (RaceService.getBaseParameters(raceStr, customRaces)[matchedKey] || defaultMin);
+
+    const effLevel = typeof options?.level === 'number' && !isNaN(options.level) && options.level >= 1
+      ? Math.floor(options.level)
+      : 1;
+
+    const effRank = options?.rank || 'F';
+    const effConfig = options?.progressionConfig || world?.progressionConfig;
+    const effProfile = options?.developmentProfile || 'normal';
+
+    const baselineProgressionVal = ProgressionService.calculateParameterValueForLevel({
+      parameterName: matchedKey,
+      baseValue: defaultRaceBase,
+      level: effLevel,
+      rank: effRank,
+      xp: options?.xp,
+      config: effConfig,
+      profileType: effProfile,
+      race: raceStr,
+      customRaces,
+      potential: options?.potential,
+      parameterPotentialPercentages: options?.parameterPotentialPercentages,
+      parameterGrowthPoints: options?.parameterGrowthPoints,
+      parameterGrowthFactors: options?.parameterGrowthFactors,
+      developmentRateMultiplier: options?.developmentRate,
+      rankGrowthBonus: options?.rankGrowthBonus,
+      rankGrowthMultiplier: options?.rankGrowthMultiplier,
+      levelsPerRank: options?.levelsPerRank,
+      baseGrowthPerLevel: options?.baseGrowthPerLevel,
+      potentialMax: potMaxNum,
+      minValue: defaultMin,
+      manualDelta: 0
+    });
+
+    // Prüfe auf manuelle Bonus-Punkte (z.B. durch Pfeilbuttons / freie Punkte im Statusfenster)
+    let manualBonus = 0;
+    const manualObj = (campaignPowerLevels as any)?._manualPoints;
+    if (manualObj && typeof manualObj[matchedKey] === 'number' && !isNaN(manualObj[matchedKey])) {
+      manualBonus = manualObj[matchedKey];
+    } else if (rawVal !== undefined && typeof rawVal === 'number' && !isNaN(rawVal)) {
+      if (rawVal > baselineProgressionVal) {
+        manualBonus = rawVal - baselineProgressionVal;
+      }
+    }
+
+    const calculatedCurrentVal = baselineProgressionVal + manualBonus;
+
     // REGEL 4: Wenn das neue Maximum unter dem aktuellen Wert liegt, muss sicher gekappt werden
-    const effectiveVal = Math.min(valNum, potMaxNum);
+    const effectiveVal = Math.min(potMaxNum, Math.max(defaultMin, calculatedCurrentVal));
 
     const result = {
       value: effectiveVal,

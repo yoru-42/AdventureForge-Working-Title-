@@ -1028,13 +1028,16 @@ Stil: ${style}. Hochwertige digitale Illustration.`;
             <RpgStatusWindow
               world={world}
               worldPowerSettings={effectivePowerSettings}
-              race={editForm.race || editForm.details?.race || 'Mensch'}
+              progressionConfig={world?.progressionConfig}
+              level={editForm.details?.level || (editForm as any).level || 1}
+              rank={editForm.details?.rank || (editForm as any).rank}
+              race={(editForm as any).race || editForm.details?.race || 'Mensch'}
               customRaces={world?.customRaces}
-              gender={editForm.gender || editForm.appearance?.gender || editForm.details?.gender}
-              build={editForm.build || editForm.appearance?.build || editForm.details?.build || editForm.details?.stature}
-              stature={editForm.build || editForm.appearance?.build || editForm.details?.build || editForm.details?.stature}
-              characterPotential={editForm.potential || editForm.details?.potential || 100}
-              parameterPotentialPercentages={editForm.parameterPotentialPercentages || editForm.details?.parameterPotentialPercentages}
+              gender={(editForm as any).gender || (editForm as any).appearance?.gender || editForm.details?.gender}
+              build={(editForm as any).build || (editForm as any).appearance?.build || editForm.details?.build || editForm.details?.stature}
+              stature={(editForm as any).build || (editForm as any).appearance?.build || editForm.details?.build || editForm.details?.stature}
+              characterPotential={(editForm as any).potential || editForm.details?.potential || 100}
+              parameterPotentialPercentages={(editForm as any).parameterPotentialPercentages || editForm.details?.parameterPotentialPercentages}
               campaignPowerLevels={editForm.details?.campaignPowerData || editForm.details?.campaignPowerLevels || {}}
               onChangeCampaignPowerLevels={newData => {
                 updateDetail('campaignPowerData', newData);
