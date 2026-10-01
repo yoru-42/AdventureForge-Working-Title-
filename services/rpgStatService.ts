@@ -17,8 +17,9 @@ import {
 export interface CharacterPowerData {
   [key: string]: {
     value: number;
-    potentialMax: number;
-  };
+    potentialMax?: number;
+    xp?: number;
+  } | number;
 }
 
 export const STANDARD_PARAMETERS = [
@@ -155,13 +156,13 @@ export function calculateRpgCharacterStats(
       ? globalSettings[matchedKey].max
       : 1000;
 
-    const rawVal = typeof data === 'number' ? data : (typeof data?.value === 'number' ? data.value : undefined);
-    const valNum = typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 0
+    const rawVal = typeof data === 'number' ? data : (data && typeof data?.value === 'number' ? data.value : undefined);
+    const valNum = (typeof rawVal === 'number' && !isNaN(rawVal))
       ? rawVal
       : defaultMin;
 
-    const rawMax = typeof data?.potentialMax === 'number' ? data.potentialMax : undefined;
-    const potMaxNum = typeof rawMax === 'number' && !isNaN(rawMax) && rawMax > 0
+    const rawMax = data && typeof data === 'object' && typeof data?.potentialMax === 'number' ? data.potentialMax : undefined;
+    const potMaxNum = typeof rawMax === 'number' && !isNaN(rawMax)
       ? rawMax
       : defaultMax;
 

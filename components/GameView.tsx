@@ -5176,7 +5176,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
               }
               
               if (d.campaignPowerLevels) {
-                const powers = Object.entries(d.campaignPowerLevels).map(([k, v]: any) => `${k} (Aktuell: ${v.value}, Potenzial: ${v.potentialMax})`);
+                const powers = Object.entries(d.campaignPowerLevels).map(([k, v]: any) => `${k}: ${v?.value !== undefined ? v.value : v}`);
                 if (powers.length > 0) {
                   traits.push(`Machtniveau: ${powers.join(', ')}`);
                 }

@@ -128,23 +128,16 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   const handleParameterUpdate = (cat: string, val: number) => {
     if (readOnly || !onChangeCampaignPowerLevels) return;
 
-    const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
-      ? baseParameters[cat]
-      : 10;
-
     const current = campaignPowerLevels[cat];
-    const currentPMax = typeof current === 'object' && typeof current?.potentialMax === 'number'
-      ? current.potentialMax
-      : (typeof characterPotential === 'number' && characterPotential > 0 ? characterPotential : 1000);
-
     const sMin = 0;
     const sMax = globalSettings[cat]?.scaleMax ?? 100000;
     const clampedVal = Math.max(sMin, Math.min(sMax, isNaN(val) ? sMin : val));
 
-    const updated = {
-      value: clampedVal,
-      potentialMax: currentPMax
-    };
+    const updated = typeof current === 'object' && current !== null
+      ? { ...current, value: clampedVal }
+      : { value: clampedVal };
+
+    delete (updated as any).potentialMax;
 
     onChangeCampaignPowerLevels({
       ...campaignPowerLevels,
@@ -287,8 +280,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
             )}
           </div>
 
-          {/* Parameter-Liste als RPG-Status: Stärke 42 / 1000 ▲ +4 */}
-          <div className="space-y-1.5 font-mono text-xs max-h-[460px] overflow-y-auto pr-1 custom-scrollbar">
+          {/* Parameter-Liste als RPG-Status: Stärke 10 ▲ +2 */}
+          <div className="space-y-1.5 font-mono text-xs">
             {categories.map(cat => {
               const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
                 ? baseParameters[cat]
@@ -303,32 +296,21 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 ? rawVal
                 : baseVal;
 
-              const scaleMax = typeof globalSettings[cat]?.scaleMax === 'number' && globalSettings[cat].scaleMax > 0
-                ? globalSettings[cat].scaleMax
-                : 1000;
-
               const allocated = allocatedPoints[cat] ?? safeBaseGrowth;
-              const ratioPercent = scaleMax > 0 ? Math.min(100, Math.max(0, Math.round((charVal / scaleMax) * 100))) : 0;
 
               return (
                 <div
                   key={`param-row-${cat}`}
-                  className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 transition-colors"
+                  className="flex items-center justify-between gap-3 p-2 rounded-lg bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 transition-colors"
                 >
-                  {/* Parameter Name & Mini Fortschrittsbalken */}
-                  <div className="flex-1 min-w-[100px] space-y-1">
+                  {/* Parameter Name */}
+                  <div className="flex-1 min-w-[110px]">
                     <span className="font-bold text-slate-200 block truncate" title={cat}>
                       {cat}
                     </span>
-                    <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60">
-                      <div
-                        className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-300"
-                        style={{ width: `${ratioPercent}%` }}
-                      />
-                    </div>
                   </div>
 
-                  {/* Aktueller Wert & Globale Skala: 42 / 1000 */}
+                  {/* Aktueller Wert */}
                   <div className="flex items-center gap-1 shrink-0 font-mono text-xs">
                     {!readOnly && onChangeCampaignPowerLevels ? (
                       <input
@@ -337,13 +319,11 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                         value={charVal}
                         onChange={e => handleParameterUpdate(cat, parseInt(e.target.value) || 0)}
                         title="Aktueller Wert"
-                        className="w-12 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded px-1 py-0.5 text-center font-bold text-amber-300 text-xs"
+                        className="w-14 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded px-1.5 py-0.5 text-center font-bold text-amber-300 text-xs"
                       />
                     ) : (
                       <span className="font-bold text-amber-300 text-xs px-1">{charVal}</span>
                     )}
-
-                    <span className="text-slate-500 text-xs font-normal">/ {scaleMax}</span>
                   </div>
 
                   {/* Geplante Entwicklung pro Level mit Stepper: ▲ +X */}
@@ -359,7 +339,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                         >
                           <Minus className="w-2.5 h-2.5" />
                         </button>
-                        <div className="flex items-center px-1 font-mono font-bold text-amber-400 text-[11px]">
+                        <div className="flex items-center px-1.5 font-mono font-bold text-amber-400 text-[11px]">
                           <span className="text-amber-500/80 mr-0.5 text-[10px]">▲</span>
                           <span>+{allocated}</span>
                         </div>

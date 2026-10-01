@@ -326,9 +326,9 @@ export function enrichAndCompleteCharacterDetails(entry: any, worldContext?: any
     techniques: safeTrim(details.techniques, ''),
     abilities: Array.isArray(details.abilities) ? details.abilities : [],
     campaignPowerLevels: details.campaignPowerLevels || {
-      physical: { value: 35, potentialMax: 50 },
-      mental: { value: 30, potentialMax: 45 },
-      social: { value: 40, potentialMax: 60 }
+      physical: { value: 35 },
+      mental: { value: 30 },
+      social: { value: 40 }
     }
   };
 

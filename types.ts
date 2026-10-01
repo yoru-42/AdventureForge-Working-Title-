@@ -429,8 +429,9 @@ export interface UserProfile {
     rankGrowth?: number;
     maxRequirement?: number;
   };
-  campaignPowerLevels?: Record<string, { value: number; potentialMax: number; xp?: number }>;
+  campaignPowerLevels?: Record<string, { value: number; potentialMax?: number; xp?: number }>;
   campaignPowerData?: Record<string, number | CampaignPowerParameter>;
+  campaignPowerDataVersion?: number;
   parameterGrowthFactors?: Record<string, number>;
   parameterGrowthPoints?: Record<string, number>;
   developmentPointsPerLevel?: number;
@@ -553,7 +554,7 @@ export interface ProgressionResult {
   rankUps: { fromRank: string; toRank: string }[];
   levelUpEvents: { level: number; rank?: string; xpNeeded: number }[];
   attributePointsEarned: number;
-  updatedPowerLevels?: Record<string, { value: number; potentialMax: number }>;
+  updatedPowerLevels?: Record<string, { value: number; potentialMax?: number }>;
 }
 
 /**
@@ -594,7 +595,8 @@ export interface ProgressionState {
   rankGrowthMultiplier?: number;
   levelsPerRank?: number;
   resetLevelOnRankUp?: boolean;
-  campaignPowerLevels?: Record<string, { value: number; potentialMax: number }>;
+  campaignPowerLevels?: Record<string, { value: number; potentialMax?: number }>;
+  campaignPowerDataVersion?: number;
   parameterGrowthFactors?: Record<string, number>;
   parameterGrowthPoints?: Record<string, number>;
   developmentPointsPerLevel?: number;
@@ -1711,7 +1713,7 @@ export interface Character {
   characterAbilities?: CharacterAbility[];
   characterTechniques?: CharacterTechnique[];
   powerForms?: CharacterPowerForm[];
-  campaignPowerLevels?: Record<string, { value: number; potentialMax: number; xp?: number }>;
+  campaignPowerLevels?: Record<string, { value: number; potentialMax?: number; xp?: number }>;
   parameterGrowthFactors?: Record<string, number>;
   parameterGrowthPoints?: Record<string, number>;
   developmentPointsPerLevel?: number;

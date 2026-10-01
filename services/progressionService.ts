@@ -476,7 +476,7 @@ export class ProgressionService {
     const pointsEarned = levelsGained * baseGrowth;
 
     // Parameterwachstum anwenden bei gewonnenen Leveln oder Rangaufstiegen
-    let updatedPowerLevels: Record<string, { value: number; potentialMax: number }> | undefined = undefined;
+    let updatedPowerLevels: Record<string, { value: number; potentialMax?: number }> | undefined = undefined;
     const rankUpsCount = rankUps.length;
     const charRace = currentState.race || 'Mensch';
     const charRaceFactors = currentState.raceGrowthFactors || RaceService.getRaceGrowthFactors(charRace);
@@ -715,7 +715,7 @@ export class ProgressionService {
    * Das individuelle Potenzial schränkt das tatsächliche Wachstum NICHT ein.
    */
   static applyLevelUpToPowerLevels(
-    powerLevels: Record<string, { value: number; potentialMax: number }> = {},
+    powerLevels: Record<string, { value: number; potentialMax?: number }> = {},
     levelsGained: number,
     config: ProgressionConfig = DEFAULT_PROGRESSION_CONFIG,
     profileType?: DevelopmentProfileType,
@@ -733,7 +733,7 @@ export class ProgressionService {
       rankGrowthBonus?: number;
       rankGrowthMultiplier?: number;
     }
-  ): Record<string, { value: number; potentialMax: number }> {
+  ): Record<string, { value: number; potentialMax?: number }> {
     const rankUpsCount = options?.rankUpsCount ?? 0;
     if (levelsGained === 0 && rankUpsCount === 0 && powerLevels && Object.keys(powerLevels).length > 0) {
       return powerLevels;
@@ -750,7 +750,7 @@ export class ProgressionService {
     const maxVal = config.attributeProgression?.maxAttributeValue ?? scaleMax;
     const minVal = config.attributeProgression?.minAttributeValue ?? scaleMin;
 
-    const updated: Record<string, { value: number; potentialMax: number }> = { ...(powerLevels || {}) };
+    const updated: Record<string, { value: number; potentialMax?: number }> = { ...(powerLevels || {}) };
 
     const settingsSource = worldPowerSettings || {};
     const settingsKeys = Object.keys(settingsSource);

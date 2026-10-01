@@ -171,8 +171,19 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   useEffect(() => {
     const currentData = characterPowerData || {};
     let needsUpdate = false;
-    const updatedPowerData: Record<string, { value: number; potentialMax: number }> = {};
-    const defaultCharPot = safePotNum || 1000;
+    const updatedPowerData: Record<string, { value: number; xp?: number }> = {};
+
+    // One-time check for legacy broken Level 1 zeroed datasets
+    const isLegacyZeroedLevel1 = (
+      safeLevel === 1 &&
+      safeXp === 0 &&
+      STANDARD_PARAMETERS.every(pName => {
+        const entry = currentData[pName];
+        if (entry === undefined || entry === null) return true;
+        const v = typeof entry === 'number' ? entry : entry.value;
+        return v === 0;
+      })
+    );
 
     parameterList.forEach(paramName => {
       const existing = currentData[paramName];
@@ -180,31 +191,31 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         ? baseParams[paramName]
         : 10;
 
-      if (existing !== undefined && existing !== null) {
+      if (isLegacyZeroedLevel1 && STANDARD_PARAMETERS.includes(paramName)) {
+        updatedPowerData[paramName] = { value: raceBaseVal };
+        needsUpdate = true;
+      } else if (existing !== undefined && existing !== null) {
         if (typeof existing === 'number') {
           const val = !isNaN(existing) ? existing : raceBaseVal;
-          updatedPowerData[paramName] = {
-            value: val,
-            potentialMax: defaultCharPot
-          };
+          updatedPowerData[paramName] = { value: val };
           if (val !== existing) needsUpdate = true;
         } else if (typeof existing === 'object') {
           const rawVal = existing.value;
-          const val = typeof rawVal === 'number' && !isNaN(rawVal)
+          const val = (typeof rawVal === 'number' && !isNaN(rawVal))
             ? rawVal
             : raceBaseVal;
-          const rawPMax = existing.potentialMax;
-          const pMax = typeof rawPMax === 'number' && !isNaN(rawPMax)
-            ? rawPMax
-            : defaultCharPot;
 
-          if (val !== rawVal || pMax !== rawPMax) {
+          const existingXp = existing.xp;
+          if (val !== rawVal || existing.potentialMax !== undefined) {
             needsUpdate = true;
           }
-          updatedPowerData[paramName] = { value: val, potentialMax: pMax };
+          updatedPowerData[paramName] = {
+            value: val,
+            ...(existingXp !== undefined ? { xp: existingXp } : {})
+          };
         }
       } else {
-        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: defaultCharPot };
+        updatedPowerData[paramName] = { value: raceBaseVal };
         needsUpdate = true;
       }
     });
@@ -212,7 +223,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     if (needsUpdate || Object.keys(currentData).length === 0) {
       onCharacterPowerDataChange(updatedPowerData);
     }
-  }, [characterPowerData, parameterList, baseParams, safePotNum, onCharacterPowerDataChange]);
+  }, [characterPowerData, parameterList, baseParams, safeLevel, safeXp, onCharacterPowerDataChange]);
 
   return (
     <div className="space-y-6">

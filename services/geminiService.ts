@@ -5110,13 +5110,12 @@ Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend 
       }
 
       // 2. Process Campaign Power Levels & Data
-      const levels: Record<string, { value: number; potentialMax: number }> = {};
+      const levels: Record<string, { value: number; xp?: number }> = {};
       if (Array.isArray(data.campaignPowerLevelsList) && data.campaignPowerLevelsList.length > 0) {
         data.campaignPowerLevelsList.forEach((item: any) => {
           if (item && item.parameterName) {
             levels[item.parameterName] = {
-              value: typeof item.value === 'number' ? item.value : 0,
-              potentialMax: typeof item.potentialMax === 'number' ? item.potentialMax : (typeof item.value === 'number' ? Math.max(item.value, 100) : 100)
+              value: typeof item.value === 'number' ? item.value : 10
             };
           }
         });
@@ -5128,11 +5127,10 @@ Konzentriere deine Generierung vor allem auf die Felder dieses Bereichs passend 
           const sMin = typeof paramVal === 'number' ? Math.floor(paramVal * 0.4) : (typeof paramVal?.scaleMin === 'number' ? paramVal.scaleMin : (typeof paramVal?.min === 'number' ? paramVal.min : 0));
           const sMax = typeof paramVal === 'number' ? paramVal : (typeof paramVal?.scaleMax === 'number' ? paramVal.scaleMax : (typeof paramVal?.max === 'number' ? paramVal.max : 100));
           
-          if (!levels[paramName] || levels[paramName].value === 0) {
+          if (levels[paramName] === undefined) {
             const baseVal = Math.max(sMin, Math.min(sMax, Math.floor(sMin + (sMax - sMin) * 0.55)));
             levels[paramName] = {
-              value: baseVal,
-              potentialMax: sMax
+              value: baseVal
             };
           }
         });
