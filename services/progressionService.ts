@@ -184,6 +184,26 @@ export class ProgressionService {
   }
 
   /**
+   * Bestimmt das Basis-Wachstum pro Level (baseGrowthPerLevel) für einen Charakter oder ein Profil.
+   * Berücksichtigt individuelle Werte, Entwicklungs-Profile oder globale Konfigurationen.
+   */
+  static determineBaseGrowthPerLevel(params: {
+    characterBaseGrowth?: number;
+    config?: ProgressionConfig;
+    profileType?: DevelopmentProfileType;
+  }): number {
+    if (typeof params.characterBaseGrowth === 'number' && !isNaN(params.characterBaseGrowth) && params.characterBaseGrowth >= 0) {
+      return params.characterBaseGrowth;
+    }
+    const config = params.config || DEFAULT_PROGRESSION_CONFIG;
+    const profileMultiplier = params.profileType
+      ? (this.getDevelopmentProfile(params.profileType, config).attributeGrowthMultiplier ?? 1.0)
+      : 1.0;
+    const baseConfigGrowth = config.attributeProgression?.baseGrowthPerLevel ?? 2;
+    return Math.max(0, Math.round(baseConfigGrowth * profileMultiplier));
+  }
+
+  /**
    * Ermittelt den Index des Rangs in der Rangliste (0 für 'F', 1 für 'E', etc.).
    */
   static getRankIndex(rank?: string, config: ProgressionConfig = DEFAULT_PROGRESSION_CONFIG): number {

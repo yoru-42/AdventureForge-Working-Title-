@@ -438,6 +438,7 @@ export interface UserProfile {
   developmentPointsPerLevel?: number;
   rankGrowthBonus?: number;
   rankGrowthMultiplier?: number;
+  baseGrowthPerLevel?: number;
   appearance: {
     gender: string;
     age: string;
@@ -1721,6 +1722,7 @@ export interface Character {
   developmentPointsPerLevel?: number;
   rankGrowthBonus?: number;
   rankGrowthMultiplier?: number;
+  baseGrowthPerLevel?: number;
   race?: string;
   raceFeatures?: string;
   rank?: CharacterRank | string;

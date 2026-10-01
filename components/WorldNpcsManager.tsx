@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { WorldSetting } from '../types';
 import { GeminiService } from '../services/geminiService';
 
+const GENDER_OPTIONS = ['Männlich', 'Weiblich', 'Geschlechtslos', 'Futanari'];
+
 interface WorldNpcsManagerProps {
   world: WorldSetting;
   onChangeWorld: (updated: WorldSetting) => void;
@@ -548,13 +550,15 @@ export const WorldNpcsManager: React.FC<WorldNpcsManagerProps> = ({
                     </div>
                     <div className="space-y-1">
                       <label className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Geschlecht</label>
-                      <input
-                        type="text"
-                        placeholder="z.B. Weiblich, Divers"
-                        value={newNpc.gender}
+                      <select
+                        value={GENDER_OPTIONS.includes(newNpc.gender) ? newNpc.gender : (newNpc.gender === 'Divers' || newNpc.gender === 'Nicht-Binär' || newNpc.gender === 'Androgyn' || newNpc.gender === 'Unbekannt' ? 'Geschlechtslos' : 'Männlich')}
                         onChange={e => setNewNpc({ ...newNpc, gender: e.target.value })}
-                        className="w-full bg-slate-900 border border-slate-800 text-xs text-slate-200 rounded-xl p-2.5 focus:border-violet-500 outline-none"
-                      />
+                        className="w-full bg-slate-900 border border-slate-800 text-xs text-slate-200 rounded-xl p-2.5 focus:border-violet-500 outline-none cursor-pointer"
+                      >
+                        {GENDER_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[9px] text-slate-400 uppercase tracking-wider font-bold">Rasse</label>
@@ -711,12 +715,15 @@ export const WorldNpcsManager: React.FC<WorldNpcsManagerProps> = ({
                         </div>
                         <div className="space-y-0.5">
                           <label className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Geschlecht</label>
-                          <input
-                            type="text"
-                            value={npc.gender || ''}
+                          <select
+                            value={GENDER_OPTIONS.includes(npc.gender || '') ? npc.gender : (npc.gender === 'Divers' || npc.gender === 'Nicht-Binär' || npc.gender === 'Androgyn' || npc.gender === 'Unbekannt' ? 'Geschlechtslos' : 'Männlich')}
                             onChange={e => handleUpdateNpc(idx, 'gender', e.target.value)}
-                            className="bg-transparent border-b border-slate-800 focus:border-violet-500 text-slate-200 text-xs outline-none w-full pb-0.5"
-                          />
+                            className="bg-transparent border-b border-slate-800 focus:border-violet-500 text-slate-200 text-xs outline-none w-full pb-0.5 cursor-pointer"
+                          >
+                            {GENDER_OPTIONS.map(opt => (
+                              <option key={opt} value={opt} className="bg-slate-900 text-slate-200">{opt}</option>
+                            ))}
+                          </select>
                         </div>
                         <div className="space-y-0.5">
                           <label className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Beruf</label>

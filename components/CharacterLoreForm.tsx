@@ -1967,7 +1967,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
               updateDetail('race', val);
               setEditForm(prev => ({ ...prev, race: val } as any));
             }}
-            gender={getAppearanceValue('gender') || getDetail('gender', 'Unbekannt')}
+            gender={getAppearanceValue('gender') || getDetail('gender', 'Männlich')}
             onGenderChange={val => {
               updateAppearanceValue('gender', val);
               updateDetail('gender', val);
@@ -2033,6 +2033,12 @@ export const CharacterLoreForm: React.FC<Props> = ({
             onDevelopmentPointsPerLevelChange={budget => updateDetail('developmentPointsPerLevel', budget)}
             levelsPerRank={getDetail('levelsPerRank')}
             onLevelsPerRankChange={val => updateDetail('levelsPerRank', val)}
+            baseGrowthPerLevel={getDetail<any>('baseGrowthPerLevel') ?? getDetail<any>('attributeGrowth')?.baseGrowthPerLevel}
+            onBaseGrowthPerLevelChange={val => {
+              updateDetail('baseGrowthPerLevel', val);
+              const existingAttrGrowth = getDetail<any>('attributeGrowth') || {};
+              updateDetail('attributeGrowth', { ...existingAttrGrowth, baseGrowthPerLevel: val });
+            }}
           />
         </div>
       )}

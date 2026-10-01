@@ -53,6 +53,8 @@ export interface CharacterRaceAndStatsSectionProps {
   progressionConfig?: ProgressionConfig;
   levelsPerRank?: number;
   onLevelsPerRankChange?: (val: number) => void;
+  baseGrowthPerLevel?: number;
+  onBaseGrowthPerLevelChange?: (val: number) => void;
 }
 
 export const CHARACTER_GENDER_OPTIONS = ['Männlich', 'Weiblich', 'Geschlechtslos', 'Futanari'];
@@ -77,7 +79,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   race,
   onRaceChange,
   customRaces,
-  gender = 'Unbekannt',
+  gender = 'Männlich',
   onGenderChange,
   build = 'Schlank',
   onBuildChange,
@@ -117,7 +119,9 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   onParameterGrowthFactorsChange,
   progressionConfig,
   levelsPerRank,
-  onLevelsPerRankChange
+  onLevelsPerRankChange,
+  baseGrowthPerLevel,
+  onBaseGrowthPerLevelChange
 }) => {
   const currentRace = race || 'Mensch';
   const effectiveStature = stature || build || 'Schlank';
@@ -238,6 +242,27 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     }
   }, [rankBonusValue]);
 
+  // Base growth per parameter from prop or config
+  const rawBaseGrowth = typeof baseGrowthPerLevel === 'number' && !isNaN(baseGrowthPerLevel) && baseGrowthPerLevel >= 0
+    ? baseGrowthPerLevel
+    : effectiveConfig.attributeProgression?.baseGrowthPerLevel;
+  const baseGrowthPerParam = typeof rawBaseGrowth === 'number' && !isNaN(rawBaseGrowth) && rawBaseGrowth >= 0
+    ? rawBaseGrowth
+    : 2;
+
+  const [localBaseGrowthStr, setLocalBaseGrowthStr] = React.useState<string>(() => String(baseGrowthPerParam));
+  React.useEffect(() => {
+    if (localBaseGrowthStr !== '' && !isNaN(parseInt(localBaseGrowthStr, 10))) {
+      if (parseInt(localBaseGrowthStr, 10) !== baseGrowthPerParam) {
+        setLocalBaseGrowthStr(String(baseGrowthPerParam));
+      }
+    } else if (localBaseGrowthStr === '') {
+      // Keep empty while user is typing
+    } else {
+      setLocalBaseGrowthStr(String(baseGrowthPerParam));
+    }
+  }, [baseGrowthPerParam]);
+
   // Level bis Rangaufstieg calculation
   const levelsUntilRankUp = Math.max(0, currentLevelsPerRank - (((safeLevel - 1) % currentLevelsPerRank) + 1));
 
@@ -256,12 +281,6 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     }
     return Array.from(keys);
   }, [worldPowerSettings, characterPowerData, world]);
-
-  // Base growth per parameter from config
-  const rawBaseGrowth = effectiveConfig.attributeProgression?.baseGrowthPerLevel;
-  const baseGrowthPerParam = typeof rawBaseGrowth === 'number' && !isNaN(rawBaseGrowth) && rawBaseGrowth > 0
-    ? rawBaseGrowth
-    : 2;
 
   // Total Budget pro Level (Mensch = 5)
   const isHuman = currentRace.toLowerCase().includes('mensch') || currentRace.toLowerCase().includes('human');
@@ -682,7 +701,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         </div>
 
         {/* EP-Gewinn, Entwicklungsrate & Rangbonus */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-xl">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-xl">
           <div>
             <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
@@ -802,6 +821,44 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                 className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
               />
               <span className="text-xs text-slate-300 font-mono font-bold shrink-0">+{rankBonusValue} %</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              Basis-Wachstum pro Level
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={50}
+                value={localBaseGrowthStr}
+                onChange={e => {
+                  const raw = e.target.value;
+                  setLocalBaseGrowthStr(raw);
+                  if (raw === '') return;
+                  const parsed = parseInt(raw, 10);
+                  if (!isNaN(parsed)) {
+                    const clamped = Math.max(0, Math.min(50, parsed));
+                    onBaseGrowthPerLevelChange?.(clamped);
+                  }
+                }}
+                onBlur={() => {
+                  if (localBaseGrowthStr === '' || isNaN(parseInt(localBaseGrowthStr, 10))) {
+                    setLocalBaseGrowthStr(String(baseGrowthPerParam));
+                    onBaseGrowthPerLevelChange?.(baseGrowthPerParam);
+                  } else {
+                    const parsed = parseInt(localBaseGrowthStr, 10);
+                    const clamped = Math.max(0, Math.min(50, parsed));
+                    setLocalBaseGrowthStr(String(clamped));
+                    onBaseGrowthPerLevelChange?.(clamped);
+                  }
+                }}
+                placeholder="2"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
+              />
+              <span className="text-xs text-slate-400 font-mono font-bold shrink-0">Pkt.</span>
             </div>
           </div>
         </div>
