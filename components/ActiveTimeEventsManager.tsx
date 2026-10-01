@@ -10,6 +10,7 @@ import {
 } from '../types';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import { ActiveTimeEventService } from '../services/activeTimeEventService';
+import { WorldSimulationService } from '../services/worldSimulationService';
 
 interface Props {
   adventure: Adventure;
@@ -241,6 +242,10 @@ export const ActiveTimeEventsManager: React.FC<Props> = ({ adventure, onUpdateAd
           </p>
         </div>
         <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-amber-400">
+            <i className="fa-solid fa-calendar-days text-[11px]"></i>
+            <span>{WorldSimulationService.formatDateTime(adventure.worldTime || adventure.world?.worldTime)}</span>
+          </div>
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
@@ -657,6 +662,11 @@ export const ActiveTimeEventsManager: React.FC<Props> = ({ adventure, onUpdateAd
                               Phase {idx + 1}
                             </span>
                             <span className="font-semibold text-slate-200">{stg.title}</span>
+                            {stg.executedAtWorldTime && (
+                              <span className="text-[10px] text-amber-400 font-mono">
+                                ({WorldSimulationService.formatDateTime(stg.executedAtWorldTime)})
+                              </span>
+                            )}
                           </div>
                           {selectedAte.stages.length > 1 && (
                             <button

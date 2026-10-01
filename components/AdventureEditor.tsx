@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection, RelationshipsSmartFillScope, AbilitiesSmartFillScope, CharacterRank, DevelopmentProfileType } from '../types';
+import { Adventure, WorldSetting, Character, NPC, GameViewMode, StatusElement, UserProfile, LoreEntry, TechniqueRuleItem, StructuredInventory, CharacterPowerSource, CharacterRelationship, PersonalityTraits, SmartFillContext, SmartFillSection, RelationshipsSmartFillScope, AbilitiesSmartFillScope, CharacterRank, DevelopmentProfileType, WorldTime } from '../types';
 import { GeminiService } from '../services/geminiService';
 import { applySmartFillUpdates } from '../utils/smartFillUtils';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
@@ -49,6 +49,7 @@ import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/ab
 import { createStandardLoreEntries } from '../lib/standardItemsData';
 import { AdventureResetService } from '../services/adventureResetService';
 import { DEFAULT_RACES, RaceService } from '../services/raceService';
+import { WorldSimulationService } from '../services/worldSimulationService';
 
 interface Props {
   onSave: (adventure: Adventure) => void;
@@ -80,11 +81,13 @@ const TAG_OPTIONS = [
 
 const HUD_PRESETS: Record<string, { label: string, value: string }[]> = {
   "Klassisch": [
+    { label: "Datum", value: "Tag 1" },
     { label: "Uhrzeit", value: "12:00" },
     { label: "Standort", value: "Startgebiet" },
     { label: "Vermögen", value: "100 Gold" }
   ],
   "Fokus Status & Emotion": [
+    { label: "Datum", value: "Tag 1" },
     { label: "Uhrzeit", value: "12:00" },
     { label: "Standort", value: "Startgebiet" },
     { label: "Körperlicher Zustand", value: "Gesund" },
@@ -93,6 +96,7 @@ const HUD_PRESETS: Record<string, { label: string, value: string }[]> = {
     { label: "Tonart", value: "Normal" }
   ],
   "RPG": [
+    { label: "Datum", value: "Tag 1" },
     { label: "Uhrzeit", value: "12:00" },
     { label: "Standort", value: "Taverne" },
     { label: "HP", value: "100/100" },
@@ -102,6 +106,7 @@ const HUD_PRESETS: Record<string, { label: string, value: string }[]> = {
     { label: "Level", value: "1" }
   ],
   "Körper & Transformation": [
+    { label: "Datum", value: "Tag 1" },
     { label: "Uhrzeit", value: "12:00" },
     { label: "Standort", value: "Startgebiet" },
     { label: "Körperlicher Zustand", value: "Gesund" },
@@ -110,6 +115,7 @@ const HUD_PRESETS: Record<string, { label: string, value: string }[]> = {
     { label: "Point of No Return", value: "80%" }
   ],
   "Metamorphose & Fluch": [
+    { label: "Datum", value: "Tag 1" },
     { label: "Uhrzeit", value: "12:00" },
     { label: "Standort", value: "Arkaner Tempel" },
     { label: "Körperlicher Zustand", value: "Gesund" },
@@ -118,6 +124,7 @@ const HUD_PRESETS: Record<string, { label: string, value: string }[]> = {
     { label: "Flüche & Segen", value: "Inaktiv" }
   ],
   "Survival": [
+    { label: "Datum", value: "Tag 1" },
     { label: "Uhrzeit", value: "08:00" },
     { label: "Standort", value: "Zuflucht" },
     { label: "Körperlicher Zustand", value: "Gesund" },
@@ -126,6 +133,7 @@ const HUD_PRESETS: Record<string, { label: string, value: string }[]> = {
     { label: "Temperatur", value: "Normal" }
   ],
   "Sci-Fi": [
+    { label: "Datum", value: "Tag 1" },
     { label: "Uhrzeit", value: "06:00" },
     { label: "Standort", value: "Raumstation" },
     { label: "Körperlicher Zustand", value: "Gesund" },
@@ -792,11 +800,46 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         }
       };
 
+      // Extract or compute current WorldTime
+      let currentWt: WorldTime = initialData?.worldTime 
+        ? JSON.parse(JSON.stringify(initialData.worldTime))
+        : (initialData?.world?.worldTime 
+          ? JSON.parse(JSON.stringify(initialData.world.worldTime))
+          : (initialSnapshotsRef.current.initialWorldTime ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldTime)) : { day: 1, hour: 12, minute: 0, totalMinutes: 720 }));
+
+      // Synchronize with any explicit Datum/Uhrzeit in statusElements
+      const dateElem = statusElements.find(s => {
+        const l = (s.label || '').toLowerCase();
+        return l === 'datum' || l === 'tag' || l === 'date' || l === 'spieltag';
+      });
+      if (dateElem?.value) {
+        const parsedD = WorldSimulationService.parseDateString(dateElem.value);
+        if (parsedD) currentWt.day = parsedD.day;
+      }
+      const timeElem = statusElements.find(s => {
+        const l = (s.label || '').toLowerCase();
+        return l.includes('zeit') || l.includes('uhrzeit') || l === 'time' || l === 'tageszeit';
+      });
+      if (timeElem?.value) {
+        const parsedT = WorldSimulationService.parseTimeString(timeElem.value);
+        if (parsedT) {
+          currentWt.hour = parsedT.hour;
+          currentWt.minute = parsedT.minute;
+        }
+      }
+      currentWt.totalMinutes = WorldSimulationService.toTotalMinutes(currentWt);
+
+      const syncedStatusElements = WorldSimulationService.syncStatusElementsWithWorldTime(statusElements, currentWt);
+      const syncedWorld: WorldSetting = {
+        ...world,
+        worldTime: currentWt
+      };
+
       const currentAdventure: Adventure = {
         id: adventureIdRef.current,
         authorId: mode === GameViewMode.JOIN_CUSTOM_CHAR ? userId : (initialData?.authorId || userId),
         isPublic,
-        world,
+        world: syncedWorld,
         player: cleanPlayer,
         npcs,
         loreDatabase,
@@ -806,7 +849,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         firstMessage: firstMessage,
         chatHistory: newChatHistory,
         backgroundImage: bgImage,
-        statusElements,
+        statusElements: syncedStatusElements,
+        worldTime: currentWt,
         initialPlayer: initialSnapshotsRef.current.initialPlayer ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialPlayer)) : undefined,
         initialWorld: initialSnapshotsRef.current.initialWorld ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorld)) : undefined,
         initialWorldTime: initialSnapshotsRef.current.initialWorldTime ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldTime)) : { day: 1, hour: 8, minute: 0 },
@@ -935,11 +979,46 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
         }
       };
 
+      // Extract or compute current WorldTime
+      let currentWt: WorldTime = initialData?.worldTime 
+        ? JSON.parse(JSON.stringify(initialData.worldTime))
+        : (initialData?.world?.worldTime 
+          ? JSON.parse(JSON.stringify(initialData.world.worldTime))
+          : (initialSnapshotsRef.current.initialWorldTime ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldTime)) : { day: 1, hour: 12, minute: 0, totalMinutes: 720 }));
+
+      // Synchronize with any explicit Datum/Uhrzeit in statusElements
+      const dateElem = statusElements.find(s => {
+        const l = (s.label || '').toLowerCase();
+        return l === 'datum' || l === 'tag' || l === 'date' || l === 'spieltag';
+      });
+      if (dateElem?.value) {
+        const parsedD = WorldSimulationService.parseDateString(dateElem.value);
+        if (parsedD) currentWt.day = parsedD.day;
+      }
+      const timeElem = statusElements.find(s => {
+        const l = (s.label || '').toLowerCase();
+        return l.includes('zeit') || l.includes('uhrzeit') || l === 'time' || l === 'tageszeit';
+      });
+      if (timeElem?.value) {
+        const parsedT = WorldSimulationService.parseTimeString(timeElem.value);
+        if (parsedT) {
+          currentWt.hour = parsedT.hour;
+          currentWt.minute = parsedT.minute;
+        }
+      }
+      currentWt.totalMinutes = WorldSimulationService.toTotalMinutes(currentWt);
+
+      const syncedStatusElements = WorldSimulationService.syncStatusElementsWithWorldTime(statusElements, currentWt);
+      const syncedWorld: WorldSetting = {
+        ...world,
+        worldTime: currentWt
+      };
+
       const updatedAdventure: Adventure = {
         id: adventureIdRef.current,
         authorId: mode === GameViewMode.JOIN_CUSTOM_CHAR ? userId : (initialData?.authorId || userId),
         isPublic,
-        world,
+        world: syncedWorld,
         player: cleanPlayer,
         npcs,
         loreDatabase: cleanLore,
@@ -957,7 +1036,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           ? [...initialData.chatHistory]
           : [{ id: 'prologue-msg', role: 'model', text: prologue || 'Die Reise beginnt...', isCombatLog: false } as any],
         backgroundImage: bgImage,
-        statusElements,
+        statusElements: syncedStatusElements,
+        worldTime: currentWt,
         initialPlayer: initialSnapshotsRef.current.initialPlayer ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialPlayer)) : undefined,
         initialWorld: initialSnapshotsRef.current.initialWorld ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorld)) : undefined,
         initialWorldTime: initialSnapshotsRef.current.initialWorldTime ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldTime)) : { day: 1, hour: 8, minute: 0 },
@@ -1076,6 +1156,30 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
             money: parsedMoney,
             currencyLabel: textMatch || old?.currencyLabel || 'Goldstücke'
           }));
+        } else if (l === 'datum' || l === 'tag' || l === 'date' || l === 'spieltag') {
+          const match = (updated.value || '').match(/\d+/);
+          if (match) {
+            const dayNum = parseInt(match[0]);
+            if (!isNaN(dayNum) && dayNum >= 1) {
+              initialSnapshotsRef.current.initialWorldTime = {
+                ...(initialSnapshotsRef.current.initialWorldTime || { hour: 12, minute: 0 }),
+                day: dayNum
+              };
+            }
+          }
+        } else if (l === 'zeit' || l === 'uhrzeit' || l === 'time' || l === 'tageszeit') {
+          const timeMatch = (updated.value || '').match(/(\d{1,2}):(\d{2})/);
+          if (timeMatch) {
+            const h = parseInt(timeMatch[1]);
+            const m = parseInt(timeMatch[2]);
+            if (!isNaN(h) && !isNaN(m)) {
+              initialSnapshotsRef.current.initialWorldTime = {
+                ...(initialSnapshotsRef.current.initialWorldTime || { day: 1 }),
+                hour: h,
+                minute: m
+              };
+            }
+          }
         }
         return updated;
       }
@@ -3070,11 +3174,46 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
 
     const isNewAdventure = mode === GameViewMode.CREATE || mode === GameViewMode.JOIN_CUSTOM_CHAR || !initialData || AdventureResetService.isFreshAdventure(initialData);
 
+    // Extract or compute current WorldTime
+    let currentWt: WorldTime = initialData?.worldTime 
+      ? JSON.parse(JSON.stringify(initialData.worldTime))
+      : (initialData?.world?.worldTime 
+        ? JSON.parse(JSON.stringify(initialData.world.worldTime))
+        : (initialSnapshotsRef.current.initialWorldTime ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorldTime)) : { day: 1, hour: 12, minute: 0, totalMinutes: 720 }));
+
+    // Synchronize with any explicit Datum/Uhrzeit in statusElements
+    const dateElem = statusElements.find(s => {
+      const l = (s.label || '').toLowerCase();
+      return l === 'datum' || l === 'tag' || l === 'date' || l === 'spieltag';
+    });
+    if (dateElem?.value) {
+      const parsedD = WorldSimulationService.parseDateString(dateElem.value);
+      if (parsedD) currentWt.day = parsedD.day;
+    }
+    const timeElem = statusElements.find(s => {
+      const l = (s.label || '').toLowerCase();
+      return l.includes('zeit') || l.includes('uhrzeit') || l === 'time' || l === 'tageszeit';
+    });
+    if (timeElem?.value) {
+      const parsedT = WorldSimulationService.parseTimeString(timeElem.value);
+      if (parsedT) {
+        currentWt.hour = parsedT.hour;
+        currentWt.minute = parsedT.minute;
+      }
+    }
+    currentWt.totalMinutes = WorldSimulationService.toTotalMinutes(currentWt);
+
+    const syncedStatusElements = WorldSimulationService.syncStatusElementsWithWorldTime(statusElements, currentWt);
+    const syncedWorld: WorldSetting = {
+      ...finalWorld,
+      worldTime: currentWt
+    };
+
     const finalAdventure: Adventure = {
       id: adventureIdRef.current,
       authorId: mode === GameViewMode.JOIN_CUSTOM_CHAR ? userId : (initialData?.authorId || userId),
       isPublic,
-      world: finalWorld,
+      world: syncedWorld,
       player: finalPlayer,
       npcs: finalNpcs,
       loreDatabase: finalLoreDatabase,
@@ -3084,7 +3223,8 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
       firstMessage: firstMessage,
       chatHistory: newChatHistory,
       backgroundImage: bgImage,
-      statusElements,
+      statusElements: syncedStatusElements,
+      worldTime: currentWt,
       combatState: customCombatState,
       initialPlayer: initialSnapshotsRef.current.initialPlayer ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialPlayer)) : undefined,
       initialWorld: initialSnapshotsRef.current.initialWorld ? JSON.parse(JSON.stringify(initialSnapshotsRef.current.initialWorld)) : undefined,
@@ -5135,6 +5275,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Standard-Anzeigen hinzufügen:</span>
                   <div className="flex flex-wrap gap-2">
                     {[
+                      { label: 'Datum', value: 'Tag 1', icon: 'fa-calendar-days', color: 'text-amber-400' },
                       { label: 'Uhrzeit', value: '12:00', icon: 'fa-clock', color: 'text-amber-400' },
                       { label: 'Standort', value: 'Startgebiet', icon: 'fa-map-location-dot', color: 'text-sky-400' },
                       { label: 'Körperlicher Zustand', value: 'Gesund', icon: 'fa-heart-pulse', color: 'text-emerald-400' },

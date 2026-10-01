@@ -2285,6 +2285,7 @@ export const TacticalCombatMap: React.FC<TacticalCombatMapProps> = ({
       updatedStatus.push({ id: 'def-loc', label: 'Standort', value: newLocationStr });
     } else {
       updatedStatus = [
+        { id: 'def-datum', label: 'Datum', value: 'Tag 1' },
         { id: 'def-zeit', label: 'Uhrzeit', value: '12:00' },
         { id: 'def-loc', label: 'Standort', value: newLocationStr },
         { id: 'def-money', label: 'Vermögen', value: '100 Gold' }

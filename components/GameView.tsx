@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, Character, LoreEntry, Territory, WorldSetting, TacticalFormation, TacticalDirection, PlacedCombatObject } from '../types';
+import { Adventure, ChatMessage, GameViewMode, StatusElement, NPC, UserProfile, Character, LoreEntry, Territory, WorldSetting, TacticalFormation, TacticalDirection, PlacedCombatObject, WorldTime } from '../types';
 import { GeminiService, audioUtils } from '../services/geminiService';
 import AutoExpandingTextarea from './AutoExpandingTextarea';
 import ReactMarkdown from 'react-markdown';
@@ -4893,7 +4893,8 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
             const sLabel = s.label.toLowerCase();
             const kLabel = key.toLowerCase();
             if (sLabel === kLabel) return true;
-            if ((sLabel === 'zeit' || sLabel === 'uhrzeit') && (kLabel === 'zeit' || kLabel === 'uhrzeit')) return true;
+            if ((sLabel === 'zeit' || sLabel === 'uhrzeit' || sLabel === 'time' || sLabel === 'tageszeit') && (kLabel === 'zeit' || kLabel === 'uhrzeit' || kLabel === 'time' || kLabel === 'tageszeit')) return true;
+            if ((sLabel === 'datum' || sLabel === 'tag' || sLabel === 'date' || sLabel === 'spieltag') && (kLabel === 'datum' || kLabel === 'tag' || kLabel === 'date' || kLabel === 'spieltag')) return true;
             if ((sLabel.includes('körper') && sLabel.includes('zustand')) && (kLabel.includes('körper') && kLabel.includes('zustand'))) return true;
             if ((sLabel.includes('standort') || sLabel.includes('ort')) && (kLabel.includes('standort') || kLabel.includes('ort') || kLabel.includes('currentlocation'))) return true;
             return false;
@@ -5415,18 +5416,19 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       17. STRENGES ZITIER- & WIEDERHOLUNGSVERBOT: Du darfst NIEMALS die Worte, Sätze, Aktionen, Fragen oder Ausrufe des Spielers zitieren, wiederholen, umformulieren, umschreiben oder kopieren (auch nicht als wörtliche Rede, Gedanken oder Einleitung). Der Spieler hat seine Nachricht bereits selbst geschrieben/gelesen und will sie unter keinen Umständen in deiner Antwort wiederholt sehen. Beginne deine Antwort direkt mit den unmittelbaren Konsequenzen, NPCs-Reaktionen oder dem weiteren physischen/verbalen Verlauf der Szene. Schreibe absolut keine Einleitung, Zusammenfassung oder Rekapitulation des Spielerbeitrags. Wirf den Leser mitten in die darauffolgende Handlung!
       18. STRENGER GEHEIMNIS- UND SPOILER-SCHUTZ BEI TARNUNGEN UND GEHEIMNISSEN: Erwähne niemals geheime Rollen, verborgene Pläne, verdeckte Zugehörigkeiten oder Undercover-Identitäten von Charakteren direkt oder indirekt in der Narration (z.B. wenn Himiko Frost als Lehrerin auftritt, darfst du sei unter keinen Umständen als "Undercover-Agentin" oder "vermeintliche Lehrerin" bezeichnen, oder durch verdächtige oder unnatürliche Formulierungen ihre Tarnung im Text gefährden, es sei denn, ihre Identität wurde im Handlungsverlauf für die Spielfigur bereits eindeutig und unumstößlich aufgedeckt). Für den Spieler muss sie sich absolut lückenlos und überzeugend wie eine echte Lehrerin verhalten.
       19. INTERAKTIONEN UND DIALOGE ZWISCHEN NPCS: Baue vermehrt lebendige, direkte Dialoge in deine Antworten ein. Lass die anwesenden NPCs nicht nur mit dem Spieler sprechen, sondern auch direkt untereinander interagieren, sich unterhalten, Meinungen austauschen, miteinander diskutieren, scherzen, sich absprechen oder streiten. NPCs sind eigenständige Personen mit Beziehungen zueinander und sollten im Chat aktiv und hörbar miteinander kommunizieren, um Szenen lebendiger und authentischer zu machen.
-      20. DYNAMISCHE UHRZEIT & SITUATIVER ZEITFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Zeit=HH:MM]]):
-          Du bist dafür verantwortlich, dass pro Chat-Nachricht die Zeit in der Spielwelt realistisch und verhältnismäßig vergeht.
-          ACHTE PENIBEL DARAUF, DASS DIE UHRZEIT NICHT ZU SCHNELL VERGEHT! In einem Rollenspiel dauern die meisten Chat-Aktionen (wie Sprechen, eine Frage stellen, Nachdenken, ein kurzer Blick oder ein einzelner Angriff/Zug) nur wenige Sekunden bis maximal 1 Minute.
-          Gib in JEDER Antwort die neu berechnete Uhrzeit im Format [[STATUS: Zeit=HH:MM]] (oder Uhrzeit=HH:MM) an!
+      20. DYNAMISCHE UHRZEIT & DATUM MIT SITUATIVEM ZEITFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Datum=Tag X, Zeit=HH:MM]]):
+          Du bist dafür verantwortlich, dass pro Chat-Nachricht Datum und Uhrzeit in der Spielwelt realistisch und verhältnismäßig synchron geführt werden.
+          ACHTE PENIBEL DARAUF, DASS DIE ZEIT NICHT ZU SCHNELL VERGEHT! In einem Rollenspiel dauern die meisten Chat-Aktionen (wie Sprechen, eine Frage stellen, Nachdenken, ein kurzer Blick oder ein einzelner Angriff/Zug) nur wenige Sekunden bis maximal 1 Minute.
+          Gib in JEDER Antwort Datum und Uhrzeit im Format [[STATUS: Datum=Tag X, Zeit=HH:MM]] (z. B. [[STATUS: Datum=Tag 1, Zeit=12:05]]) an!
+          - ÜBERSCHREITEN VON MITTERNACHT (00:00 Uhr): Wenn die Zeit durch Nachtruhe, Schlaf, Ohnmacht oder das Verstreichen der Nachtstunden Mitternacht überschreitet, rückt das Datum zwingend auf den nächsten Tag vor (z. B. von Tag 1 auf Tag 2).
           Realistische Richtwerte für den Zeitverlauf:
           - Kurze Bemerkung / Dialog / Frage / Reaktion / einzelner Zug: +0 bis +1 Minute (die Uhrzeit ändert sich oft gar nicht oder nur um 1 Minute).
           - Längeres Gespräch / Diskussion / kurzes Verweilen / Inspektion eines Objekts: +2 bis +5 Minuten.
           - Gründliches Durchsuchen eines großen Raums / Spaziergang / Besorgungen: +10 bis +15 Minuten.
           - Kampf / Auseinandersetzung: Dauert in der Regel 1 bis 3 Minuten (Schlagabtäusche laufen in Sekunden ab). Nur ausgedehnte Großschlachten dauern 15 bis 30 Minuten.
           - Längere Reise / Fußmarsch zwischen weit entfernten Orten: Entsprechend der tatsächlichen Reisedauer (z.B. +1 bis +3 Stunden).
-          - Rast / Schlaf / Ohnmacht / bewusste Zeitsprünge: Entsprechend der Dauer (z.B. +1 Stunde Pause, +7 bis +8 Stunden Nachtruhe z. B. bis 07:00 Uhr morgens, bzw. +1 bis +3 Stunden bei Ohnmacht). Der Charakter erwacht noch in derselben Antwort und die nächste Handlung beginnt sofort!
-          Berechne die neue Uhrzeit immer exakt ausgehend von der bisherigen Uhrzeit im Status (z.B. von 12:00 nach einer kurzen Frage auf 12:00 oder 12:01, nach einem kurzen Kampf auf 12:03) und gib sie im [[STATUS]] Block an.
+          - Rast / Schlaf / Ohnmacht / bewusste Zeitsprünge: Entsprechend der Dauer (z.B. +1 Stunde Pause, +7 bis +8 Stunden Nachtruhe z. B. bis 07:00 Uhr morgens an Tag X+1, bzw. +1 bis +3 Stunden bei Ohnmacht). Der Charakter erwacht noch in derselben Antwort und die nächste Handlung beginnt sofort!
+          Berechne neues Datum und neue Uhrzeit immer exakt ausgehend vom bisherigen Status (z. B. von Tag 1, 12:00 nach einer kurzen Frage auf Tag 1, 12:01) und gib sie im [[STATUS]] Block an.
       21. GEHEIMNISSE, VERBORGENES WISSEN & ABSICHTENISOLATION (3-STUFEN-LOGIK & KEINE HELLSEHEREI): // rule21_loc1
           // loc1_marker
           Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 ist eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden.
@@ -5529,24 +5531,33 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       setMessages(prev => [...prev, newModelMsg]);
       const nextChatHistory: ChatMessage[] = [...updatedMessages, newModelMsg];
       
-      let syncedStatus = [...newStatus];
+      // Synchronize in-game Date, Time, and Status elements through WorldSimulationService
+      const currentWorldTimeBeforeTurn = activeWorld.worldTime || adventure.worldTime || adventure.world?.worldTime || { day: 1, hour: 12, minute: 0, totalMinutes: 720 };
+      const timeProcessResult = WorldSimulationService.processWorldTimeAndStatusFromChat({
+        rawAiText: rawText,
+        prevWorldTime: currentWorldTimeBeforeTurn,
+        statusElements: newStatus,
+        fallbackActionText: textToSend
+      });
 
-      // Automatic robust HUD status time sync with activeWorld.worldTime if model didn't update Zeit
-      if (activeWorld.worldTime) {
-        const timeIdx = syncedStatus.findIndex(el => {
-          const l = (el.label || '').toLowerCase();
-          return l === 'zeit' || l === 'uhrzeit' || l.includes('zeit');
-        });
-        const hadModelTimeUpdate = rawText.includes('STATUS:') && /zeit\s*=/i.test(rawText);
-        if (timeIdx > -1 && !hadModelTimeUpdate) {
-          const hStr = String(activeWorld.worldTime.hour).padStart(2, '0');
-          const mStr = String(activeWorld.worldTime.minute).padStart(2, '0');
-          syncedStatus[timeIdx] = {
-            ...syncedStatus[timeIdx],
-            value: `${hStr}:${mStr}`
+      let syncedWorldTime = timeProcessResult.updatedWorldTime;
+      let syncedStatus = timeProcessResult.updatedStatusElements;
+
+      // Handle sleep / rest leap forward to next morning if not already advanced
+      if (isSleepOrRestOrUnconscious && isSleep) {
+        if (syncedWorldTime.day === currentWorldTimeBeforeTurn.day && (currentWorldTimeBeforeTurn.hour ?? 12) >= 20) {
+          const nextDay = (currentWorldTimeBeforeTurn.day || 1) + 1;
+          syncedWorldTime = {
+            day: nextDay,
+            hour: 7,
+            minute: 0,
+            totalMinutes: WorldSimulationService.toTotalMinutes({ day: nextDay, hour: 7, minute: 0 })
           };
+          syncedStatus = WorldSimulationService.syncStatusElementsWithWorldTime(syncedStatus, syncedWorldTime);
         }
       }
+
+      updatedWorld.worldTime = syncedWorldTime;
 
       if (isSleepOrRestOrUnconscious) {
         if (isSleep) {
@@ -5588,6 +5599,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
         player: updatedPlayer,
         npcs: updatedNpcs,
         world: updatedWorld,
+        worldTime: syncedWorldTime,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
         storyState: updatedStoryState,
@@ -7610,18 +7622,19 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       17. STRENGES ZITIER- & WIEDERHOLUNGSVERBOT: Du darfst NIEMALS die Worte, Sätze, Aktionen, Fragen oder Ausrufe des Spielers zitieren, wiederholen, umformulieren, umschreiben oder kopieren (auch nicht als wörtliche Rede, Gedanken oder Einleitung). Der Spieler hat seine Nachricht bereits selbst geschrieben/gelesen und will sie unter keinen Umständen in deiner Antwort wiederholt sehen. Beginne deine Antwort direkt mit den unmittelbaren Konsequenzen, NPCs-Reaktionen oder dem weiteren physischen/verbalen Verlauf der Szene. Schreibe absolut keine Einleitung, Zusammenfassung oder Rekapitulation des Spielerbeitrags. Wirf den Leser mitten in die darauffolgende Handlung!
       18. STRENGER GEHEIMNIS- UND SPOILER-SCHUTZ BEI TARNUNGEN UND GEHEIMNISSEN: Erwähne niemals geheime Rollen, verborgene Pläne, verdeckte Zugehörigkeiten oder Undercover-Identitäten von Charakteren direkt oder indirekt in der Narration (z.B. wenn Himiko Frost als Lehrerin auftritt, darfst du sie unter keinen Umständen als "Undercover-Agentin" oder "vermeintliche Lehrerin" bezeichnen, oder durch verdächtige oder unnatürliche Formulierungen ihre Tarnung im Textgefährden, es sei denn, ihre Identität wurde im Handlungsverlauf für die Spielfigur bereits eindeutig und unumstößlich aufgedeckt). Für den Spieler muss sie sich absolut lückenlos und überzeugend wie eine echte Lehrerin verhalten.
       19. INTERAKTIONEN UND DIALOGE ZWISCHEN NPCS: Baue vermehrt lebendige, direkte Dialoge in deine Antworten ein. Lass die anwesenden NPCs nicht nur mit dem Spieler sprechen, sondern auch direkt untereinander interagieren, sich unterhalten, Meinungen austauschen, miteinander diskutieren, scherzen, sich absprechen oder streiten. NPCs sind eigenständige Personen mit Beziehungen zueinander und sollten im Chat aktiv und hörbar miteinander kommunizieren, um Szenen lebendiger und authentischer zu machen.
-      20. DYNAMISCHE UHRZEIT & SITUATIVER ZEITFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Zeit=HH:MM]]):
-          Du bist dafür verantwortlich, dass pro Chat-Nachricht die Zeit in der Spielwelt realistisch und verhältnismäßig vergeht.
-          ACHTE PENIBEL DARAUF, DASS DIE UHRZEIT NICHT ZU SCHNELL VERGEHT! In einem Rollenspiel dauern die meisten Chat-Aktionen (wie Sprechen, eine Frage stellen, Nachdenken, ein kurzer Blick oder ein einzelner Angriff/Zug) nur wenige Sekunden bis maximal 1 Minute.
-          Gib in JEDER Antwort die neu berechnete Uhrzeit im Format [[STATUS: Zeit=HH:MM]] (oder Uhrzeit=HH:MM) an!
+      20. DYNAMISCHE UHRZEIT & DATUM MIT SITUATIVEM ZEITFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Datum=Tag X, Zeit=HH:MM]]):
+          Du bist dafür verantwortlich, dass pro Chat-Nachricht Datum und Uhrzeit in der Spielwelt realistisch und verhältnismäßig synchron geführt werden.
+          ACHTE PENIBEL DARAUF, DASS DIE ZEIT NICHT ZU SCHNELL VERGEHT! In einem Rollenspiel dauern die meisten Chat-Aktionen (wie Sprechen, eine Frage stellen, Nachdenken, ein kurzer Blick oder ein einzelner Angriff/Zug) nur wenige Sekunden bis maximal 1 Minute.
+          Gib in JEDER Antwort Datum und Uhrzeit im Format [[STATUS: Datum=Tag X, Zeit=HH:MM]] (z. B. [[STATUS: Datum=Tag 1, Zeit=12:05]]) an!
+          - ÜBERSCHREITEN VON MITTERNACHT (00:00 Uhr): Wenn die Zeit durch Nachtruhe, Schlaf, Ohnmacht oder das Verstreichen der Nachtstunden Mitternacht überschreitet, rückt das Datum zwingend auf den nächsten Tag vor (z. B. von Tag 1 auf Tag 2).
           Realistische Richtwerte für den Zeitverlauf:
           - Kurze Bemerkung / Dialog / Frage / Reaktion / einzelner Zug: +0 bis +1 Minute (die Uhrzeit ändert sich oft gar nicht oder nur um 1 Minute).
           - Längeres Gespräch / Diskussion / kurzes Verweilen / Inspektion eines Objekts: +2 bis +5 Minuten.
           - Gründliches Durchsuchen eines großen Raums / Spaziergang / Besorgungen: +10 bis +15 Minuten.
           - Kampf / Auseinandersetzung: Dauert in der Regel 1 bis 3 Minuten (Schlagabtäusche laufen in Sekunden ab). Nur ausgedehnte Großschlachten dauern 15 bis 30 Minuten.
           - Längere Reise / Fußmarsch zwischen weit entfernten Orten: Entsprechend der tatsächlichen Reisedauer (z.B. +1 bis +3 Stunden).
-          - Rast / Schlaf / bewusste Zeitsprünge: Entsprechend der Schlafdauer (z.B. +1 Stunde Pause, +8 Stunden Nachtruhe).
-          Berechne die neue Uhrzeit immer exakt ausgehend von der bisherigen Uhrzeit im Status (z.B. von 12:00 nach einer kurzen Frage auf 12:00 oder 12:01, nach einem kurzen Kampf auf 12:03) und gib sie im [[STATUS]] Block an.
+          - Rast / Schlaf / Ohnmacht / bewusste Zeitsprünge: Entsprechend der Dauer (z.B. +1 Stunde Pause, +7 bis +8 Stunden Nachtruhe z. B. bis 07:00 Uhr morgens an Tag X+1, bzw. +1 bis +3 Stunden bei Ohnmacht). Der Charakter erwacht noch in derselben Antwort und die nächste Handlung beginnt sofort!
+          Berechne neues Datum und neue Uhrzeit immer exakt ausgehend vom bisherigen Status (z. B. von Tag 1, 12:00 nach einer kurzen Frage auf Tag 1, 12:01) und gib sie im [[STATUS]] Block an.
       21. GEHEIMNISSE, VERBORGENES WISSEN & ABSICHTENISOLATION (3-STUFEN-LOGIK & KEINE HELLSEHEREI):
           // loc2_marker
           Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 is eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden.
@@ -7709,7 +7722,18 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
       const finalMessages: ChatMessage[] = [...historyToUse, newModelMsg];
       setMessages(finalMessages);
       
-      let syncedStatus = [...newStatus];
+      // Synchronize in-game Date, Time, and Status elements through WorldSimulationService
+      const currentWorldTimeBeforeTurn = adventure.worldTime || adventure.world?.worldTime || { day: 1, hour: 12, minute: 0, totalMinutes: 720 };
+      const timeProcessResult = WorldSimulationService.processWorldTimeAndStatusFromChat({
+        rawAiText: rawText,
+        prevWorldTime: currentWorldTimeBeforeTurn,
+        statusElements: newStatus
+      });
+
+      let syncedWorldTime = timeProcessResult.updatedWorldTime;
+      let syncedStatus = timeProcessResult.updatedStatusElements;
+      updatedWorld.worldTime = syncedWorldTime;
+
       let syncedInv = updatedStructuredInventory ? { ...updatedStructuredInventory } : { money: 100, currencyLabel: 'Goldstücke' };
       const moneyStatusIdx = syncedStatus.findIndex(el => {
         const l = (el.label || '').toLowerCase();
@@ -7737,6 +7761,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
         player: updatedPlayer,
         npcs: updatedNpcs,
         world: updatedWorld,
+        worldTime: syncedWorldTime,
         statusElements: syncedStatus, 
         loreDatabase: updatedLore,
         storyState: updatedStoryState,
@@ -7983,9 +8008,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
           const resolvedApp = resolveBodyAppearance(adventure.player);
           const activeConds = resolvedApp.activeConditionList || [];
 
+          const currentDayVal = adventure.worldTime?.day || adventure.world?.worldTime?.day || 1;
           const statusList = (adventure.statusElements && adventure.statusElements.length > 0)
             ? adventure.statusElements
             : [
+                { id: 'def-datum', label: 'Datum', value: `Tag ${currentDayVal}` },
                 { id: 'def-zeit', label: 'Uhrzeit', value: '12:00' },
                 { id: 'def-loc', label: 'Standort', value: adventure.player.appearance.currentLocation || 'Startgebiet' },
                 { id: 'def-money', label: 'Vermögen', value: '100 Gold' }
@@ -8008,27 +8035,149 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
           const hudItems: React.ReactNode[] = [];
 
-          // Category 1: Welt - Uhrzeit
-          statusList.filter(el => {
+          // Category 1: Welt - Datum
+          const dateElements = statusList.filter(el => {
             const l = (el.label || '').toLowerCase();
-            return l.includes('zeit') || l.includes('uhrzeit');
-          }).forEach((el, idx) => {
-            const val = el.value || '12:00';
+            return l === 'datum' || l === 'tag' || l === 'date' || l === 'spieltag';
+          });
+
+          if (dateElements.length > 0) {
+            dateElements.forEach((el, idx) => {
+              const val = el.value || `Tag ${currentDayVal}`;
+              hudItems.push(
+                <button
+                  key={`hud-date-${el.id || idx}`}
+                  type="button"
+                  onClick={() => {
+                    setHudModalEditValue(val);
+                    setSelectedHudDetailField({
+                      id: el.id || 'date',
+                      category: 'Welt',
+                      label: el.label || 'Datum',
+                      value: val,
+                      icon: 'fa-calendar-days',
+                      colorClass: 'text-amber-400',
+                      isEditable: true,
+                      elementId: el.id,
+                      details: [
+                        { label: 'Kategorie', value: 'Welt & Datum' },
+                        { label: 'Aktueller Tag', value: val },
+                        { label: 'Chronologie', value: 'Echtzeit-Synchronisiert' }
+                      ],
+                      actionType: 'edit'
+                    });
+                  }}
+                  className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+                >
+                  <span className="font-semibold text-slate-300">
+                    {el.label || 'Datum'}
+                  </span>
+                  <span className="font-bold text-amber-400 font-mono">
+                    {val}
+                  </span>
+                </button>
+              );
+            });
+          } else {
+            // Always display Datum if not explicitly present in custom list
+            const val = `Tag ${currentDayVal}`;
             hudItems.push(
               <button
-                key={`hud-time-${el.id || idx}`}
+                key="hud-date-inferred"
                 type="button"
                 onClick={() => {
                   setHudModalEditValue(val);
                   setSelectedHudDetailField({
-                    id: el.id || 'time',
+                    id: 'date-inferred',
                     category: 'Welt',
-                    label: el.label,
+                    label: 'Datum',
+                    value: val,
+                    icon: 'fa-calendar-days',
+                    colorClass: 'text-amber-400',
+                    isEditable: true,
+                    elementId: 'date-inferred',
+                    details: [
+                      { label: 'Kategorie', value: 'Welt & Datum' },
+                      { label: 'Aktueller Tag', value: val },
+                      { label: 'Chronologie', value: 'Echtzeit-Synchronisiert' }
+                    ],
+                    actionType: 'edit'
+                  });
+                }}
+                className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+              >
+                <span className="font-semibold text-slate-300">
+                  Datum
+                </span>
+                <span className="font-bold text-amber-400 font-mono">
+                  {val}
+                </span>
+              </button>
+            );
+          }
+
+          // Category 1: Welt - Uhrzeit
+          const timeElements = statusList.filter(el => {
+            const l = (el.label || '').toLowerCase();
+            return l.includes('zeit') || l.includes('uhrzeit') || l === 'time' || l === 'tageszeit';
+          });
+
+          if (timeElements.length > 0) {
+            timeElements.forEach((el, idx) => {
+              const val = el.value || '12:00';
+              hudItems.push(
+                <button
+                  key={`hud-time-${el.id || idx}`}
+                  type="button"
+                  onClick={() => {
+                    setHudModalEditValue(val);
+                    setSelectedHudDetailField({
+                      id: el.id || 'time',
+                      category: 'Welt',
+                      label: el.label,
+                      value: val,
+                      icon: 'fa-clock',
+                      colorClass: 'text-amber-400',
+                      isEditable: true,
+                      elementId: el.id,
+                      details: [
+                        { label: 'Kategorie', value: 'Welt & Tageszeit' },
+                        { label: 'Aktuelle Uhrzeit', value: val },
+                        { label: 'Chronologie', value: 'Echtzeit-Synchronisiert' }
+                      ],
+                      actionType: 'edit'
+                    });
+                  }}
+                  className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
+                >
+                  <span className="font-semibold text-slate-300">
+                    {el.label}
+                  </span>
+                  <span className="font-bold text-amber-400 font-mono">
+                    {val}
+                  </span>
+                </button>
+              );
+            });
+          } else {
+            // Always display Uhrzeit if not explicitly present in custom list
+            const wtVal = adventure.worldTime || adventure.world?.worldTime;
+            const val = WorldSimulationService.formatTime(wtVal);
+            hudItems.push(
+              <button
+                key="hud-time-inferred"
+                type="button"
+                onClick={() => {
+                  setHudModalEditValue(val);
+                  setSelectedHudDetailField({
+                    id: 'time-inferred',
+                    category: 'Welt',
+                    label: 'Uhrzeit',
                     value: val,
                     icon: 'fa-clock',
                     colorClass: 'text-amber-400',
                     isEditable: true,
-                    elementId: el.id,
+                    elementId: 'time-inferred',
                     details: [
                       { label: 'Kategorie', value: 'Welt & Tageszeit' },
                       { label: 'Aktuelle Uhrzeit', value: val },
@@ -8040,14 +8189,14 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 className="flex items-center gap-2 text-left cursor-pointer hover:opacity-80 transition-opacity text-xs py-0.5"
               >
                 <span className="font-semibold text-slate-300">
-                  {el.label}
+                  Uhrzeit
                 </span>
-                <span className="font-bold text-amber-400">
+                <span className="font-bold text-amber-400 font-mono">
                   {val}
                 </span>
               </button>
             );
-          });
+          }
 
           // Category 1: Welt - Standort
           statusList.filter(el => {
@@ -8577,6 +8726,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             const l = (el.label || '').toLowerCase();
             const isHandledSpecial = 
               l.includes('zeit') || l.includes('uhrzeit') ||
+              l.includes('datum') || l === 'tag' || l === 'date' || l === 'spieltag' ||
               l.includes('standort') || l.includes('ort') ||
               l.includes('verwandlungsstufe') || l.includes('point of no return') || l.includes('pnr') || l.includes('verwandlung') ||
               l.includes('abklingzeit') || l.includes('cooldown') ||
@@ -12373,6 +12523,48 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
 
                     const isMoney = elLabel.toLowerCase().includes('vermögen') || elLabel.toLowerCase().includes('geld') || elLabel.toLowerCase().includes('gold') || elLabel.toLowerCase().includes('berry') || elLabel.toLowerCase().includes('münzen') || elLabel.toLowerCase().includes('credits');
                     const isLocation = elLabel.toLowerCase().includes('standort') || elLabel.toLowerCase().includes('ort');
+                    const isDate = elLabel.toLowerCase().includes('datum') || elLabel.toLowerCase() === 'tag' || elLabel.toLowerCase() === 'date' || elLabel.toLowerCase() === 'spieltag';
+                    const isTime = elLabel.toLowerCase().includes('zeit') || elLabel.toLowerCase().includes('uhrzeit') || elLabel.toLowerCase() === 'time' || elLabel.toLowerCase() === 'tageszeit';
+
+                    if (isDate || isTime) {
+                      const curWt = adventure.worldTime || adventure.world?.worldTime || { day: 1, hour: 12, minute: 0, totalMinutes: 720 };
+                      let nextDay = curWt.day || 1;
+                      let nextHour = curWt.hour ?? 12;
+                      let nextMinute = curWt.minute ?? 0;
+
+                      if (isDate) {
+                        const parsedD = WorldSimulationService.parseDateString(newVal);
+                        if (parsedD) nextDay = parsedD.day;
+                      }
+                      if (isTime) {
+                        const parsedT = WorldSimulationService.parseTimeString(newVal);
+                        if (parsedT) {
+                          nextHour = parsedT.hour;
+                          nextMinute = parsedT.minute;
+                        }
+                      }
+
+                      const nextWt: WorldTime = {
+                        day: nextDay,
+                        hour: nextHour,
+                        minute: nextMinute,
+                        totalMinutes: WorldSimulationService.toTotalMinutes({ day: nextDay, hour: nextHour, minute: nextMinute })
+                      };
+
+                      updatedStatus = WorldSimulationService.syncStatusElementsWithWorldTime(updatedStatus, nextWt);
+
+                      onUpdateAdventure({
+                        ...adventure,
+                        worldTime: nextWt,
+                        world: {
+                          ...adventure.world,
+                          worldTime: nextWt
+                        },
+                        statusElements: updatedStatus
+                      });
+                      setSelectedHudDetailField(null);
+                      return;
+                    }
 
                     if (isMoney) {
                       const numMatch = newVal.match(/\d+/);

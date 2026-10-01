@@ -276,6 +276,12 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
       chatHistory: finalChatHistory
     };
     updatedAdventure.worldTime = updatedAdventure.world.worldTime;
+    if (updatedAdventure.statusElements && updatedAdventure.worldTime) {
+      updatedAdventure.statusElements = WorldSimulationService.syncStatusElementsWithWorldTime(
+        updatedAdventure.statusElements,
+        updatedAdventure.worldTime
+      );
+    }
 
 
     // Step 5b: Parse Character Knowledge tags from AI response

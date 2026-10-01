@@ -96,6 +96,218 @@ export class WorldSimulationService {
   }
 
   /**
+   * Formats in-game date consistently (e.g. "Tag 1").
+   */
+  static formatDate(wt?: WorldTime): string {
+    const day = wt?.day || 1;
+    return `Tag ${day}`;
+  }
+
+  /**
+   * Formats in-game time consistently (e.g. "12:00").
+   */
+  static formatTime(wt?: WorldTime): string {
+    const hour = String(wt?.hour ?? 0).padStart(2, '0');
+    const minute = String(wt?.minute ?? 0).padStart(2, '0');
+    return `${hour}:${minute}`;
+  }
+
+  /**
+   * Formats in-game date and time combined (e.g. "Tag 1, 12:00").
+   */
+  static formatDateTime(wt?: WorldTime): string {
+    return `${this.formatDate(wt)}, ${this.formatTime(wt)}`;
+  }
+
+  /**
+   * Parses time string such as "14:30", "14:30 Uhr", "8:00".
+   */
+  static parseTimeString(val: string): { hour: number; minute: number } | null {
+    if (!val) return null;
+    const match = val.match(/(\d{1,2}):(\d{2})/);
+    if (match) {
+      const h = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+      if (!isNaN(h) && !isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+        return { hour: h, minute: m };
+      }
+    }
+    const singleHour = val.match(/^(\d{1,2})\s*(?:uhr)?$/i);
+    if (singleHour) {
+      const h = parseInt(singleHour[1], 10);
+      if (!isNaN(h) && h >= 0 && h <= 23) {
+        return { hour: h, minute: 0 };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Parses date string such as "Tag 2", "Tag 10", "2".
+   */
+  static parseDateString(val: string): { day: number } | null {
+    if (!val) return null;
+    const match = val.match(/(?:tag|day)?\s*(\d+)/i);
+    if (match) {
+      const d = parseInt(match[1], 10);
+      if (!isNaN(d) && d >= 1) {
+        return { day: d };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Synchronizes HUD status elements to ensure Datum and Uhrzeit are always present and match worldTime.
+   */
+  static syncStatusElementsWithWorldTime<T extends { id?: string; label: string; value: string }>(
+    statusElements: T[] = [],
+    worldTime?: WorldTime
+  ): T[] {
+    const wt = worldTime || { day: 1, hour: 12, minute: 0, totalMinutes: 720 };
+    const dateStr = this.formatDate(wt);
+    const timeStr = this.formatTime(wt);
+
+    const result = [...statusElements];
+
+    // Find or update Datum
+    const dateIdx = result.findIndex(el => {
+      const l = (el.label || '').toLowerCase();
+      return l === 'datum' || l === 'tag' || l === 'date' || l === 'spieltag';
+    });
+    if (dateIdx > -1) {
+      result[dateIdx] = { ...result[dateIdx], value: dateStr };
+    } else {
+      result.unshift({
+        id: 'hud-datum-' + Math.random().toString(36).substr(2, 7),
+        label: 'Datum',
+        value: dateStr
+      } as T);
+    }
+
+    // Find or update Uhrzeit
+    const timeIdx = result.findIndex(el => {
+      const l = (el.label || '').toLowerCase();
+      return l === 'uhrzeit' || l === 'zeit' || l === 'time' || l === 'tageszeit';
+    });
+    if (timeIdx > -1) {
+      result[timeIdx] = { ...result[timeIdx], value: timeStr };
+    } else {
+      const insertAt = dateIdx > -1 ? dateIdx + 1 : 1;
+      result.splice(insertAt, 0, {
+        id: 'hud-time-' + Math.random().toString(36).substr(2, 7),
+        label: 'Uhrzeit',
+        value: timeStr
+      } as T);
+    }
+
+    return result;
+  }
+
+  /**
+   * Processes AI output tags and synchronizes in-game Date, Time, and statusElements.
+   * Handles midnight rollover, explicit Datum tags, sleep/rest leaps, and fallback estimation.
+   */
+  static processWorldTimeAndStatusFromChat<T extends { id?: string; label: string; value: string }>(params: {
+    rawAiText: string;
+    prevWorldTime?: WorldTime;
+    statusElements: T[];
+    fallbackActionText?: string;
+  }): {
+    updatedWorldTime: WorldTime;
+    updatedStatusElements: T[];
+    elapsedMinutes: number;
+    hadExplicitTime: boolean;
+    hadExplicitDate: boolean;
+  } {
+    const { rawAiText, statusElements, fallbackActionText } = params;
+    const prevWt: WorldTime = params.prevWorldTime || { day: 1, hour: 12, minute: 0, totalMinutes: 720 };
+    const prevTotalMins = this.toTotalMinutes(prevWt);
+
+    // Look for [[STATUS: ...]] tags
+    let explicitHour: number | null = null;
+    let explicitMinute: number | null = null;
+    let explicitDay: number | null = null;
+
+    const statusMatches = rawAiText.match(/\[\[STATUS:\s*(.*?)\]\]/gi) || [];
+    for (const block of statusMatches) {
+      const inner = block.replace(/\[\[STATUS:\s*/i, '').replace(/\]\]/, '');
+      const pairs = inner.split(/[,|]/);
+      for (const pair of pairs) {
+        const [k, ...vParts] = pair.split('=');
+        if (!k || vParts.length === 0) continue;
+        const key = k.trim().toLowerCase();
+        const val = vParts.join('=').trim();
+
+        if (key === 'zeit' || key === 'uhrzeit' || key === 'time') {
+          const parsed = this.parseTimeString(val);
+          if (parsed) {
+            explicitHour = parsed.hour;
+            explicitMinute = parsed.minute;
+          }
+        } else if (key === 'datum' || key === 'tag' || key === 'date' || key === 'spieltag') {
+          const parsed = this.parseDateString(val);
+          if (parsed) {
+            explicitDay = parsed.day;
+          }
+        }
+      }
+    }
+
+    let nextDay = prevWt.day || 1;
+    let nextHour = prevWt.hour ?? 12;
+    let nextMinute = prevWt.minute ?? 0;
+
+    const hadExplicitTime = explicitHour !== null && explicitMinute !== null;
+    const hadExplicitDate = explicitDay !== null;
+
+    if (hadExplicitDate) {
+      nextDay = explicitDay!;
+    }
+
+    if (hadExplicitTime) {
+      nextHour = explicitHour!;
+      nextMinute = explicitMinute!;
+
+      // If time was given but NOT explicit date, check for midnight rollover
+      if (!hadExplicitDate) {
+        const prevMinsInDay = (prevWt.hour || 0) * 60 + (prevWt.minute || 0);
+        const newMinsInDay = nextHour * 60 + nextMinute;
+        if (newMinsInDay < prevMinsInDay) {
+          nextDay = (prevWt.day || 1) + 1;
+        }
+      }
+    } else {
+      // Neither time nor date given explicitly in STATUS: advance realistically
+      const durationMins = this.estimateActionDurationMinutes(fallbackActionText);
+      const advanced = this.addMinutes(prevWt, durationMins);
+      nextDay = advanced.day;
+      nextHour = advanced.hour;
+      nextMinute = advanced.minute;
+    }
+
+    const updatedWorldTime: WorldTime = {
+      day: nextDay,
+      hour: nextHour,
+      minute: nextMinute,
+      totalMinutes: this.toTotalMinutes({ day: nextDay, hour: nextHour, minute: nextMinute })
+    };
+
+    const newTotalMins = updatedWorldTime.totalMinutes || 0;
+    const elapsedMinutes = Math.max(0, newTotalMins - prevTotalMins);
+
+    const updatedStatusElements = this.syncStatusElementsWithWorldTime(statusElements, updatedWorldTime);
+
+    return {
+      updatedWorldTime,
+      updatedStatusElements,
+      elapsedMinutes,
+      hadExplicitTime,
+      hadExplicitDate
+    };
+  }
+
+  /**
    * Estimates time advancement in minutes based on player action text or intent.
    */
   static estimateActionDurationMinutes(actionText?: string): number {
@@ -108,23 +320,23 @@ export class WorldSimulationService {
       return 480; // 8 hours
     }
     // Short Rest / Nap
-    if (/(?:rasten|rast|pause|verschnaufen|kurzes\s*schläfchen|nap)/.test(text)) {
+    if (/(?:rast|pause|verschnauf|kurzes\s*schläfchen|nap)/.test(text)) {
       return 60; // 1 hour
     }
     // Long Travel
-    if (/(?:reisen|reise|marschieren|wanderung|seefahrt|überqueren|weg\s*nach|reiten\s*nach)/.test(text)) {
+    if (/(?:reis|marschier|wander|seefahrt|überquer|weg\s*nach|reit)/.test(text)) {
       return 180; // 3 hours
     }
     // Search / Investigate / Explore
-    if (/(?:durchsuchen|untersuchen|erkunden|erforschen|durchkämmen|spuren\s*suchen)/.test(text)) {
+    if (/(?:durchsuch|untersuch|erkund|erforsch|durchkämm|spuren\s*such)/.test(text)) {
       return 30;
     }
     // Combat / Raid / Attack
-    if (/(?:angreifen|angreif|greife|kampf|gefecht|überfall|attacke|sturm)/.test(text)) {
+    if (/(?:angreif|greife|kampf|gefecht|überfall|attacke|sturm)/.test(text)) {
       return 15;
     }
     // Work / Crafting / Trade
-    if (/(?:arbeiten|handeln|feilschen|schmieden|brauen|reparieren)/.test(text)) {
+    if (/(?:arbeit|handel|feilsch|schmied|brau|reparier)/.test(text)) {
       return 120; // 2 hours
     }
 
@@ -584,6 +796,12 @@ export class WorldSimulationService {
     if (updatedAdventure) {
       updatedAdventure.world = updatedWorld;
       updatedAdventure.worldTime = timeEnd;
+      if (updatedAdventure.statusElements && updatedAdventure.statusElements.length > 0) {
+        updatedAdventure.statusElements = this.syncStatusElementsWithWorldTime(
+          updatedAdventure.statusElements,
+          timeEnd
+        );
+      }
     }
 
     const playerVisibleSummary = playerVisibleMessages.join('\n');
@@ -616,15 +834,17 @@ export class WorldSimulationService {
     const totalMins = this.toTotalMinutes(wt);
 
     return `
+=== AKTUELLE SPIELZEIT & DATUM ===
 === AKTUELLE SPIELZEIT ===
 
+Datum: Tag ${day}
 Tag: ${day}
 Uhrzeit: ${hourStr}:${minStr}
 Gesamtzeit: ${totalMins} Minuten
 
-Diese Spielzeit ist autoritativ.
+Diese Spielzeit und das Datum sind autoritativ.
 
-Alle zeitlichen Aussagen, Termine und verbleibenden Zeitangaben müssen sich auf diese aktuelle Spielzeit beziehen.
+Alle zeitlichen Aussagen, Termine, Tageswechsel und verbleibenden Zeitangaben müssen sich auf dieses aktuelle Datum und diese Uhrzeit beziehen.
 
 Die Zeit darf nicht aus dem Chatverlauf geschätzt werden.
 `;

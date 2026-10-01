@@ -731,6 +731,15 @@ AKTUELLE WERTE: ${currentStatsStr}`;
       chatHistory: finalChatHistory
     };
     finalAdventure.worldTime = parsedResult.updatedWorld.worldTime;
+    if (finalAdventure.world) {
+      finalAdventure.world.worldTime = finalAdventure.worldTime;
+    }
+    if (finalAdventure.statusElements && finalAdventure.worldTime) {
+      finalAdventure.statusElements = WorldSimulationService.syncStatusElementsWithWorldTime(
+        finalAdventure.statusElements,
+        finalAdventure.worldTime
+      );
+    }
 
 
     if (finalLocation) {

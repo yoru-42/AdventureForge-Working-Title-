@@ -209,6 +209,11 @@ export interface WorldTime {
   hour: number;
   minute: number;
   totalMinutes?: number;
+  year?: number;
+  month?: number;
+  season?: string;
+  formattedDate?: string;
+  formattedTime?: string;
 }
 
 export interface TransformationState {

@@ -440,7 +440,7 @@ export class ActiveTimeEventService {
   }): Adventure {
     const ates = this.getActiveTimeEvents(params.adventure);
     const worldTime = params.adventure.worldTime || { day: 1, hour: 8, minute: 0 };
-    const timeStr = `Tag ${worldTime.day}, ${String(worldTime.hour).padStart(2, '0')}:${String(worldTime.minute).padStart(2, '0')}`;
+    const timeStr = WorldSimulationService.formatDateTime(worldTime);
 
     const updatedATEs = ates.map(ate => {
       if (ate.id !== params.ateId) return ate;

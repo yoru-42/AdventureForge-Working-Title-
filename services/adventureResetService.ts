@@ -15,6 +15,7 @@ import {
   CollectionTask
 } from '../types';
 import { EquipmentConditionService } from './equipmentConditionService';
+import { WorldSimulationService } from './worldSimulationService';
 
 /**
  * Safe deep-clone helper avoiding reference sharing and circular issues.
@@ -291,23 +292,31 @@ export class AdventureResetService {
     const resetCollectionTasks: CollectionTask[] = [];
 
     // 10. Restore Status Elements & World Time
-    const resetStatusElements = adventure.initialStatusElements
+    const resetWorldTime: WorldTime = adventure.initialWorldTime
+      ? deepClone(adventure.initialWorldTime)
+      : { day: 1, hour: 8, minute: 0, totalMinutes: 480 };
+    resetWorldTime.totalMinutes = WorldSimulationService.toTotalMinutes(resetWorldTime);
+
+    let resetStatusElements = adventure.initialStatusElements
       ? deepClone(adventure.initialStatusElements)
       : (adventure.statusElements || []).map(el => {
-          if (el.label === 'Zeit') return { ...el, value: '08:00' };
+          if (el.label === 'Zeit' || el.label === 'Uhrzeit') return { ...el, value: '08:00' };
+          if (el.label === 'Datum' || el.label === 'Tag') return { ...el, value: 'Tag 1' };
           if (el.label === 'Ausdauer') return { ...el, value: '100%' };
           return deepClone(el);
         });
 
-    const resetWorldTime: WorldTime = adventure.initialWorldTime
-      ? deepClone(adventure.initialWorldTime)
-      : { day: 1, hour: 8, minute: 0 };
+    resetStatusElements = WorldSimulationService.syncStatusElementsWithWorldTime(
+      resetStatusElements,
+      resetWorldTime
+    );
 
     const resetActiveTimeEvents = adventure.initialActiveTimeEvents
       ? deepClone(adventure.initialActiveTimeEvents)
       : [];
     if (resetWorld) {
       resetWorld.activeTimeEvents = resetActiveTimeEvents;
+      resetWorld.worldTime = resetWorldTime;
     }
 
     // 11. Reset Chat History to Baseline Messages
