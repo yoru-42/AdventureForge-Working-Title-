@@ -31,6 +31,56 @@ export const STANDARD_PARAMETERS = [
   'Magie'
 ];
 
+/**
+ * Hilfsfunktion zum Prüfen, ob ein Schlüssel eine Ressource (HP, MP, SP etc.) und kein Parameter ist.
+ */
+export function isResourceKey(key: string, world?: WorldSetting): boolean {
+  if (!key) return false;
+  const kLower = key.toLowerCase().trim();
+
+  if (kLower.startsWith('_') || kLower === 'freepoints') {
+    return true;
+  }
+
+  const commonResourceNames = [
+    'hp',
+    'mp',
+    'sp',
+    'mana',
+    'gesundheit',
+    'gesundheit (hp)',
+    'ausdauer',
+    'stamina',
+    'energie'
+  ];
+
+  if (commonResourceNames.includes(kLower)) {
+    return true;
+  }
+
+  if (kLower.startsWith('res-') || kLower.startsWith('cost-') || kLower.startsWith('power-source-')) {
+    return true;
+  }
+
+  if (world?.healthLabel && kLower === world.healthLabel.toLowerCase().trim()) {
+    return true;
+  }
+
+  if (world?.healthPowerNames && Array.isArray(world.healthPowerNames)) {
+    if (world.healthPowerNames.some(hpName => hpName.toLowerCase().trim() === kLower)) {
+      return true;
+    }
+  }
+
+  if (world?.costResources && Array.isArray(world.costResources)) {
+    if (world.costResources.some(res => (res.id && res.id.toLowerCase().trim() === kLower) || (res.name && res.name.toLowerCase().trim() === kLower))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export interface DerivedCombatProperty {
   id: string;
   label: string;
@@ -67,9 +117,10 @@ export function calculateRpgCharacterStats(
 ): DerivedRpgStats {
   const settingsSource = worldPowerSettings || world?.campaignPowerSettings || EP_DEFAULT_PARAMETERS;
 
-  // 1. Parameter-Definitionen aufbauen (ohne künstliches 0-100 Limit)
+  // 1. Parameter-Definitionen aufbauen (ohne künstliches 0-100 Limit, ohne Ressourcen)
   const globalSettings: Record<string, CampaignPowerParameter> = {};
   Object.entries(settingsSource).forEach(([key, val]) => {
+    if (isResourceKey(key, world)) return;
     if (typeof val === 'number') {
       const maxVal = Math.max(1000, val);
       globalSettings[key] = {
@@ -109,9 +160,9 @@ export function calculateRpgCharacterStats(
     }
   });
 
-  // Also include any extra keys present in campaignPowerLevels
+  // Also include any extra parameter keys present in campaignPowerLevels (excluding resources)
   Object.keys(campaignPowerLevels).forEach(k => {
-    if (!globalSettings[k]) {
+    if (!isResourceKey(k, world) && !globalSettings[k]) {
       globalSettings[k] = {
         min: 10,
         max: 1000,
@@ -122,8 +173,8 @@ export function calculateRpgCharacterStats(
     }
   });
 
-  // Build categories with STANDARD_PARAMETERS first, followed by remaining keys
-  const remainingKeys = Object.keys(globalSettings).filter(k => !STANDARD_PARAMETERS.includes(k));
+  // Build categories with STANDARD_PARAMETERS first, followed by remaining keys (filtering out resources)
+  const remainingKeys = Object.keys(globalSettings).filter(k => !STANDARD_PARAMETERS.includes(k) && !isResourceKey(k, world));
   const categories = [...STANDARD_PARAMETERS, ...remainingKeys];
 
   const statAllocations: CustomStatAllocation[] =
@@ -210,9 +261,14 @@ export function calculateRpgCharacterStats(
   let healthSum = 0;
   let healthCount = 0;
 
-  healthPowerNames.forEach(hpName => {
+  const activeHealthParamNames = healthPowerNames.filter(name => {
+    return categories.some(c => c.toLowerCase() === name.toLowerCase()) || name.toLowerCase() === 'konstitution';
+  });
+  const effectiveHealthParams = activeHealthParamNames.length > 0 ? activeHealthParamNames : ['Konstitution'];
+
+  effectiveHealthParams.forEach(hpName => {
     const pData = getParamData(hpName);
-    healthSum += pData.value;
+    healthSum += Math.max(1, pData.value);
     healthCount++;
   });
 
@@ -225,10 +281,13 @@ export function calculateRpgCharacterStats(
   let customHpVal: number | undefined = undefined;
   if (hpOverrideKey) {
     const entry = campaignPowerLevels[hpOverrideKey];
-    customHpVal = typeof entry === 'number' ? entry : entry?.value;
+    const parsed = typeof entry === 'number' ? entry : entry?.value;
+    if (typeof parsed === 'number' && !isNaN(parsed) && parsed >= 1) {
+      customHpVal = parsed;
+    }
   }
 
-  const hpVal = customHpVal !== undefined && !isNaN(customHpVal) ? customHpVal : computedHpVal;
+  const hpVal = Math.max(1, customHpVal !== undefined ? customHpVal : computedHpVal);
   const hpMax = 9999; // Technische globale Skala für Kampfeigenschaft HP
 
   const hpResource: DerivedResource = {
@@ -253,13 +312,13 @@ export function calculateRpgCharacterStats(
 
     sources.forEach(spName => {
       const pData = getParamData(spName);
-      resSum += pData.value;
-      resMaxSum += pData.potentialMax;
+      resSum += Math.max(1, pData.value);
+      resMaxSum += Math.max(1, pData.potentialMax);
       resCount++;
     });
 
-    const defaultResVal = resCount > 0 ? Math.round(resSum / resCount) : res.baseMax || 100;
-    const defaultResMax = resCount > 0 ? Math.round(resMaxSum / resCount) : res.baseMax || 1000;
+    const defaultResVal = resCount > 0 ? Math.max(1, Math.round(resSum / resCount)) : Math.max(1, res.baseMax || 100);
+    const defaultResMax = resCount > 0 ? Math.max(1, Math.round(resMaxSum / resCount)) : Math.max(1, res.baseMax || 1000);
     const resId = res.id || `cost-${(res.name || 'mp').toLowerCase()}`;
 
     // Prüfe auf direkte Überschreibung im Charakter-Datenobjekt
@@ -267,10 +326,13 @@ export function calculateRpgCharacterStats(
     let customResVal: number | undefined = undefined;
     if (resOverrideKey) {
       const entry = campaignPowerLevels[resOverrideKey];
-      customResVal = typeof entry === 'number' ? entry : entry?.value;
+      const parsed = typeof entry === 'number' ? entry : entry?.value;
+      if (typeof parsed === 'number' && !isNaN(parsed) && parsed >= 1) {
+        customResVal = parsed;
+      }
     }
 
-    const resVal = customResVal !== undefined && !isNaN(customResVal) ? customResVal : defaultResVal;
+    const resVal = Math.max(1, customResVal !== undefined ? customResVal : defaultResVal);
 
     if (!costResourcesMap.has(resId)) {
       costResourcesMap.set(resId, {

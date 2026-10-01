@@ -173,7 +173,7 @@ export const EP_DEFAULT_COST_RESOURCES: CostResource[] = [
   }
 ];
 
-export const EP_DEFAULT_HEALTH_NAMES = ['Konstitution', 'Abwehr'];
+export const EP_DEFAULT_HEALTH_NAMES = ['Konstitution'];
 export const EP_DEFAULT_COST_NAMES = ['MP', 'SP'];
 
 export const EP_DEFAULT_CUSTOM_RESOURCE_MAPPINGS: CustomResourceMapping[] = [

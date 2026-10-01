@@ -8,6 +8,7 @@ export interface RaceDefinition {
   baseParameters?: Record<string, number>;
   growthFactors: Record<string, number>;
   defaultFeatures?: string;
+  defaultFreePoints?: number;
   details?: any;
 }
 
@@ -33,7 +34,8 @@ export const HUMAN_RACE_DEFINITION: RaceDefinition = {
     'Willenskraft': 1.0,
     'Magie': 1.0
   },
-  defaultFeatures: 'Anpassungsfähiger Körperbau, hohe Ausdauer und Lernfähigkeit.'
+  defaultFeatures: 'Anpassungsfähiger Körperbau, hohe Ausdauer und Lernfähigkeit.',
+  defaultFreePoints: 5
 };
 
 export const DEFAULT_RACES: RaceDefinition[] = [HUMAN_RACE_DEFINITION];

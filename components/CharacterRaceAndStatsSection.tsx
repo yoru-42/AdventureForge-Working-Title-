@@ -3,6 +3,7 @@ import React, { useMemo, useEffect } from 'react';
 import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentProfileType } from '../types';
 import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
+import { isResourceKey } from '../services/rpgStatService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
 import { Dna, Layers, Sliders, Shield } from 'lucide-react';
@@ -140,17 +141,21 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   // Level bis Rangaufstieg calculation
   const levelsUntilRankUp = Math.max(0, currentLevelsPerRank - (((safeLevel - 1) % currentLevelsPerRank) + 1));
 
-  // Parameter List: Standard parameters are always included, plus any custom parameters
+  // Parameter List: Standard parameters are always included, plus any custom parameters (excluding resources)
   const parameterList = useMemo(() => {
     const keys = new Set<string>(STANDARD_PARAMETERS);
     if (worldPowerSettings && typeof worldPowerSettings === 'object') {
-      Object.keys(worldPowerSettings).forEach(k => keys.add(k));
+      Object.keys(worldPowerSettings).forEach(k => {
+        if (!isResourceKey(k, world)) keys.add(k);
+      });
     }
     if (characterPowerData && typeof characterPowerData === 'object') {
-      Object.keys(characterPowerData).forEach(k => keys.add(k));
+      Object.keys(characterPowerData).forEach(k => {
+        if (!isResourceKey(k, world)) keys.add(k);
+      });
     }
     return Array.from(keys);
-  }, [worldPowerSettings, characterPowerData]);
+  }, [worldPowerSettings, characterPowerData, world]);
 
   // Base growth per parameter from config
   const rawBaseGrowth = effectiveConfig.attributeProgression?.baseGrowthPerLevel;
@@ -158,8 +163,9 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     ? rawBaseGrowth
     : 2;
 
-  // Total Budget pro Level
-  const defaultBudget = parameterList.length * baseGrowthPerParam;
+  // Total Budget pro Level (Mensch = 5)
+  const isHuman = currentRace.toLowerCase().includes('mensch') || currentRace.toLowerCase().includes('human');
+  const defaultBudget = isHuman ? 5 : (currentRaceDef.defaultFreePoints ?? 5);
   const rawDevPoints = typeof developmentPointsPerLevel === 'number' && !isNaN(developmentPointsPerLevel)
     ? developmentPointsPerLevel
     : (typeof developmentPointsPerLevel === 'string' ? parseFloat(developmentPointsPerLevel) || defaultBudget : defaultBudget);
@@ -173,36 +179,37 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     let needsUpdate = false;
     const updatedPowerData: Record<string, { value: number; potentialMax?: number; xp?: number }> = {};
 
-    // One-time check for legacy broken Level 1 zeroed datasets
-    const isLegacyZeroedLevel1 = (
+    // Check for broken Level 1 zeroed or all-1 datasets caused by previous point reset bug
+    const isLegacyBrokenDataset = (
       safeLevel === 1 &&
       safeXp === 0 &&
+      (currentData as any)?._freePoints === 0 &&
       STANDARD_PARAMETERS.every(pName => {
         const entry = currentData[pName];
         if (entry === undefined || entry === null) return true;
         const v = typeof entry === 'number' ? entry : entry.value;
-        return v === 0;
+        return v === 0 || v === 1;
       })
     );
 
     parameterList.forEach(paramName => {
       const existing = currentData[paramName];
       const raceBaseVal = typeof baseParams[paramName] === 'number' && !isNaN(baseParams[paramName])
-        ? baseParams[paramName]
+        ? Math.max(1, baseParams[paramName])
         : 10;
 
-      if (isLegacyZeroedLevel1 && STANDARD_PARAMETERS.includes(paramName)) {
+      if (isLegacyBrokenDataset && STANDARD_PARAMETERS.includes(paramName)) {
         updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: safePotNum };
         needsUpdate = true;
       } else if (existing !== undefined && existing !== null) {
         if (typeof existing === 'number') {
-          const val = !isNaN(existing) ? existing : raceBaseVal;
+          const val = !isNaN(existing) ? Math.max(1, existing) : raceBaseVal;
           updatedPowerData[paramName] = { value: val, potentialMax: safePotNum };
           if (val !== existing) needsUpdate = true;
         } else if (typeof existing === 'object') {
           const rawVal = existing.value;
           const val = (typeof rawVal === 'number' && !isNaN(rawVal))
-            ? rawVal
+            ? Math.max(1, rawVal)
             : raceBaseVal;
 
           const existingXp = existing.xp;
@@ -225,10 +232,28 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
       }
     });
 
+    // Behalte alle bestehenden Nicht-Parameter-Einträge bei
+    Object.keys(currentData).forEach(k => {
+      if (!parameterList.includes(k) && currentData[k] !== undefined) {
+        if (isLegacyBrokenDataset && (k === 'hp' || k === 'res-mp' || k === 'res-sp' || k === 'cost-mp' || k === 'cost-sp')) {
+          // In broken dataset, reset custom resource overrides so they derive cleanly
+          needsUpdate = true;
+        } else {
+          updatedPowerData[k] = currentData[k];
+        }
+      }
+    });
+
+    const currentFree = (currentData as any)?._freePoints;
+    if (currentFree === undefined || isLegacyBrokenDataset) {
+      (updatedPowerData as any)._freePoints = isHuman ? 5 : currentBudget;
+      needsUpdate = true;
+    }
+
     if (needsUpdate || Object.keys(currentData).length === 0) {
       onCharacterPowerDataChange(updatedPowerData);
     }
-  }, [characterPowerData, parameterList, baseParams, safeLevel, safeXp, onCharacterPowerDataChange]);
+  }, [characterPowerData, parameterList, baseParams, safeLevel, safeXp, onCharacterPowerDataChange, isHuman, currentBudget, safePotNum]);
 
   return (
     <div className="space-y-6">
@@ -500,6 +525,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         </div>
 
         <RpgStatusWindow
+          race={currentRace}
           world={world}
           worldPowerSettings={worldPowerSettings}
           campaignPowerLevels={characterPowerData}
