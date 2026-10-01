@@ -1,8 +1,8 @@
 // -*- coding: utf-8 -*-
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { WorldSetting, CampaignPowerParameter } from '../types';
 import { calculateRpgCharacterStats, CharacterPowerData } from '../services/rpgStatService';
-import { Plus, Minus, RotateCcw } from 'lucide-react';
+import { Plus, Minus, RotateCcw, Sliders, Shield, Zap, X } from 'lucide-react';
 
 export interface RpgStatusWindowProps {
   world?: WorldSetting;
@@ -47,7 +47,9 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   onParameterGrowthFactorsChange,
   baseGrowthPerParam = 2
 }) => {
-  const { categories, globalSettings, combatProperties, resources } =
+  const [isPointModalOpen, setIsPointModalOpen] = useState(false);
+
+  const { categories, globalSettings, combatProperties, hpResource, powerSources, resources } =
     calculateRpgCharacterStats(campaignPowerLevels, world, worldPowerSettings);
 
   const safeBaseGrowth = typeof baseGrowthPerParam === 'number' && !isNaN(baseGrowthPerParam) && baseGrowthPerParam > 0
@@ -148,7 +150,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   const hasProgressionControls = Boolean(onParameterGrowthPointsChange || onParameterGrowthFactorsChange);
 
   return (
-    <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 sm:p-4 space-y-3.5 shadow-xl">
+    <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 sm:p-4 space-y-4 shadow-xl">
       {/* Optional Top Status Header Bar */}
       {showStatusHeader && (
         <div className="flex flex-wrap items-center justify-between bg-slate-900/90 border border-slate-800 px-3 py-2 rounded-lg text-xs font-mono">
@@ -182,11 +184,14 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
         {/* Spalte 1: KAMPFEIGENSCHAFTEN */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 space-y-3">
           <div className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider border-b border-slate-800 pb-1.5 flex items-center justify-between">
-            <span>KAMPFEIGENSCHAFTEN</span>
+            <span className="flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              <span>KAMPFEIGENSCHAFTEN</span>
+            </span>
           </div>
 
           <div className="space-y-2">
-            {/* Dynamische Ressourcen (HP, MP etc.) */}
+            {/* Dynamische Kampfeigenschafts-Ressourcen (HP, MP, SP) */}
             {resources.map(res => {
               const resPercent = res.max > 0 ? Math.min(100, Math.max(0, Math.round((res.value / res.max) * 100))) : 100;
               const isHp = res.id.toLowerCase().includes('hp') || res.name.toLowerCase().includes('gesundheit');
@@ -200,7 +205,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
               return (
                 <div
                   key={`res-row-${res.id}`}
-                  className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-2 space-y-1.5 font-mono"
+                  className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-2.5 space-y-1.5 font-mono"
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-200">{res.name}</span>
@@ -236,9 +241,11 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="text-amber-300 font-bold text-xs shrink-0">
-                    {prop.value}
-                    {prop.isPercentage ? '%' : ''}
+                  <div className="text-amber-300 font-bold text-xs shrink-0 flex items-center gap-1">
+                    <span>{prop.value}{prop.isPercentage ? '%' : ''}</span>
+                    <span className="text-slate-600 font-normal text-[10px]">
+                      / {prop.isPercentage ? '100%' : (prop.potentialMax || 1000)}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -246,41 +253,16 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
           </div>
         </div>
 
-        {/* Spalte 2: PARAMETER (RPG-Charakterstatus-Layout) */}
+        {/* Spalte 2: PARAMETER (Klare Zahlen ohne Skala-Maximum) */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5 space-y-3">
-          {/* Header mit RPG-Status & Budget */}
-          <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-1.5">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
             <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-wider">
               PARAMETER
             </span>
-            {hasProgressionControls && !readOnly && (
-              <div className="flex items-center gap-2 text-[10px] font-mono">
-                <span className="text-amber-300 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                  {currentBudget} Pkt.
-                </span>
-                <span className={`px-1.5 py-0.5 rounded font-bold border ${
-                  remainingBudget === 0
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                    : remainingBudget > 0
-                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                }`}>
-                  {totalSpent}/{currentBudget}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleResetToEvenBudget}
-                  title="Gleichmäßig verteilen"
-                  className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition-colors flex items-center gap-0.5 cursor-pointer"
-                >
-                  <RotateCcw className="w-2.5 h-2.5" />
-                  <span className="hidden sm:inline text-[9px]">Gleich</span>
-                </button>
-              </div>
-            )}
+            <span className="text-[10px] font-mono text-slate-500">Charakter-Grundwerte</span>
           </div>
 
-          {/* Parameter-Liste als RPG-Status: Stärke 10 ▲ +2 */}
+          {/* Parameter-Liste: Stärke 10 */}
           <div className="space-y-1.5 font-mono text-xs">
             {categories.map(cat => {
               const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
@@ -296,8 +278,6 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 ? rawVal
                 : baseVal;
 
-              const allocated = allocatedPoints[cat] ?? safeBaseGrowth;
-
               return (
                 <div
                   key={`param-row-${cat}`}
@@ -310,7 +290,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                     </span>
                   </div>
 
-                  {/* Aktueller Wert */}
+                  {/* Aktueller Wert als feste Zahl */}
                   <div className="flex items-center gap-1 shrink-0 font-mono text-xs">
                     {!readOnly && onChangeCampaignPowerLevels ? (
                       <input
@@ -319,52 +299,135 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                         value={charVal}
                         onChange={e => handleParameterUpdate(cat, parseInt(e.target.value) || 0)}
                         title="Aktueller Wert"
-                        className="w-14 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded px-1.5 py-0.5 text-center font-bold text-amber-300 text-xs"
+                        className="w-16 bg-slate-900 border border-slate-700 focus:border-amber-500 rounded px-2 py-0.5 text-center font-bold text-amber-300 text-xs"
                       />
                     ) : (
-                      <span className="font-bold text-amber-300 text-xs px-1">{charVal}</span>
-                    )}
-                  </div>
-
-                  {/* Geplante Entwicklung pro Level mit Stepper: ▲ +X */}
-                  <div className="flex items-center justify-end shrink-0 pl-1">
-                    {hasProgressionControls && !readOnly ? (
-                      <div className="inline-flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded-md p-0.5">
-                        <button
-                          type="button"
-                          disabled={allocated <= 0}
-                          onClick={() => handlePointChange(cat, -1)}
-                          title="Punkt verringern"
-                          className="w-4 h-5 rounded bg-slate-950 border border-slate-800 hover:border-slate-600 text-slate-400 hover:text-white disabled:opacity-20 disabled:pointer-events-none flex items-center justify-center text-[10px] font-bold transition-colors cursor-pointer"
-                        >
-                          <Minus className="w-2.5 h-2.5" />
-                        </button>
-                        <div className="flex items-center px-1.5 font-mono font-bold text-amber-400 text-[11px]">
-                          <span className="text-amber-500/80 mr-0.5 text-[10px]">▲</span>
-                          <span>+{allocated}</span>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={remainingBudget <= 0}
-                          onClick={() => handlePointChange(cat, 1)}
-                          title="Punkt erhöhen"
-                          className="w-4 h-5 rounded bg-slate-950 border border-slate-800 hover:border-slate-600 text-slate-400 hover:text-white disabled:opacity-20 disabled:pointer-events-none flex items-center justify-center text-[10px] font-bold transition-colors cursor-pointer"
-                        >
-                          <Plus className="w-2.5 h-2.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-amber-400 font-bold text-xs font-mono px-1">
-                        ▲ +{allocated}
-                      </span>
+                      <span className="font-bold text-amber-300 text-xs px-2">{charVal}</span>
                     )}
                   </div>
                 </div>
               );
             })}
           </div>
+
+          {/* Separater Button für Entwicklungspunkte */}
+          {hasProgressionControls && !readOnly && (
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPointModalOpen(true)}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 hover:border-amber-500/50 rounded-lg py-2 px-3 text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-amber-500/10"
+              >
+                <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                <span>Punkte verteilen</span>
+                <span className="bg-slate-950 text-slate-300 font-normal px-2 py-0.5 rounded text-[10px] ml-1">
+                  ({totalSpent}/{currentBudget})
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
+
+
+
+      {/* COMPACT DIALOG / MODAL FOR ENTWICKLUNGSPUNKTE VERTEILEN */}
+      {isPointModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4 text-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-xs font-bold font-mono text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-amber-400" />
+                <span>Entwicklung pro Level verteilen</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsPointModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-xs flex items-center justify-between">
+              <span className="text-slate-400">Entwicklung pro Level:</span>
+              <span className="font-bold text-amber-300 text-sm">{currentBudget} Punkte</span>
+            </div>
+
+            {/* Parameter Punkt-Verteilung mit + / - */}
+            <div className="space-y-2 font-mono text-xs max-h-[55vh] overflow-y-auto pr-1 custom-scrollbar">
+              {categories.map(cat => {
+                const allocated = allocatedPoints[cat] ?? safeBaseGrowth;
+                return (
+                  <div
+                    key={`modal-param-${cat}`}
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 hover:border-slate-700/80 transition-colors"
+                  >
+                    <span className="font-bold text-slate-200">{cat}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={allocated <= 0}
+                        onClick={() => handlePointChange(cat, -1)}
+                        className="w-7 h-7 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-20 disabled:pointer-events-none flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
+                        title="Punkt entfernen"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="w-8 text-center font-bold text-amber-300 text-sm">
+                        {allocated}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={remainingBudget <= 0}
+                        onClick={() => handlePointChange(cat, 1)}
+                        className="w-7 h-7 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-20 disabled:pointer-events-none flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
+                        title="Punkt hinzufügen"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between border-t border-slate-800 pt-3 font-mono text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">Vergeben:</span>
+                <span className={`font-bold px-2 py-0.5 rounded ${
+                  remainingBudget === 0
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : remainingBudget > 0
+                    ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
+                    : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                }`}>
+                  {totalSpent} / {currentBudget}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetToEvenBudget}
+                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                  title="Gleichmäßig verteilen"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Gleich</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPointModalOpen(false)}
+                  className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-colors cursor-pointer"
+                >
+                  Fertig
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

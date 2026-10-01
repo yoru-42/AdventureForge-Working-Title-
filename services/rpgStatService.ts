@@ -52,6 +52,8 @@ export interface DerivedRpgStats {
   globalSettings: Record<string, CampaignPowerParameter>;
   combatProperties: DerivedCombatProperty[];
   resources: DerivedResource[];
+  hpResource: DerivedResource;
+  powerSources: DerivedResource[];
 }
 
 /**
@@ -201,33 +203,33 @@ export function calculateRpgCharacterStats(
     };
   });
 
-  // 3. Dynamische Ressourcenberechnung (ohne künstliche *10 Skalierung)
-  const resourceMap = new Map<string, DerivedResource>();
+  // 3. Dynamische Ressourcenberechnung (Gesundheit / HP + Kosten-Ressourcen wie MP, SP)
+  const costResourcesMap = new Map<string, DerivedResource>();
 
-  // A) Gesundheits-Ressource (HP)
+  // A) Gesundheits-Ressource (HP): Mensch-Basiswert = 30 bei Parameter-Durchschnitt = 10
   let healthSum = 0;
-  let healthMaxSum = 0;
   let healthCount = 0;
 
   healthPowerNames.forEach(hpName => {
     const pData = getParamData(hpName);
     healthSum += pData.value;
-    healthMaxSum += pData.potentialMax;
     healthCount++;
   });
 
-  const hpVal = healthCount > 0 ? Math.round(healthSum / healthCount) : 100;
-  const hpMax = healthCount > 0 ? Math.round(healthMaxSum / healthCount) : 100;
-  const healthLabel = world?.healthLabel || 'HP';
+  const avgHealthParam = healthCount > 0 ? (healthSum / healthCount) : 10;
+  // Basiswert 30 bei Parameter = 10 (Mensch Level 1 Standard)
+  const hpVal = Math.max(1, Math.round(30 * (avgHealthParam / 10)));
+  const hpMax = 9999; // Technische globale Skala für Kampfeigenschaft HP
+  const healthLabel = world?.healthLabel || 'Gesundheit (HP)';
 
-  resourceMap.set('hp', {
+  const hpResource: DerivedResource = {
     id: 'hp',
     name: healthLabel,
     value: hpVal,
     max: hpMax
-  });
+  };
 
-  // B) Kosten-Ressourcen (MP, SP etc.)
+  // B) Kosten-Ressourcen (MP, SP etc.) - gehören direkt zu Kampfeigenschaften
   costResources.forEach(res => {
     let resSum = 0;
     let resMaxSum = 0;
@@ -248,11 +250,11 @@ export function calculateRpgCharacterStats(
     });
 
     const resVal = resCount > 0 ? Math.round(resSum / resCount) : res.baseMax || 100;
-    const resMax = resCount > 0 ? Math.round(resMaxSum / resCount) : res.baseMax || 100;
+    const resMax = resCount > 0 ? Math.round(resMaxSum / resCount) : res.baseMax || 1000;
     const resId = res.id || `cost-${(res.name || 'mp').toLowerCase()}`;
 
-    if (!resourceMap.has(resId)) {
-      resourceMap.set(resId, {
+    if (!costResourcesMap.has(resId)) {
+      costResourcesMap.set(resId, {
         id: resId,
         name: res.name || 'MP',
         value: resVal,
@@ -261,41 +263,14 @@ export function calculateRpgCharacterStats(
     }
   });
 
-  // C) Benutzerdefinierte Ressourcen-Zuordnungen (customResourceMappings)
-  customResourceMappings.forEach(res => {
-    let resSum = 0;
-    let resMaxSum = 0;
-    let resCount = 0;
-
-    (res.sourcePowers || []).forEach(spName => {
-      const pData = getParamData(spName);
-      resSum += pData.value;
-      resMaxSum += pData.potentialMax;
-      resCount++;
-    });
-
-    const resVal = resCount > 0 ? Math.round(resSum / resCount) : res.baseMax || 100;
-    const resMax = resCount > 0 ? Math.round(resMaxSum / resCount) : res.baseMax || 100;
-    const resId = res.id || `custom-${res.name.toLowerCase()}`;
-
-    const exists = Array.from(resourceMap.values()).some(
-      r => r.name.toLowerCase() === res.name.toLowerCase()
-    );
-
-    if (!exists) {
-      resourceMap.set(resId, {
-        id: resId,
-        name: res.name,
-        value: resVal,
-        max: resMax
-      });
-    }
-  });
+  const costResourcesList = Array.from(costResourcesMap.values());
 
   return {
     categories,
     globalSettings,
     combatProperties,
-    resources: Array.from(resourceMap.values())
+    resources: [hpResource, ...costResourcesList],
+    hpResource,
+    powerSources: costResourcesList
   };
 }
