@@ -1,9 +1,9 @@
 // -*- coding: utf-8 -*-
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { WorldSetting, CampaignPowerParameter } from '../types';
-import { calculateRpgCharacterStats, CharacterPowerData } from '../services/rpgStatService';
+import { calculateRpgCharacterStats, calculateIndividualParameterMax, CharacterPowerData } from '../services/rpgStatService';
 import { ProgressionService } from '../services/progressionService';
-import { RaceService } from '../services/raceService';
+import { RaceService, RaceDefinition } from '../services/raceService';
 import { Shield, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react';
 
 interface HoldButtonProps {
@@ -106,7 +106,18 @@ const HoldButton: React.FC<HoldButtonProps> = ({
 };
 
 export interface RpgStatusWindowProps {
-  race?: string;
+  race?: string | RaceDefinition;
+  customRaces?: RaceDefinition[];
+  gender?: string;
+  stature?: string;
+  build?: string;
+  body?: {
+    gender?: string;
+    stature?: string;
+    build?: string;
+    statureFactors?: Record<string, number>;
+    genderFactors?: Record<string, number>;
+  };
   world?: WorldSetting;
   worldPowerSettings?: Record<string, number | CampaignPowerParameter>;
   campaignPowerLevels?: CharacterPowerData;
@@ -119,6 +130,7 @@ export interface RpgStatusWindowProps {
   showStatusHeader?: boolean;
   baseParameters?: Record<string, number>;
   characterPotential?: number;
+  parameterPotentialPercentages?: Record<string, number>;
   developmentPointsPerLevel?: number;
   onDevelopmentPointsPerLevelChange?: (budget: number) => void;
   parameterGrowthPoints?: Record<string, number>;
@@ -130,6 +142,11 @@ export interface RpgStatusWindowProps {
 
 export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   race = 'Mensch',
+  customRaces,
+  gender,
+  stature,
+  build,
+  body,
   world,
   worldPowerSettings,
   campaignPowerLevels = {},
@@ -141,7 +158,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   maxXp,
   showStatusHeader = false,
   baseParameters = {},
-  characterPotential,
+  characterPotential = 100,
+  parameterPotentialPercentages,
   developmentPointsPerLevel,
   onDevelopmentPointsPerLevelChange,
   parameterGrowthPoints = {},
@@ -151,15 +169,24 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   baseGrowthPerParam = 2
 }) => {
   const { categories, globalSettings, combatProperties, hpResource, powerSources, resources } =
-    calculateRpgCharacterStats(campaignPowerLevels, world, worldPowerSettings);
+    calculateRpgCharacterStats(campaignPowerLevels, world, worldPowerSettings, race, customRaces, {
+      body,
+      gender,
+      stature,
+      build,
+      potential: characterPotential,
+      parameterPotentialPercentages,
+      baseParameters
+    });
 
   const safeBaseGrowth = typeof baseGrowthPerParam === 'number' && !isNaN(baseGrowthPerParam) && baseGrowthPerParam > 0
     ? baseGrowthPerParam
     : 2;
 
   // Development Budget & Rassen-Standardpunkte (Mensch = 5)
-  const isHuman = (race || 'Mensch').toLowerCase().includes('mensch') || (race || 'Mensch').toLowerCase().includes('human');
-  const currentRaceDef = RaceService.getRaceDefinition(race || 'Mensch');
+  const raceNameStr = typeof race === 'string' ? race : (race?.name || 'Mensch');
+  const isHuman = raceNameStr.toLowerCase().includes('mensch') || raceNameStr.toLowerCase().includes('human');
+  const currentRaceDef = RaceService.getRaceDefinition(raceNameStr, customRaces);
   const raceDefaultFreePoints = isHuman ? 5 : (currentRaceDef.defaultFreePoints ?? 5);
 
   const rawFreePoints = (campaignPowerLevels as any)?._freePoints;
@@ -247,8 +274,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
     const currentLevels = latestPowerLevelsRef.current || {};
     const current = currentLevels[cat];
-    const sMin = 1; // Minimum is 1, cannot fall to 0!
-    const sMax = globalSettings[cat]?.scaleMax ?? 100000;
+    const sMin = 1; // Minimum ist 1, darf nicht auf 0 fallen!
 
     const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
       ? baseParameters[cat]
@@ -258,19 +284,40 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       ? current.value
       : (typeof current === 'number' ? current : baseVal);
 
-    const currentPot = typeof current === 'object' && current !== null && typeof current.potentialMax === 'number'
+    // Berechne das individuelle Maximum für diesen Parameter
+    const calculatedMax = calculateIndividualParameterMax({
+      paramName: cat,
+      race,
+      customRaces,
+      body,
+      gender,
+      stature,
+      build,
+      potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
+      parameterPotentialPercentages,
+      world,
+      worldPowerSettings,
+      baseParameters
+    });
+
+    const rawPot = typeof current === 'object' && current !== null && typeof current.potentialMax === 'number'
       ? current.potentialMax
-      : (characterPotential || globalSettings[cat]?.max || 1000);
+      : undefined;
+    const currentPot = (rawPot !== undefined && rawPot !== 1000 && rawPot !== 9999 && rawPot !== 100000 && rawPot > 0)
+      ? rawPot
+      : calculatedMax;
 
     const rawCurFree = (currentLevels as any)?._freePoints;
     const currentFreePoints = typeof rawCurFree === 'number' && !isNaN(rawCurFree) && rawCurFree >= 0
       ? rawCurFree
       : raceDefaultFreePoints;
 
-    if (delta > 0 && currentFreePoints <= 0) return;
+    // + ist gesperrt, wenn keine freien Punkte da sind oder wenn der Wert das individuelle Maximum erreicht hat
+    if (delta > 0 && (currentFreePoints <= 0 || currentVal >= currentPot)) return;
+    if (delta < 0 && currentVal <= sMin) return;
 
     const newVal = currentVal + delta;
-    if (newVal < sMin || newVal > sMax) return;
+    if (newVal < sMin || newVal > currentPot) return;
 
     const nextFreePoints = delta > 0 ? Math.max(0, currentFreePoints - 1) : currentFreePoints + 1;
 
@@ -286,7 +333,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
     latestPowerLevelsRef.current = nextLevels;
     onChangeCampaignPowerLevels(nextLevels);
-  }, [readOnly, onChangeCampaignPowerLevels, globalSettings, characterPotential, raceDefaultFreePoints, baseParameters]);
+  }, [readOnly, onChangeCampaignPowerLevels, globalSettings, characterPotential, parameterPotentialPercentages, raceDefaultFreePoints, baseParameters, race, customRaces, body, gender, stature, build, world, worldPowerSettings]);
 
   const handleResourceUpdate = useCallback((resId: string, resName: string, delta: number) => {
     if (readOnly || !onChangeCampaignPowerLevels) return;
@@ -298,6 +345,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     // Verwende den aktuellen abgeleiteten Ressourcen-Wert als sicheren Ausgangspunkt
     const matchedRes = resources.find(r => r.id === resId || r.name === resName);
     const fallbackVal = matchedRes ? matchedRes.value : (resId === 'hp' ? 30 : 10);
+    const maxVal = matchedRes ? matchedRes.max : 1000;
 
     const currentVal = typeof current === 'object' && current !== null && typeof current.value === 'number'
       ? current.value
@@ -308,16 +356,17 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       ? rawCurFree
       : raceDefaultFreePoints;
 
-    if (delta > 0 && currentFreePoints <= 0) return;
+    if (delta > 0 && (currentFreePoints <= 0 || currentVal >= maxVal)) return;
+    if (delta < 0 && currentVal <= 1) return;
 
     const newVal = currentVal + delta;
-    if (newVal < 1) return; // Minimum ist 1, darf nicht auf 0 fallen!
+    if (newVal < 1 || newVal > maxVal) return;
 
     const nextFreePoints = delta > 0 ? Math.max(0, currentFreePoints - 1) : currentFreePoints + 1;
 
     const updated = typeof current === 'object' && current !== null
-      ? { ...current, value: newVal }
-      : { value: newVal };
+      ? { ...current, value: newVal, potentialMax: maxVal }
+      : { value: newVal, potentialMax: maxVal };
 
     const nextLevels = {
       ...currentLevels,
@@ -337,15 +386,28 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       const baseVal = typeof baseParameters[cat] === 'number' && !isNaN(baseParameters[cat])
         ? baseParameters[cat]
         : (globalSettings[cat]?.min && globalSettings[cat].min > 0 ? globalSettings[cat].min : 10);
-      const pot = characterPotential || globalSettings[cat]?.max || 1000;
-      resetLevels[cat] = { value: baseVal, potentialMax: pot };
+      const indMax = calculateIndividualParameterMax({
+        paramName: cat,
+        race,
+        customRaces,
+        body,
+        gender,
+        stature,
+        build,
+        potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
+        parameterPotentialPercentages,
+        world,
+        worldPowerSettings,
+        baseParameters
+      });
+      resetLevels[cat] = { value: baseVal, potentialMax: indMax };
     });
 
     resetLevels._freePoints = raceDefaultFreePoints;
 
     latestPowerLevelsRef.current = resetLevels;
     onChangeCampaignPowerLevels(resetLevels);
-  }, [readOnly, onChangeCampaignPowerLevels, categories, baseParameters, globalSettings, characterPotential, raceDefaultFreePoints]);
+  }, [readOnly, onChangeCampaignPowerLevels, categories, baseParameters, globalSettings, characterPotential, parameterPotentialPercentages, raceDefaultFreePoints, race, customRaces, body, gender, stature, build, world, worldPowerSettings]);
 
   const hasProgressionControls = Boolean(onParameterGrowthPointsChange || onParameterGrowthFactorsChange);
 
@@ -466,7 +528,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                   <div className="text-amber-300 font-bold text-xs shrink-0 flex items-center gap-1">
                     <span>{prop.value}{prop.isPercentage ? '%' : ''}</span>
                     <span className="text-slate-600 font-normal text-[10px]">
-                      / {prop.isPercentage ? '100%' : (prop.potentialMax || 1000)}
+                      / {prop.isPercentage ? '100%' : prop.potentialMax}
                     </span>
                   </div>
                 </div>
@@ -512,14 +574,31 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 ? rawEntry
                 : (rawEntry && typeof rawEntry === 'object' && typeof rawEntry.value === 'number' ? rawEntry.value : undefined);
 
+              const calculatedMax = calculateIndividualParameterMax({
+                paramName: cat,
+                race,
+                customRaces,
+                body,
+                gender,
+                stature,
+                build,
+                potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
+                parameterPotentialPercentages,
+                world,
+                worldPowerSettings,
+                baseParameters
+              });
+
               const rawPotMax = typeof rawEntry === 'object' && rawEntry !== null && typeof rawEntry.potentialMax === 'number'
                 ? rawEntry.potentialMax
                 : undefined;
 
               const charVal = rawVal !== undefined && !isNaN(rawVal) ? rawVal : baseVal;
-              const charPotMax = rawPotMax !== undefined && !isNaN(rawPotMax)
+              const charPotMax = (rawPotMax !== undefined && rawPotMax !== 1000 && rawPotMax !== 9999 && rawPotMax !== 100000 && rawPotMax > 0)
                 ? rawPotMax
-                : (characterPotential || globalSettings[cat]?.max || 1000);
+                : calculatedMax;
+
+              const isAtMax = charVal >= charPotMax;
 
               return (
                 <div
@@ -546,10 +625,10 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                           <ChevronDown className="w-3.5 h-3.5" />
                         </HoldButton>
                         <HoldButton
-                          disabled={readOnly || freePoints <= 0}
+                          disabled={readOnly || freePoints <= 0 || isAtMax}
                           action={() => handleParameterUpdate(cat, 1)}
                           className="p-0.5 hover:bg-slate-800 text-slate-400 hover:text-amber-400 disabled:opacity-20 disabled:pointer-events-none rounded transition-colors cursor-pointer"
-                          title={freePoints > 0 ? `${cat} erhöhen (1 Punkt verbrauchen)` : 'Keine Punkte verfügbar'}
+                          title={isAtMax ? `${cat} hat individuelles Maximum (${charPotMax}) erreicht` : (freePoints > 0 ? `${cat} erhöhen (1 Punkt verbrauchen)` : 'Keine Punkte verfügbar')}
                         >
                           <ChevronUp className="w-3.5 h-3.5" />
                         </HoldButton>

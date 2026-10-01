@@ -44,6 +44,7 @@ import {
 } from '../lib/progressionDefaults';
 import { ProgressionSettingSection } from './ProgressionSettingSection';
 import { CharacterRaceAndStatsSection } from './CharacterRaceAndStatsSection';
+import { calculateIndividualParameterMax } from '../services/rpgStatService';
 import { TechniqueHierarchyTree } from './TechniqueHierarchyTree';
 import { normalizeAbilityHierarchy, syncCharacterAbilityTree } from '../utils/abilityHierarchy';
 import { createStandardLoreEntries } from '../lib/standardItemsData';
@@ -1192,21 +1193,52 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
     
     // Parse campaign power levels list to record/map format
     const levels: Record<string, { value: number; potentialMax: number; xp: number }> = {};
+    const charRace = charData.race || charData.appearance?.race || 'Mensch';
+    const charPot = typeof charData.potential === 'number' ? charData.potential : 100;
+    const charGender = charData.gender || charData.appearance?.gender;
+    const charBuild = charData.build || charData.appearance?.build;
+
     if (charData.campaignPowerLevelsList && Array.isArray(charData.campaignPowerLevelsList)) {
       charData.campaignPowerLevelsList.forEach((item: any) => {
         if (item.parameterName) {
+          const rawPot = typeof item.potentialMax === 'number' ? item.potentialMax : undefined;
+          const indMax = calculateIndividualParameterMax({
+            paramName: item.parameterName,
+            race: charRace,
+            gender: charGender,
+            build: charBuild,
+            potentialPercent: charPot,
+            world
+          });
+          const effectivePot = (rawPot !== undefined && rawPot !== 1000 && rawPot !== 9999 && rawPot !== 100000 && rawPot > 0)
+            ? rawPot
+            : indMax;
+
           levels[item.parameterName] = {
             value: item.value !== undefined ? item.value : 10,
-            potentialMax: item.potentialMax !== undefined ? item.potentialMax : 1000,
+            potentialMax: effectivePot,
             xp: 0
           };
         }
       });
     } else if (charData.campaignPowerLevels) {
       Object.entries(charData.campaignPowerLevels).forEach(([k, v]: [string, any]) => {
+        const rawPot = typeof v === 'object' && typeof v?.potentialMax === 'number' ? v.potentialMax : undefined;
+        const indMax = calculateIndividualParameterMax({
+          paramName: k,
+          race: charRace,
+          gender: charGender,
+          build: charBuild,
+          potentialPercent: charPot,
+          world
+        });
+        const effectivePot = (rawPot !== undefined && rawPot !== 1000 && rawPot !== 9999 && rawPot !== 100000 && rawPot > 0)
+          ? rawPot
+          : indMax;
+
         levels[k] = {
-          value: v?.value !== undefined ? v.value : 10,
-          potentialMax: v?.potentialMax !== undefined ? v.potentialMax : 1000,
+          value: v?.value !== undefined ? v.value : (typeof v === 'number' ? v : 10),
+          potentialMax: effectivePot,
           xp: v?.xp || 0
         };
       });
@@ -4263,6 +4295,16 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       updateAppearanceValue('race', val);
                       setPlayer(prev => ({ ...prev, race: val }));
                     }}
+                    gender={player.appearance?.gender || (player as any).gender || getAppearanceValue('gender') || 'Weiblich'}
+                    onGenderChange={val => {
+                      updateAppearanceValue('gender', val);
+                      setPlayer(prev => ({ ...prev, gender: val, appearance: { ...(prev.appearance || {}), gender: val } } as any));
+                    }}
+                    build={player.appearance?.build || (player as any).build || getAppearanceValue('build') || 'Schlank'}
+                    onBuildChange={val => {
+                      updateAppearanceValue('build', val);
+                      setPlayer(prev => ({ ...prev, build: val, appearance: { ...(prev.appearance || {}), build: val } } as any));
+                    }}
                     customRaces={RaceService.parseRaceLoreEntries(loreDatabase)}
                     raceFeatures={player.raceFeatures || getAppearanceValue('raceFeatures') || ''}
                     onRaceFeaturesChange={val => {
@@ -4283,12 +4325,16 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     onLevelChange={lvl => setPlayer(prev => ({ ...prev, level: lvl }))}
                     rank={player.rank || 'F'}
                     onRankChange={rnk => setPlayer(prev => ({ ...prev, rank: rnk }))}
-                    potential={typeof player.potential === 'number' ? player.potential : (typeof player.potential === 'string' ? parseFloat(player.potential) || 1000 : 1000)}
+                    potential={typeof player.potential === 'number' ? player.potential : (typeof player.potential === 'string' ? parseFloat(player.potential) || 100 : 100)}
                     onPotentialChange={pot => setPlayer(prev => ({ ...prev, potential: pot }))}
+                    parameterPotentialPercentages={(player as any).parameterPotentialPercentages}
+                    onParameterPotentialPercentagesChange={percentages => setPlayer(prev => ({ ...prev, parameterPotentialPercentages: percentages } as any))}
                     xp={player.xp ?? 0}
                     onXpChange={x => setPlayer(prev => ({ ...prev, xp: x }))}
                     developmentProfile={player.developmentProfile || 'normal'}
                     onDevelopmentProfileChange={prof => setPlayer(prev => ({ ...prev, developmentProfile: prof }))}
+                    epGainRate={(player as any).epGainRate ?? (player as any).epGainMultiplier}
+                    onEpGainRateChange={rate => setPlayer(prev => ({ ...prev, epGainRate: rate, epGainMultiplier: rate } as any))}
                     developmentRate={typeof player.developmentRate === 'number' ? player.developmentRate : (player.developmentRate?.attributeGrowthMultiplier ?? 1.0)}
                     onDevelopmentRateChange={rate => setPlayer(prev => ({ ...prev, developmentRate: typeof prev.developmentRate === 'object' ? { ...prev.developmentRate, attributeGrowthMultiplier: rate } : rate } as any))}
                     parameterGrowthFactors={player.parameterGrowthFactors || {}}
@@ -4300,6 +4346,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                     developmentPointsPerLevel={player.developmentPointsPerLevel}
                     onDevelopmentPointsPerLevelChange={budget => setPlayer(prev => ({ ...prev, developmentPointsPerLevel: budget }))}
                     levelsPerRank={player.levelsPerRank}
+                    onLevelsPerRankChange={val => setPlayer(prev => ({ ...prev, levelsPerRank: val }))}
                   />
                 </div>
               )}

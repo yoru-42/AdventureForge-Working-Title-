@@ -625,10 +625,10 @@ export class ProgressionService {
         typeof potential === 'number' && !isNaN(potential)
           ? potential
           : typeof potential === 'string'
-          ? parseFloat(potential) || 1000
-          : 1000;
-      const normPot = potNum <= 10 ? potNum * 100 : potNum;
-      potentialFactor = Math.max(0.2, Math.min(3.0, 1 + (normPot - 1000) / 2000));
+          ? parseFloat(potential) || 100
+          : 100;
+      const potPercent = potNum > 200 ? potNum / 10 : potNum;
+      potentialFactor = Math.max(0.01, Math.min(3.0, potPercent / 100));
     }
 
     // 5. Grundformel

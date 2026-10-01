@@ -3,15 +3,19 @@ import React, { useMemo, useEffect } from 'react';
 import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentProfileType } from '../types';
 import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
-import { isResourceKey } from '../services/rpgStatService';
+import { isResourceKey, calculateIndividualParameterMax } from '../services/rpgStatService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
-import { Dna, Layers, Sliders, Shield } from 'lucide-react';
+import { Dna, Layers, Sliders, Shield, Zap } from 'lucide-react';
 
 export interface CharacterRaceAndStatsSectionProps {
   race: string;
   onRaceChange: (val: string) => void;
   customRaces?: RaceDefinition[];
+  gender?: string;
+  onGenderChange?: (val: string) => void;
+  build?: string;
+  onBuildChange?: (val: string) => void;
   raceFeatures?: string;
   onRaceFeaturesChange?: (val: string) => void;
   origin?: string;
@@ -26,10 +30,14 @@ export interface CharacterRaceAndStatsSectionProps {
   onRankChange?: (rank: string) => void;
   potential?: number | string;
   onPotentialChange?: (pot: number) => void;
+  parameterPotentialPercentages?: Record<string, number>;
+  onParameterPotentialPercentagesChange?: (percentages: Record<string, number>) => void;
   xp?: number;
   onXpChange?: (xp: number) => void;
   developmentProfile?: DevelopmentProfileType;
   onDevelopmentProfileChange?: (profile: DevelopmentProfileType) => void;
+  epGainRate?: number;
+  onEpGainRateChange?: (rate: number) => void;
   developmentRate?: number;
   onDevelopmentRateChange?: (rate: number) => void;
   rankGrowthBonus?: number;
@@ -42,7 +50,11 @@ export interface CharacterRaceAndStatsSectionProps {
   onParameterGrowthFactorsChange?: (factors: Record<string, number>) => void;
   progressionConfig?: ProgressionConfig;
   levelsPerRank?: number;
+  onLevelsPerRankChange?: (val: number) => void;
 }
+
+export const CHARACTER_GENDER_OPTIONS = ['Männlich', 'Weiblich', 'Divers', 'Nicht-Binär', 'Androgyn', 'Futanari', 'Unbekannt'];
+export const CHARACTER_BUILD_OPTIONS = ['Schlank', 'Sportlich', 'Muskulös', 'Kräftig', 'Zierlich', 'Drahtig', 'Kurvig', 'Stämmig', 'Hager', 'Unbekannt'];
 
 const PROFILE_OPTIONS: { value: DevelopmentProfileType; label: string; desc: string }[] = [
   { value: 'normal', label: 'Normal (1.0× EP / 1.0× Werte)', desc: 'Standardmäßiges, ausgewogenes Entwicklungstempo.' },
@@ -63,6 +75,10 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   race,
   onRaceChange,
   customRaces,
+  gender = 'Unbekannt',
+  onGenderChange,
+  build = 'Schlank',
+  onBuildChange,
   raceFeatures = '',
   onRaceFeaturesChange,
   origin = '',
@@ -75,12 +91,16 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   onLevelChange,
   rank = 'F',
   onRankChange,
-  potential = 1000,
+  potential = 100,
   onPotentialChange,
+  parameterPotentialPercentages,
+  onParameterPotentialPercentagesChange,
   xp = 0,
   onXpChange,
   developmentProfile = 'normal',
   onDevelopmentProfileChange,
+  epGainRate,
+  onEpGainRateChange,
   developmentRate = 1.0,
   onDevelopmentRateChange,
   rankGrowthBonus = 25,
@@ -92,7 +112,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   parameterGrowthFactors = {},
   onParameterGrowthFactorsChange,
   progressionConfig,
-  levelsPerRank
+  levelsPerRank,
+  onLevelsPerRankChange
 }) => {
   const currentRace = race || 'Mensch';
   const availableRaces = customRaces && customRaces.length > 0
@@ -103,16 +124,48 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   const baseParams = currentRaceDef.baseParameters || HUMAN_BASE_PARAMETERS;
 
   const effectiveConfig = progressionConfig || world?.progressionConfig || DEFAULT_PROGRESSION_CONFIG;
-  const rawLevelsPerRank = levelsPerRank ?? effectiveConfig.levelSystem?.levelsPerRank ?? 10;
-  const currentLevelsPerRank = typeof rawLevelsPerRank === 'number' && !isNaN(rawLevelsPerRank) && rawLevelsPerRank > 0
-    ? rawLevelsPerRank
+  const [localLevelsPerRank, setLocalLevelsPerRank] = React.useState<number | undefined>(levelsPerRank);
+  React.useEffect(() => {
+    if (levelsPerRank !== undefined) {
+      setLocalLevelsPerRank(levelsPerRank);
+    }
+  }, [levelsPerRank]);
+
+  const effectiveLevelsPerRank = levelsPerRank ?? localLevelsPerRank ?? effectiveConfig.levelSystem?.levelsPerRank ?? 10;
+  const currentLevelsPerRank = typeof effectiveLevelsPerRank === 'number' && !isNaN(effectiveLevelsPerRank) && effectiveLevelsPerRank > 0
+    ? effectiveLevelsPerRank
     : 10;
+
+  const handleLevelsPerRankChange = (val: number) => {
+    const safeVal = Math.max(1, Math.min(500, val));
+    setLocalLevelsPerRank(safeVal);
+    onLevelsPerRankChange?.(safeVal);
+  };
 
   // Safe numerical progression values
   const safeLevel = typeof level === 'number' && !isNaN(level) && level >= 1 ? Math.floor(level) : 1;
   const safeXp = typeof xp === 'number' && !isNaN(xp) && xp >= 0 ? Math.floor(xp) : 0;
 
   const activeProfileKey = developmentProfile || 'normal';
+  const profileEpMult = ProgressionService.getDevelopmentProfile(activeProfileKey, effectiveConfig).epGainMultiplier ?? 1.0;
+  const rawEpGain = typeof epGainRate === 'number' && !isNaN(epGainRate)
+    ? epGainRate
+    : (typeof epGainRate === 'string' ? parseFloat(epGainRate) || profileEpMult : profileEpMult);
+  const epGainPercent = Math.round(rawEpGain * 100);
+
+  const [localEpGainStr, setLocalEpGainStr] = React.useState<string>(() => String(epGainPercent));
+  React.useEffect(() => {
+    if (localEpGainStr !== '' && !isNaN(parseInt(localEpGainStr, 10))) {
+      if (parseInt(localEpGainStr, 10) !== epGainPercent) {
+        setLocalEpGainStr(String(epGainPercent));
+      }
+    } else if (localEpGainStr === '') {
+      // Keep empty while user is typing
+    } else {
+      setLocalEpGainStr(String(epGainPercent));
+    }
+  }, [epGainPercent]);
+
   const rawXpNeeded = ProgressionService.calculateXpRequirement(safeLevel, rank, effectiveConfig, activeProfileKey);
   const xpNeeded = typeof rawXpNeeded === 'number' && !isNaN(rawXpNeeded) && rawXpNeeded > 0 ? rawXpNeeded : 100;
   const rawProgressPercent = xpNeeded > 0 ? Math.round((safeXp / xpNeeded) * 100) : 100;
@@ -120,12 +173,27 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     ? Math.min(100, Math.max(0, rawProgressPercent))
     : 0;
 
-  const potNum = typeof potential === 'number' && !isNaN(potential)
+  const rawPot = typeof potential === 'number' && !isNaN(potential)
     ? potential
     : typeof potential === 'string'
-    ? (parseFloat(potential) || 1000)
-    : 1000;
-  const safePotNum = typeof potNum === 'number' && !isNaN(potNum) ? potNum : 1000;
+    ? (parseFloat(potential) || 100)
+    : 100;
+  const safePotPercent = rawPot > 200
+    ? Math.min(200, Math.max(1, Math.round(rawPot / 10)))
+    : Math.min(200, Math.max(1, Math.round(rawPot)));
+
+  const [localPotentialStr, setLocalPotentialStr] = React.useState<string>(() => String(safePotPercent));
+  React.useEffect(() => {
+    if (localPotentialStr !== '' && !isNaN(parseInt(localPotentialStr, 10))) {
+      if (parseInt(localPotentialStr, 10) !== safePotPercent) {
+        setLocalPotentialStr(String(safePotPercent));
+      }
+    } else if (localPotentialStr === '') {
+      // Keep empty while user is typing
+    } else {
+      setLocalPotentialStr(String(safePotPercent));
+    }
+  }, [safePotPercent]);
 
   // Percentage values for Entwicklungsrate & Rangbonus
   const rawDevRate = typeof developmentRate === 'number' && !isNaN(developmentRate)
@@ -133,10 +201,36 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     : (typeof developmentRate === 'string' ? parseFloat(developmentRate) || 1.0 : 1.0);
   const devRatePercent = Math.round((!isNaN(rawDevRate) ? rawDevRate : 1.0) * 100);
 
+  const [localDevRateStr, setLocalDevRateStr] = React.useState<string>(() => String(devRatePercent));
+  React.useEffect(() => {
+    if (localDevRateStr !== '' && !isNaN(parseInt(localDevRateStr, 10))) {
+      if (parseInt(localDevRateStr, 10) !== devRatePercent) {
+        setLocalDevRateStr(String(devRatePercent));
+      }
+    } else if (localDevRateStr === '') {
+      // Keep empty while user is typing
+    } else {
+      setLocalDevRateStr(String(devRatePercent));
+    }
+  }, [devRatePercent]);
+
   const rawRankBonus = typeof rankGrowthBonus === 'number' && !isNaN(rankGrowthBonus)
     ? rankGrowthBonus
     : (typeof rankGrowthBonus === 'string' ? parseFloat(rankGrowthBonus) || 25 : 25);
   const rankBonusValue = !isNaN(rawRankBonus) ? rawRankBonus : 25;
+
+  const [localRankBonusStr, setLocalRankBonusStr] = React.useState<string>(() => String(rankBonusValue));
+  React.useEffect(() => {
+    if (localRankBonusStr !== '' && !isNaN(parseInt(localRankBonusStr, 10))) {
+      if (parseInt(localRankBonusStr, 10) !== rankBonusValue) {
+        setLocalRankBonusStr(String(rankBonusValue));
+      }
+    } else if (localRankBonusStr === '') {
+      // Keep empty while user is typing
+    } else {
+      setLocalRankBonusStr(String(rankBonusValue));
+    }
+  }, [rankBonusValue]);
 
   // Level bis Rangaufstieg calculation
   const levelsUntilRankUp = Math.max(0, currentLevelsPerRank - (((safeLevel - 1) % currentLevelsPerRank) + 1));
@@ -198,14 +292,27 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         ? Math.max(1, baseParams[paramName])
         : 10;
 
+      const indMax = calculateIndividualParameterMax({
+        paramName,
+        race: currentRace,
+        customRaces,
+        gender,
+        build,
+        potentialPercent: parameterPotentialPercentages?.[paramName] ?? safePotPercent,
+        parameterPotentialPercentages,
+        world,
+        worldPowerSettings,
+        baseParameters: baseParams
+      });
+
       if (isLegacyBrokenDataset && STANDARD_PARAMETERS.includes(paramName)) {
-        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: safePotNum };
+        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: indMax };
         needsUpdate = true;
       } else if (existing !== undefined && existing !== null) {
         if (typeof existing === 'number') {
           const val = !isNaN(existing) ? Math.max(1, existing) : raceBaseVal;
-          updatedPowerData[paramName] = { value: val, potentialMax: safePotNum };
-          if (val !== existing) needsUpdate = true;
+          updatedPowerData[paramName] = { value: val, potentialMax: indMax };
+          needsUpdate = true;
         } else if (typeof existing === 'object') {
           const rawVal = existing.value;
           const val = (typeof rawVal === 'number' && !isNaN(rawVal))
@@ -213,21 +320,25 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             : raceBaseVal;
 
           const existingXp = existing.xp;
-          const existingPotMax = typeof existing.potentialMax === 'number' && !isNaN(existing.potentialMax)
+          const rawPot = typeof existing.potentialMax === 'number' && !isNaN(existing.potentialMax)
             ? existing.potentialMax
-            : safePotNum;
+            : undefined;
 
-          if (val !== rawVal || existing.potentialMax !== existingPotMax) {
+          const effectivePotMax = (rawPot !== undefined && rawPot !== 1000 && rawPot !== 9999 && rawPot !== 100000 && rawPot > 0)
+            ? rawPot
+            : indMax;
+
+          if (val !== rawVal || existing.potentialMax !== effectivePotMax) {
             needsUpdate = true;
           }
           updatedPowerData[paramName] = {
             value: val,
-            potentialMax: existingPotMax,
+            potentialMax: effectivePotMax,
             ...(existingXp !== undefined ? { xp: existingXp } : {})
           };
         }
       } else {
-        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: safePotNum };
+        updatedPowerData[paramName] = { value: raceBaseVal, potentialMax: indMax };
         needsUpdate = true;
       }
     });
@@ -253,7 +364,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     if (needsUpdate || Object.keys(currentData).length === 0) {
       onCharacterPowerDataChange(updatedPowerData);
     }
-  }, [characterPowerData, parameterList, baseParams, safeLevel, safeXp, onCharacterPowerDataChange, isHuman, currentBudget, safePotNum]);
+  }, [characterPowerData, parameterList, baseParams, safeLevel, safeXp, onCharacterPowerDataChange, isHuman, currentBudget, currentRace, customRaces, gender, build, safePotPercent, parameterPotentialPercentages, world, worldPowerSettings]);
 
   return (
     <div className="space-y-6">
@@ -266,7 +377,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-[11px] font-semibold text-slate-300 mb-1">
               Rasse / Spezies
@@ -289,6 +400,46 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 
           <div>
             <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              Geschlecht
+            </label>
+            <select
+              value={gender || 'Unbekannt'}
+              onChange={e => onGenderChange?.(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+            >
+              {CHARACTER_GENDER_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
+              Biologisches oder phänotypisches Geschlecht
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+              Statur
+            </label>
+            <select
+              value={build || 'Schlank'}
+              onChange={e => onBuildChange?.(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+            >
+              {CHARACTER_BUILD_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
+              Körperbau und Statur
+            </span>
+          </div>
+
+          <div className="sm:col-span-2 md:col-span-1">
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
               Rassenmerkmale
             </label>
             <AutoExpandingTextarea
@@ -303,7 +454,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             </span>
           </div>
 
-          <div>
+          <div className="sm:col-span-2 md:col-span-2">
             <label className="block text-[11px] font-semibold text-slate-300 mb-1">
               Herkunft / Volk
             </label>
@@ -396,56 +547,111 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             <label className="block text-[11px] font-semibold text-slate-300 mb-1">
               Potenzial
             </label>
-            <input
-              type="number"
-              min={1}
-              value={safePotNum}
-              onChange={e => {
-                const val = Math.max(1, parseInt(e.target.value) || 1000);
-                onPotentialChange?.(val);
-              }}
-              placeholder="1000"
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
-            />
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={localPotentialStr}
+                onChange={e => {
+                  const raw = e.target.value;
+                  setLocalPotentialStr(raw);
+                  if (raw === '') return;
+                  const parsed = parseInt(raw, 10);
+                  if (!isNaN(parsed)) {
+                    const clamped = Math.min(200, Math.max(1, parsed));
+                    onPotentialChange?.(clamped);
+                  }
+                }}
+                onBlur={() => {
+                  if (localPotentialStr === '' || isNaN(parseInt(localPotentialStr, 10))) {
+                    setLocalPotentialStr('100');
+                    onPotentialChange?.(100);
+                  } else {
+                    const parsed = parseInt(localPotentialStr, 10);
+                    const clamped = Math.min(200, Math.max(1, parsed));
+                    setLocalPotentialStr(String(clamped));
+                    onPotentialChange?.(clamped);
+                  }
+                }}
+                placeholder="100"
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-amber-300 focus:outline-none focus:border-amber-500 font-mono font-bold"
+              />
+              <span className="text-xs text-slate-300 font-mono font-bold shrink-0">%</span>
+            </div>
             <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
-              Wachstumstempo
+              Wachstumstempo (1–200%)
             </span>
           </div>
 
           <div className="col-span-2 sm:col-span-1">
-            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+            <label className="block text-[11px] font-semibold text-slate-300 mb-1" title="Wie viele Level erreicht werden müssen, um einen neuen Rang aufzusteigen">
               Level bis Rangaufstieg
             </label>
-            <div className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-amber-300 font-mono font-bold flex items-center justify-between">
-              <span>{levelsUntilRankUp}</span>
-              <span className="text-[10px] font-normal text-slate-500">
-                ({currentLevelsPerRank}/Rang)
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">
-              Verbleibende Stufen
+            <input
+              type="number"
+              min={1}
+              max={500}
+              value={currentLevelsPerRank}
+              onChange={e => {
+                const val = Math.max(1, parseInt(e.target.value) || 1);
+                handleLevelsPerRankChange(val);
+              }}
+              placeholder="10"
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-amber-300 focus:outline-none focus:border-amber-500 font-mono font-bold"
+            />
+            <span className="text-[10px] text-slate-400 mt-0.5 block truncate" title={`Noch ${levelsUntilRankUp} Stufe(n) bis zum nächsten Rang`}>
+              Noch {levelsUntilRankUp} {levelsUntilRankUp === 1 ? 'Stufe' : 'Stufen'} verbleibend
             </span>
           </div>
         </div>
 
-        {/* Entwicklungsprofil, Entwicklungsrate & Rangbonus */}
+        {/* EP-Gewinn, Entwicklungsrate & Rangbonus */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3.5 bg-slate-950/70 border border-slate-800/80 rounded-xl">
           <div>
             <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
-              <Sliders className="w-3.5 h-3.5 text-amber-400" />
-              <span>Entwicklungsprofil</span>
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>EP-Gewinn</span>
             </label>
-            <select
-              value={activeProfileKey}
-              onChange={e => onDevelopmentProfileChange?.(e.target.value as DevelopmentProfileType)}
-              className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 cursor-pointer"
-            >
-              {PROFILE_OPTIONS.map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={10}
+                max={1000}
+                value={localEpGainStr}
+                onChange={e => {
+                  const raw = e.target.value;
+                  setLocalEpGainStr(raw);
+                  if (raw === '') return;
+                  const parsed = parseInt(raw, 10);
+                  if (!isNaN(parsed)) {
+                    const clamped = Math.max(10, Math.min(1000, parsed));
+                    onEpGainRateChange?.(clamped / 100);
+                    if (clamped === 100) onDevelopmentProfileChange?.('normal');
+                    else if (clamped === 150) onDevelopmentProfileChange?.('fast');
+                    else if (clamped === 250) onDevelopmentProfileChange?.('veryFast');
+                    else if (clamped === 75) onDevelopmentProfileChange?.('slow');
+                    else if (clamped === 50) onDevelopmentProfileChange?.('verySlow');
+                    else onDevelopmentProfileChange?.('custom');
+                  }
+                }}
+                onBlur={() => {
+                  if (localEpGainStr === '' || isNaN(parseInt(localEpGainStr, 10))) {
+                    setLocalEpGainStr('100');
+                    onEpGainRateChange?.(1.0);
+                    onDevelopmentProfileChange?.('normal');
+                  } else {
+                    const parsed = parseInt(localEpGainStr, 10);
+                    const clamped = Math.max(10, Math.min(1000, parsed));
+                    setLocalEpGainStr(String(clamped));
+                    onEpGainRateChange?.(clamped / 100);
+                  }
+                }}
+                placeholder="100"
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
+              />
+              <span className="text-xs text-slate-300 font-mono font-bold shrink-0">%</span>
+            </div>
           </div>
 
           <div>
@@ -455,14 +661,31 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                step={5}
                 min={10}
                 max={500}
-                value={devRatePercent}
+                value={localDevRateStr}
                 onChange={e => {
-                  const val = parseInt(e.target.value) || 100;
-                  onDevelopmentRateChange?.(val / 100);
+                  const raw = e.target.value;
+                  setLocalDevRateStr(raw);
+                  if (raw === '') return;
+                  const parsed = parseInt(raw, 10);
+                  if (!isNaN(parsed)) {
+                    const clamped = Math.max(10, Math.min(500, parsed));
+                    onDevelopmentRateChange?.(clamped / 100);
+                  }
                 }}
+                onBlur={() => {
+                  if (localDevRateStr === '' || isNaN(parseInt(localDevRateStr, 10))) {
+                    setLocalDevRateStr('100');
+                    onDevelopmentRateChange?.(1.0);
+                  } else {
+                    const parsed = parseInt(localDevRateStr, 10);
+                    const clamped = Math.max(10, Math.min(500, parsed));
+                    setLocalDevRateStr(String(clamped));
+                    onDevelopmentRateChange?.(clamped / 100);
+                  }
+                }}
+                placeholder="100"
                 className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
               />
               <span className="text-xs text-slate-300 font-mono font-bold shrink-0">%</span>
@@ -476,14 +699,31 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                step={5}
                 min={0}
                 max={500}
-                value={rankBonusValue}
+                value={localRankBonusStr}
                 onChange={e => {
-                  const val = Math.max(0, parseInt(e.target.value) || 0);
-                  onRankGrowthBonusChange?.(val);
+                  const raw = e.target.value;
+                  setLocalRankBonusStr(raw);
+                  if (raw === '') return;
+                  const parsed = parseInt(raw, 10);
+                  if (!isNaN(parsed)) {
+                    const clamped = Math.max(0, Math.min(500, parsed));
+                    onRankGrowthBonusChange?.(clamped);
+                  }
                 }}
+                onBlur={() => {
+                  if (localRankBonusStr === '' || isNaN(parseInt(localRankBonusStr, 10))) {
+                    setLocalRankBonusStr('25');
+                    onRankGrowthBonusChange?.(25);
+                  } else {
+                    const parsed = parseInt(localRankBonusStr, 10);
+                    const clamped = Math.max(0, Math.min(500, parsed));
+                    setLocalRankBonusStr(String(clamped));
+                    onRankGrowthBonusChange?.(clamped);
+                  }
+                }}
+                placeholder="25"
                 className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono font-bold"
               />
               <span className="text-xs text-slate-300 font-mono font-bold shrink-0">+{rankBonusValue} %</span>
@@ -526,6 +766,9 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 
         <RpgStatusWindow
           race={currentRace}
+          customRaces={availableRaces}
+          gender={gender}
+          build={build}
           world={world}
           worldPowerSettings={worldPowerSettings}
           campaignPowerLevels={characterPowerData}
@@ -536,7 +779,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           maxXp={xpNeeded}
           showStatusHeader={false}
           baseParameters={baseParams}
-          characterPotential={safePotNum}
+          characterPotential={safePotPercent}
+          parameterPotentialPercentages={parameterPotentialPercentages}
           developmentPointsPerLevel={currentBudget}
           onDevelopmentPointsPerLevelChange={onDevelopmentPointsPerLevelChange}
           parameterGrowthPoints={parameterGrowthPoints}

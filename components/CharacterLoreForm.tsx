@@ -1967,6 +1967,16 @@ export const CharacterLoreForm: React.FC<Props> = ({
               updateDetail('race', val);
               setEditForm(prev => ({ ...prev, race: val } as any));
             }}
+            gender={getAppearanceValue('gender') || getDetail('gender', 'Unbekannt')}
+            onGenderChange={val => {
+              updateAppearanceValue('gender', val);
+              updateDetail('gender', val);
+            }}
+            build={getAppearanceValue('build') || getDetail('build', 'Schlank')}
+            onBuildChange={val => {
+              updateAppearanceValue('build', val);
+              updateDetail('build', val);
+            }}
             customRaces={RaceService.parseRaceLoreEntries(lore)}
             raceFeatures={getAppearanceValue('raceFeatures') || getDetail('raceFeatures', '')}
             onRaceFeaturesChange={val => {
@@ -1992,12 +2002,19 @@ export const CharacterLoreForm: React.FC<Props> = ({
             onLevelChange={lvl => updateDetail('level', lvl)}
             rank={getDetail('rank', 'F')}
             onRankChange={rnk => updateDetail('rank', rnk)}
-            potential={getDetail('potential', 1000)}
+            potential={getDetail('potential', 100)}
             onPotentialChange={pot => updateDetail('potential', pot)}
+            parameterPotentialPercentages={getDetail('parameterPotentialPercentages', {})}
+            onParameterPotentialPercentagesChange={percentages => updateDetail('parameterPotentialPercentages', percentages)}
             xp={getDetail('xp', 0)}
             onXpChange={x => updateDetail('xp', x)}
             developmentProfile={getDetail('developmentProfile', 'normal')}
             onDevelopmentProfileChange={prof => updateDetail('developmentProfile', prof)}
+            epGainRate={typeof getDetail('epGainRate') === 'number' ? getDetail('epGainRate') : (typeof getDetail('epGainMultiplier') === 'number' ? getDetail('epGainMultiplier') : undefined)}
+            onEpGainRateChange={rate => {
+              updateDetail('epGainRate', rate);
+              updateDetail('epGainMultiplier', rate);
+            }}
             developmentRate={typeof getDetail('developmentRate') === 'number' ? getDetail('developmentRate') : (typeof getDetail('developmentRate') === 'object' ? (getDetail('developmentRate') as any)?.attributeGrowthMultiplier : (parseFloat(getDetail('developmentRate')) || 1.0))}
             onDevelopmentRateChange={rate => updateDetail('developmentRate', rate)}
             parameterGrowthFactors={getDetail('parameterGrowthFactors', {})}
@@ -2009,6 +2026,7 @@ export const CharacterLoreForm: React.FC<Props> = ({
             developmentPointsPerLevel={getDetail('developmentPointsPerLevel')}
             onDevelopmentPointsPerLevelChange={budget => updateDetail('developmentPointsPerLevel', budget)}
             levelsPerRank={getDetail('levelsPerRank')}
+            onLevelsPerRankChange={val => updateDetail('levelsPerRank', val)}
           />
         </div>
       )}

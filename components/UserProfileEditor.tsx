@@ -100,6 +100,10 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
             <CharacterRaceAndStatsSection
               race={formData.race || formData.appearance?.race || 'Mensch'}
               onRaceChange={val => setFormData(prev => ({ ...prev, race: val, appearance: { ...prev.appearance, race: val } }))}
+              gender={formData.appearance?.gender || (formData as any).gender || 'Weiblich'}
+              onGenderChange={val => handleAppearanceChange('gender', val)}
+              build={formData.appearance?.build || (formData as any).build || 'Schlank'}
+              onBuildChange={val => handleAppearanceChange('build', val)}
               customRaces={DEFAULT_RACES}
               raceFeatures={formData.raceFeatures || formData.appearance?.raceFeatures || ''}
               onRaceFeaturesChange={val => setFormData(prev => ({ ...prev, raceFeatures: val, appearance: { ...prev.appearance, raceFeatures: val } }))}
@@ -111,12 +115,16 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
               onLevelChange={lvl => setFormData(prev => ({ ...prev, level: lvl }))}
               rank={formData.rank || 'F'}
               onRankChange={rnk => setFormData(prev => ({ ...prev, rank: rnk }))}
-              potential={typeof formData.potential === 'number' ? formData.potential : 1000}
+              potential={typeof formData.potential === 'number' ? formData.potential : 100}
               onPotentialChange={pot => setFormData(prev => ({ ...prev, potential: pot }))}
+              parameterPotentialPercentages={(formData as any).parameterPotentialPercentages}
+              onParameterPotentialPercentagesChange={percentages => setFormData(prev => ({ ...prev, parameterPotentialPercentages: percentages } as any))}
               xp={formData.xp ?? 0}
               onXpChange={x => setFormData(prev => ({ ...prev, xp: x }))}
               developmentProfile={formData.developmentProfile || 'normal'}
               onDevelopmentProfileChange={prof => setFormData(prev => ({ ...prev, developmentProfile: prof }))}
+              epGainRate={(formData as any).epGainRate ?? (formData as any).epGainMultiplier}
+              onEpGainRateChange={rate => setFormData(prev => ({ ...prev, epGainRate: rate, epGainMultiplier: rate } as any))}
               developmentRate={typeof formData.developmentRate === 'number' ? formData.developmentRate : (formData.developmentRate?.attributeGrowthMultiplier ?? 1.0)}
               onDevelopmentRateChange={rate => setFormData(prev => ({ ...prev, developmentRate: typeof prev.developmentRate === 'object' ? { ...prev.developmentRate, attributeGrowthMultiplier: rate } : rate } as any))}
               parameterGrowthFactors={formData.parameterGrowthFactors || {}}
@@ -128,6 +136,7 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
               developmentPointsPerLevel={formData.developmentPointsPerLevel}
               onDevelopmentPointsPerLevelChange={budget => setFormData(prev => ({ ...prev, developmentPointsPerLevel: budget }))}
               levelsPerRank={formData.levelsPerRank}
+              onLevelsPerRankChange={val => setFormData(prev => ({ ...prev, levelsPerRank: val }))}
             />
           </div>
 
