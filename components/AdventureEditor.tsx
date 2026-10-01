@@ -4300,6 +4300,11 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
                       updateAppearanceValue('build', val);
                       setPlayer(prev => ({ ...prev, build: val, appearance: { ...(prev.appearance || {}), build: val } } as any));
                     }}
+                    stature={player.appearance?.build || (player as any).stature || (player as any).build || getAppearanceValue('build') || 'Schlank'}
+                    onStatureChange={val => {
+                      updateAppearanceValue('build', val);
+                      setPlayer(prev => ({ ...prev, build: val, stature: val, appearance: { ...(prev.appearance || {}), build: val } } as any));
+                    }}
                     customRaces={RaceService.parseRaceLoreEntries(loreDatabase)}
                     raceFeatures={player.raceFeatures || getAppearanceValue('raceFeatures') || ''}
                     onRaceFeaturesChange={val => {

@@ -1977,6 +1977,12 @@ export const CharacterLoreForm: React.FC<Props> = ({
               updateAppearanceValue('build', val);
               updateDetail('build', val);
             }}
+            stature={getAppearanceValue('build') || getDetail('stature') || getDetail('build', 'Schlank')}
+            onStatureChange={val => {
+              updateAppearanceValue('build', val);
+              updateDetail('stature', val);
+              updateDetail('build', val);
+            }}
             customRaces={RaceService.parseRaceLoreEntries(lore)}
             raceFeatures={getAppearanceValue('raceFeatures') || getDetail('raceFeatures', '')}
             onRaceFeaturesChange={val => {

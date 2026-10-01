@@ -198,6 +198,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
   // Ref-Tracking für verzögerungsfreie Hold-to-Repeat Aktualisierung
   const latestPowerLevelsRef = useRef(campaignPowerLevels);
+  latestPowerLevelsRef.current = campaignPowerLevels;
   useEffect(() => {
     latestPowerLevelsRef.current = campaignPowerLevels;
   }, [campaignPowerLevels]);
@@ -481,10 +482,10 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                             <ChevronDown className="w-3.5 h-3.5" />
                           </HoldButton>
                           <HoldButton
-                            disabled={readOnly || freePoints <= 0}
+                            disabled={readOnly || freePoints <= 0 || res.value >= res.max}
                             action={() => handleResourceUpdate(res.id, res.name, 1)}
                             className="p-0.5 hover:bg-slate-800 text-slate-400 hover:text-amber-400 disabled:opacity-20 disabled:pointer-events-none rounded transition-colors cursor-pointer"
-                            title={freePoints > 0 ? `${res.name} erhöhen (1 Punkt verbrauchen)` : 'Keine Punkte verfügbar'}
+                            title={res.value >= res.max ? `${res.name} hat Maximum (${res.max}) erreicht` : (freePoints > 0 ? `${res.name} erhöhen (1 Punkt verbrauchen)` : 'Keine Punkte verfügbar')}
                           >
                             <ChevronUp className="w-3.5 h-3.5" />
                           </HoldButton>

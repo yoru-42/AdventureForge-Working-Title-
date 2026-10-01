@@ -104,6 +104,8 @@ const UserProfileEditor: React.FC<Props> = ({ profile, onSave, onCancel }) => {
               onGenderChange={val => handleAppearanceChange('gender', val)}
               build={formData.appearance?.build || (formData as any).build || 'Schlank'}
               onBuildChange={val => handleAppearanceChange('build', val)}
+              stature={formData.appearance?.build || (formData as any).stature || (formData as any).build || 'Schlank'}
+              onStatureChange={val => handleAppearanceChange('build', val)}
               customRaces={DEFAULT_RACES}
               raceFeatures={formData.raceFeatures || formData.appearance?.raceFeatures || ''}
               onRaceFeaturesChange={val => setFormData(prev => ({ ...prev, raceFeatures: val, appearance: { ...prev.appearance, raceFeatures: val } }))}

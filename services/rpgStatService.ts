@@ -120,8 +120,55 @@ export function calculateIndividualParameterMax(options: IndividualMaxCalculatio
   let statureModifier = 1.0;
   if (body?.statureFactors && typeof body.statureFactors[paramName] === 'number') {
     statureModifier = body.statureFactors[paramName];
-  } else if (world && (world as any).statureFactors && effectiveStature && (world as any).statureFactors[effectiveStature]?.[paramName]) {
-    statureModifier = (world as any).statureFactors[effectiveStature][paramName];
+  } else {
+    const statureSources = [
+      (raceDef as any)?.statureFactors,
+      (raceDef as any)?.buildFactors,
+      (world as any)?.statureFactors,
+      (world as any)?.buildFactors
+    ].filter(Boolean);
+
+    for (const source of statureSources) {
+      if (effectiveStature && typeof source === 'object') {
+        const directEntry = source[effectiveStature];
+        if (typeof directEntry === 'number') {
+          statureModifier = directEntry;
+          break;
+        } else if (directEntry && typeof directEntry === 'object') {
+          if (typeof directEntry[paramName] === 'number') {
+            statureModifier = directEntry[paramName];
+            break;
+          }
+          const lowerParam = paramName.toLowerCase();
+          const matchParam = Object.keys(directEntry).find(k => k.toLowerCase() === lowerParam);
+          if (matchParam && typeof directEntry[matchParam] === 'number') {
+            statureModifier = directEntry[matchParam];
+            break;
+          }
+        }
+
+        const lowerStature = effectiveStature.toLowerCase();
+        const matchedKey = Object.keys(source).find(k => k.toLowerCase() === lowerStature);
+        if (matchedKey) {
+          const matchedEntry = source[matchedKey];
+          if (typeof matchedEntry === 'number') {
+            statureModifier = matchedEntry;
+            break;
+          } else if (matchedEntry && typeof matchedEntry === 'object') {
+            if (typeof matchedEntry[paramName] === 'number') {
+              statureModifier = matchedEntry[paramName];
+              break;
+            }
+            const lowerParam = paramName.toLowerCase();
+            const matchParam = Object.keys(matchedEntry).find(k => k.toLowerCase() === lowerParam);
+            if (matchParam && typeof matchedEntry[matchParam] === 'number') {
+              statureModifier = matchedEntry[matchParam];
+              break;
+            }
+          }
+        }
+      }
+    }
   }
 
   // 5. Optionaler Geschlechtsfaktor (erweiterbar, default 1.0 = neutral)
@@ -129,8 +176,53 @@ export function calculateIndividualParameterMax(options: IndividualMaxCalculatio
   let genderModifier = 1.0;
   if (body?.genderFactors && typeof body.genderFactors[paramName] === 'number') {
     genderModifier = body.genderFactors[paramName];
-  } else if (world && (world as any).genderFactors && effectiveGender && (world as any).genderFactors[effectiveGender]?.[paramName]) {
-    genderModifier = (world as any).genderFactors[effectiveGender][paramName];
+  } else {
+    const genderSources = [
+      (raceDef as any)?.genderFactors,
+      (world as any)?.genderFactors
+    ].filter(Boolean);
+
+    for (const source of genderSources) {
+      if (effectiveGender && typeof source === 'object') {
+        const directEntry = source[effectiveGender];
+        if (typeof directEntry === 'number') {
+          genderModifier = directEntry;
+          break;
+        } else if (directEntry && typeof directEntry === 'object') {
+          if (typeof directEntry[paramName] === 'number') {
+            genderModifier = directEntry[paramName];
+            break;
+          }
+          const lowerParam = paramName.toLowerCase();
+          const matchParam = Object.keys(directEntry).find(k => k.toLowerCase() === lowerParam);
+          if (matchParam && typeof directEntry[matchParam] === 'number') {
+            genderModifier = directEntry[matchParam];
+            break;
+          }
+        }
+
+        const lowerGender = effectiveGender.toLowerCase();
+        const matchedKey = Object.keys(source).find(k => k.toLowerCase() === lowerGender);
+        if (matchedKey) {
+          const matchedEntry = source[matchedKey];
+          if (typeof matchedEntry === 'number') {
+            genderModifier = matchedEntry;
+            break;
+          } else if (matchedEntry && typeof matchedEntry === 'object') {
+            if (typeof matchedEntry[paramName] === 'number') {
+              genderModifier = matchedEntry[paramName];
+              break;
+            }
+            const lowerParam = paramName.toLowerCase();
+            const matchParam = Object.keys(matchedEntry).find(k => k.toLowerCase() === lowerParam);
+            if (matchParam && typeof matchedEntry[matchParam] === 'number') {
+              genderModifier = matchedEntry[matchParam];
+              break;
+            }
+          }
+        }
+      }
+    }
   }
 
   // 6. Individuelles Potential (0–100% bzw. bis zu 200%, Standard: 100%)
@@ -385,8 +477,11 @@ export function calculateRpgCharacterStats(
       ? calculatedIndividualMax
       : (typeof rawMax === 'number' && !isNaN(rawMax) && rawMax > 0 && rawMax !== 1000 && rawMax !== 9999 && rawMax !== 100000 ? rawMax : 100);
 
+    // REGEL 4: Wenn das neue Maximum unter dem aktuellen Wert liegt, muss sicher gekappt werden
+    const effectiveVal = Math.min(valNum, potMaxNum);
+
     const result = {
-      value: valNum,
+      value: effectiveVal,
       potentialMax: potMaxNum
     };
     resolvedPowerData[matchedKey] = result;

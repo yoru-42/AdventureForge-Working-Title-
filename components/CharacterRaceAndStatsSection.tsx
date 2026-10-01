@@ -16,6 +16,8 @@ export interface CharacterRaceAndStatsSectionProps {
   onGenderChange?: (val: string) => void;
   build?: string;
   onBuildChange?: (val: string) => void;
+  stature?: string;
+  onStatureChange?: (val: string) => void;
   raceFeatures?: string;
   onRaceFeaturesChange?: (val: string) => void;
   origin?: string;
@@ -79,6 +81,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   onGenderChange,
   build = 'Schlank',
   onBuildChange,
+  stature,
+  onStatureChange,
   raceFeatures = '',
   onRaceFeaturesChange,
   origin = '',
@@ -116,6 +120,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   onLevelsPerRankChange
 }) => {
   const currentRace = race || 'Mensch';
+  const effectiveStature = stature || build || 'Schlank';
+  const effectiveBuild = build || stature || 'Schlank';
   const availableRaces = customRaces && customRaces.length > 0
     ? Array.from(new Map([...DEFAULT_RACES, ...customRaces].map(r => [r.name.toLowerCase(), r])).values())
     : DEFAULT_RACES;
@@ -297,7 +303,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         race: currentRace,
         customRaces,
         gender,
-        build,
+        stature: effectiveStature,
+        build: effectiveBuild,
         potentialPercent: parameterPotentialPercentages?.[paramName] ?? safePotPercent,
         parameterPotentialPercentages,
         world,
@@ -310,7 +317,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         needsUpdate = true;
       } else if (existing !== undefined && existing !== null) {
         if (typeof existing === 'number') {
-          const val = !isNaN(existing) ? Math.max(1, existing) : raceBaseVal;
+          const val = !isNaN(existing) ? Math.min(Math.max(1, existing), indMax) : raceBaseVal;
           updatedPowerData[paramName] = { value: val, potentialMax: indMax };
           needsUpdate = true;
         } else if (typeof existing === 'object') {
@@ -320,7 +327,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             : raceBaseVal;
 
           const existingXp = existing.xp;
-          // Regel 1: potentialMax ist ein berechneter Wert aus der aktuellen Charakterkonfiguration!
+          // Regel 1 & 4: potentialMax ist ein berechneter Wert aus der aktuellen Charakterkonfiguration!
           const effectivePotMax = indMax;
           val = Math.min(val, effectivePotMax);
 
@@ -355,12 +362,38 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     if (currentFree === undefined || isLegacyBrokenDataset) {
       (updatedPowerData as any)._freePoints = isHuman ? 5 : currentBudget;
       needsUpdate = true;
+    } else {
+      (updatedPowerData as any)._freePoints = currentFree;
     }
 
-    if (needsUpdate || Object.keys(currentData).length === 0) {
+    if (needsUpdate) {
       onCharacterPowerDataChange(updatedPowerData);
     }
-  }, [characterPowerData, parameterList, baseParams, safeLevel, safeXp, onCharacterPowerDataChange, isHuman, currentBudget, currentRace, customRaces, gender, build, safePotPercent, parameterPotentialPercentages, world, worldPowerSettings]);
+  }, [
+    characterPowerData,
+    parameterList,
+    baseParams,
+    level,
+    safeLevel,
+    xp,
+    safeXp,
+    onCharacterPowerDataChange,
+    race,
+    currentRace,
+    customRaces,
+    gender,
+    build,
+    effectiveBuild,
+    stature,
+    effectiveStature,
+    potential,
+    safePotPercent,
+    parameterPotentialPercentages,
+    world,
+    worldPowerSettings,
+    isHuman,
+    currentBudget
+  ]);
 
   return (
     <div className="space-y-6">
@@ -419,8 +452,12 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               Statur
             </label>
             <select
-              value={build || 'Schlank'}
-              onChange={e => onBuildChange?.(e.target.value)}
+              value={effectiveStature}
+              onChange={e => {
+                const val = e.target.value;
+                onBuildChange?.(val);
+                onStatureChange?.(val);
+              }}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
             >
               {CHARACTER_BUILD_OPTIONS.map(opt => (
@@ -764,7 +801,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           race={currentRace}
           customRaces={availableRaces}
           gender={gender}
-          build={build}
+          build={effectiveBuild}
+          stature={effectiveStature}
           world={world}
           worldPowerSettings={worldPowerSettings}
           campaignPowerLevels={characterPowerData}
