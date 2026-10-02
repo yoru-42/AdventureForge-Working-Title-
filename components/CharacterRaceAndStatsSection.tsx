@@ -370,6 +370,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         potentialPercent: parameterPotentialPercentages?.[paramName] ?? safePotPercent,
         parameterPotentialPercentages,
         parameterPotentialFactors: parameterPotentialFactors || (currentData as any)?.parameterPotentialFactors,
+        parents: currentParents,
         world,
         worldPowerSettings,
         baseParameters: baseParams,
@@ -467,6 +468,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
       potential: safePotPercent,
       parameterPotentialPercentages,
       parameterPotentialFactors: parameterPotentialFactors || (currentData as any)?.parameterPotentialFactors,
+      parents: currentParents,
       level: safeLevel,
       rank: rank || 'F',
       progressionConfig: effectiveConfig,
@@ -1184,6 +1186,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           onParameterPotentialPercentagesChange={onParameterPotentialPercentagesChange}
           parameterPotentialFactors={parameterPotentialFactors || (characterPowerData as any)?.parameterPotentialFactors}
           onParameterPotentialFactorsChange={onParameterPotentialFactorsChange}
+          parents={currentParents}
+          onParentsChange={onParentsChange}
           developmentPointsPerLevel={currentBudget}
           onDevelopmentPointsPerLevelChange={onDevelopmentPointsPerLevelChange}
           parameterGrowthPoints={parameterGrowthPoints}

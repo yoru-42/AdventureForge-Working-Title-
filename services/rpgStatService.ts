@@ -38,6 +38,8 @@ export const STANDARD_PARAMETERS = [
 /**
  * Optionen für die zentrale Berechnung des individuellen Parameter-Maximums.
  */
+import { CharacterParents } from '../types';
+
 export interface IndividualMaxCalculationOptions {
   paramName: string;
   race?: string | RaceDefinition;
@@ -56,11 +58,46 @@ export interface IndividualMaxCalculationOptions {
   parameterPotentialPercentages?: Record<string, number>;
   parameterPotentialFactors?: Record<string, number>;
   individualParameterFactors?: Record<string, number>;
+  naturalPotentialFactors?: Record<string, number>;
+  parents?: CharacterParents;
   world?: WorldSetting;
   worldPowerSettings?: Record<string, number | CampaignPowerParameter>;
   baseParameters?: Record<string, number>;
   rank?: string;
   rankGrowthBonus?: number;
+}
+
+/**
+ * Hilfsfunktion zur Berechnung der natürlichen Elternanlagen (Durchschnitt aus Vater und Mutter)
+ */
+export function calculateNaturalParentFactors(parents?: CharacterParents): Record<string, number> {
+  const result: Record<string, number> = {};
+  if (!parents) return result;
+
+  const fatherFactors = parents.father?.parameterPotentialFactors || {};
+  const motherFactors = parents.mother?.parameterPotentialFactors || {};
+
+  STANDARD_PARAMETERS.forEach(paramName => {
+    let fVal = fatherFactors[paramName];
+    if (typeof fVal !== 'number') {
+      const lowerP = paramName.toLowerCase();
+      const match = Object.keys(fatherFactors).find(k => k.toLowerCase() === lowerP);
+      if (match && typeof fatherFactors[match] === 'number') fVal = fatherFactors[match];
+    }
+    let mVal = motherFactors[paramName];
+    if (typeof mVal !== 'number') {
+      const lowerP = paramName.toLowerCase();
+      const match = Object.keys(motherFactors).find(k => k.toLowerCase() === lowerP);
+      if (match && typeof motherFactors[match] === 'number') mVal = motherFactors[match];
+    }
+
+    const cleanF = typeof fVal === 'number' && !isNaN(fVal) && fVal > 0 ? (fVal > 10 ? fVal / 100 : fVal) : 1.0;
+    const cleanM = typeof mVal === 'number' && !isNaN(mVal) && mVal > 0 ? (mVal > 10 ? mVal / 100 : mVal) : 1.0;
+
+    result[paramName] = (cleanF + cleanM) / 2;
+  });
+
+  return result;
 }
 
 /**
@@ -273,9 +310,28 @@ export function calculateIndividualParameterMax(options: IndividualMaxCalculatio
     }
   }
 
-  // 7. Formel: Base Maximum * (BaseParam / 10) * Race Growth Factor * Disposition Factor * Stature Modifier * Gender Modifier * Potential Modifier
+  // 6c. Natürliche Eltern-Anlage (parents / naturalPotentialFactors)
+  const naturalFactors = options.naturalPotentialFactors || calculateNaturalParentFactors(options.parents);
+  let naturalDispositionFactor = 1.0;
+  if (naturalFactors && typeof naturalFactors === 'object') {
+    let rawNat = naturalFactors[paramName];
+    if (typeof rawNat !== 'number') {
+      const lowerKey = paramName.toLowerCase();
+      const foundKey = Object.keys(naturalFactors).find(k => k.toLowerCase() === lowerKey);
+      if (foundKey && typeof naturalFactors[foundKey] === 'number') {
+        rawNat = naturalFactors[foundKey];
+      }
+    }
+    if (typeof rawNat === 'number' && !isNaN(rawNat) && rawNat > 0) {
+      naturalDispositionFactor = rawNat > 10 ? rawNat / 100 : rawNat;
+    }
+  }
+
+  const combinedDispositionFactor = individualDispositionFactor * naturalDispositionFactor;
+
+  // 7. Formel: Base Maximum * (BaseParam / 10) * Race Growth Factor * Combined Disposition Factor * Stature Modifier * Gender Modifier * Potential Modifier
   const calculatedMax = Math.round(
-    baseMax * (baseParamVal / 10) * raceGrowthFactor * individualDispositionFactor * statureModifier * genderModifier * potentialModifier
+    baseMax * (baseParamVal / 10) * raceGrowthFactor * combinedDispositionFactor * statureModifier * genderModifier * potentialModifier
   );
 
   // 8. Rang-Einfluss auf das Potenzial (potentialMax)
@@ -399,6 +455,8 @@ export function calculateRpgCharacterStats(
     parameterPotentialPercentages?: Record<string, number>;
     parameterPotentialFactors?: Record<string, number>;
     individualParameterFactors?: Record<string, number>;
+    naturalPotentialFactors?: Record<string, number>;
+    parents?: CharacterParents;
     baseParameters?: Record<string, number>;
     level?: number;
     xp?: number;
@@ -517,6 +575,8 @@ export function calculateRpgCharacterStats(
       potentialPercent: typeof options?.potential === 'number' ? options.potential : (typeof options?.potential === 'string' ? parseFloat(options.potential) || 100 : 100),
       parameterPotentialPercentages: options?.parameterPotentialPercentages,
       parameterPotentialFactors: options?.parameterPotentialFactors || options?.individualParameterFactors || (options as any)?.parameterDispositionFactors,
+      naturalPotentialFactors: options?.naturalPotentialFactors,
+      parents: options?.parents || (campaignPowerLevels as any)?.parents || (campaignPowerLevels as any)?._parents,
       world,
       worldPowerSettings,
       baseParameters: options?.baseParameters,

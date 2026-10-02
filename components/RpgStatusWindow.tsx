@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { WorldSetting, CampaignPowerParameter, ProgressionConfig, DevelopmentProfileType } from '../types';
-import { calculateRpgCharacterStats, calculateIndividualParameterMax, CharacterPowerData } from '../services/rpgStatService';
+import { WorldSetting, CampaignPowerParameter, ProgressionConfig, DevelopmentProfileType, CharacterParents } from '../types';
+import { calculateRpgCharacterStats, calculateIndividualParameterMax, calculateNaturalParentFactors, CharacterPowerData } from '../services/rpgStatService';
 import { ProgressionService } from '../services/progressionService';
 import { RaceService, RaceDefinition } from '../services/raceService';
 import { Shield, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react';
@@ -134,6 +134,8 @@ export interface RpgStatusWindowProps {
   onParameterPotentialPercentagesChange?: (percentages: Record<string, number>) => void;
   parameterPotentialFactors?: Record<string, number>;
   onParameterPotentialFactorsChange?: (factors: Record<string, number>) => void;
+  parents?: CharacterParents;
+  onParentsChange?: (parents: CharacterParents) => void;
   developmentPointsPerLevel?: number;
   onDevelopmentPointsPerLevelChange?: (budget: number) => void;
   parameterGrowthPoints?: Record<string, number>;
@@ -171,6 +173,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   onParameterPotentialPercentagesChange,
   parameterPotentialFactors,
   onParameterPotentialFactorsChange,
+  parents,
+  onParentsChange,
   developmentPointsPerLevel,
   onDevelopmentPointsPerLevelChange,
   parameterGrowthPoints = {},
@@ -188,6 +192,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     ? baseGrowthPerParam
     : 2;
 
+  const effectiveParents = parents || (campaignPowerLevels as any)?.parents || (campaignPowerLevels as any)?._parents;
+
   const { categories, globalSettings, combatProperties, hpResource, powerSources, resources, resolvedPowerData } =
     calculateRpgCharacterStats(campaignPowerLevels, world, worldPowerSettings, race, customRaces, {
       body,
@@ -197,6 +203,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       potential: characterPotential,
       parameterPotentialPercentages,
       parameterPotentialFactors: parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors,
+      parents: effectiveParents,
       baseParameters,
       level,
       xp,
@@ -326,6 +333,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
       parameterPotentialPercentages,
       parameterPotentialFactors: parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors,
+      parents: effectiveParents,
       world,
       worldPowerSettings,
       baseParameters,
@@ -454,6 +462,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
         potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
         parameterPotentialPercentages,
         parameterPotentialFactors: parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors,
+        parents: effectiveParents,
         world,
         worldPowerSettings,
         baseParameters,
@@ -708,6 +717,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
                 parameterPotentialPercentages,
                 parameterPotentialFactors: parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors,
+                parents: effectiveParents,
                 world,
                 worldPowerSettings,
                 baseParameters,
@@ -738,18 +748,54 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
               const formattedDisposition = numFactor.toFixed(2).replace('.', ',');
 
+              // Ermittle den natürlichen Elternanlagenfaktor
+              const naturalParentFactors = calculateNaturalParentFactors(effectiveParents);
+              let rawNat = naturalParentFactors[cat];
+              if (typeof rawNat !== 'number') {
+                const lowerC = cat.toLowerCase();
+                const matchKey = Object.keys(naturalParentFactors).find(k => k.toLowerCase() === lowerC);
+                if (matchKey && typeof naturalParentFactors[matchKey] === 'number') {
+                  rawNat = naturalParentFactors[matchKey];
+                }
+              }
+              const numNat = typeof rawNat === 'number' && !isNaN(rawNat) && rawNat > 0 ? (rawNat > 10 ? rawNat / 100 : rawNat) : 1.0;
+              const formattedNaturalDisposition = numNat.toFixed(2).replace('.', ',');
+
+              // Berechne die natürliche Grenze aus Abstammung (vor charakterspezifischem Rang/Potenzial-Push)
+              const naturalBoundaryMax = calculateIndividualParameterMax({
+                paramName: cat,
+                race,
+                customRaces,
+                body,
+                gender,
+                stature,
+                build,
+                potentialPercent: 100,
+                parameterPotentialFactors: {},
+                naturalPotentialFactors: naturalParentFactors,
+                world,
+                worldPowerSettings,
+                baseParameters,
+                rank: 'F',
+                rankGrowthBonus: 0
+              });
+
               return (
                 <div
                   key={`param-row-${cat}`}
                   className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-950/60 transition-colors font-mono text-xs border border-transparent hover:border-slate-800/50"
                 >
-                  {/* Parameter Name & Anlage */}
-                  <div className="flex-1 min-w-[100px] truncate pr-2 flex flex-col justify-center">
+                  {/* Parameter Name, Anlage, Natürlich & Grenze */}
+                  <div className="flex-1 min-w-[120px] truncate pr-2 flex flex-col justify-center">
                     <span className="font-bold text-slate-200 truncate leading-tight" title={cat}>
                       {cat}
                     </span>
-                    <span className="text-[10px] font-sans text-slate-400 font-medium leading-tight">
-                      Anlage {formattedDisposition}
+                    <span className="text-[10px] font-sans text-slate-400 font-medium leading-tight flex items-center gap-1.5 flex-wrap">
+                      <span>Anlage {formattedDisposition}</span>
+                      <span className="text-slate-600 font-normal">·</span>
+                      <span>Natürlich {formattedNaturalDisposition}</span>
+                      <span className="text-slate-600 font-normal">·</span>
+                      <span className="text-slate-400">Grenze {naturalBoundaryMax}</span>
                     </span>
                   </div>
 
