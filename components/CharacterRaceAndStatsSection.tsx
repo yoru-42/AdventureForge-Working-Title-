@@ -3,7 +3,7 @@ import React, { useMemo, useEffect } from 'react';
 import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentProfileType, ParentProfile, CharacterParents } from '../types';
 import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
-import { isResourceKey, calculateIndividualParameterMax, calculateRpgCharacterStats } from '../services/rpgStatService';
+import { isResourceKey, calculateIndividualParameterMax, calculateRpgCharacterStats, STANDARD_PARAMETERS } from '../services/rpgStatService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
 import { Dna, Layers, Sliders, Shield, Zap, Users } from 'lucide-react';
@@ -77,7 +77,116 @@ const PROFILE_OPTIONS: { value: DevelopmentProfileType; label: string; desc: str
   { value: 'custom', label: 'Individuell', desc: 'Frei definierte Multiplikatoren.' }
 ];
 
-const STANDARD_PARAMETERS = ['Stärke', 'Geschicklichkeit', 'Konstitution', 'Intelligenz', 'Willenskraft', 'Magie'];
+interface ParentAnlagenEditorProps {
+  label: string;
+  factors?: Record<string, number>;
+  parameters: string[];
+  onChange: (param: string, factor: number) => void;
+}
+
+const ParentAnlagenEditor: React.FC<ParentAnlagenEditorProps> = ({
+  label,
+  factors = {},
+  parameters,
+  onChange
+}) => {
+  const [localTexts, setLocalTexts] = React.useState<Record<string, string>>({});
+
+  const getFactor = (param: string): number => {
+    let raw = factors[param];
+    if (typeof raw !== 'number') {
+      const lower = param.toLowerCase();
+      const match = Object.keys(factors).find(k => k.toLowerCase() === lower);
+      if (match && typeof factors[match] === 'number') raw = factors[match];
+    }
+    if (typeof raw === 'number' && !isNaN(raw) && raw > 0) {
+      return raw > 10 ? raw / 100 : raw;
+    }
+    return 1.0;
+  };
+
+  const handleStep = (param: string, delta: number) => {
+    const current = getFactor(param);
+    const next = Math.max(0.1, Math.min(3.0, Math.round((current + delta) * 100) / 100));
+    setLocalTexts(prev => {
+      const copy = { ...prev };
+      delete copy[param];
+      return copy;
+    });
+    onChange(param, next);
+  };
+
+  const handleTextChange = (param: string, val: string) => {
+    setLocalTexts(prev => ({ ...prev, [param]: val }));
+    const parsed = parseFloat(val.replace(',', '.'));
+    if (!isNaN(parsed) && parsed > 0 && parsed <= 5) {
+      onChange(param, Math.round(parsed * 100) / 100);
+    }
+  };
+
+  const handleBlur = (param: string) => {
+    setLocalTexts(prev => {
+      const copy = { ...prev };
+      delete copy[param];
+      return copy;
+    });
+  };
+
+  return (
+    <div className="pt-2 border-t border-slate-800/80 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="block text-[11px] font-semibold text-slate-300">
+          {label}
+        </label>
+        <span className="text-[10px] text-slate-500 font-mono">
+          1,00 = Standard
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+        {parameters.map(param => {
+          const factor = getFactor(param);
+          const displayStr = factor.toFixed(2).replace('.', ',');
+          const valueToShow = localTexts[param] !== undefined ? localTexts[param] : displayStr;
+
+          return (
+            <div
+              key={`parent-param-${param}`}
+              className="flex items-center justify-between py-1 px-2 rounded bg-slate-900/60 border border-slate-800/60 text-xs font-mono"
+            >
+              <span className="text-slate-300 font-medium truncate pr-1" title={param}>{param}</span>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleStep(param, -0.05)}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 font-bold transition-colors cursor-pointer text-xs"
+                  title="-0,05"
+                >
+                  -
+                </button>
+                <input
+                  type="text"
+                  value={valueToShow}
+                  onChange={e => handleTextChange(param, e.target.value)}
+                  onBlur={() => handleBlur(param)}
+                  className="w-12 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-center text-amber-300 font-bold text-xs focus:outline-none focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleStep(param, 0.05)}
+                  className="w-5 h-5 flex items-center justify-center rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 font-bold transition-colors cursor-pointer text-xs"
+                  title="+0,05"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSectionProps> = ({
   race,
@@ -175,6 +284,18 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     const updatedData = { ...characterPowerData, parents: nextParents, _parents: nextParents };
     onCharacterPowerDataChange(updatedData);
   };
+
+  const parentParameters = useMemo(() => {
+    const list = [...STANDARD_PARAMETERS];
+    if (worldPowerSettings) {
+      Object.keys(worldPowerSettings).forEach(k => {
+        if (!isResourceKey(k, world) && !list.includes(k)) {
+          list.push(k);
+        }
+      });
+    }
+    return list;
+  }, [worldPowerSettings, world]);
 
   const effectiveConfig = progressionConfig || world?.progressionConfig || DEFAULT_PROGRESSION_CONFIG;
   const [localLevelsPerRank, setLocalLevelsPerRank] = React.useState<number | undefined>(levelsPerRank);
@@ -745,6 +866,17 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                   className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
                 />
               </div>
+
+              <ParentAnlagenEditor
+                label="Natürliche Anlagen"
+                factors={father.parameterPotentialFactors}
+                parameters={parentParameters}
+                onChange={(param, factor) => {
+                  const currentFactors = { ...(father.parameterPotentialFactors || {}) };
+                  currentFactors[param] = factor;
+                  updateFather({ parameterPotentialFactors: currentFactors });
+                }}
+              />
             </div>
 
             {/* MUTTER */}
@@ -815,6 +947,17 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                   className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
                 />
               </div>
+
+              <ParentAnlagenEditor
+                label="Natürliche Anlagen"
+                factors={mother.parameterPotentialFactors}
+                parameters={parentParameters}
+                onChange={(param, factor) => {
+                  const currentFactors = { ...(mother.parameterPotentialFactors || {}) };
+                  currentFactors[param] = factor;
+                  updateMother({ parameterPotentialFactors: currentFactors });
+                }}
+              />
             </div>
           </div>
         </div>

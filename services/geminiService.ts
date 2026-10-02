@@ -188,21 +188,21 @@ Wenn Eltern und Kinder (oder der Spieler und seine Verwandten) erstellt werden, 
 ${SMART_FILL_NAMING_RULES_PROMPT}`;
 
 export class GeminiService {
-  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 5, initialDelay = 1500): Promise<Response> {
+  private static async fetchWithRetry(url: string, options: RequestInit, maxRetries = 3, initialDelay = 1000): Promise<Response> {
     let attempt = 0;
     let delay = initialDelay;
     while (true) {
       try {
         attempt++;
         const res = await fetch(url, options);
-        if (!res.ok && (res.status === 429 || res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) && attempt <= maxRetries) {
+        if (!res.ok && (res.status === 429 || res.status === 502 || res.status === 503 || res.status === 504) && attempt <= maxRetries) {
           let waitMs = delay;
           try {
             const clone = res.clone();
             const text = await clone.text();
             const match = text.match(/warte ca\.\s*([\d\.]+)\s*Sekunden/i) || text.match(/retry in ([\d\.]+)s/i);
             if (match) {
-              waitMs = Math.min(Math.ceil(parseFloat(match[1]) * 1000) + 1000, 35000);
+              waitMs = Math.min(Math.ceil(parseFloat(match[1]) * 1000) + 1000, 15000);
             }
           } catch (_) {}
           console.warn(`[Gemini Client Fetch] HTTP ${res.status}, retrying attempt ${attempt}/${maxRetries} in ${waitMs}ms...`);
@@ -219,7 +219,7 @@ export class GeminiService {
           delay *= 1.5;
           continue;
         }
-        throw err;
+        throw new Error('Verbindung zum KI-Server fehlgeschlagen. Bitte versuche es in wenigen Sekunden erneut.');
       }
     }
   }
@@ -331,28 +331,21 @@ export class GeminiService {
               };
             } else {
               // Received non-JSON (e.g. HTML index fallback in pure vite mode)
-              serverFailed = true;
+              throw new Error("Der KI-Endpunkt hat eine ungültige Antwort zurückgegeben. Bitte überprüfe die Server-Verbindung.");
             }
           } catch (fetchErr: any) {
             serverError = fetchErr?.message || String(fetchErr);
             if (
-              serverError.includes('Quota') || 
-              serverError.includes('Limit') || 
-              serverError.includes('ausgelastet') ||
-              serverError.includes('429') ||
-              serverError.includes('RESOURCE_EXHAUSTED')
+              serverError.toLowerCase().includes('failed to fetch') ||
+              serverError.toLowerCase().includes('networkerror') ||
+              serverError.toLowerCase().includes('load failed')
             ) {
-              throw fetchErr;
+              serverError = 'Verbindung zum KI-Server fehlgeschlagen. Bitte versuche es in wenigen Sekunden erneut.';
             }
-            serverFailed = true;
+            throw new Error(serverError);
           }
 
-          // Return clean error if server endpoint failed
-          if (serverFailed) {
-            throw new Error(serverError || "Verbindung zum KI-Server fehlgeschlagen. Bitte versuche es in wenigen Sekunden erneut.");
-          }
-
-          throw new Error("Antwort konnte nicht generiert werden.");
+          throw new Error(serverError || "Antwort konnte nicht generiert werden.");
         }
       }
     } as any;

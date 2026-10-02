@@ -111,16 +111,34 @@ function extractResponseText(response: any): string {
   return '';
 }
 
+// Track models currently on quota/rate-limit cooldown to avoid repeatedly hitting 429s
+const modelQuotaCooldownUntil = new Map<string, number>();
+
+function isModelOnCooldown(model: string): boolean {
+  const until = modelQuotaCooldownUntil.get(model);
+  if (!until) return false;
+  if (Date.now() > until) {
+    modelQuotaCooldownUntil.delete(model);
+    return false;
+  }
+  return true;
+}
+
+function markModelCooldown(model: string, durationMs = 10 * 60 * 1000) {
+  modelQuotaCooldownUntil.set(model, Date.now() + durationMs);
+}
+
 async function generateWithFallback(requestedModel: string, contents: any, isNsfw: boolean, config: any) {
   const sanitizedContents = sanitizeContents(contents);
   const defaultModels = [
+    'gemini-2.5-flash',
+    'gemini-3.1-flash-lite',
     'gemini-3.8-flash',
-    'gemini-flash-latest',
-    'gemini-3.1-flash-lite'
+    'gemini-flash-latest'
   ];
   
   // Map legacy, non-existent, or alias model requests to verified stable models
-  let targetModel = 'gemini-3.8-flash';
+  let targetModel = 'gemini-2.5-flash';
   if (requestedModel) {
     if (requestedModel.includes('flash-lite-image') || requestedModel.includes('image')) {
       targetModel = 'gemini-3.1-flash-lite-image';
@@ -128,17 +146,25 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
       targetModel = 'gemini-3.1-flash-lite';
     } else if (requestedModel.includes('pro')) {
       targetModel = 'gemini-3.1-pro-preview';
+    } else if (requestedModel.includes('2.5-flash')) {
+      targetModel = 'gemini-2.5-flash';
     } else if (requestedModel.includes('3.8-flash')) {
-      targetModel = 'gemini-3.8-flash';
+      targetModel = isModelOnCooldown('gemini-3.8-flash') ? 'gemini-2.5-flash' : 'gemini-3.8-flash';
     } else if (requestedModel.includes('flash-latest')) {
-      targetModel = 'gemini-flash-latest';
+      targetModel = isModelOnCooldown('gemini-flash-latest') ? 'gemini-2.5-flash' : 'gemini-flash-latest';
     } else {
-      targetModel = 'gemini-3.8-flash';
+      targetModel = 'gemini-2.5-flash';
     }
   }
   
-  // Build deduplicated ordered candidate models list
-  let modelsToTry = Array.from(new Set([targetModel, ...defaultModels]));
+  // Build deduplicated ordered candidate models list, prioritizing healthy non-cooldown models
+  const rawCandidateList = Array.from(new Set([targetModel, ...defaultModels]));
+  const healthyModels = rawCandidateList.filter(m => !isModelOnCooldown(m));
+  const coolingModels = rawCandidateList.filter(m => isModelOnCooldown(m));
+  let modelsToTry = [...healthyModels, ...coolingModels];
+  if (modelsToTry.length === 0) {
+    modelsToTry = ['gemini-2.5-flash', 'gemini-3.1-flash-lite'];
+  }
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -221,62 +247,48 @@ async function generateWithFallback(requestedModel: string, contents: any, isNsf
                                      rawMsg.includes('UNAVAILABLE');
 
       if (isPermissionDenied) {
-        console.log(`[Gemini Server] Note: ${currentModel} permission limitation (403). Filtering out model and switching immediately to standard flash...`);
+        console.log(`[Gemini Server] Note: ${currentModel} permission limitation (403). Filtering out model...`);
+        markModelCooldown(currentModel, 60 * 60 * 1000);
         modelsToTry = modelsToTry.filter(m => m !== currentModel);
         i--;
         await delay(50);
       } else if (isQuotaOrRateLimit) {
-        console.log(`[Gemini Server] Note: ${currentModel} reached rate/quota limit. Switching to alternative candidate...`);
-        await delay(250);
+        console.log(`[Gemini Server] Note: ${currentModel} reached rate/quota limit. Setting temporary cooldown and switching to alternative candidate...`);
+        const isDailyExceeded = rawMsg.includes('perDay') || rawMsg.includes('FreeTier') || rawMsg.includes('generate_content_free_tier_requests') || rawMsg.includes('limit: 20');
+        markModelCooldown(currentModel, isDailyExceeded ? 15 * 60 * 1000 : 2 * 60 * 1000);
+        await delay(50);
       } else if (isTransientServerError) {
         console.log(`[Gemini Server] Note: ${currentModel} temporarily in high demand (503). Switching immediately to alternative candidate...`);
-        await delay(250);
+        await delay(100);
       } else {
         console.log(`[Gemini Server] Note: ${currentModel} error (${rawMsg.slice(0, 100)}). Switching to alternative candidate...`);
-        await delay(250);
+        await delay(100);
       }
     }
   }
 
-  // Phase 2: If all candidates failed on Phase 1, wait cooldown window and auto-retry across candidates
-  const candidatePool = modelsToTry.length > 0 ? modelsToTry : defaultModels;
-  for (let cooldownAttempt = 1; cooldownAttempt <= 5; cooldownAttempt++) {
-    const errStr = lastError?.message || String(lastError || '');
-    const isRateLimit = errStr.includes('429') || errStr.toLowerCase().includes('quota') || errStr.toLowerCase().includes('rate limit') || errStr.includes('RESOURCE_EXHAUSTED');
-    const retryMatch = errStr.match(/retry in ([\d\.]+)s/i) || errStr.match(/warte ca\.\s*([\d\.]+)\s*Sekunden/i);
-    const waitSeconds = isRateLimit
-      ? (retryMatch ? Math.min(Math.ceil(parseFloat(retryMatch[1])) + 1, 25) : (cooldownAttempt * 3))
-      : (cooldownAttempt * 2);
+  // Phase 2: If Phase 1 failed, do one quick recovery attempt (after a short 1s pause) using resilient models
+  console.log(`[Gemini Server] Phase 2 quick recovery attempt across resilient models...`);
+  await delay(1000);
 
-    console.log(`[Gemini Server] Phase 2 recovery attempt ${cooldownAttempt}/5 (waiting ${waitSeconds}s)...`);
-    await delay(waitSeconds * 1000);
-    
-    for (const retryModel of candidatePool) {
-      try {
-        const recoveryResponse = await getAiClient().models.generateContent({
-          model: retryModel,
-          contents: sanitizedContents,
-          config: {
-            ...activeConfig,
-            safetySettings: isNsfw ? getSafetySettings() : undefined
-          }
-        });
-        const text = extractResponseText(recoveryResponse);
-        if (text.trim().length > 0) {
-          console.log(`[Gemini Server] Cooldown recovery succeeded with ${retryModel}!`);
-          return { response: recoveryResponse, text };
+  const recoveryPool = ['gemini-2.5-flash', 'gemini-3.1-flash-lite'];
+  for (const retryModel of recoveryPool) {
+    try {
+      const recoveryResponse = await getAiClient().models.generateContent({
+        model: retryModel,
+        contents: sanitizedContents,
+        config: {
+          ...activeConfig,
+          safetySettings: isNsfw ? getSafetySettings() : undefined
         }
-      } catch (retryErr: any) {
-        lastError = retryErr;
-        const rawMsg = retryErr?.message || (retryErr ? String(retryErr) : '');
-        if ((rawMsg.toLowerCase().includes('schema') || rawMsg.toLowerCase().includes('too many states') || rawMsg.toLowerCase().includes('constraint')) && activeConfig?.responseSchema) {
-          activeConfig = {
-            ...activeConfig,
-            responseSchema: undefined,
-            responseMimeType: 'application/json'
-          };
-        }
+      });
+      const text = extractResponseText(recoveryResponse);
+      if (text.trim().length > 0) {
+        console.log(`[Gemini Server] Quick recovery succeeded with ${retryModel}!`);
+        return { response: recoveryResponse, text };
       }
+    } catch (retryErr: any) {
+      lastError = retryErr;
     }
   }
 
@@ -338,9 +350,15 @@ async function startServer() {
         errorMsg.includes('503') ||
         errorMsg.toLowerCase().includes('high demand') ||
         errorMsg.toLowerCase().includes('temporarily unavailable') ||
-        errorMsg.toLowerCase().includes('overloaded')
+        errorMsg.toLowerCase().includes('overloaded') ||
+        errorMsg.toLowerCase().includes('fetch failed') ||
+        errorMsg.toLowerCase().includes('enotfound') ||
+        errorMsg.toLowerCase().includes('econnrefused') ||
+        errorMsg.toLowerCase().includes('etimedout') ||
+        errorMsg.toLowerCase().includes('network') ||
+        errorMsg.toLowerCase().includes('socket')
       ) {
-        userFriendlyError = 'Die KI-Server verzeichnen derzeit eine hohe Auslastung. Bitte versuche es in wenigen Sekunden erneut.';
+        userFriendlyError = 'Verbindung zum KI-Server fehlgeschlagen. Bitte versuche es in wenigen Sekunden erneut.';
         return res.status(503).json({ error: userFriendlyError });
       }
 

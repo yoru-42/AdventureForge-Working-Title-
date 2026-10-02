@@ -70,14 +70,21 @@ export interface IndividualMaxCalculationOptions {
 /**
  * Hilfsfunktion zur Berechnung der natürlichen Elternanlagen (Durchschnitt aus Vater und Mutter)
  */
-export function calculateNaturalParentFactors(parents?: CharacterParents): Record<string, number> {
+export function calculateNaturalParentFactors(parents?: CharacterParents, additionalKeys?: string[]): Record<string, number> {
   const result: Record<string, number> = {};
   if (!parents) return result;
 
   const fatherFactors = parents.father?.parameterPotentialFactors || {};
   const motherFactors = parents.mother?.parameterPotentialFactors || {};
 
-  STANDARD_PARAMETERS.forEach(paramName => {
+  const keysToProcess = Array.from(new Set([
+    ...STANDARD_PARAMETERS,
+    ...(additionalKeys || []),
+    ...Object.keys(fatherFactors),
+    ...Object.keys(motherFactors)
+  ]));
+
+  keysToProcess.forEach(paramName => {
     let fVal = fatherFactors[paramName];
     if (typeof fVal !== 'number') {
       const lowerP = paramName.toLowerCase();
