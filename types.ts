@@ -435,6 +435,7 @@ export interface UserProfile {
   parameterGrowthFactors?: Record<string, number>;
   parameterGrowthPoints?: Record<string, number>;
   parameterPotentialPercentages?: Record<string, number>;
+  parents?: CharacterParents;
   developmentPointsPerLevel?: number;
   rankGrowthBonus?: number;
   rankGrowthMultiplier?: number;
@@ -1648,6 +1649,19 @@ export interface SecondaryProfession {
   professionCompetencies?: ProfessionCompetency[];
 }
 
+export interface ParentProfile {
+  race?: string;
+  stature?: string;
+  profession?: string;
+  disposition?: string;
+  parameterPotentialFactors?: Record<string, number>;
+}
+
+export interface CharacterParents {
+  father?: ParentProfile;
+  mother?: ParentProfile;
+}
+
 export interface Character {
   id?: string;
   name: string;
@@ -1719,6 +1733,7 @@ export interface Character {
   parameterGrowthFactors?: Record<string, number>;
   parameterGrowthPoints?: Record<string, number>;
   parameterPotentialPercentages?: Record<string, number>;
+  parents?: CharacterParents;
   developmentPointsPerLevel?: number;
   rankGrowthBonus?: number;
   rankGrowthMultiplier?: number;

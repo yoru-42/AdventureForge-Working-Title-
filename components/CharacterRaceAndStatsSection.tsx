@@ -1,12 +1,12 @@
 // -*- coding: utf-8 -*-
 import React, { useMemo, useEffect } from 'react';
-import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentProfileType } from '../types';
+import { CampaignPowerParameter, WorldSetting, ProgressionConfig, DevelopmentProfileType, ParentProfile, CharacterParents } from '../types';
 import { STANDARD_RANKS, ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { DEFAULT_RACES, RaceService, RaceDefinition, HUMAN_BASE_PARAMETERS } from '../services/raceService';
 import { isResourceKey, calculateIndividualParameterMax, calculateRpgCharacterStats } from '../services/rpgStatService';
 import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import RpgStatusWindow from './RpgStatusWindow';
-import { Dna, Layers, Sliders, Shield, Zap } from 'lucide-react';
+import { Dna, Layers, Sliders, Shield, Zap, Users } from 'lucide-react';
 
 export interface CharacterRaceAndStatsSectionProps {
   race: string;
@@ -22,6 +22,8 @@ export interface CharacterRaceAndStatsSectionProps {
   onRaceFeaturesChange?: (val: string) => void;
   origin?: string;
   onOriginChange?: (val: string) => void;
+  parents?: CharacterParents;
+  onParentsChange?: (parents: CharacterParents) => void;
   world?: WorldSetting;
   worldPowerSettings?: Record<string, number | CampaignPowerParameter>;
   characterPowerData?: any;
@@ -91,6 +93,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   onRaceFeaturesChange,
   origin = '',
   onOriginChange,
+  parents,
+  onParentsChange,
   world,
   worldPowerSettings = {},
   characterPowerData = {},
@@ -136,6 +140,41 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 
   const currentRaceDef = RaceService.getRaceDefinition(currentRace, availableRaces);
   const baseParams = currentRaceDef.baseParameters || HUMAN_BASE_PARAMETERS;
+
+  const currentParents: CharacterParents = useMemo(() => {
+    if (parents) return parents;
+    if (characterPowerData && typeof characterPowerData === 'object') {
+      if ((characterPowerData as any).parents) return (characterPowerData as any).parents;
+      if ((characterPowerData as any)._parents) return (characterPowerData as any)._parents;
+    }
+    return {
+      father: { race: 'Mensch', stature: 'Schlank', profession: '', disposition: '' },
+      mother: { race: 'Mensch', stature: 'Schlank', profession: '', disposition: '' }
+    };
+  }, [parents, characterPowerData]);
+
+  const father: ParentProfile = currentParents.father || { race: 'Mensch', stature: 'Schlank', profession: '', disposition: '' };
+  const mother: ParentProfile = currentParents.mother || { race: 'Mensch', stature: 'Schlank', profession: '', disposition: '' };
+
+  const updateFather = (updatedFields: Partial<ParentProfile>) => {
+    const nextParents: CharacterParents = {
+      ...currentParents,
+      father: { ...father, ...updatedFields }
+    };
+    onParentsChange?.(nextParents);
+    const updatedData = { ...characterPowerData, parents: nextParents, _parents: nextParents };
+    onCharacterPowerDataChange(updatedData);
+  };
+
+  const updateMother = (updatedFields: Partial<ParentProfile>) => {
+    const nextParents: CharacterParents = {
+      ...currentParents,
+      mother: { ...mother, ...updatedFields }
+    };
+    onParentsChange?.(nextParents);
+    const updatedData = { ...characterPowerData, parents: nextParents, _parents: nextParents };
+    onCharacterPowerDataChange(updatedData);
+  };
 
   const effectiveConfig = progressionConfig || world?.progressionConfig || DEFAULT_PROGRESSION_CONFIG;
   const [localLevelsPerRank, setLocalLevelsPerRank] = React.useState<number | undefined>(levelsPerRank);
@@ -620,6 +659,161 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
             <span className="text-[10px] text-slate-500 mt-0.5 block">
               Heimatland oder Kulturkreis
             </span>
+          </div>
+        </div>
+
+        {/* Abstammung & Eltern (Vater & Mutter) */}
+        <div className="pt-3 border-t border-slate-800 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-amber-400" />
+              <span>Eltern &amp; Abstammung</span>
+            </span>
+            <span className="text-[10px] text-slate-500">
+              Biologische oder kulturelle Prägung durch Vater und Mutter
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* VATER */}
+            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-3">
+              <div className="text-xs font-bold text-slate-200 border-b border-slate-800/80 pb-2 flex items-center justify-between">
+                <span>Vater</span>
+                <span className="text-[10px] font-normal text-slate-500">Elternteil 1</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Rasse / Spezies
+                  </label>
+                  <select
+                    value={father.race || 'Mensch'}
+                    onChange={e => updateFather({ race: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+                  >
+                    {availableRaces.map(r => (
+                      <option key={`father-race-${r.id || r.name}`} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Körper / Statur
+                  </label>
+                  <select
+                    value={father.stature || 'Schlank'}
+                    onChange={e => updateFather({ stature: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+                  >
+                    {CHARACTER_BUILD_OPTIONS.map(opt => (
+                      <option key={`father-build-${opt}`} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Berufe / Tätigkeit
+                </label>
+                <AutoExpandingTextarea
+                  minRows={1}
+                  value={father.profession || ''}
+                  onChange={e => updateFather({ profession: e.target.value })}
+                  placeholder="z. B. Schmied, Krieger, Gelehrter, Händler"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Anlagen / Spezialisierung
+                </label>
+                <AutoExpandingTextarea
+                  minRows={1}
+                  value={father.disposition || ''}
+                  onChange={e => updateFather({ disposition: e.target.value })}
+                  placeholder="z. B. Hohe Stärke, Robustheit, Handwerksgeschick"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
+                />
+              </div>
+            </div>
+
+            {/* MUTTER */}
+            <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 space-y-3">
+              <div className="text-xs font-bold text-slate-200 border-b border-slate-800/80 pb-2 flex items-center justify-between">
+                <span>Mutter</span>
+                <span className="text-[10px] font-normal text-slate-500">Elternteil 2</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Rasse / Spezies
+                  </label>
+                  <select
+                    value={mother.race || 'Mensch'}
+                    onChange={e => updateMother({ race: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+                  >
+                    {availableRaces.map(r => (
+                      <option key={`mother-race-${r.id || r.name}`} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Körper / Statur
+                  </label>
+                  <select
+                    value={mother.stature || 'Schlank'}
+                    onChange={e => updateMother({ stature: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+                  >
+                    {CHARACTER_BUILD_OPTIONS.map(opt => (
+                      <option key={`mother-build-${opt}`} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Berufe / Tätigkeit
+                </label>
+                <AutoExpandingTextarea
+                  minRows={1}
+                  value={mother.profession || ''}
+                  onChange={e => updateMother({ profession: e.target.value })}
+                  placeholder="z. B. Alchemistin, Heilerin, Waldläuferin, Magierin"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Anlagen / Spezialisierung
+                </label>
+                <AutoExpandingTextarea
+                  minRows={1}
+                  value={mother.disposition || ''}
+                  onChange={e => updateMother({ disposition: e.target.value })}
+                  placeholder="z. B. Hohe Magie, Intuition, Kräuterkunde"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
