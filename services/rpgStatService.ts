@@ -644,20 +644,28 @@ export function calculateRpgCharacterStats(
   const computedHpMax = Math.round(baseHpMax * rankBonusMultiplier);
   const healthLabel = world?.healthLabel || 'Gesundheit (HP)';
 
-  // Prüfe auf direkte Überschreibung des aktuellen Werts im Charakter-Datenobjekt (z.B. durch Pfeilbuttons)
+  // HP-Maximum ist immer das aktuell aus dem individuellen Konstitutionsmaximum berechnete Limit
+  const hpMax = computedHpMax;
+
+  // Prüfe auf direkte manuelle Überschreibung des aktuellen Werts im Charakter-Datenobjekt (z.B. durch Ressourcen-Pfeilbuttons)
   const hpOverrideKey = ['hp', healthLabel, 'Gesundheit (HP)'].find(k => campaignPowerLevels[k] !== undefined);
   let customHpVal: number | undefined = undefined;
   if (hpOverrideKey) {
-    const entry = campaignPowerLevels[hpOverrideKey];
-    const parsedVal = typeof entry === 'number' ? entry : entry?.value;
-    if (typeof parsedVal === 'number' && !isNaN(parsedVal) && parsedVal >= 1) {
-      customHpVal = parsedVal;
+    const entry: any = campaignPowerLevels[hpOverrideKey];
+    if (entry && typeof entry === 'object' && (entry._isManual || entry.isManual)) {
+      const parsedVal = typeof entry.value === 'number' ? entry.value : undefined;
+      const parsedMax = typeof entry.potentialMax === 'number' ? entry.potentialMax : (typeof entry.max === 'number' ? entry.max : undefined);
+      // Wenn der vorherige Wert bereits auf Maximum war oder kein reduzierter Stand vorliegt, skaliere dynamisch mit
+      if (typeof parsedVal === 'number' && !isNaN(parsedVal) && parsedVal >= 1) {
+        if (typeof parsedMax === 'number' && parsedVal < parsedMax) {
+          // Der Charakter hat verbleibenden Schaden, behalte den manuellen Wert
+          customHpVal = parsedVal;
+        }
+      }
     }
   }
 
-  // HP-Maximum ist immer das aktuell aus dem individuellen Konstitutionsmaximum berechnete Limit
-  const hpMax = computedHpMax;
-  // Der aktuelle HP-Wert darf das individuelle HP-Maximum nicht überschreiten
+  // Der aktuelle HP-Wert skaliert dynamisch mit Konstitution, wenn keine manuelle Verwundung vorliegt
   const hpVal = Math.min(hpMax, Math.max(1, customHpVal !== undefined ? Math.round(customHpVal * rankBonusMultiplier) : computedHpVal));
 
   const hpResource: DerivedResource = {
@@ -696,20 +704,25 @@ export function calculateRpgCharacterStats(
     const computedResMax = Math.round(defaultResMax * rankBonusMultiplier);
     const resId = res.id || `cost-${(res.name || 'mp').toLowerCase()}`;
 
-    // Prüfe auf direkten aktuellen Wert im Charakter-Datenobjekt
+    // Prüfe auf manuelle Überschreibung des aktuellen Werts
     const resOverrideKey = [resId, res.name].find(k => k && campaignPowerLevels[k] !== undefined);
     let customResVal: number | undefined = undefined;
     if (resOverrideKey) {
-      const entry = campaignPowerLevels[resOverrideKey];
-      const parsedVal = typeof entry === 'number' ? entry : entry?.value;
-      if (typeof parsedVal === 'number' && !isNaN(parsedVal) && parsedVal >= 1) {
-        customResVal = parsedVal;
+      const entry: any = campaignPowerLevels[resOverrideKey];
+      if (entry && typeof entry === 'object' && (entry._isManual || entry.isManual)) {
+        const parsedVal = typeof entry.value === 'number' ? entry.value : undefined;
+        const parsedMax = typeof entry.potentialMax === 'number' ? entry.potentialMax : (typeof entry.max === 'number' ? entry.max : undefined);
+        if (typeof parsedVal === 'number' && !isNaN(parsedVal) && parsedVal >= 1) {
+          if (typeof parsedMax === 'number' && parsedVal < parsedMax) {
+            customResVal = parsedVal;
+          }
+        }
       }
     }
 
     // Ressourcen-Maximum basiert direkt auf dem berechneten individuellen Maximum der Quellparameter
     const resMax = computedResMax;
-    // Der aktuelle Wert wird durch das berechnete Maximum begrenzt
+    // Der aktuelle Wert skaliert dynamisch mit den Quellparametern, außer bei Verbrauch
     const resVal = Math.min(resMax, Math.max(1, customResVal !== undefined ? Math.round(customResVal * rankBonusMultiplier) : computedResVal));
 
     if (!costResourcesMap.has(resId)) {
