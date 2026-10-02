@@ -34,6 +34,8 @@ export interface CharacterRaceAndStatsSectionProps {
   onPotentialChange?: (pot: number) => void;
   parameterPotentialPercentages?: Record<string, number>;
   onParameterPotentialPercentagesChange?: (percentages: Record<string, number>) => void;
+  parameterPotentialFactors?: Record<string, number>;
+  onParameterPotentialFactorsChange?: (factors: Record<string, number>) => void;
   xp?: number;
   onXpChange?: (xp: number) => void;
   developmentProfile?: DevelopmentProfileType;
@@ -101,6 +103,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
   onPotentialChange,
   parameterPotentialPercentages,
   onParameterPotentialPercentagesChange,
+  parameterPotentialFactors,
+  onParameterPotentialFactorsChange,
   xp = 0,
   onXpChange,
   developmentProfile = 'normal',
@@ -326,6 +330,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
         build: effectiveBuild,
         potentialPercent: parameterPotentialPercentages?.[paramName] ?? safePotPercent,
         parameterPotentialPercentages,
+        parameterPotentialFactors: parameterPotentialFactors || (currentData as any)?.parameterPotentialFactors,
         world,
         worldPowerSettings,
         baseParameters: baseParams,
@@ -422,6 +427,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
       build: effectiveBuild,
       potential: safePotPercent,
       parameterPotentialPercentages,
+      parameterPotentialFactors: parameterPotentialFactors || (currentData as any)?.parameterPotentialFactors,
       level: safeLevel,
       rank: rank || 'F',
       progressionConfig: effectiveConfig,
@@ -435,8 +441,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
 
     derivedStats.resources.forEach(res => {
       const activeKey = [res.id, res.name].find(k => k && currentData[k] !== undefined) || res.name;
-      const defaultVal = res.unscaledValue ?? res.value;
-      const defaultMax = res.unscaledMax ?? res.max;
+      const defaultVal = res.value;
+      const defaultMax = res.max;
       
       const existing = updatedPowerData[activeKey];
       const existingVal = typeof existing === 'object' ? existing?.value : (typeof existing === 'number' ? existing : undefined);
@@ -463,6 +469,11 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
     const currentManualPoints = (currentData as any)?._manualPoints;
     if (currentManualPoints && !isLegacyBrokenDataset) {
       (updatedPowerData as any)._manualPoints = currentManualPoints;
+    }
+
+    const currentManualResourcePoints = (currentData as any)?._manualResourcePoints;
+    if (currentManualResourcePoints && !isLegacyBrokenDataset) {
+      (updatedPowerData as any)._manualResourcePoints = currentManualResourcePoints;
     }
 
     if (needsUpdate) {
@@ -977,6 +988,8 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
           characterPotential={safePotPercent}
           parameterPotentialPercentages={parameterPotentialPercentages}
           onParameterPotentialPercentagesChange={onParameterPotentialPercentagesChange}
+          parameterPotentialFactors={parameterPotentialFactors || (characterPowerData as any)?.parameterPotentialFactors}
+          onParameterPotentialFactorsChange={onParameterPotentialFactorsChange}
           developmentPointsPerLevel={currentBudget}
           onDevelopmentPointsPerLevelChange={onDevelopmentPointsPerLevelChange}
           parameterGrowthPoints={parameterGrowthPoints}

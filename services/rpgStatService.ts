@@ -54,6 +54,8 @@ export interface IndividualMaxCalculationOptions {
   build?: string;
   potentialPercent?: number;
   parameterPotentialPercentages?: Record<string, number>;
+  parameterPotentialFactors?: Record<string, number>;
+  individualParameterFactors?: Record<string, number>;
   world?: WorldSetting;
   worldPowerSettings?: Record<string, number | CampaignPowerParameter>;
   baseParameters?: Record<string, number>;
@@ -254,9 +256,26 @@ export function calculateIndividualParameterMax(options: IndividualMaxCalculatio
     : Math.max(0, rawPotential);
   const potentialModifier = cleanPotentialPercent / 100;
 
-  // 7. Formel: Base Maximum * (BaseParam / 10) * Race Growth Factor * Stature Modifier * Gender Modifier * Potential Modifier
+  // 6b. Individuelle Anlage (parameterPotentialFactors / individualParameterFactors)
+  const dispositionFactors = options.parameterPotentialFactors || options.individualParameterFactors || (options as any).parameterDispositionFactors;
+  let individualDispositionFactor = 1.0;
+  if (dispositionFactors && typeof dispositionFactors === 'object') {
+    let rawFactor = dispositionFactors[paramName];
+    if (typeof rawFactor !== 'number') {
+      const lowerKey = paramName.toLowerCase();
+      const foundKey = Object.keys(dispositionFactors).find(k => k.toLowerCase() === lowerKey);
+      if (foundKey && typeof dispositionFactors[foundKey] === 'number') {
+        rawFactor = dispositionFactors[foundKey];
+      }
+    }
+    if (typeof rawFactor === 'number' && !isNaN(rawFactor) && rawFactor > 0) {
+      individualDispositionFactor = rawFactor > 10 ? rawFactor / 100 : rawFactor;
+    }
+  }
+
+  // 7. Formel: Base Maximum * (BaseParam / 10) * Race Growth Factor * Disposition Factor * Stature Modifier * Gender Modifier * Potential Modifier
   const calculatedMax = Math.round(
-    baseMax * (baseParamVal / 10) * raceGrowthFactor * statureModifier * genderModifier * potentialModifier
+    baseMax * (baseParamVal / 10) * raceGrowthFactor * individualDispositionFactor * statureModifier * genderModifier * potentialModifier
   );
 
   // 8. Rang-Einfluss auf das Potenzial (potentialMax)
@@ -378,6 +397,8 @@ export function calculateRpgCharacterStats(
     build?: string;
     potential?: number | string;
     parameterPotentialPercentages?: Record<string, number>;
+    parameterPotentialFactors?: Record<string, number>;
+    individualParameterFactors?: Record<string, number>;
     baseParameters?: Record<string, number>;
     level?: number;
     xp?: number;
@@ -495,6 +516,7 @@ export function calculateRpgCharacterStats(
       build: options?.build,
       potentialPercent: typeof options?.potential === 'number' ? options.potential : (typeof options?.potential === 'string' ? parseFloat(options.potential) || 100 : 100),
       parameterPotentialPercentages: options?.parameterPotentialPercentages,
+      parameterPotentialFactors: options?.parameterPotentialFactors || options?.individualParameterFactors || (options as any)?.parameterDispositionFactors,
       world,
       worldPowerSettings,
       baseParameters: options?.baseParameters,
@@ -647,6 +669,10 @@ export function calculateRpgCharacterStats(
   // HP-Maximum ist immer das aktuell aus dem individuellen Konstitutionsmaximum berechnete Limit
   const hpMax = computedHpMax;
 
+  // Prüfe auf manuelle Ressourcen-Abweichungen (_manualResourcePoints)
+  const manualResourcePoints = (campaignPowerLevels as any)?._manualResourcePoints || {};
+  const hpManualBonus = ['hp', healthLabel, 'Gesundheit (HP)'].map(k => manualResourcePoints[k]).find(v => typeof v === 'number') ?? 0;
+
   // Prüfe auf direkte manuelle Überschreibung des aktuellen Werts im Charakter-Datenobjekt (z.B. durch Ressourcen-Pfeilbuttons)
   const hpOverrideKey = ['hp', healthLabel, 'Gesundheit (HP)'].find(k => campaignPowerLevels[k] !== undefined);
   let customHpVal: number | undefined = undefined;
@@ -655,18 +681,16 @@ export function calculateRpgCharacterStats(
     if (entry && typeof entry === 'object' && (entry._isManual || entry.isManual)) {
       const parsedVal = typeof entry.value === 'number' ? entry.value : undefined;
       const parsedMax = typeof entry.potentialMax === 'number' ? entry.potentialMax : (typeof entry.max === 'number' ? entry.max : undefined);
-      // Wenn der vorherige Wert bereits auf Maximum war oder kein reduzierter Stand vorliegt, skaliere dynamisch mit
       if (typeof parsedVal === 'number' && !isNaN(parsedVal) && parsedVal >= 1) {
         if (typeof parsedMax === 'number' && parsedVal < parsedMax) {
-          // Der Charakter hat verbleibenden Schaden, behalte den manuellen Wert
           customHpVal = parsedVal;
         }
       }
     }
   }
 
-  // Der aktuelle HP-Wert skaliert dynamisch mit Konstitution, wenn keine manuelle Verwundung vorliegt
-  const hpVal = Math.min(hpMax, Math.max(1, customHpVal !== undefined ? Math.round(customHpVal * rankBonusMultiplier) : computedHpVal));
+  // Der aktuelle HP-Wert skaliert dynamisch mit Konstitution + manueller Abweichung, außer bei Verwundung
+  const hpVal = Math.min(hpMax, Math.max(1, customHpVal !== undefined ? Math.round(customHpVal * rankBonusMultiplier) : (computedHpVal + hpManualBonus)));
 
   const hpResource: DerivedResource = {
     id: 'hp',
@@ -704,6 +728,8 @@ export function calculateRpgCharacterStats(
     const computedResMax = Math.round(defaultResMax * rankBonusMultiplier);
     const resId = res.id || `cost-${(res.name || 'mp').toLowerCase()}`;
 
+    const resManualBonus = [resId, res.name].map(k => k ? manualResourcePoints[k] : undefined).find(v => typeof v === 'number') ?? 0;
+
     // Prüfe auf manuelle Überschreibung des aktuellen Werts
     const resOverrideKey = [resId, res.name].find(k => k && campaignPowerLevels[k] !== undefined);
     let customResVal: number | undefined = undefined;
@@ -722,8 +748,8 @@ export function calculateRpgCharacterStats(
 
     // Ressourcen-Maximum basiert direkt auf dem berechneten individuellen Maximum der Quellparameter
     const resMax = computedResMax;
-    // Der aktuelle Wert skaliert dynamisch mit den Quellparametern, außer bei Verbrauch
-    const resVal = Math.min(resMax, Math.max(1, customResVal !== undefined ? Math.round(customResVal * rankBonusMultiplier) : computedResVal));
+    // Der aktuelle Wert skaliert dynamisch mit den Quellparametern + manueller Abweichung, außer bei Verbrauch
+    const resVal = Math.min(resMax, Math.max(1, customResVal !== undefined ? Math.round(customResVal * rankBonusMultiplier) : (computedResVal + resManualBonus)));
 
     if (!costResourcesMap.has(resId)) {
       costResourcesMap.set(resId, {

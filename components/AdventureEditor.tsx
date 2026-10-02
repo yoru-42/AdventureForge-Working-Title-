@@ -1208,6 +1208,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
             build: charBuild,
             potentialPercent: charPot,
             parameterPotentialPercentages: charData.parameterPotentialPercentages,
+            parameterPotentialFactors: charData.parameterPotentialFactors,
             world,
             rank: charData.rank,
             rankGrowthBonus: charData.rankGrowthBonus
@@ -1229,6 +1230,7 @@ const AdventureEditor: React.FC<Props> = ({ onSave, onAutoSave, onCancel, initia
           build: charBuild,
           potentialPercent: charPot,
           parameterPotentialPercentages: charData.parameterPotentialPercentages,
+          parameterPotentialFactors: charData.parameterPotentialFactors,
           world,
           rank: charData.rank,
           rankGrowthBonus: charData.rankGrowthBonus

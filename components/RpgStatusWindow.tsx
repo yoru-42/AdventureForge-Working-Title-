@@ -132,6 +132,8 @@ export interface RpgStatusWindowProps {
   characterPotential?: number;
   parameterPotentialPercentages?: Record<string, number>;
   onParameterPotentialPercentagesChange?: (percentages: Record<string, number>) => void;
+  parameterPotentialFactors?: Record<string, number>;
+  onParameterPotentialFactorsChange?: (factors: Record<string, number>) => void;
   developmentPointsPerLevel?: number;
   onDevelopmentPointsPerLevelChange?: (budget: number) => void;
   parameterGrowthPoints?: Record<string, number>;
@@ -167,6 +169,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   characterPotential = 100,
   parameterPotentialPercentages,
   onParameterPotentialPercentagesChange,
+  parameterPotentialFactors,
+  onParameterPotentialFactorsChange,
   developmentPointsPerLevel,
   onDevelopmentPointsPerLevelChange,
   parameterGrowthPoints = {},
@@ -192,6 +196,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       build,
       potential: characterPotential,
       parameterPotentialPercentages,
+      parameterPotentialFactors: parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors,
       baseParameters,
       level,
       xp,
@@ -320,6 +325,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
       build,
       potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
       parameterPotentialPercentages,
+      parameterPotentialFactors: parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors,
       world,
       worldPowerSettings,
       baseParameters,
@@ -347,7 +353,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     const currentManual = (currentLevels as any)?._manualPoints || {};
     const nextManual = {
       ...currentManual,
-      [cat]: Math.max(0, (currentManual[cat] || 0) + delta)
+      [cat]: (currentManual[cat] ?? 0) + delta
     };
 
     const updated = typeof current === 'object' && current !== null
@@ -363,22 +369,24 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
     latestPowerLevelsRef.current = nextLevels;
     onChangeCampaignPowerLevels(nextLevels);
-  }, [readOnly, onChangeCampaignPowerLevels, globalSettings, characterPotential, parameterPotentialPercentages, raceDefaultFreePoints, baseParameters, race, customRaces, body, gender, stature, build, world, worldPowerSettings]);
+  }, [readOnly, onChangeCampaignPowerLevels, globalSettings, characterPotential, parameterPotentialPercentages, raceDefaultFreePoints, baseParameters, race, customRaces, body, gender, stature, build, world, worldPowerSettings, rank, rankGrowthBonus]);
 
   const handleResourceUpdate = useCallback((resId: string, resName: string, delta: number) => {
     if (readOnly || !onChangeCampaignPowerLevels) return;
 
     const currentLevels = latestPowerLevelsRef.current || {};
-    const targetKey = resId || resName;
-    const current = currentLevels[targetKey] || currentLevels[resName];
+    
+    // Eindeutigen Ziel-Key bestimmen, um Dopplungen zu verhindern
+    const targetKey = [resId, resName].find(k => k && currentLevels[k] !== undefined) ?? resId ?? resName;
+    const current = currentLevels[targetKey] || currentLevels[resId] || currentLevels[resName];
 
     // Verwende den aktuellen abgeleiteten unskalierten Ressourcen-Wert als sicheren Ausgangspunkt
     const matchedRes = resources.find(r => r.id === resId || r.name === resName);
     const fallbackVal = matchedRes 
-      ? (typeof matchedRes.unscaledValue === 'number' ? matchedRes.unscaledValue : matchedRes.value)
+      ? (typeof matchedRes.value === 'number' ? matchedRes.value : 30)
       : (resId === 'hp' ? 30 : 10);
     const maxVal = matchedRes 
-      ? (typeof matchedRes.unscaledMax === 'number' ? matchedRes.unscaledMax : matchedRes.max)
+      ? (typeof matchedRes.max === 'number' ? matchedRes.max : 1000)
       : 1000;
 
     const currentVal = typeof current === 'object' && current !== null && typeof current.value === 'number'
@@ -393,10 +401,17 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     if (delta > 0 && (currentFreePoints <= 0 || currentVal >= maxVal)) return;
     if (delta < 0 && currentVal <= 1) return;
 
-    const newVal = currentVal + delta;
-    if (newVal < 1 || newVal > maxVal) return;
+    const newVal = Math.min(maxVal, Math.max(1, currentVal + delta));
 
     const nextFreePoints = delta > 0 ? Math.max(0, currentFreePoints - 1) : currentFreePoints + 1;
+
+    // Signierte manuelle Abweichung für Ressourcen (_manualResourcePoints)
+    const currentManualRes = (currentLevels as any)?._manualResourcePoints || {};
+    const resManualKey = [resId, resName].find(k => k && currentManualRes[k] !== undefined) ?? targetKey;
+    const nextManualRes = {
+      ...currentManualRes,
+      [resManualKey]: (currentManualRes[resManualKey] ?? 0) + delta
+    };
 
     const updated = typeof current === 'object' && current !== null
       ? { ...current, value: newVal, potentialMax: maxVal }
@@ -405,7 +420,8 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
     const nextLevels = {
       ...currentLevels,
       [targetKey]: updated,
-      _freePoints: nextFreePoints
+      _freePoints: nextFreePoints,
+      _manualResourcePoints: nextManualRes
     };
 
     latestPowerLevelsRef.current = nextLevels;
@@ -437,6 +453,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
         build,
         potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
         parameterPotentialPercentages,
+        parameterPotentialFactors: parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors,
         world,
         worldPowerSettings,
         baseParameters,
@@ -472,6 +489,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
     resetLevels._freePoints = raceDefaultFreePoints;
     (resetLevels as any)._manualPoints = {};
+    (resetLevels as any)._manualResourcePoints = {};
 
     latestPowerLevelsRef.current = resetLevels;
     onChangeCampaignPowerLevels(resetLevels);
@@ -652,6 +670,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 build,
                 potentialPercent: parameterPotentialPercentages?.[cat] ?? characterPotential,
                 parameterPotentialPercentages,
+                parameterPotentialFactors: parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors,
                 world,
                 worldPowerSettings,
                 baseParameters,
