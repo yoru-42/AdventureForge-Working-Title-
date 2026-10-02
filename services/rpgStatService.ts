@@ -721,8 +721,8 @@ export function calculateRpgCharacterStats(
       resCount++;
     });
 
-    const defaultResVal = resCount > 0 ? Math.max(1, Math.round(resSum / resCount)) : Math.max(1, res.baseMax || 100);
-    const defaultResMax = resCount > 0 ? Math.max(defaultResVal, Math.round(resMaxSum / resCount)) : Math.max(1, res.baseMax || 100);
+    const defaultResVal = resCount > 0 ? Math.max(1, Math.round(resSum / resCount)) : Math.max(1, (res.baseMax && res.baseMax <= 1000 ? res.baseMax : 10));
+    const defaultResMax = resCount > 0 ? Math.max(defaultResVal, Math.round(resMaxSum / resCount)) : Math.max(defaultResVal, (res.baseMax && res.baseMax <= 1000 ? res.baseMax : 100));
     
     const computedResVal = Math.round(defaultResVal * rankBonusMultiplier);
     const computedResMax = Math.round(defaultResMax * rankBonusMultiplier);

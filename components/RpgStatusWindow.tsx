@@ -550,13 +550,56 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                 ? 'from-cyan-600 to-cyan-400'
                 : 'from-amber-600 to-amber-400';
 
+              // Ermittle den individuellen Anlagenfaktor für Gesundheit (HP), MP und SP
+              const effectiveFactors = parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors || {};
+              let resFactor: number | undefined = undefined;
+              const directKey = [res.id, res.name].find(k => k && effectiveFactors[k] !== undefined);
+              if (directKey && typeof effectiveFactors[directKey] === 'number') {
+                resFactor = effectiveFactors[directKey];
+              } else {
+                let sourceParams: string[] = [];
+                if (isHp) {
+                  sourceParams = ['Konstitution'];
+                } else if (isMp) {
+                  sourceParams = ['Magie', 'Intelligenz'];
+                } else {
+                  sourceParams = ['Stärke', 'Konstitution', 'Willenskraft'];
+                }
+                
+                let sumFactors = 0;
+                let countFactors = 0;
+                sourceParams.forEach(spName => {
+                  const lowerSp = spName.toLowerCase();
+                  const matchedSpKey = Object.keys(effectiveFactors).find(k => k.toLowerCase() === lowerSp);
+                  if (matchedSpKey && typeof effectiveFactors[matchedSpKey] === 'number') {
+                    sumFactors += effectiveFactors[matchedSpKey];
+                    countFactors++;
+                  }
+                });
+                if (countFactors > 0) {
+                  resFactor = sumFactors / countFactors;
+                }
+              }
+
+              let numResFactor = 1.0;
+              if (typeof resFactor === 'number' && !isNaN(resFactor) && resFactor > 0) {
+                numResFactor = resFactor > 10 ? resFactor / 100 : resFactor;
+              }
+
+              const formattedResDisposition = numResFactor.toFixed(2).replace('.', ',');
+
               return (
                 <div
                   key={`res-row-${res.id}`}
-                  className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-2.5 space-y-1.5 font-mono"
+                  className="py-1 px-2 rounded hover:bg-slate-950/60 transition-colors space-y-1 font-mono border border-transparent hover:border-slate-800/50"
                 >
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-200">{res.name}</span>
+                    <div className="flex flex-col justify-center">
+                      <span className="font-bold text-slate-200 leading-tight">{res.name}</span>
+                      <span className="text-[10px] font-sans text-slate-400 font-medium leading-tight">
+                        Anlage {formattedResDisposition}
+                      </span>
+                    </div>
                     <div className="flex items-center gap-2">
                       {!readOnly && (
                         <div className="flex items-center gap-0.5 bg-slate-900 border border-slate-800 rounded px-1 py-0.5">
@@ -585,12 +628,6 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
                         <span className="text-slate-500 font-normal"> / {res.max}</span>
                       </span>
                     </div>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden border border-slate-800/60 p-0.5">
-                    <div
-                      className={`h-full bg-gradient-to-r ${barColor} rounded-full transition-all duration-300`}
-                      style={{ width: `${resPercent}%` }}
-                    />
                   </div>
                 </div>
               );
@@ -683,15 +720,36 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
 
               const isAtMax = charVal >= charPotMax;
 
+              // Ermittle den individuellen Anlagenfaktor (parameterPotentialFactors)
+              const effectiveFactors = parameterPotentialFactors || (campaignPowerLevels as any)?.parameterPotentialFactors || {};
+              let rawFactor = effectiveFactors[cat];
+              if (typeof rawFactor !== 'number') {
+                const lowerCat = cat.toLowerCase();
+                const matchedKey = Object.keys(effectiveFactors).find(k => k.toLowerCase() === lowerCat);
+                if (matchedKey && typeof effectiveFactors[matchedKey] === 'number') {
+                  rawFactor = effectiveFactors[matchedKey];
+                }
+              }
+
+              let numFactor = 1.0;
+              if (typeof rawFactor === 'number' && !isNaN(rawFactor) && rawFactor > 0) {
+                numFactor = rawFactor > 10 ? rawFactor / 100 : rawFactor;
+              }
+
+              const formattedDisposition = numFactor.toFixed(2).replace('.', ',');
+
               return (
                 <div
                   key={`param-row-${cat}`}
                   className="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-950/60 transition-colors font-mono text-xs border border-transparent hover:border-slate-800/50"
                 >
-                  {/* Parameter Name */}
-                  <div className="flex-1 min-w-[90px] truncate pr-2">
-                    <span className="font-bold text-slate-200 truncate" title={cat}>
+                  {/* Parameter Name & Anlage */}
+                  <div className="flex-1 min-w-[100px] truncate pr-2 flex flex-col justify-center">
+                    <span className="font-bold text-slate-200 truncate leading-tight" title={cat}>
                       {cat}
+                    </span>
+                    <span className="text-[10px] font-sans text-slate-400 font-medium leading-tight">
+                      Anlage {formattedDisposition}
                     </span>
                   </div>
 
