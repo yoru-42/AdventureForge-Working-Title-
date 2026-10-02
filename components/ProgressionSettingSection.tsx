@@ -864,7 +864,7 @@ export const ProgressionSettingSection: React.FC<ProgressionSettingSectionProps>
                   min={0}
                   value={config.attributeProgression.baseGrowthPerLevel ?? 2}
                   onChange={e => {
-                    const val = Math.max(0, parseInt(e.target.value) || 0);
+                    const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                     updateConfig(prev => ({
                       ...prev,
                       attributeProgression: { ...prev.attributeProgression, baseGrowthPerLevel: val }

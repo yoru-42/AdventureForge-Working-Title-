@@ -180,7 +180,7 @@ export const RpgStatusWindow: React.FC<RpgStatusWindowProps> = ({
   rankGrowthBonus,
   levelsPerRank
 }) => {
-  const safeBaseGrowth = typeof baseGrowthPerParam === 'number' && !isNaN(baseGrowthPerParam) && baseGrowthPerParam > 0
+  const safeBaseGrowth = typeof baseGrowthPerParam === 'number' && !isNaN(baseGrowthPerParam) && baseGrowthPerParam >= 0
     ? baseGrowthPerParam
     : 2;
 

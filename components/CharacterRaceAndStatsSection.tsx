@@ -879,7 +879,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
               <input
                 type="number"
                 min={0}
-                max={50}
+                max={100}
                 value={localBaseGrowthStr}
                 onChange={e => {
                   const raw = e.target.value;
@@ -887,7 +887,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                   if (raw === '') return;
                   const parsed = parseInt(raw, 10);
                   if (!isNaN(parsed)) {
-                    const clamped = Math.max(0, Math.min(50, parsed));
+                    const clamped = Math.max(0, Math.min(100, parsed));
                     onBaseGrowthPerLevelChange?.(clamped);
                   }
                 }}
@@ -897,7 +897,7 @@ export const CharacterRaceAndStatsSection: React.FC<CharacterRaceAndStatsSection
                     onBaseGrowthPerLevelChange?.(baseGrowthPerParam);
                   } else {
                     const parsed = parseInt(localBaseGrowthStr, 10);
-                    const clamped = Math.max(0, Math.min(50, parsed));
+                    const clamped = Math.max(0, Math.min(100, parsed));
                     setLocalBaseGrowthStr(String(clamped));
                     onBaseGrowthPerLevelChange?.(clamped);
                   }

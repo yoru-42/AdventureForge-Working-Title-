@@ -755,7 +755,7 @@ export class ProgressionService {
       totalLevelsGained = Math.max(0, safeLevel - 1);
     }
 
-    const effectiveBaseGrowth = typeof baseGrowthPerLevel === 'number' && !isNaN(baseGrowthPerLevel) && baseGrowthPerLevel > 0
+    const effectiveBaseGrowth = typeof baseGrowthPerLevel === 'number' && !isNaN(baseGrowthPerLevel) && baseGrowthPerLevel >= 0
       ? baseGrowthPerLevel
       : (config.attributeProgression?.baseGrowthPerLevel ?? 2);
 

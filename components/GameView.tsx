@@ -15,7 +15,7 @@ import { formatRelationshipForAI, formatMotivationCoreForAI, formatNPCForAIPromp
 import { formatDisplayLocationName } from '../utils/mapUtils';
 import { createOrganicIslandPoints } from './worldmap/worldMapData';
 import { formatPersonalityTraitsAsPrompt } from './PersonalityTraitsEditor';
-import { ProgressionService } from '../services/progressionService';
+import { ProgressionService, DEFAULT_PROGRESSION_CONFIG } from '../services/progressionService';
 import { WorkManagementModal } from './WorkManagementModal';
 import { NavigationModal } from './NavigationModal';
 import { TradeModal } from './TradeModal';
@@ -6238,6 +6238,19 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
         statsToAward = [targetKeys[Math.floor(Math.random() * targetKeys.length)]];
       }
 
+      const config = adventure.world?.progressionConfig || DEFAULT_PROGRESSION_CONFIG;
+      const activeProfile = adventure.player.developmentProfile || config.activeProfile || 'normal';
+      const profile = ProgressionService.getDevelopmentProfile(activeProfile, config);
+      const profileMult = profile.attributeGrowthMultiplier ?? 1.0;
+
+      const devRateMult = typeof adventure.player.developmentRate === 'number'
+        ? adventure.player.developmentRate
+        : (adventure.player.developmentRate?.attributeGrowthMultiplier ?? config.developmentRate?.attributeGrowthMultiplier ?? 1.0);
+
+      const baseGrowthVal = typeof adventure.player.baseGrowthPerLevel === 'number' && !isNaN(adventure.player.baseGrowthPerLevel) && adventure.player.baseGrowthPerLevel >= 0
+        ? adventure.player.baseGrowthPerLevel
+        : (config.attributeProgression?.baseGrowthPerLevel ?? 2);
+
       statsToAward.forEach(statKey => {
         const p = updatedPowerLevels[statKey];
         const currentXP = p.xp || 0;
@@ -6247,7 +6260,23 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
         if (nextXP >= 100) {
           const numLevels = Math.floor(nextXP / 100);
           nextXP = nextXP % 100;
-          nextValue = Math.min(p.potentialMax || 100, nextValue + (numLevels * 5));
+
+          const lvlGrowth = ProgressionService.calculateParameterGrowth({
+            parameterName: statKey,
+            currentValue: nextValue,
+            baseGrowth: baseGrowthVal,
+            parameterGrowthFactors: adventure.player.parameterGrowthFactors,
+            parameterGrowthPoints: adventure.player.parameterGrowthPoints,
+            race: adventure.player.race,
+            potential: adventure.player.potential,
+            parameterPotentialPercentages: adventure.player.parameterPotentialPercentages,
+            developmentRateMultiplier: devRateMult,
+            profileMultiplier: profileMult,
+            isRankUp: false,
+            usePotentialForGrowth: config.attributeProgression?.usePotentialForGrowth ?? true
+          });
+
+          nextValue = Math.min(p.potentialMax || 100, Math.round(nextValue + numLevels * lvlGrowth));
         }
 
         updatedPowerLevels[statKey] = {
