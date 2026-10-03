@@ -394,6 +394,7 @@ const calcCommonRankGrowth = ProgressionService.calculateParameterGrowth({
   race: 'Mensch',
   developmentRateMultiplier: 1.0,
   profileMultiplier: 1.0,
+  rankGrowthMultiplier: 1,
   rankGrowthBonus: 25,
   isRankUp: true
 });

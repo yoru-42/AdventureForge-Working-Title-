@@ -205,6 +205,97 @@ export class WorldSimulationService {
   }
 
   /**
+   * Detects narrative timeskips described in words in the AI text or player action (e.g. "Wochen ziehen ins Land", "Es sind Wochen vergangen", "Drei Wochen später", "nach 14 Tagen").
+   * Returns the number of days to advance.
+   */
+  static detectNarrativeTimeJumpDays(text?: string): number {
+    if (!text || !text.trim()) return 0;
+    const lower = text.toLowerCase();
+
+    // 1. Explicit German/English weeks
+    // "Wochen ziehen ins Land", "Es sind Wochen vergangen", "Wochen vergingen", "nach Wochen" -> 21 days (3 weeks)
+    if (/(?:wochen?\s*(?:ziehen\s*ins\s*land|sind\s*vergangen|vergingen|zogen\s*ins\s*land|verstreichen|später)|es\s*sind\s*wochen\s*vergangen)/i.test(lower)) {
+      return 21;
+    }
+
+    // "X Wochen" (digits or German word numbers)
+    const numWeekMatch = lower.match(/(?:nach|in\s*den\s*kommenden|über\s*die\s*nächsten|dauert(?:e)?|für)?\s*(\d+|eine|einer|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn)\s*wochen?(?:\s*(?:später|vergingen|zogen\s*ins\s*land|vergangen|lang|danach))?/i);
+    if (numWeekMatch) {
+      const raw = numWeekMatch[1];
+      let num = parseInt(raw, 10);
+      if (isNaN(num)) {
+        if (raw === 'eine' || raw === 'einer') num = 1;
+        else if (raw === 'zwei') num = 2;
+        else if (raw === 'drei') num = 3;
+        else if (raw === 'vier') num = 4;
+        else if (raw === 'fünf') num = 5;
+        else if (raw === 'sechs') num = 6;
+        else if (raw === 'sieben') num = 7;
+        else if (raw === 'acht') num = 8;
+        else if (raw === 'neun') num = 9;
+        else if (raw === 'zehn') num = 10;
+        else num = 1;
+      }
+      return num * 7;
+    }
+
+    // "einige Wochen", "mehrere Wochen", "ein paar Wochen"
+    if (/(?:einige|mehrere|paar)\s*wochen/i.test(lower)) {
+      return 14;
+    }
+
+    // 2. Explicit Months
+    if (/(?:monate?\s*(?:ziehen\s*ins\s*land|sind\s*vergangen|vergingen|später)|es\s*sind\s*monate\s*vergangen)/i.test(lower)) {
+      return 60;
+    }
+    const numMonthMatch = lower.match(/(?:nach|in\s*den\s*kommenden|über\s*die\s*nächsten|dauert(?:e)?|für)?\s*(\d+|einem|einen|ein|zwei|drei|vier|fünf|sechs)\s*monat(?:en)?(?:\s*(?:später|vergingen|vergangen|lang|danach))?/i);
+    if (numMonthMatch) {
+      const raw = numMonthMatch[1];
+      let num = parseInt(raw, 10);
+      if (isNaN(num)) {
+        if (raw === 'einem' || raw === 'einen' || raw === 'ein') num = 1;
+        else if (raw === 'zwei') num = 2;
+        else if (raw === 'drei') num = 3;
+        else if (raw === 'vier') num = 4;
+        else if (raw === 'fünf') num = 5;
+        else if (raw === 'sechs') num = 6;
+        else num = 1;
+      }
+      return num * 30;
+    }
+
+    if (/(?:einige|mehrere|paar)\s*monate/i.test(lower)) {
+      return 60;
+    }
+
+    // 3. Explicit Days (>= 2 days)
+    const numDayMatch = lower.match(/(?:nach|in\s*den\s*kommenden|über\s*die\s*nächsten|dauert(?:e)?|für)?\s*(\d+|zwei|drei|vier|fünf|sechs|sieben|acht|neun|zehn)\s*tagen?(?:\s*(?:später|vergingen|vergangen|lang|danach))?/i);
+    if (numDayMatch) {
+      const raw = numDayMatch[1];
+      let num = parseInt(raw, 10);
+      if (isNaN(num)) {
+        if (raw === 'zwei') num = 2;
+        else if (raw === 'drei') num = 3;
+        else if (raw === 'vier') num = 4;
+        else if (raw === 'fünf') num = 5;
+        else if (raw === 'sechs') num = 6;
+        else if (raw === 'sieben') num = 7;
+        else if (raw === 'acht') num = 8;
+        else if (raw === 'neun') num = 9;
+        else if (raw === 'zehn') num = 10;
+        else num = 0;
+      }
+      if (num >= 2) return num;
+    }
+
+    if (/(?:einige|mehrere|paar)\s*tage/i.test(lower)) {
+      return 3;
+    }
+
+    return 0;
+  }
+
+  /**
    * Processes AI output tags and synchronizes in-game Date, Time, and statusElements.
    * Handles midnight rollover, explicit Datum tags, sleep/rest leaps, and fallback estimation.
    */
@@ -261,16 +352,29 @@ export class WorldSimulationService {
     const hadExplicitTime = explicitHour !== null && explicitMinute !== null;
     const hadExplicitDate = explicitDay !== null;
 
+    // Detect narrative time jumps in prose (e.g. "Wochen ziehen ins Land", "Es sind Wochen vergangen")
+    const narrativeJumpDays = Math.max(
+      this.detectNarrativeTimeJumpDays(rawAiText),
+      this.detectNarrativeTimeJumpDays(fallbackActionText)
+    );
+
     if (hadExplicitDate) {
       nextDay = explicitDay!;
+      // If the narrative text describes a large timeskip (e.g. weeks), but the AI output a stale or minimal day (e.g. Tag 2),
+      // ensure the date moves forward to accurately match the narrative time jump!
+      if (narrativeJumpDays > 0 && nextDay < (prevWt.day || 1) + narrativeJumpDays) {
+        nextDay = (prevWt.day || 1) + narrativeJumpDays;
+      }
+    } else if (narrativeJumpDays > 0) {
+      nextDay = (prevWt.day || 1) + narrativeJumpDays;
     }
 
     if (hadExplicitTime) {
       nextHour = explicitHour!;
       nextMinute = explicitMinute!;
 
-      // If time was given but NOT explicit date, check for midnight rollover
-      if (!hadExplicitDate) {
+      // If time was given but NOT explicit date and no narrative jump, check for midnight rollover
+      if (!hadExplicitDate && narrativeJumpDays === 0) {
         const prevMinsInDay = (prevWt.hour || 0) * 60 + (prevWt.minute || 0);
         const newMinsInDay = nextHour * 60 + nextMinute;
         if (newMinsInDay < prevMinsInDay) {
@@ -281,7 +385,9 @@ export class WorldSimulationService {
       // Neither time nor date given explicitly in STATUS: advance realistically
       const durationMins = this.estimateActionDurationMinutes(fallbackActionText);
       const advanced = this.addMinutes(prevWt, durationMins);
-      nextDay = advanced.day;
+      if (!hadExplicitDate && narrativeJumpDays === 0) {
+        nextDay = advanced.day;
+      }
       nextHour = advanced.hour;
       nextMinute = advanced.minute;
     }

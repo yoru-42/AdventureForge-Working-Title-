@@ -178,12 +178,14 @@ export function resolveCharacterPortraitData(params: {
   }
 
   const displayName =
+    foundChar?.name ||
+    foundChar?.title ||
+    foundChar?.details?.name ||
+    foundChar?.details?.callName ||
     foundChar?.nickname ||
     foundChar?.rufName ||
     foundChar?.details?.nickname ||
     foundChar?.details?.rufName ||
-    foundChar?.name ||
-    foundChar?.title ||
     lookupName ||
     (isPlayer ? 'Spieler' : 'Charakter');
 

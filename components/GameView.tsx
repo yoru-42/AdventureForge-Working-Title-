@@ -3901,7 +3901,7 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
     }
 
     // Parse CONDITION_ADD: [[CONDITION_ADD: Name | Typ | Beschreibung | Quelle]]
-    const condAddRegex = /\[\[CONDITION_ADD:\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)(?:\s*\|\s*([^\]]+))?\]\]/g;
+    const condAddRegex = /\[\[(?:CONDITION_ADD|BODY_CONDITION_ADD):\s*([^|]+)\s*\|\s*([^|]+)\s*\|\s*([^|]+)(?:\s*\|\s*([^\]]+))?\]\]/gi;
     let condAddMatch;
     while ((condAddMatch = condAddRegex.exec(text)) !== null) {
       cleanedText = cleanedText.replace(condAddMatch[0], '');
@@ -3911,7 +3911,7 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       const condSource = (condAddMatch[4] || 'Fremdeinfluss').trim();
 
       const currentConditions = [...(updatedPlayer.appearance?.activeConditions || [])];
-      const existingIdx = currentConditions.findIndex(c => c.name.toLowerCase() === condName.toLowerCase());
+      const existingIdx = currentConditions.findIndex(c => String(c?.name || '').toLowerCase() === String(condName || '').toLowerCase());
       const newCondition = {
         id: existingIdx >= 0 ? currentConditions[existingIdx].id : `cond-chat-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         name: condName,
@@ -3946,13 +3946,18 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
       });
     }
 
-    // Parse CONDITION_REMOVE: [[CONDITION_REMOVE: Name]]
-    const condRemRegex = /\[\[CONDITION_REMOVE:\s*([^\]]+)\]\]/g;
+    // Parse CONDITION_REMOVE & BODY_CONDITION_REMOVE: [[CONDITION_REMOVE: Name]] or [[BODY_CONDITION_REMOVE: Name]]
+    const condRemRegex = /\[\[(?:CONDITION_REMOVE|BODY_CONDITION_REMOVE):\s*([^\]]+)\]\]/gi;
     let condRemMatch;
     while ((condRemMatch = condRemRegex.exec(text)) !== null) {
       cleanedText = cleanedText.replace(condRemMatch[0], '');
-      const condName = condRemMatch[1].trim().toLowerCase();
-      const currentConditions = (updatedPlayer.appearance?.activeConditions || []).filter(c => c.name.toLowerCase() !== condName);
+      const condName = String(condRemMatch[1] || '').trim().toLowerCase();
+      const currentConditions = (updatedPlayer.appearance?.activeConditions || []).filter(
+        c => {
+          const cName = String(c?.name || '').toLowerCase();
+          return cName !== condName && !cName.includes(condName) && !condName.includes(cName);
+        }
+      );
 
       updatedPlayer = {
         ...updatedPlayer,
@@ -3961,6 +3966,124 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
           activeConditions: currentConditions
         }
       };
+
+      notifications.push({
+        id: Math.random().toString(),
+        type: 'remove',
+        title: `${condRemMatch[1].trim()} (Zustand entfernt / abgeklungen)`,
+        category: 'Zustand'
+      });
+    }
+
+    // Parse BODY_CONDITION_CHANGES: [[BODY_CONDITION_CHANGES: action=removed, condition=Hormonmanipulation]] or action=added
+    const bodyCondChangesRegex = /\[\[BODY_CONDITION_CHANGES:\s*action=([^,\]]+),\s*condition=([^\]]+)\]\]/gi;
+    let bccMatch;
+    while ((bccMatch = bodyCondChangesRegex.exec(text)) !== null) {
+      cleanedText = cleanedText.replace(bccMatch[0], '');
+      const action = String(bccMatch[1] || '').trim().toLowerCase();
+      const conditionName = String(bccMatch[2] || '').trim();
+      const conditionNameLower = conditionName.toLowerCase();
+
+      if (action.includes('remov') || action.includes('entfern') || action.includes('delet') || action.includes('healed') || action.includes('geheilt') || action.includes('cured') || action.includes('abgeklungen')) {
+        const currentConditions = (updatedPlayer.appearance?.activeConditions || []).filter(
+          c => {
+            const cName = String(c?.name || '').toLowerCase();
+            return cName !== conditionNameLower && !cName.includes(conditionNameLower) && !conditionNameLower.includes(cName);
+          }
+        );
+
+        updatedPlayer = {
+          ...updatedPlayer,
+          appearance: {
+            ...(updatedPlayer.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' }),
+            activeConditions: currentConditions
+          }
+        };
+
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'remove',
+          title: `${conditionName} (Zustand entfernt / geheilt)`,
+          category: 'Zustand'
+        });
+      } else {
+        const currentConditions = [...(updatedPlayer.appearance?.activeConditions || [])];
+        const existingIdx = currentConditions.findIndex(c => String(c?.name || '').toLowerCase() === conditionNameLower);
+        const newCondition = {
+          id: existingIdx >= 0 ? currentConditions[existingIdx].id : `cond-chat-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          name: conditionName,
+          type: 'curse' as const,
+          category: 'Körperlicher Zustand / Statuseffekt',
+          isActive: true,
+          severity: 'leicht' as const,
+          source: 'Fremdeinfluss',
+          duration: 'Temporär (Aktiv)',
+          description: conditionName
+        };
+
+        if (existingIdx >= 0) {
+          currentConditions[existingIdx] = { ...currentConditions[existingIdx], ...newCondition, isActive: true };
+        } else {
+          currentConditions.push(newCondition);
+        }
+
+        updatedPlayer = {
+          ...updatedPlayer,
+          appearance: {
+            ...(updatedPlayer.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' }),
+            activeConditions: currentConditions
+          }
+        };
+
+        notifications.push({
+          id: Math.random().toString(),
+          type: 'add',
+          title: `${conditionName} (Körperlicher Zustand)`,
+          category: 'Zustand'
+        });
+      }
+    }
+
+    // Parse PHYSICAL_CHANGE: [[PHYSICAL_CHANGE: Beschreibung]]
+    const physChangeRegex = /\[\[PHYSICAL_CHANGE:\s*([^\]]+)\]\]/gi;
+    let pcMatch;
+    while ((pcMatch = physChangeRegex.exec(text)) !== null) {
+      cleanedText = cleanedText.replace(pcMatch[0], '');
+      const changeDesc = pcMatch[1].trim();
+      const currentApp = updatedPlayer.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' };
+      const history = [...(updatedPlayer.physicalChangeHistory || [])];
+      history.push({
+        id: `pc-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        timestamp: new Date().toISOString(),
+        transformationIntensity: currentApp.transformationIntensity || 0,
+        stageName: currentApp.activeTransformationId || 'standard',
+        changes: [{
+          id: `change-${Date.now()}`,
+          category: 'appearance',
+          label: 'Körperliche Veränderung',
+          type: 'text',
+          baseValue: 'Standard',
+          currentValue: changeDesc,
+          deltaDisplay: changeDesc,
+          isSignificant: true
+        }]
+      });
+
+      updatedPlayer = {
+        ...updatedPlayer,
+        appearance: {
+          ...currentApp,
+          physicalChanges: changeDesc
+        },
+        physicalChangeHistory: history
+      };
+
+      notifications.push({
+        id: Math.random().toString(),
+        type: 'add',
+        title: `Körperliche Veränderung: ${changeDesc}`,
+        category: 'Körper'
+      });
     }
 
     // Parse LORE_UNLOCK: [[LORE_UNLOCK: Titel]]
@@ -4890,62 +5013,68 @@ WICHTIGE ERZÄHLERISCHE ANWEISUNG FÜR DEN SPIELLEITER & WELTSIMULATOR:
           }
 
           const index = newStatus.findIndex(s => {
-            const sLabel = s.label.toLowerCase();
-            const kLabel = key.toLowerCase();
+            const sLabel = String(s?.label || '').toLowerCase();
+            const kLabel = String(key || '').toLowerCase();
             if (sLabel === kLabel) return true;
             if ((sLabel === 'zeit' || sLabel === 'uhrzeit' || sLabel === 'time' || sLabel === 'tageszeit') && (kLabel === 'zeit' || kLabel === 'uhrzeit' || kLabel === 'time' || kLabel === 'tageszeit')) return true;
             if ((sLabel === 'datum' || sLabel === 'tag' || sLabel === 'date' || sLabel === 'spieltag') && (kLabel === 'datum' || kLabel === 'tag' || kLabel === 'date' || kLabel === 'spieltag')) return true;
             if ((sLabel.includes('körper') && sLabel.includes('zustand')) && (kLabel.includes('körper') && kLabel.includes('zustand'))) return true;
+            if ((sLabel.includes('körper') && (sLabel.includes('veränderung') || sLabel.includes('veranderung'))) && (kLabel.includes('körper') && (kLabel.includes('veränderung') || kLabel.includes('veranderung')))) return true;
             if ((sLabel.includes('standort') || sLabel.includes('ort')) && (kLabel.includes('standort') || kLabel.includes('ort') || kLabel.includes('currentlocation'))) return true;
             return false;
           });
           if (index !== -1) {
-            const isLoc = newStatus[index].label.toLowerCase().includes('ort') || newStatus[index].label.toLowerCase().includes('standort');
+            const isLoc = String(newStatus[index]?.label || '').toLowerCase().includes('ort') || String(newStatus[index]?.label || '').toLowerCase().includes('standort');
             const valToStore = isLoc ? formatDisplayLocationName(value) : value;
             newStatus[index] = { ...newStatus[index], value: valToStore };
 
-            // If this is "Körperlicher Zustand", dynamically reflect in activeConditions
-            const isBodyStatus = newStatus[index].label.toLowerCase().includes('körper') && newStatus[index].label.toLowerCase().includes('zustand');
-            if (isBodyStatus) {
-              const valLower = value.toLowerCase();
+            // If this is "Körperlicher Zustand" or "Körperliche Veränderungen", dynamically reflect in player state
+            const isBodyStatus = String(newStatus[index]?.label || '').toLowerCase().includes('körper') && String(newStatus[index]?.label || '').toLowerCase().includes('zustand');
+            const isPhysChange = String(newStatus[index]?.label || '').toLowerCase().includes('körper') && (String(newStatus[index]?.label || '').toLowerCase().includes('veränderung') || String(newStatus[index]?.label || '').toLowerCase().includes('veranderung'));
+
+            if (isBodyStatus || isPhysChange) {
+              const valLower = String(value || '').toLowerCase();
               setTimeout(() => {
                 const currentAdv = adventureRef.current || adventure;
                 if (currentAdv?.player) {
                   const currentApp = currentAdv.player.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' };
-                  const conds = [...(currentApp.activeConditions || [])];
+                  let conds = [...(currentApp.activeConditions || [])];
                   let changed = false;
 
-                  if (valLower.includes('hormon') || valLower.includes('instabil')) {
-                    if (!conds.some(c => c.name.toLowerCase().includes('hormon'))) {
-                      conds.push({
-                        id: `cond-hormon-${Date.now()}`,
-                        name: 'Hormonelle Instabilität',
-                        type: 'curse',
-                        category: 'Körperlicher Zustand / Statuseffekt',
-                        isActive: true,
-                        severity: 'leicht',
-                        source: 'Fremdeinfluss',
-                        duration: 'Temporär (Aktiv)',
-                        description: 'Hormonelle Schwankungen und Instabilität beeinflussen den physischen und mentalen Zustand.'
-                      });
-                      changed = true;
-                    }
-                  } else if (valLower.includes('gesund') || valLower.includes('unverletzt') || valLower.includes('normal')) {
-                    const filtered = conds.filter(c => !c.name.toLowerCase().includes('hormon'));
-                    if (filtered.length !== conds.length) {
-                      conds.length = 0;
-                      conds.push(...filtered);
-                      changed = true;
+                  if (isBodyStatus) {
+                    if (valLower.includes('hormon') || valLower.includes('instabil')) {
+                      if (!conds.some(c => String(c?.name || '').toLowerCase().includes('hormon'))) {
+                        conds.push({
+                          id: `cond-hormon-${Date.now()}`,
+                          name: 'Hormonelle Instabilität',
+                          type: 'curse',
+                          category: 'Körperlicher Zustand / Statuseffekt',
+                          isActive: true,
+                          severity: 'leicht',
+                          source: 'Fremdeinfluss',
+                          duration: 'Temporär (Aktiv)',
+                          description: 'Hormonelle Schwankungen und Instabilität beeinflussen den physischen und mentalen Zustand.'
+                        });
+                        changed = true;
+                      }
+                    } else if (valLower.includes('gesund') || valLower.includes('unverletzt') || valLower.includes('normal')) {
+                      const filtered = conds.filter(c => !String(c?.name || '').toLowerCase().includes('hormon'));
+                      if (filtered.length !== conds.length) {
+                        conds = filtered;
+                        changed = true;
+                      }
                     }
                   }
 
-                  if (changed) {
+                  if (changed || isBodyStatus || isPhysChange) {
                     onUpdateAdventureRef.current({
                       ...currentAdv,
                       player: {
                         ...currentAdv.player,
                         appearance: {
                           ...currentApp,
+                          physicalCondition: isBodyStatus ? value : currentApp.physicalCondition,
+                          physicalChanges: isPhysChange ? value : currentApp.physicalChanges,
                           activeConditions: conds
                         }
                       }
@@ -5416,19 +5545,22 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
       17. STRENGES ZITIER- & WIEDERHOLUNGSVERBOT: Du darfst NIEMALS die Worte, Sätze, Aktionen, Fragen oder Ausrufe des Spielers zitieren, wiederholen, umformulieren, umschreiben oder kopieren (auch nicht als wörtliche Rede, Gedanken oder Einleitung). Der Spieler hat seine Nachricht bereits selbst geschrieben/gelesen und will sie unter keinen Umständen in deiner Antwort wiederholt sehen. Beginne deine Antwort direkt mit den unmittelbaren Konsequenzen, NPCs-Reaktionen oder dem weiteren physischen/verbalen Verlauf der Szene. Schreibe absolut keine Einleitung, Zusammenfassung oder Rekapitulation des Spielerbeitrags. Wirf den Leser mitten in die darauffolgende Handlung!
       18. STRENGER GEHEIMNIS- UND SPOILER-SCHUTZ BEI TARNUNGEN UND GEHEIMNISSEN: Erwähne niemals geheime Rollen, verborgene Pläne, verdeckte Zugehörigkeiten oder Undercover-Identitäten von Charakteren direkt oder indirekt in der Narration (z.B. wenn Himiko Frost als Lehrerin auftritt, darfst du sei unter keinen Umständen als "Undercover-Agentin" oder "vermeintliche Lehrerin" bezeichnen, oder durch verdächtige oder unnatürliche Formulierungen ihre Tarnung im Text gefährden, es sei denn, ihre Identität wurde im Handlungsverlauf für die Spielfigur bereits eindeutig und unumstößlich aufgedeckt). Für den Spieler muss sie sich absolut lückenlos und überzeugend wie eine echte Lehrerin verhalten.
       19. INTERAKTIONEN UND DIALOGE ZWISCHEN NPCS: Baue vermehrt lebendige, direkte Dialoge in deine Antworten ein. Lass die anwesenden NPCs nicht nur mit dem Spieler sprechen, sondern auch direkt untereinander interagieren, sich unterhalten, Meinungen austauschen, miteinander diskutieren, scherzen, sich absprechen oder streiten. NPCs sind eigenständige Personen mit Beziehungen zueinander und sollten im Chat aktiv und hörbar miteinander kommunizieren, um Szenen lebendiger und authentischer zu machen.
-      20. DYNAMISCHE UHRZEIT & DATUM MIT SITUATIVEM ZEITFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Datum=Tag X, Zeit=HH:MM]]):
-          Du bist dafür verantwortlich, dass pro Chat-Nachricht Datum und Uhrzeit in der Spielwelt realistisch und verhältnismäßig synchron geführt werden.
-          ACHTE PENIBEL DARAUF, DASS DIE ZEIT NICHT ZU SCHNELL VERGEHT! In einem Rollenspiel dauern die meisten Chat-Aktionen (wie Sprechen, eine Frage stellen, Nachdenken, ein kurzer Blick oder ein einzelner Angriff/Zug) nur wenige Sekunden bis maximal 1 Minute.
-          Gib in JEDER Antwort Datum und Uhrzeit im Format [[STATUS: Datum=Tag X, Zeit=HH:MM]] (z. B. [[STATUS: Datum=Tag 1, Zeit=12:05]]) an!
+      20. DYNAMISCHE UHRZEIT & DATUM MIT KONSISTENTEM ZEITFORTSCHRITT PRO CHAT-NACHRICHT (MANDATORY [[STATUS: Datum=Tag X, Zeit=HH:MM]]):
+          Du bist dafür verantwortlich, dass pro Chat-Nachricht Datum und Uhrzeit in der Spielwelt realistisch und synchron geführt werden.
+          - REGEL FÜR KURZE SZENEN: Kurze Bemerkungen, Dialoge und Aktionen dauern Sekunden bis Minuten (+0 bis +2 Minuten).
+          - STRIKTE PFLICHT BEI ZEITSPRÜNGEN, WOCHEN & MONATEN:
+            Wenn in deiner Narration, bei Heilung, medizinischer Behandlung, Training, Inhaftierung, Reisen oder Zeitsprüngen mehrere Tage, Wochen oder Monate vergehen (z. B. "Wochen ziehen ins Land...", "Es sind Wochen vergangen...", "Nach drei Wochen...", "Zwei Monate später..."):
+            MUSST du das Datum im [[STATUS: Datum=Tag X, Zeit=HH:MM]] ZWINGEND um diese Zeitspanne vorrücken!
+            (1 Woche = +7 Tage, 2 Wochen = +14 Tage, 3 Wochen = +21 Tage, 1 Monat = +30 Tage).
+            Es ist STRENGSTENS VERBOTEN, dass in der Narration Wochen vergehen, aber im Status 'Tag 2' ausgegeben wird! Narration und HUD-Datum müssen immer 100% konsistent synchron sein!
           - ÜBERSCHREITEN VON MITTERNACHT (00:00 Uhr): Wenn die Zeit durch Nachtruhe, Schlaf, Ohnmacht oder das Verstreichen der Nachtstunden Mitternacht überschreitet, rückt das Datum zwingend auf den nächsten Tag vor (z. B. von Tag 1 auf Tag 2).
-          Realistische Richtwerte für den Zeitverlauf:
-          - Kurze Bemerkung / Dialog / Frage / Reaktion / einzelner Zug: +0 bis +1 Minute (die Uhrzeit ändert sich oft gar nicht oder nur um 1 Minute).
-          - Längeres Gespräch / Diskussion / kurzes Verweilen / Inspektion eines Objekts: +2 bis +5 Minuten.
-          - Gründliches Durchsuchen eines großen Raums / Spaziergang / Besorgungen: +10 bis +15 Minuten.
-          - Kampf / Auseinandersetzung: Dauert in der Regel 1 bis 3 Minuten (Schlagabtäusche laufen in Sekunden ab). Nur ausgedehnte Großschlachten dauern 15 bis 30 Minuten.
-          - Längere Reise / Fußmarsch zwischen weit entfernten Orten: Entsprechend der tatsächlichen Reisedauer (z.B. +1 bis +3 Stunden).
-          - Rast / Schlaf / Ohnmacht / bewusste Zeitsprünge: Entsprechend der Dauer (z.B. +1 Stunde Pause, +7 bis +8 Stunden Nachtruhe z. B. bis 07:00 Uhr morgens an Tag X+1, bzw. +1 bis +3 Stunden bei Ohnmacht). Der Charakter erwacht noch in derselben Antwort und die nächste Handlung beginnt sofort!
-          Berechne neues Datum und neue Uhrzeit immer exakt ausgehend vom bisherigen Status (z. B. von Tag 1, 12:00 nach einer kurzen Frage auf Tag 1, 12:01) und gib sie im [[STATUS]] Block an.
+          Gib in JEDER Antwort Datum und Uhrzeit im Format [[STATUS: Datum=Tag X, Zeit=HH:MM]] an!
+      20b. KÖRPERLICHER ZUSTAND & KÖRPERLICHE VERÄNDERUNGEN (LIVE-SYNCHRONISATION IM HUD):
+          - Wenn der Charakter geheilt wird, ein Fluch/Zustand abklingt oder medizinisch entfernt wird (z. B. Hormonstabilisierung, Schwinden von Zaubern, Abklingen von Giften):
+            Gib zwingend [[CONDITION_REMOVE: NameDesZustands]] oder [[BODY_CONDITION_CHANGES: action=removed, condition=NameDesZustands]] und [[STATUS: Körperlicher Zustand=Gesund]] aus!
+          - Wenn der Charakter verletzt wird, erschöpft ist oder körperliche Mutationen/Veränderungen erfährt:
+            Gib zwingend [[STATUS: Körperlicher Zustand=Leicht erschöpft]] bzw. [[STATUS: Körperliche Veränderungen=Dämonenhörner]] oder [[CONDITION_ADD: Name | Fluch/Segen/Mutation | Beschreibung | Quelle]] aus!
+          - Verwende niemals unbegründet veraltete Krankheitszustände weiter, wenn der Text beschreibt, dass sie geheilt oder abgeklungen sind!
       21. GEHEIMNISSE, VERBORGENES WISSEN & ABSICHTENISOLATION (3-STUFEN-LOGIK & KEINE HELLSEHEREI): // rule21_loc1
           // loc1_marker
           Halte dich strikt an die 3 Stufen des geheimen Wissens. Stufe 1 ist historisch allgemein bekannt. Stufe 2 sind historische Gerüchte/Indizien, aber NPCs vermuten diese nicht aktiv bezüglich gegenwärtiger Ereignisse. Stufe 3 ist eine ABSOLUTE BLACKBOX für NPCs, den Erzähler und den Chat. Verrate, andeute oder leake Stufe 2 und Stufe 3 Geheimnisse von Charakteren (einschließlich des Spielers!) NIEMALS unaufgefordert im Chat! NPCs dürfen dieses Wissen unter keinen Umständen in Dialogen, Handlungen, Beschreibungen oder Gedanken verwenden.
@@ -5863,11 +5995,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKT-BERECHNUNG:
     const speakerNpc = npcList.find(n => n.id === dialogueSpeakerId) || npcList[0];
     const targetNpc = npcList.find(n => n.id === dialogueTargetId) || (npcList.length > 1 ? npcList[1] : npcList[0]);
     
-    const speakerName = speakerNpc ? (speakerNpc.nickname || speakerNpc.name) : 'Charakter';
-    const targetName = targetNpc ? (targetNpc.nickname || targetNpc.name) : 'Charakter';
+    const speakerName = speakerNpc ? (speakerNpc.name || speakerNpc.nickname) : 'Charakter';
+    const targetName = targetNpc ? (targetNpc.name || targetNpc.nickname) : 'Charakter';
     
     const groupNpcs = npcList.filter(n => dialogueGroupSelectedIds.includes(n.id));
-    const groupNamesStr = groupNpcs.map(n => n.nickname || n.name).join(', ');
+    const groupNamesStr = groupNpcs.map(n => n.name || n.nickname).join(', ');
 
     setIsLoading(true);
     setInputText('');
@@ -5937,7 +6069,7 @@ REGELN FÜR DEINE ANTWORT (STRENG EINZUHALTEN):
       aiSystemDirective = `
 DU BEFINDEST DICH IM REINEN GRUPPEN-DIALOG-MODUS!
 Teilnehmende Charaktere:
-${groupNpcs.map(n => `- ${n.nickname || n.name}: Persönlichkeit: ${n.personality}${n.personalityTraits ? ` (${formatPersonalityTraitsAsPrompt(n.personalityTraits)})` : ''}, Bio: ${n.bio}, Verhalten: ${n.conduct}`).join('\n')}
+${groupNpcs.map(n => `- ${n.name || n.nickname}: Persönlichkeit: ${n.personality}${n.personalityTraits ? ` (${formatPersonalityTraitsAsPrompt(n.personalityTraits)})` : ''}, Bio: ${n.bio}, Verhalten: ${n.conduct}`).join('\n')}
 
 Thema oder Anregung des Nutzers: "${text || 'Ein lockeres Gespräch über ihre nächsten Pläne'}"
 
@@ -5958,7 +6090,7 @@ REGELN FÜR DEINE ANTWORT (STRENG EINZUHALTEN):
       isDialogue: true,
       dialogueType,
       dialogueSpeakerId: dialogueType === 'user_npc' ? 'player' : speakerNpc?.id,
-      dialogueSpeakerName: dialogueType === 'user_npc' ? (adventure.player?.nickname || adventure.player?.name) : speakerName,
+      dialogueSpeakerName: dialogueType === 'user_npc' ? (adventure.player?.name || adventure.player?.nickname) : speakerName,
       dialogueTargetId: targetNpc?.id,
       dialogueTargetName: targetName,
       dialogueParticipantIds: dialogueType === 'group' ? groupNpcs.map(n => n.id) : (dialogueType === 'npc_npc' ? [speakerNpc?.id, targetNpc?.id].filter(Boolean) as string[] : ['player', speakerNpc?.id].filter(Boolean) as string[])
@@ -6042,7 +6174,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
         dialogueSpeakerId: dialogueType === 'user_npc' ? speakerNpc?.id : undefined,
         dialogueSpeakerName: dialogueType === 'user_npc' ? speakerName : undefined,
         dialogueTargetId: dialogueType === 'user_npc' ? 'player' : targetNpc?.id,
-        dialogueTargetName: dialogueType === 'user_npc' ? (adventure.player?.nickname || adventure.player?.name) : targetName,
+        dialogueTargetName: dialogueType === 'user_npc' ? (adventure.player?.name || adventure.player?.nickname) : targetName,
         dialogueParticipantIds: dialogueType === 'group' ? groupNpcs.map(n => n.id) : (dialogueType === 'npc_npc' ? [speakerNpc?.id, targetNpc?.id].filter(Boolean) as string[] : ['player', speakerNpc?.id].filter(Boolean) as string[])
       };
 
@@ -7145,6 +7277,7 @@ ${STRUCTURED_STORY_STATE_DIRECTIVE}`;
     
     // Reset messages locally
     setMessages(resetAdventure.chatHistory);
+    messagesRef.current = resetAdventure.chatHistory;
 
     // Calculate maxHp and maxMp on basis of reset player & world
     const isHero = resetAdventure.world.isHeroic !== false;
@@ -8311,7 +8444,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
             const currentPowerUsage = resolvedApp.powerUsageVal || 0;
             const reductionText = valueReduction > 0 ? `Werte −${valueReduction} %` : 'Gesund';
             const overloadText = currentPowerUsage > 0 ? `Kraftüberlastung ${Math.round(currentPowerUsage)} %` : '';
-            const bodyStatusValText = overloadText ? `${reductionText} · ${overloadText}` : reductionText;
+            const calculatedBodyStatus = overloadText ? `${reductionText} · ${overloadText}` : reductionText;
+            const displayBodyStatus = el.value || cond.statusText || calculatedBodyStatus;
 
             const overloadConfig = activeTransformation?.chibiOnPowerOverload ||
               activeTransformation?.chibiForm?.chibiOnPowerOverload ||
@@ -8325,15 +8459,18 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 key={`hud-bodycond-${el.id || idx}`}
                 type="button"
                 onClick={() => {
+                  setHudModalEditValue(displayBodyStatus);
                   setSelectedHudDetailField({
                     id: el.id || 'bodycond',
+                    elementId: el.id,
                     category: 'Charakter',
                     label: 'Körperlicher Zustand',
-                    value: bodyStatusValText,
+                    value: displayBodyStatus,
                     icon: 'fa-heart-pulse',
-                    colorClass: cond.severity === 'healthy' ? 'text-emerald-400' : cond.severity === 'minor' ? 'text-amber-400' : 'text-rose-400',
+                    colorClass: cond.severity === 'healthy' && (!el.value || el.value.toLowerCase().includes('gesund')) ? 'text-emerald-400' : cond.severity === 'minor' ? 'text-amber-400' : 'text-rose-400',
+                    isEditable: true,
                     details: [
-                      { label: 'Status', value: cond.statusText },
+                      { label: 'Status', value: displayBodyStatus },
                       { label: 'Details', value: cond.detailText },
                       { label: 'Wertminderung', value: valueReduction > 0 ? `−${valueReduction}% (durch körperliche Form/Zustand)` : 'Keine Einschränkung (Optimal)' },
                       { label: 'Kraftüberlastung', value: `${Math.round(currentPowerUsage)}%` },
@@ -8351,8 +8488,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 <span className="font-semibold text-slate-300">
                   Körperlicher Zustand
                 </span>
-                <span className={`font-bold ${cond.severity === 'healthy' ? 'text-emerald-400' : cond.severity === 'minor' ? 'text-amber-400' : 'text-rose-400'}`}>
-                  {bodyStatusValText}
+                <span className={`font-bold ${cond.severity === 'healthy' && (!el.value || el.value.toLowerCase().includes('gesund')) ? 'text-emerald-400' : cond.severity === 'minor' ? 'text-amber-400' : 'text-rose-400'}`}>
+                  {displayBodyStatus}
                 </span>
               </button>
             );
@@ -8422,7 +8559,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
               }
             }
 
-            const changeValueText = resolvedChibi.active
+            const calculatedChangeValueText = resolvedChibi.active
               ? (chibiDurationText === 'Kraftüberlastung'
                   ? 'Chibi-Form · Kraftüberlastung'
                   : (chibiDurationText === 'dauerhaft'
@@ -8430,18 +8567,25 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       : `Chibi-Form · ${chibiDurationText}`))
               : (summaryText && summaryText !== 'Keine' ? `${summaryText} · dauerhaft` : 'Keine');
 
+            const displayPhysChange = el.value && el.value !== 'Keine'
+              ? el.value
+              : calculatedChangeValueText;
+
             hudItems.push(
               <button
                 key={`hud-physchange-${el.id || idx}`}
                 type="button"
                 onClick={() => {
+                  setHudModalEditValue(displayPhysChange);
                   setSelectedHudDetailField({
                     id: el.id || 'physchange',
+                    elementId: el.id,
                     category: 'Charakter',
                     label: 'Körperliche Veränderungen',
-                    value: changeValueText,
+                    value: displayPhysChange,
                     icon: 'fa-dna',
                     colorClass: 'text-teal-400',
+                    isEditable: true,
                     details: resolvedChibi.active ? [
                       { label: 'Kategorie', value: 'Körperliche Veränderung' },
                       { label: 'Aktiver Zustand', value: 'Chibi-Form (Zustandsschicht)' },
@@ -8464,11 +8608,11 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       { label: 'Mögliche Nebenwirkungen (Aktiv)', value: duringEffects.length > 0 ? duringEffects.map(s => `${s.name}: ${s.effect}`).join(' • ') : 'Keine akuten Nebenwirkungen' },
                       { label: 'Nachwirkungen nach Form', value: afterEffects.length > 0 ? afterEffects.map(s => `${s.name} (${s.duration || 'Temporär'}): ${s.effect}`).join(' • ') : 'Keine' },
                       { label: 'Point of No Return & Risiken', value: pnrEffects.length > 0 ? pnrEffects.map(s => `${s.name}: ${s.effect}`).join(' • ') : `Point of No Return ab ${formatNum(transSettings.pnrThreshold)}%` },
-                      { label: 'Körperliche Veränderungen', value: summaryText },
+                      { label: 'Körperliche Veränderungen', value: displayPhysChange },
                       { label: 'Originalprofil', value: 'Unverändert geschützt' }
                     ] : [
                       { label: 'Kategorie', value: 'Charakter & Anatomie' },
-                      { label: 'Aktuelle Veränderungen', value: summaryText },
+                      { label: 'Aktuelle Veränderungen', value: displayPhysChange },
                       { label: 'Originalprofil', value: 'Unverändert geschützt' },
                       { label: 'Änderungshistorie', value: 'Logbuch-Aktiv' }
                     ]),
@@ -8481,7 +8625,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                   Körperliche Veränderungen
                 </span>
                 <span className="font-bold text-teal-400">
-                  {changeValueText}
+                  {displayPhysChange}
                 </span>
               </button>
             );
@@ -9003,6 +9147,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       <CharacterPortrait
                         adventure={adventure}
                         characterId={dialogueSpeakerId}
+                        characterName={availableDialogueNpcs?.find(n => n.id === dialogueSpeakerId)?.name}
                         size="md"
                       />
                       <select
@@ -9012,7 +9157,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       >
                         {availableDialogueNpcs.map((npc, nIdx) => (
                           <option key={npc.id ? `dlg-npc-${npc.id}-${nIdx}` : `dlg-npc-${nIdx}`} value={npc.id}>
-                            {npc.nickname || npc.name} ({npc.role || 'Charakter'})
+                            {npc.name} {npc.role ? `(${npc.role})` : ''}
                           </option>
                         ))}
                       </select>
@@ -9032,7 +9177,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Sprecher A:</label>
                       <div className="flex items-center gap-1.5">
-                        <CharacterPortrait adventure={adventure} characterId={dialogueSpeakerId} size="xs" />
+                        <CharacterPortrait adventure={adventure} characterId={dialogueSpeakerId} characterName={availableDialogueNpcs?.find(n => n.id === dialogueSpeakerId)?.name} size="xs" />
                         <select
                           value={dialogueSpeakerId}
                           onChange={(e) => setDialogueSpeakerId(e.target.value)}
@@ -9040,7 +9185,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         >
                           {availableDialogueNpcs?.map((npc, nIdx) => (
                             <option key={npc.id ? `spkA-${npc.id}-${nIdx}` : `spkA-${nIdx}`} value={npc.id} disabled={npc.id === dialogueTargetId}>
-                              {npc.nickname || npc.name}
+                              {npc.name}
                             </option>
                           ))}
                         </select>
@@ -9049,7 +9194,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Sprecher B:</label>
                       <div className="flex items-center gap-1.5">
-                        <CharacterPortrait adventure={adventure} characterId={dialogueTargetId} size="xs" />
+                        <CharacterPortrait adventure={adventure} characterId={dialogueTargetId} characterName={availableDialogueNpcs?.find(n => n.id === dialogueTargetId)?.name} size="xs" />
                         <select
                           value={dialogueTargetId}
                           onChange={(e) => setDialogueTargetId(e.target.value)}
@@ -9057,7 +9202,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                         >
                           {availableDialogueNpcs?.map((npc, nIdx) => (
                             <option key={npc.id ? `spkB-${npc.id}-${nIdx}` : `spkB-${nIdx}`} value={npc.id} disabled={npc.id === dialogueSpeakerId}>
-                              {npc.nickname || npc.name}
+                              {npc.name}
                             </option>
                           ))}
                         </select>
@@ -9091,8 +9236,8 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                             className="w-full flex items-center justify-between text-left p-1.5 hover:bg-slate-900 rounded-lg transition-all gap-2"
                           >
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <CharacterPortrait adventure={adventure} characterId={npc.id} characterName={npc.nickname || npc.name} size="xs" />
-                              <span className="text-xs text-slate-200 truncate">{npc.nickname || npc.name}</span>
+                              <CharacterPortrait adventure={adventure} characterId={npc.id} characterName={npc.name} size="xs" />
+                              <span className="text-xs text-slate-200 truncate font-medium">{npc.name}</span>
                             </div>
                             <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] border shrink-0 ${isChecked ? 'bg-amber-600 border-amber-500 text-white' : 'border-slate-700 text-transparent'}`}></span>
                           </button>
@@ -10275,7 +10420,7 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), isDialogueActive ? handleSendDialogue() : handleSend())} 
                 placeholder={
                   !isDialogueActive ? "Deine Handlung..." :
-                  dialogueType === 'user_npc' ? `Wörtliche Rede an ${(availableDialogueNpcs?.find(n => n.id === dialogueSpeakerId)?.nickname || availableDialogueNpcs?.find(n => n.id === dialogueSpeakerId)?.name || 'Charakter')}...` :
+                  dialogueType === 'user_npc' ? `Wörtliche Rede an ${(availableDialogueNpcs?.find(n => n.id === dialogueSpeakerId)?.name || availableDialogueNpcs?.find(n => n.id === dialogueSpeakerId)?.nickname || 'Charakter')}...` :
                   dialogueType === 'npc_npc' ? "Gesprächsthema oder erster Satz..." : "Thema für die Gruppe..."
                 } 
                 className="flex-1 bg-transparent border-none px-4 py-2 text-sm text-white outline-none resize-none placeholder:text-slate-500 max-h-40" 
@@ -12593,6 +12738,57 @@ STRIKTE SYSTEM-REGELN FÜR DIE KI ZUR ANWENDUNG DER EFFEKTE:
                       });
                       setSelectedHudDetailField(null);
                       return;
+                    }
+
+                    const isBodyStatus = elLabel.toLowerCase().includes('körper') && elLabel.toLowerCase().includes('zustand');
+                    const isPhysChange = elLabel.toLowerCase().includes('körper') && (elLabel.toLowerCase().includes('veränderung') || elLabel.toLowerCase().includes('veranderung'));
+
+                    if (isBodyStatus) {
+                      const currentApp = adventure.player.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' };
+                      let conds = [...(currentApp.activeConditions || [])];
+                      if (newVal.toLowerCase().includes('gesund') || newVal.toLowerCase().includes('normal') || newVal.toLowerCase().includes('unverletzt')) {
+                        conds = conds.filter(c => {
+                          const cName = String(c?.name || '').toLowerCase();
+                          return !cName.includes('hormon') && !cName.includes('verletzt') && !cName.includes('wunde');
+                        });
+                      }
+                      updatedPlayer = {
+                        ...adventure.player,
+                        appearance: {
+                          ...currentApp,
+                          physicalCondition: newVal,
+                          activeConditions: conds
+                        }
+                      };
+                    }
+
+                    if (isPhysChange) {
+                      const currentApp = adventure.player.appearance || { gender: 'Weiblich', build: '', hairColor: '', eyeColor: '', age: '' };
+                      const history = [...(adventure.player.physicalChangeHistory || [])];
+                      history.push({
+                        id: `pc-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                        timestamp: new Date().toISOString(),
+                        transformationIntensity: currentApp.transformationIntensity || 0,
+                        stageName: currentApp.activeTransformationId || 'standard',
+                        changes: [{
+                          id: `change-${Date.now()}`,
+                          category: 'appearance',
+                          label: 'Körperliche Veränderung',
+                          type: 'text',
+                          baseValue: currentApp.physicalChanges || 'Keine',
+                          currentValue: newVal,
+                          deltaDisplay: newVal,
+                          isSignificant: true
+                        }]
+                      });
+                      updatedPlayer = {
+                        ...adventure.player,
+                        appearance: {
+                          ...currentApp,
+                          physicalChanges: newVal
+                        },
+                        physicalChangeHistory: history
+                      };
                     }
 
                     if (isMoney) {

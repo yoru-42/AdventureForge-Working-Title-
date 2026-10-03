@@ -104,6 +104,13 @@ export class AdventureResetService {
       if (!cloned.initialActiveTimeEvents && (cloned.activeTimeEvents || cloned.world?.activeTimeEvents)) {
         cloned.initialActiveTimeEvents = deepClone(cloned.activeTimeEvents || cloned.world?.activeTimeEvents || []);
       }
+      if (!cloned.initialChatHistory && cloned.chatHistory && cloned.chatHistory.length > 0) {
+        // Snapshot only the initial prologue and first message
+        const initialModelMsgs = cloned.chatHistory.filter(m => m.role === 'model').slice(0, 2);
+        if (initialModelMsgs.length > 0) {
+          cloned.initialChatHistory = deepClone(initialModelMsgs);
+        }
+      }
     }
 
     return cloned;
@@ -111,7 +118,7 @@ export class AdventureResetService {
 
   /**
    * Resets an active adventure back to its pristine starting runtime state,
-   * while strictly preserving all canonical editor data, additions and chat history.
+   * while strictly preserving all canonical editor data and resetting story progress.
    * 
    * Canonical / Editor data preserved:
    * - adventure.npcs (all new NPCs, edited NPCs, traits, roles)
@@ -119,9 +126,9 @@ export class AdventureResetService {
    * - adventure.worldStory & adventure.worldStoryMarkers
    * - adventure.world (new territories, locations, connections, buildings, boundary settings)
    * - adventure.player (permanent profile: name, gender, race, appearance, profession, abilities, potential, parameters)
-   * - adventure.chatHistory (completely preserved, no messages deleted)
    * 
    * Runtime data reset:
+   * - adventure.chatHistory (reset to Prologue + Game Start / First Scene, all played user/model turns purged)
    * - combatState = undefined
    * - encounterForces = []
    * - dynamicWorldState = undefined
@@ -133,6 +140,7 @@ export class AdventureResetService {
    * - temporaryConditions = []
    * - runtime storyState (activeSituation, activeGoals, runtime discoveries, processedFirstMessage = false)
    * - player runtime level, xp, power values reset to baseline/start
+   * - worldTime & activeTimeEvents reset to start baseline
    * - worldTime & activeTimeEvents reset to start baseline
    */
   public static resetAdventureToInitialState(adventure: Adventure): Adventure {
@@ -321,16 +329,7 @@ export class AdventureResetService {
     });
 
     // 4. Kanonische Lore & Codex & STORY & QUESTS behalten
-    const resetLoreDatabase: LoreEntry[] = deepClone(adventure.loreDatabase || []).map((e: LoreEntry) => {
-      // Event-Schritte auf 'pending' zurücksetzen, wenn vorhanden
-      if (e.details?.eventSteps) {
-        e.details.eventSteps = e.details.eventSteps.map((s: any) => ({
-          ...s,
-          status: 'pending'
-        }));
-      }
-      return e;
-    });
+    const resetLoreDatabase: LoreEntry[] = deepClone(adventure.loreDatabase || []);
 
     // 5. Kanonische Item-Instanzen, Inventar & Ausrüstung
     // Regel: Aktueller Itembestand aus dem Editor bleibt erhalten.
@@ -442,8 +441,47 @@ export class AdventureResetService {
       lastUpdatedTime: new Date().toISOString()
     };
 
-    // 7. CHAT VOLLSTÄNDIG ERHALTEN: Der Chat bleibt beim normalen Reset komplett erhalten!
-    const resetChatHistory: ChatMessage[] = deepClone(adventure.chatHistory || []);
+    // 7. CHAT AUF PROLOG + SPIELSTART / ERSTE SZENE ZURÜCKSETZEN
+    const resetChatHistory: ChatMessage[] = [];
+    const prologueText = (adventure.prologue || '').trim();
+    const firstMsgText = (adventure.firstMessage || '').trim();
+    const existingHistory = adventure.chatHistory || [];
+
+    // Priorität 1: Über kanonische Editor-Felder adventure.prologue & adventure.firstMessage
+    if (prologueText || firstMsgText) {
+      if (prologueText) {
+        const existingPrologue = existingHistory.find(
+          m => m.id === 'prologue-msg' || (m.role === 'model' && m.text.trim() === prologueText)
+        );
+        resetChatHistory.push({
+          id: existingPrologue?.id || 'prologue-msg',
+          role: 'model',
+          text: prologueText
+        });
+      }
+
+      if (firstMsgText) {
+        const existingFirstMsg = existingHistory.find(
+          m => m.id === 'first-msg' || (m.role === 'model' && m.text.trim() === firstMsgText)
+        );
+        resetChatHistory.push({
+          id: existingFirstMsg?.id || 'first-msg',
+          role: 'model',
+          text: firstMsgText
+        });
+      }
+    } else if (adventure.initialChatHistory && adventure.initialChatHistory.length > 0) {
+      // Priorität 2: Gespeicherter Snapshot initialChatHistory (1-2 Startnachrichten)
+      resetChatHistory.push(...deepClone(adventure.initialChatHistory.slice(0, 2)));
+    } else {
+      // Fallback: Erste Modell-Nachrichten aus bestehender chatHistory ermitteln
+      if (existingHistory.length > 0) {
+        const initialModelMsgs = existingHistory.filter(m => m.role === 'model').slice(0, 2);
+        if (initialModelMsgs.length > 0) {
+          resetChatHistory.push(...deepClone(initialModelMsgs));
+        }
+      }
+    }
 
     // 8. Loot, Drops & Tasks zurücksetzen
     const resetLootSources = adventure.initialLootSources 

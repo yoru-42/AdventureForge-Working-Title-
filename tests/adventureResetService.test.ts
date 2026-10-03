@@ -286,39 +286,32 @@ function runTests() {
   }
 
   // -------------------------------------------------------------------------
-  // Test E – Chat bleibt vollständig
+  // Test E – Chat wird auf Prolog + Spielstart / Erste Szene zurückgesetzt
   // Erstelle:
-  // Prolog, User 1, Model 1, User 2, Model 2, User 3, Model 3
+  // Prolog, First Message, User 1, Model 1, User 2, Model 2, User 3
   // Reset ausführen.
   // Erwartung:
-  // resetAdv.chatHistory.length === 7
-  // und jede Message muss dieselbe ID, Rolle, Nachricht, Reihenfolge haben.
+  // resetAdv.chatHistory.length === 2 (Prolog + Erste Szene)
+  // Alle weiteren Spielnachrichten sind bereinigt
   // -------------------------------------------------------------------------
   {
     const adv = deepClone(adventureWithSnapshots);
+    adv.prologue = 'Die Reise ins Ungewisse beginnt...';
+    adv.firstMessage = 'Du erwachst in einer kühlen Kammer der Taverne.';
     adv.chatHistory = [
-      { id: 'msg-0-prologue', role: 'model', text: 'Prolog: Die Reise beginnt.' },
+      { id: 'prologue-msg', role: 'model', text: 'Die Reise ins Ungewisse beginnt...' },
+      { id: 'first-msg', role: 'model', text: 'Du erwachst in einer kühlen Kammer der Taverne.' },
       { id: 'msg-1-user', role: 'user', text: 'User 1: Ich sehe mich in der Taverne um.' },
       { id: 'msg-2-model', role: 'model', text: 'Model 1: Der Raum ist warm erleuchtet.' },
       { id: 'msg-3-user', role: 'user', text: 'User 2: Ich spreche mit dem Wirt.' },
       { id: 'msg-4-model', role: 'model', text: 'Model 2: Aldric nickt dir freundlich zu.' },
-      { id: 'msg-5-user', role: 'user', text: 'User 3: Ich bestelle ein Bier.' },
-      { id: 'msg-6-model', role: 'model', text: 'Model 3: Er zapft dir ein frisches Ale.' }
+      { id: 'msg-5-user', role: 'user', text: 'User 3: Ich bestelle ein Bier.' }
     ];
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.chatHistory.length === 7, 'Test E: Chatverlauf hat nach Reset exakt 7 Nachrichten');
-    
-    let allMessagesIdentical = true;
-    for (let i = 0; i < adv.chatHistory.length; i++) {
-      const orig = adv.chatHistory[i];
-      const reset = resetAdv.chatHistory[i];
-      if (!reset || reset.id !== orig.id || reset.role !== orig.role || reset.text !== orig.text) {
-        allMessagesIdentical = false;
-        break;
-      }
-    }
-    assert(allMessagesIdentical, 'Test E: Jede Nachricht hat dieselbe ID, Rolle, Text und Reihenfolge (keine Nachrichten gelöscht)');
+    assert(resetAdv.chatHistory.length === 2, 'Test E: Chatverlauf wird auf exakt 2 Nachrichten (Prolog & Erste Szene) zurückgesetzt');
+    assert(resetAdv.chatHistory[0].text === adv.prologue, 'Test E: Nachricht 1 ist der Prolog');
+    assert(resetAdv.chatHistory[1].text === adv.firstMessage, 'Test E: Nachricht 2 ist die erste Szene / Spielstart');
   }
 
   // -------------------------------------------------------------------------
@@ -426,7 +419,7 @@ function runTests() {
     // Kanon assertions
     assert(resetAdv.npcs.some(n => n.name === 'NPC B'), 'Test G: NPC B bleibt erhalten');
     assert(resetAdv.worldStory?.mainStory === 'Story B: Das Königreich steht am Abgrund.', 'Test G: Story B bleibt gespeichert');
-    assert(resetAdv.chatHistory.length === 10, 'Test G: Chat mit 10 Nachrichten bleibt vollständig erhalten');
+    assert(resetAdv.chatHistory.length === 2, 'Test G: Chat wird auf 2 Startnachrichten (Prolog & Erste Szene) zurückgestellt');
 
     // Runtime assertions
     assert(resetAdv.combatState === undefined, 'Test G: combatState ist weg (undefined)');
@@ -462,7 +455,7 @@ function runTests() {
       era: 'Mittelalter'
     };
     adv.chatHistory = [
-      { id: 'p1', role: 'model', text: 'Prolog' },
+      { id: 'prologue-msg', role: 'model', text: 'Die Reise ins Ungewisse beginnt...' },
       { id: 'u1', role: 'user', text: 'Hallo Welt' },
       { id: 'm1', role: 'model', text: 'Willkommen!' }
     ];
@@ -480,7 +473,7 @@ function runTests() {
 
     assert(loaded.npcs.some(n => n.name === 'Gareth'), '13. Persistence-Test: NPC bleibt nach Speichern/Laden erhalten');
     assert(loaded.worldStory?.mainStory === 'Dauerhafte Weltgeschichte', '13. Persistence-Test: Story bleibt nach Speichern/Laden erhalten');
-    assert(loaded.chatHistory.length === 3, '13. Persistence-Test: Chat bleibt nach Speichern/Laden vollständig erhalten');
+    assert(loaded.chatHistory.length === 2, '13. Persistence-Test: Chat bleibt nach Speichern/Laden auf Prolog & Erste Szene zurückgesetzt');
     assert(loaded.combatState === undefined, '13. Persistence-Test: Runtime combatState bleibt nach Speichern/Laden gelöscht');
     assert(loaded.collectionTasks?.length === 0, '13. Persistence-Test: Runtime collectionTasks bleibt nach Speichern/Laden leer');
     assert(loaded.pendingPickup === null, '13. Persistence-Test: Runtime pendingPickup bleibt nach Speichern/Laden null');
@@ -909,6 +902,78 @@ function runTests() {
     assert(param.growthRate === 1.35, 'Test R17: growthRate bleibt 1.35');
     assert(param.baseGrowthPerLevel === 4, 'Test R17: baseGrowthPerLevel bleibt 4');
     assert(param.xp === 0, 'Test R17: Laufzeit-XP wird auf 0 zurückgesetzt');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R18 – Chat-Reset: Löscht alle Chatnachrichten bis auf Prolog + Spielstart / Erste Szene
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    adv.prologue = 'Der uralte Prolog...';
+    adv.firstMessage = 'Die erste Spielszene...';
+    adv.chatHistory = [
+      { id: 'prologue-msg', role: 'model', text: 'Der uralte Prolog...' },
+      { id: 'first-msg', role: 'model', text: 'Die erste Spielszene...' },
+      { id: 'user-1', role: 'user', text: 'Ich erkunde den Wald.' },
+      { id: 'model-2', role: 'model', text: 'Mehrere Wochen vergehen im Wald...' },
+      { id: 'user-2', role: 'user', text: 'Ich kehre zurück.' }
+    ];
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.chatHistory?.length === 2, 'Test R18: chatHistory nach Reset enthält genau 2 Nachrichten (Prolog + Spielstart)');
+    assert(resetAdv.chatHistory?.[0]?.text === 'Der uralte Prolog...', 'Test R18: Erste Nachricht ist Prolog');
+    assert(resetAdv.chatHistory?.[1]?.text === 'Die erste Spielszene...', 'Test R18: Zweite Nachricht ist erste Spielszene');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R19 – Story & Quests EventSteps bleiben nach Reset unverändert
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+
+    const quest: LoreEntry = {
+      id: 'quest-eventsteps',
+      title: 'Der verlorene Schatz',
+      category: 'Story & Quests',
+      description: 'Eine Quest mit gespeicherten Story-Schritten.',
+      isUnlocked: true,
+      details: {
+        eventSteps: [
+          {
+            id: 'step-1',
+            title: 'Die Spur beginnt',
+            description: 'Der Held findet einen Hinweis.',
+            status: 'happened',
+            branch: 'main',
+            stepType: 'quest'
+          },
+          {
+            id: 'step-2',
+            title: 'Die Höhle',
+            description: 'Die Höhle wird erreicht.',
+            status: 'pending',
+            branch: 'main',
+            stepType: 'quest'
+          }
+        ]
+      }
+    };
+
+    adv.loreDatabase = [quest];
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+
+    const resetQuest = resetAdv.loreDatabase?.find(e => e.id === 'quest-eventsteps');
+
+    assert(
+      resetQuest?.details?.eventSteps?.find((s: any) => s.id === 'step-1')?.status === 'happened',
+      'Test R19: gespeicherter EventStep-Status happened bleibt nach Reset erhalten'
+    );
+
+    assert(
+      resetQuest?.details?.eventSteps?.find((s: any) => s.id === 'step-2')?.status === 'pending',
+      'Test R19: gespeicherter EventStep-Status pending bleibt nach Reset erhalten'
+    );
   }
 
   console.log('\n=== TEST RUN COMPLETE ===');

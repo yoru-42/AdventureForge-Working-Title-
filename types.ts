@@ -375,6 +375,8 @@ export interface Appearance {
   silhouetteState?: SilhouetteState | any;
   activeConditions?: BodyCondition[];
   customConditions?: BodyCondition[];
+  physicalCondition?: string;
+  physicalChanges?: string;
   chibiForm?: ChibiFormState;
   chibiOnPowerOverload?: {
     enabled: boolean;
@@ -4364,6 +4366,7 @@ export interface Adventure {
   initialWorldDrops?: WorldDropItem[];
   initialCollectionTasks?: CollectionTask[];
   initialActiveTimeEvents?: ActiveTimeEvent[];
+  initialChatHistory?: ChatMessage[];
 }
 
 export interface ChatMessage {

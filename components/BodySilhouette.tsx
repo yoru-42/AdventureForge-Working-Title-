@@ -353,7 +353,7 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
         if (currentAdv?.player && currentAdv.player.name) {
           const mainP = currentAdv.player;
           const pId = (mainP as any).id || 'main_player';
-          if (!list.some(c => c.id === pId || (c.name && c.name.toLowerCase() === mainP.name.toLowerCase()))) {
+          if (!list.some(c => c.id === pId || (c.name && String(c.name).toLowerCase() === String(mainP.name).toLowerCase()))) {
             list.push({
               id: pId,
               name: mainP.name,
@@ -413,7 +413,7 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
           // Check if list already has a transformation for this swap
           const existing = list.find(t => 
             (t.transformSwappedCharacterId && t.transformSwappedCharacterId === otherChar.id) ||
-            (t.transformSwappedCharacterName && t.transformSwappedCharacterName.toLowerCase().trim() === otherChar.name.toLowerCase().trim()) ||
+            (t.transformSwappedCharacterName && String(t.transformSwappedCharacterName).toLowerCase().trim() === String(otherChar.name || '').toLowerCase().trim()) ||
             t.name === `Körpertausch: ${otherChar.name}`
           );
 
@@ -481,7 +481,7 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
 
   const rawActiveTransformationId = player.appearance?.activeTransformationId || 'standard';
   const activeTransformationId = (rawActiveTransformationId === 'standard' && activePartnerSwap)
-    ? (transformationList.find(t => t.transformSwappedCharacterName?.toLowerCase().trim() === activePartnerSwap.partner.name.toLowerCase().trim())?.id || 'standard')
+    ? (transformationList.find(t => String(t.transformSwappedCharacterName || '').toLowerCase().trim() === String(activePartnerSwap.partner?.name || '').toLowerCase().trim())?.id || 'standard')
     : rawActiveTransformationId;
 
   const activeTransformation = transformationList.find(t => t.id === activeTransformationId);
@@ -889,11 +889,11 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
       if (found) return found;
     }
     if (targetName) {
-      const found = availableCodexCharacters.find(c => c.name.toLowerCase() === targetName.toLowerCase());
+      const found = availableCodexCharacters.find(c => String(c.name || '').toLowerCase() === String(targetName).toLowerCase());
       if (found) return found;
     }
     if (activeTransformation.transformIdentityPerception === 'koerpertausch') {
-      return availableCodexCharacters.find(c => c.name.toLowerCase() === activeTransformation.name.toLowerCase()) || null;
+      return availableCodexCharacters.find(c => String(c.name || '').toLowerCase() === String(activeTransformation.name || '').toLowerCase()) || null;
     }
     return null;
   }, [availableCodexCharacters, activeTransformation]);
@@ -2820,11 +2820,19 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
           </div>
         ) : (
           <div className={`text-[9.5px] p-2 rounded-lg flex items-center gap-1.5 font-medium border ${
-            activeConditionsList.some(c => c.name.toLowerCase().includes('hormon') || c.description.toLowerCase().includes('hormon') || c.name.toLowerCase().includes('instabil') || c.name.toLowerCase().includes('fruchtbar') || c.description.toLowerCase().includes('fruchtbar') || c.name.toLowerCase().includes('lust') || c.description.toLowerCase().includes('lust'))
+            activeConditionsList.some(c => {
+              const cName = String(c?.name || '').toLowerCase();
+              const cDesc = String(c?.description || '').toLowerCase();
+              return cName.includes('hormon') || cDesc.includes('hormon') || cName.includes('instabil') || cName.includes('fruchtbar') || cDesc.includes('fruchtbar') || cName.includes('lust') || cDesc.includes('lust');
+            })
               ? 'text-pink-300 bg-pink-950/40 border-pink-500/30 shadow-sm shadow-pink-950/20'
-              : activeConditionsList.some(c => c.name.toLowerCase().includes('mental') || c.name.toLowerCase().includes('geist') || c.description.toLowerCase().includes('mental') || c.description.toLowerCase().includes('geist') || c.description.toLowerCase().includes('gedanken') || c.name.toLowerCase().includes('kontrolle'))
+              : activeConditionsList.some(c => {
+                const cName = String(c?.name || '').toLowerCase();
+                const cDesc = String(c?.description || '').toLowerCase();
+                return cName.includes('mental') || cName.includes('geist') || cDesc.includes('mental') || cDesc.includes('geist') || cDesc.includes('gedanken') || cName.includes('kontrolle');
+              })
               ? 'text-fuchsia-300 bg-fuchsia-950/40 border-fuchsia-500/30'
-              : activeConditionsList.some(c => c.type === 'curse')
+              : activeConditionsList.some(c => c?.type === 'curse')
               ? 'text-red-400 bg-red-950/30 border-red-500/20'
               : state.isPregnant
               ? 'text-pink-400 bg-pink-950/30 border-pink-500/20'
@@ -2835,15 +2843,17 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
               : 'text-emerald-400/90 bg-emerald-950/30 border-emerald-500/20'
           }`}>
             {(() => {
-              const hormonalCond = activeConditionsList.find(c => 
-                c.name.toLowerCase().includes('hormon') || 
-                c.description.toLowerCase().includes('hormon') || 
-                c.name.toLowerCase().includes('instabil') ||
-                c.name.toLowerCase().includes('fruchtbar') || 
-                c.description.toLowerCase().includes('fruchtbar') || 
-                c.name.toLowerCase().includes('lust') || 
-                c.description.toLowerCase().includes('lust')
-              );
+              const hormonalCond = activeConditionsList.find(c => {
+                const cName = String(c?.name || '').toLowerCase();
+                const cDesc = String(c?.description || '').toLowerCase();
+                return cName.includes('hormon') || 
+                  cDesc.includes('hormon') || 
+                  cName.includes('instabil') ||
+                  cName.includes('fruchtbar') || 
+                  cDesc.includes('fruchtbar') || 
+                  cName.includes('lust') || 
+                  cDesc.includes('lust');
+              });
               if (hormonalCond) {
                 return (
                   <>
@@ -2855,14 +2865,16 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                   </>
                 );
               }
-              const mentalCond = activeConditionsList.find(c => 
-                c.name.toLowerCase().includes('mental') || 
-                c.name.toLowerCase().includes('geist') || 
-                c.description.toLowerCase().includes('mental') || 
-                c.description.toLowerCase().includes('geist') || 
-                c.description.toLowerCase().includes('gedanken') || 
-                c.name.toLowerCase().includes('kontrolle')
-              );
+              const mentalCond = activeConditionsList.find(c => {
+                const cName = String(c?.name || '').toLowerCase();
+                const cDesc = String(c?.description || '').toLowerCase();
+                return cName.includes('mental') || 
+                  cName.includes('geist') || 
+                  cDesc.includes('mental') || 
+                  cDesc.includes('geist') || 
+                  cDesc.includes('gedanken') || 
+                  cName.includes('kontrolle');
+              });
               if (mentalCond) {
                 return (
                   <>
@@ -2871,13 +2883,15 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                   </>
                 );
               }
-              const diseaseCond = activeConditionsList.find(c => 
-                (c.category || '').toLowerCase().includes('krankheit') || 
-                c.name.toLowerCase().includes('krankheit') ||
-                c.name.toLowerCase().includes('seuche') ||
-                c.name.toLowerCase().includes('fieber') ||
-                c.name.toLowerCase().includes('pest')
-              );
+              const diseaseCond = activeConditionsList.find(c => {
+                const cName = String(c?.name || '').toLowerCase();
+                const cCat = String(c?.category || '').toLowerCase();
+                return cCat.includes('krankheit') || 
+                  cName.includes('krankheit') ||
+                  cName.includes('seuche') ||
+                  cName.includes('fieber') ||
+                  cName.includes('pest');
+              });
               if (diseaseCond) {
                 return (
                   <>
@@ -2886,7 +2900,7 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                   </>
                 );
               }
-              const curse = activeConditionsList.find(c => c.type === 'curse');
+              const curse = activeConditionsList.find(c => c?.type === 'curse');
               if (curse) {
                 return (
                   <>
@@ -2957,10 +2971,12 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
           {activeConditionsList.length > 0 ? (
             <div className="space-y-1.5 max-h-60 overflow-y-auto pr-0.5 custom-scrollbar">
               {activeConditionsList.map(c => {
-                const isDisease = (c.category || '').toLowerCase().includes('krankheit') || c.name.toLowerCase().includes('krankheit') || c.name.toLowerCase().includes('seuche') || c.name.toLowerCase().includes('fieber') || c.name.toLowerCase().includes('pest');
-                const isCurse = c.type === 'curse';
-                const isBlessing = c.type === 'blessing';
-                const isMental = c.type === 'special' || c.name.toLowerCase().includes('mental') || (c.category || '').toLowerCase().includes('mental');
+                const cName = String(c?.name || '').toLowerCase();
+                const cCat = String(c?.category || '').toLowerCase();
+                const isDisease = cCat.includes('krankheit') || cName.includes('krankheit') || cName.includes('seuche') || cName.includes('fieber') || cName.includes('pest');
+                const isCurse = c?.type === 'curse';
+                const isBlessing = c?.type === 'blessing';
+                const isMental = c?.type === 'special' || cName.includes('mental') || cCat.includes('mental');
                 
                 const borderColor = isDisease
                   ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-200'

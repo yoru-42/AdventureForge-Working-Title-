@@ -29,7 +29,7 @@ export type GenerateContentResponse = any;
 
 import { jsonrepair } from "jsonrepair";
 import { ChatMessage, WorldSetting, Character, NPC, UserProfile, LoreEntry, EconomyHolding, EconomyLogEntry, Territory, EconomyTask, EconomyDuty, EconomyOrder, SmartFillContext, SmartFillSection } from "../types";
-import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
+import { ACTION_AND_TIMESKIP_DIRECTIVE, CANON_PROTECTION_DIRECTIVE, FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE, GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE, NPC_AND_WORLD_PERSPECTIVE_DIRECTIVE, REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE, WORLD_INTEGRATION_DIRECTIVE, WorldKnowledgeService } from "./worldKnowledgeService";
 import { enrichAndCompleteLoreEntry, sanitizeCharacterNameAndProfession, sanitizeRulerNameAndTitle } from "../lib/loreSanitizer";
 import {
   executeDrawingPlan,
@@ -517,11 +517,11 @@ export class GeminiService {
       // The systemInstruction already contains all world, player and NPC profile info.
       const maxHistoryCount = 12;
       let historyToPass = history;
-      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}\n${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
+      let finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}\n${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}\n${NPC_AND_WORLD_PERSPECTIVE_DIRECTIVE}`;
 
       if (history.length > maxHistoryCount) {
         if (history[0] && history[0].text) {
-          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}\n${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
+          finalSystemInstruction = `${systemInstruction}\n${playerPowerAutonomyDirective}\n${CANON_PROTECTION_DIRECTIVE}\n${GROUNDED_WORLD_AND_CHARACTER_DIRECTIVE}\n${WORLD_INTEGRATION_DIRECTIVE}\n${ACTION_AND_TIMESKIP_DIRECTIVE}\n${FUTURE_INTENTIONS_AND_PLANS_ISOLATION_DIRECTIVE}\n${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}\n${NPC_AND_WORLD_PERSPECTIVE_DIRECTIVE}\n\nPROLOGUE AND STORY START:\n${history[0].text}\n[... Einige Ereignisse übersprungen für Kontext-Optimierung ...]\n`;
         }
         historyToPass = history.slice(-maxHistoryCount);
       }
@@ -810,8 +810,8 @@ Die erste Szene MUSS zwingend und unmittelbar an diesem Ort spielen! Beschreibe 
 Sprich den Spieler direkt an, beschreibe, was er in diesem Moment an diesem Ort sieht oder wer vor ihm steht, und gib ihm einen klaren Handlungsaufhänger, auf den er sofort reagieren kann. Halte es filmreif und erzähle im Präsens.
 
 ANWEISUNGEN:
-- Schreibe aus der Perspektive des Erzählers (Du-Perspektive für den Spieler).
-- Lass NPCs agieren, falls anwesend.
+- Erzähle das Geschehen aus der Außenperspektive und der Wahrnehmung der anwesenden Charaktere (NPCs) und der lebendigen Welt. Beschreibe, wie andere Figuren den Spieler mustern, auf ihn reagieren und mit ihm sprechen, ohne Gefühle, Gedanken oder unwillkürliche Reaktionen des Spielers vorzuschreiben.
+- Lass NPCs aktiv und eigenständig agieren, sprechen und interagieren.
 - Keine Fragen am Ende wie "Was tust du?".
 - Markiere Handlungen und Ausdrücke mit Sternchen (*schaut überrascht*).
 - ABSOLUTES VERBOT DES AUSGEBENS VON KAMPAGNEN-WERTEN ODER STATS:
@@ -838,7 +838,8 @@ ANWEISUNGEN:
   Nicht jeder Charakter benötigt eine persönliche Geschichte, die für den Spieler relevant ist. Die meisten Bewohner dürfen ein gewöhnliches Leben führen. Nur Charaktere mit entsprechender Bedeutung, Motivation, Beziehung oder tatsächlicher Ereignisentwicklung sollen zu zentralen Figuren werden.
 - WISSENSISOLATION BEZÜGLICH ZUKÜNFTIGER ABSICHTEN & PLÄNE (KEIN WISSEN OHNE LAUT GESAGTES WORT IM PROLOG/SPIELSTART UND NUR BEI PHYSISCHER ANWESENHEIT):
   Charaktere und NPCs besitzen KEINERLEI Vorwissen über die zukünftigen Absichten, Pläne, geheimen Vorhaben oder Zielsetzungen des Spielers oder anderer Figuren! Ein Charakter kann und darf von einer zukünftigen Absicht oder einem Plan AUSSCHLIESSLICH DANN wissen, wenn diese im Prolog oder beim Spielstart / in der Ersten Szene EXPLIZIT laut ausgesprochen wurde UND der betreffende Charakter zu diesem Zeitpunkt WIRKLICH PHYSISCH ANWESEND war. Charaktere, die nicht persönlich anwesend waren, wissen absolut nichts davon!
-${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}`;
+${REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE}
+${NPC_AND_WORLD_PERSPECTIVE_DIRECTIVE}`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',

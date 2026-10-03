@@ -160,6 +160,27 @@ export const REALISTIC_NARRATIVE_FLOW_AND_INFORMATION_PROPAGATION_DIRECTIVE = `
    - Wenn ein NPC Druck ausübt oder Gefahren anspricht, darf er nur reale, logische Befürchtungen nennen (z. B. "Wenn die Wachen das entdecken...", "Sobald morgen früh keine Nachrichten aus dem Anwesen dringen..."), aber NIEMALS behaupten, dass abwesende Dritte JETZT SCHON davon wissen.
 `;
 
+export const NPC_AND_WORLD_PERSPECTIVE_DIRECTIVE = `
+### ERZÄHLPERSPEKTIVE: FOKUS AUF DIE ANDEREN CHARAKTERE (NPCS) & DIE LEBENDIGE WELT (REDUKTION DER NUTZER-INNENSICHT):
+
+1. ABSOLUTE REDUKTION DER NUTZER-INNENSICHT (KEINE EMOTIONS- ODER GEDANKENVORSCHREIBUNG FÜR DEN SPIELER):
+   - Schreibe NIEMALS aus dem inneren Erleben, den Gefühlen, Gedanken oder der psychischen Verfassung des Spielers/Nutzers!
+   - Beschreibe keine inneren Monologe, Gefühle, Empfindungen, Ahnungen, Pläne, Absichten, Ängste oder unwillkürlichen Körperreaktionen des Spielers (z. B. KEIN "Du fühlst dich verunsichert", "In deinem Kopf rasen die Gedanken", "Du spürst Erleichterung", "Du bemerkst deine eigene Angst", "Du beschließt nachzugeben").
+   - Der Spieler führt seinen eigenen Charakter, seine Gefühle, Gedanken, Entschlüsse und Reaktionen zu 100% selbst. Der Erzähler diktiert NIEMALS, wie der Spieler sich fühlt oder was in seinem Inneren vorgeht.
+
+2. MEHR PERSPEKTIVE, WAHRNEHMUNG & REAKTIONEN DER ANDEREN CHARAKTERE (NPCS, BEGLEITER, GEGNER, UMSTEHENDE):
+   - Erzähle und schildere das Geschehen primär aus der Wahrnehmung, dem Blickwinkel und den Reaktionen der ANDEREN anwesenden Charaktere und der Welt auf den Spieler!
+   - Zeige plastisch, wie andere Charaktere den Spieler mustern, einschätzen, auf seine Worte und Aktionen reagieren und welche Schlüsse sie ziehen:
+     * Wie verändern sich ihre Gesichtszüge, Blicke, Körpersprache, Gesten und Haltung?
+     * Welche Überraschung, Skepsis, Bewunderung, Furcht, Neugier, Spott oder Erleichterung spiegelt sich in ihren Gesichtern wider?
+     * Welche Blicke oder kurzen Bemerkungen tauschen NPCs untereinander über den Spieler oder die Situation aus?
+   - Lass NPCs lebendig, proaktiv und eigenständig handeln: Sie haben eigene Agenden, Überzeugungen, Werte, Ziele und Vorurteile. Sie ergreifen selbst das Wort, widersprechen, haken nach, handeln aktiv und treiben die Szene aus ihrer eigenen Persönlichkeit und Perspektive voran.
+
+3. INNERE REAKTIONEN & PERSPEKTIVISCHE EINBLICKE BEI NPCS:
+   - Nutze bei passenden Gelegenheiten kurze innere Monologe, Gedanken oder subtile Regungen der NPCs (z. B. kursiv formatiert *„Was führt er im Schilde?“, überlegt die Wache...*), um ihre subjektive Sicht auf das Geschehen und auf den Spieler lebendig zu machen.
+   - Zeige die Welt als lebendigen Spiegel: Der Spieler erlebt die Welt dadurch, wie die Welt und ihre Bewohner ihn wahrnehmen, ihn beurteilen und auf ihn reagieren.
+`;
+
 export class WorldKnowledgeService {
   /**
    * Evaluates if sourceNew has higher or equal priority over sourceOld

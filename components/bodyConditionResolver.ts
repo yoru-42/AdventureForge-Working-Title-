@@ -179,7 +179,7 @@ export const resolveBodyAppearance = (character: Character): ResolvedBodyAppeara
   const standardGender = origApp.gender || baseApp.gender || 'Weiblich';
   const standardRace = origApp.race || baseApp.race || 'Mensch';
   const standardRaceFeatures = origApp.raceFeatures ?? baseApp.raceFeatures ?? '';
-  const stdIsFemale = standardGender.toLowerCase() === 'weiblich';
+  const stdIsFemale = String(standardGender || '').toLowerCase() === 'weiblich';
 
   let standardHeightCm = parseNumericValue(origApp.height || baseApp.height, stdIsFemale ? 168 : 180);
   let standardWeightKg = parseNumericValue(origApp.weight || baseApp.weight, stdIsFemale ? 62 : 78);
@@ -195,7 +195,7 @@ export const resolveBodyAppearance = (character: Character): ResolvedBodyAppeara
   const standardSkinTone = (origApp as any)?.skinTone || (baseApp as any)?.skinTone || 'Natürlich';
 
   // Auto-heal corrupted baseline weight/fat/muscle if standard race is a normal humanoid
-  const isGiantRace = standardRace.toLowerCase().includes('riese') || standardRace.toLowerCase().includes('koloss') || standardRace.toLowerCase().includes('drache');
+  const isGiantRace = String(standardRace || '').toLowerCase().includes('riese') || String(standardRace || '').toLowerCase().includes('koloss') || String(standardRace || '').toLowerCase().includes('drache');
   if (!isGiantRace && standardWeightKg > 200) {
     standardWeightKg = stdIsFemale ? 62 : 78;
   }
@@ -240,15 +240,15 @@ export const resolveBodyAppearance = (character: Character): ResolvedBodyAppeara
   const blendFactor = effectiveBlend;
 
   // Keywords and theme defaults for transformation
-  const tName = (targetTrans?.name || targetTrans?.transformName || '').toLowerCase();
-  const tDesc = (targetTrans?.description || '').toLowerCase();
+  const tName = String(targetTrans?.name || targetTrans?.transformName || '').toLowerCase();
+  const tDesc = String(targetTrans?.description || '').toLowerCase();
   const isYouth = tName.includes('jungbrunn') || tName.includes('verjüng') || tName.includes('kind') || tDesc.includes('jungbrunn') || tDesc.includes('verjüng') || tDesc.includes('metamorphose');
   const isGiant = tName.includes('riese') || tName.includes('koloss') || tName.includes('giant') || tDesc.includes('riese') || tDesc.includes('koloss');
   const isBeast = tName.includes('bestie') || tName.includes('beast') || tName.includes('dämon') || tName.includes('werwolf');
 
   // Parse Transformation Target Properties
   const transGender = targetTrans?.transformGender || targetTrans?.gender || standardGender;
-  const transIsFemale = transGender.toLowerCase() === 'weiblich';
+  const transIsFemale = String(transGender || '').toLowerCase() === 'weiblich';
   const transRace = targetTrans?.transformRace || targetTrans?.race || standardRace;
   const transRaceFeatures = targetTrans?.transformRaceFeatures ?? targetTrans?.raceFeatures ?? standardRaceFeatures;
   const transHeightCm = parseNumericValue(targetTrans?.transformHeight, isYouth ? 125 : isGiant ? 380 : (transIsFemale ? 170 : 185));
@@ -298,7 +298,7 @@ export const resolveBodyAppearance = (character: Character): ResolvedBodyAppeara
     gender = transGender;
   } else if (permanentLockedFeatures.gender && targetTrans) {
     gender = transGender;
-  } else if (standardGender.toLowerCase() !== transGender.toLowerCase()) {
+  } else if (String(standardGender || '').toLowerCase() !== String(transGender || '').toLowerCase()) {
     gender = (blendFactor >= 0.50 && targetTrans) ? transGender : standardGender;
   } else {
     gender = standardGender;
@@ -312,12 +312,12 @@ export const resolveBodyAppearance = (character: Character): ResolvedBodyAppeara
   let hasWings = Boolean(
     (targetTrans?.transformWings !== undefined && targetTrans.transformWings && (blendFactor >= 0.25 || permanentLockedFeatures.wings)) ||
     stateObj.hasWings ||
-    (raceFeatures.toLowerCase().includes('flügel') || raceFeatures.toLowerCase().includes('wings'))
+    (String(raceFeatures || '').toLowerCase().includes('flügel') || String(raceFeatures || '').toLowerCase().includes('wings'))
   );
   let hasHorns = Boolean(
     (targetTrans?.transformHorns !== undefined && targetTrans.transformHorns && (blendFactor >= 0.25 || permanentLockedFeatures.horns)) ||
     stateObj.hasHorns ||
-    (raceFeatures.toLowerCase().includes('horn') || raceFeatures.toLowerCase().includes('hörner'))
+    (String(raceFeatures || '').toLowerCase().includes('horn') || String(raceFeatures || '').toLowerCase().includes('hörner'))
   );
 
   // 4. Active Conditions layer
@@ -326,10 +326,10 @@ export const resolveBodyAppearance = (character: Character): ResolvedBodyAppeara
   // Also seamlessly check if character.abilities contains any bodily condition mistakenly entered as a technique (e.g. source: Fremdeinfluss or Hormonelle Instabilität)
   if (Array.isArray((character as any)?.abilities)) {
     (character as any).abilities.forEach((a: any) => {
-      const sLower = (a.source || '').toLowerCase();
-      const nLower = (a.name || '').toLowerCase();
-      const isCondition = sLower === 'fremdeinfluss' || nLower.includes('hormonelle instabilität') || (nLower.includes('hormon') && (a.category || '').toLowerCase() !== 'transformationen');
-      if (isCondition && !activeConditions.some(c => c.name.toLowerCase() === (a.name || '').toLowerCase())) {
+      const sLower = String(a?.source || '').toLowerCase();
+      const nLower = String(a?.name || '').toLowerCase();
+      const isCondition = sLower === 'fremdeinfluss' || nLower.includes('hormonelle instabilität') || (nLower.includes('hormon') && String(a?.category || '').toLowerCase() !== 'transformationen');
+      if (isCondition && !activeConditions.some(c => String(c?.name || '').toLowerCase() === String(a?.name || '').toLowerCase())) {
         activeConditions.push({
           id: a.id || 'cond-migrated-fremd',
           name: a.name || 'Hormonelle Instabilität',
@@ -409,7 +409,7 @@ export const resolveBodyAppearance = (character: Character): ResolvedBodyAppeara
   const rawPreg = baseApp.pregnancyMonth !== undefined ? baseApp.pregnancyMonth : stateObj.pregnancyMonth;
   const pregMonthVal = parseNumericValue(rawPreg, 0);
   const isPregnant = Boolean(stateObj.isPregnant || (character.appearance as any)?.isPregnant || pregMonthVal > 0);
-  const isFemale = gender.toLowerCase() === 'weiblich';
+  const isFemale = String(gender || '').toLowerCase() === 'weiblich';
   const effPregMonth = (isFemale && isPregnant) ? Math.max(1, pregMonthVal) : 0;
 
   if (effPregMonth > 0) {
@@ -999,7 +999,7 @@ export const processElapsedGameTime = (
 export const toggleConditionOnCharacter = (character: Character, condition: BodyCondition): Character => {
   const currentApp = character.appearance || { hairColor: '', eyeColor: '', age: '', build: '', gender: 'Weiblich' };
   const currentActive = [...(currentApp.activeConditions || [])];
-  const existingIdx = currentActive.findIndex(c => c.id === condition.id || c.name.toLowerCase() === condition.name.toLowerCase());
+  const existingIdx = currentActive.findIndex(c => c.id === condition.id || String(c?.name || '').toLowerCase() === String(condition?.name || '').toLowerCase());
 
   if (existingIdx > -1) {
     currentActive.splice(existingIdx, 1);
@@ -1096,7 +1096,7 @@ export const migrateFremdeinflussConditions = (player: Character): { updated: bo
     if (isBodilyCondition) {
       hasChanges = true;
       const conditionName = a.name || 'Hormonelle Instabilität';
-      const exists = currentActiveConditions.some(c => c.name.toLowerCase() === conditionName.toLowerCase());
+      const exists = currentActiveConditions.some(c => String(c?.name || '').toLowerCase() === String(conditionName || '').toLowerCase());
       if (!exists) {
         currentActiveConditions.push({
           id: a.id || `cond-migrated-${Date.now()}`,
