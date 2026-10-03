@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Character, Appearance } from '../types';
+import { Character, Appearance, BodyCondition, BodyConditionType } from '../types';
 import { BodyConditionsManager } from './BodyConditionsManager';
 import { TransformationIntensityCard } from './TransformationIntensityCard';
 import { StorageService } from '../lib/storageService';
+import { AutoExpandingTextarea } from './AutoExpandingTextarea';
 import { 
   resolveBodyAppearance,
   incrementTransformationIntensity,
   decayTransformationIntensity,
-  updateTransformationIntensity
+  updateTransformationIntensity,
+  saveCustomConditionOnCharacter,
+  removeConditionFromCharacter
 } from './bodyConditionResolver';
 import { resolveChibiForm } from '../services/chibiFormResolver';
 
@@ -90,6 +93,17 @@ const areStatesEqual = (s1: any, s2: any): boolean => {
 };
 
 
+
+const STATUS_CATEGORY_OPTIONS: Array<{ type: BodyConditionType; category: string; label: string }> = [
+  { type: 'physical_condition', category: 'Krankheit', label: 'Krankheit' },
+  { type: 'physical_condition', category: 'Physischer Zustand', label: 'Physischer Zustand' },
+  { type: 'curse', category: 'Fluch', label: 'Fluch' },
+  { type: 'blessing', category: 'Segen', label: 'Segen' },
+  { type: 'special', category: 'Mentale Veränderung', label: 'Mentale Veränderung' },
+  { type: 'gender_change', category: 'Geschlechtswechsel', label: 'Geschlechtswechsel' },
+  { type: 'race_change', category: 'Rassenwechsel / Mutation', label: 'Rassenwechsel / Mutation' },
+  { type: 'special', category: 'Spezial', label: 'Spezial' }
+];
 
 export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
   player,
@@ -710,6 +724,159 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
   const [targetCharForFullSwap, setTargetCharForFullSwap] = useState<any>(null);
   const [swappedCharSearch, setSwappedCharSearch] = useState<string>('');
   const [swapSuccessToast, setSwapSuccessToast] = useState<string | null>(null);
+
+  // Status-Veränderungen Modal State & Handlers
+  const [showStatusModal, setShowStatusModal] = useState<boolean>(false);
+  const [editingStatusId, setEditingStatusId] = useState<string | null>(null);
+  const [statusName, setStatusName] = useState<string>('');
+  const [statusType, setStatusType] = useState<BodyConditionType>('physical_condition');
+  const [statusCategory, setStatusCategory] = useState<string>('Physischer Zustand');
+  const [statusSeverity, setStatusSeverity] = useState<'leicht' | 'mittel' | 'stark' | 'vollständig'>('mittel');
+  const [statusDurationType, setStatusDurationType] = useState<'permanent' | 'timed' | 'custom'>('permanent');
+  const [statusYears, setStatusYears] = useState<number>(0);
+  const [statusMonths, setStatusMonths] = useState<number>(0);
+  const [statusDays, setStatusDays] = useState<number>(0);
+  const [statusHours, setStatusHours] = useState<number>(0);
+  const [statusMinutes, setStatusMinutes] = useState<number>(0);
+  const [statusCustomDuration, setStatusCustomDuration] = useState<string>('');
+  const [statusDescription, setStatusDescription] = useState<string>('');
+  const [statusWeightMod, setStatusWeightMod] = useState<number>(0);
+  const [statusMuscleMod, setStatusMuscleMod] = useState<number>(0);
+  const [statusFatMod, setStatusFatMod] = useState<number>(0);
+  const [statusHealingMod, setStatusHealingMod] = useState<number>(0);
+  const [statusShowModifiers, setStatusShowModifiers] = useState<boolean>(false);
+
+  const getFormattedDuration = () => {
+    if (statusDurationType === 'permanent') return 'Dauerhaft';
+    if (statusDurationType === 'custom') return statusCustomDuration.trim() || 'Dauerhaft';
+
+    const parts: string[] = [];
+    if (statusYears > 0) parts.push(`${statusYears} ${statusYears === 1 ? 'Jahr' : 'Jahre'}`);
+    if (statusMonths > 0) parts.push(`${statusMonths} ${statusMonths === 1 ? 'Monat' : 'Monate'}`);
+    if (statusDays > 0) parts.push(`${statusDays} ${statusDays === 1 ? 'Tag' : 'Tage'}`);
+    if (statusHours > 0) parts.push(`${statusHours} ${statusHours === 1 ? 'Stunde' : 'Stunden'}`);
+    if (statusMinutes > 0) parts.push(`${statusMinutes} ${statusMinutes === 1 ? 'Minute' : 'Minuten'}`);
+
+    return parts.length > 0 ? parts.join(', ') : 'Dauerhaft';
+  };
+
+  const handleOpenAddStatus = () => {
+    setEditingStatusId(null);
+    setStatusName('');
+    setStatusType('physical_condition');
+    setStatusCategory('Physischer Zustand');
+    setStatusSeverity('mittel');
+    setStatusDurationType('permanent');
+    setStatusYears(0);
+    setStatusMonths(0);
+    setStatusDays(0);
+    setStatusHours(0);
+    setStatusMinutes(0);
+    setStatusCustomDuration('');
+    setStatusDescription('');
+    setStatusWeightMod(0);
+    setStatusMuscleMod(0);
+    setStatusFatMod(0);
+    setStatusHealingMod(0);
+    setStatusShowModifiers(false);
+    setShowStatusModal(true);
+  };
+
+  const handleOpenEditStatus = (cond: BodyCondition) => {
+    setEditingStatusId(cond.id);
+    setStatusName(cond.name);
+    setStatusType(cond.type);
+    setStatusCategory(cond.category || 'Physischer Zustand');
+    setStatusSeverity(cond.severity || 'mittel');
+
+    const dur = cond.duration || 'Dauerhaft';
+    if (!dur || dur.toLowerCase() === 'dauerhaft' || dur.toLowerCase() === 'permanent') {
+      setStatusDurationType('permanent');
+      setStatusYears(0);
+      setStatusMonths(0);
+      setStatusDays(0);
+      setStatusHours(0);
+      setStatusMinutes(0);
+      setStatusCustomDuration('');
+    } else {
+      const yM = dur.match(/(\d+)\s*J/i);
+      const mM = dur.match(/(\d+)\s*Monat/i);
+      const dM = dur.match(/(\d+)\s*Tag/i);
+      const hM = dur.match(/(\d+)\s*Stund/i);
+      const minM = dur.match(/(\d+)\s*Min/i);
+
+      const y = yM ? parseInt(yM[1], 10) : 0;
+      const m = mM ? parseInt(mM[1], 10) : 0;
+      const d = dM ? parseInt(dM[1], 10) : 0;
+      const h = hM ? parseInt(hM[1], 10) : 0;
+      const min = minM ? parseInt(minM[1], 10) : 0;
+
+      if (y > 0 || m > 0 || d > 0 || h > 0 || min > 0) {
+        setStatusDurationType('timed');
+        setStatusYears(y);
+        setStatusMonths(m);
+        setStatusDays(d);
+        setStatusHours(h);
+        setStatusMinutes(min);
+        setStatusCustomDuration('');
+      } else {
+        setStatusDurationType('custom');
+        setStatusYears(0);
+        setStatusMonths(0);
+        setStatusDays(0);
+        setStatusHours(0);
+        setStatusMinutes(0);
+        setStatusCustomDuration(dur);
+      }
+    }
+
+    setStatusDescription(cond.description || '');
+    setStatusWeightMod(cond.weightModifierKg || 0);
+    setStatusMuscleMod(cond.muscleMassModifier || 0);
+    setStatusFatMod(cond.bodyFatModifier || 0);
+    setStatusHealingMod(cond.healingFactorModifier || 0);
+    setStatusShowModifiers(
+      !!cond.weightModifierKg || !!cond.muscleMassModifier || !!cond.bodyFatModifier || !!cond.healingFactorModifier
+    );
+    setShowStatusModal(true);
+  };
+
+  const handleSaveStatus = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!statusName.trim()) return;
+
+    const finalDuration = getFormattedDuration();
+    const condId = editingStatusId || `status-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const conditionToSave: BodyCondition = {
+      id: condId,
+      name: statusName.trim(),
+      type: statusType,
+      category: statusCategory,
+      isActive: true,
+      severity: statusSeverity,
+      duration: finalDuration,
+      description: statusDescription.trim(),
+      weightModifierKg: statusWeightMod || undefined,
+      muscleMassModifier: statusMuscleMod || undefined,
+      bodyFatModifier: statusFatMod || undefined,
+      healingFactorModifier: statusHealingMod || undefined,
+      statusTag: statusName.trim()
+    };
+
+    if (onUpdatePlayer) {
+      const updated = saveCustomConditionOnCharacter(player, conditionToSave);
+      onUpdatePlayer(updated);
+    }
+    setShowStatusModal(false);
+    setEditingStatusId(null);
+  };
+
+  const handleRemoveStatus = (condId: string) => {
+    if (onUpdatePlayer) {
+      const updated = removeConditionFromCharacter(player, condId);
+      onUpdatePlayer(updated);
+    }
+  };
 
 
 
@@ -2704,6 +2871,21 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                   </>
                 );
               }
+              const diseaseCond = activeConditionsList.find(c => 
+                (c.category || '').toLowerCase().includes('krankheit') || 
+                c.name.toLowerCase().includes('krankheit') ||
+                c.name.toLowerCase().includes('seuche') ||
+                c.name.toLowerCase().includes('fieber') ||
+                c.name.toLowerCase().includes('pest')
+              );
+              if (diseaseCond) {
+                return (
+                  <>
+                    <i className="fa-solid fa-viruses text-emerald-400"></i>
+                    <span className="font-semibold text-emerald-200">{diseaseCond.name} (Krankheit aktiv)</span>
+                  </>
+                );
+              }
               const curse = activeConditionsList.find(c => c.type === 'curse');
               if (curse) {
                 return (
@@ -2747,46 +2929,146 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
           </div>
         )}
 
-        {/* Active Conditions Preview on Silhouette Card */}
-        {activeConditionsList.length > 0 && (
-          <div className="pt-2 border-t border-slate-800/60">
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="text-[9.5px] font-extrabold text-amber-400 tracking-wider flex items-center gap-1">
-                <i className="fa-solid fa-sparkles text-amber-400 text-[10px]"></i>
-                <span>Aktive Bedingungen ({activeConditionsList.length})</span>
-              </span>
+        {/* Status-Veränderungen & Effekte direkt unter der Zusammenfassung */}
+        <div className="pt-2.5 border-t border-slate-800/80 space-y-2">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+              <i className="fa-solid fa-virus-slash text-indigo-400 text-xs"></i>
+              <span>Status-Veränderungen</span>
+              {activeConditionsList.length > 0 && (
+                <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold">
+                  {activeConditionsList.length}
+                </span>
+              )}
+            </span>
+
+            {!readOnly && (
               <button
                 type="button"
-                onClick={() => setActiveSilhouetteTab('conditions')}
-                className="text-[8.5px] text-amber-300 hover:underline cursor-pointer"
+                onClick={handleOpenAddStatus}
+                className="text-[10px] font-semibold text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
               >
-                Verwalten →
+                <i className="fa-solid fa-plus text-[9px]"></i>
+                <span>Status-Veränderung hinzufügen</span>
               </button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {activeConditionsList.map(c => (
-                <span
-                  key={c.id}
-                  className={`px-2 py-1 rounded-md text-[9.5px] font-bold border flex items-center gap-1.5 ${
-                    c.type === 'curse'
-                      ? 'bg-red-950/40 text-red-300 border-red-500/30'
-                      : c.type === 'blessing'
-                      ? 'bg-amber-950/40 text-amber-300 border-amber-500/30'
-                      : 'bg-indigo-950/40 text-indigo-300 border-indigo-500/30'
-                  }`}
-                >
-                  <i className={`fa-solid ${
-                    c.type === 'curse' ? 'fa-skull' :
-                    c.type === 'blessing' ? 'fa-hands-praying' :
-                    c.type === 'gender_change' ? 'fa-venus-mars' :
-                    c.type === 'race_change' ? 'fa-dna' : 'fa-sparkles'
-                  } text-[9px]`}></i>
-                  <span>{c.name}</span>
-                </span>
-              ))}
-            </div>
+            )}
           </div>
-        )}
+
+          {activeConditionsList.length > 0 ? (
+            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-0.5 custom-scrollbar">
+              {activeConditionsList.map(c => {
+                const isDisease = (c.category || '').toLowerCase().includes('krankheit') || c.name.toLowerCase().includes('krankheit') || c.name.toLowerCase().includes('seuche') || c.name.toLowerCase().includes('fieber') || c.name.toLowerCase().includes('pest');
+                const isCurse = c.type === 'curse';
+                const isBlessing = c.type === 'blessing';
+                const isMental = c.type === 'special' || c.name.toLowerCase().includes('mental') || (c.category || '').toLowerCase().includes('mental');
+                
+                const borderColor = isDisease
+                  ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-200'
+                  : isCurse
+                  ? 'border-red-500/40 bg-red-950/30 text-red-200'
+                  : isBlessing
+                  ? 'border-amber-500/40 bg-amber-950/30 text-amber-200'
+                  : isMental
+                  ? 'border-fuchsia-500/40 bg-fuchsia-950/30 text-fuchsia-200'
+                  : 'border-indigo-500/40 bg-indigo-950/30 text-indigo-200';
+
+                const badgeBg = isDisease
+                  ? 'bg-emerald-900/60 text-emerald-300 border-emerald-500/40'
+                  : isCurse
+                  ? 'bg-red-900/60 text-red-300 border-red-500/40'
+                  : isBlessing
+                  ? 'bg-amber-900/60 text-amber-300 border-amber-500/40'
+                  : isMental
+                  ? 'bg-fuchsia-900/60 text-fuchsia-300 border-fuchsia-500/40'
+                  : 'bg-indigo-900/60 text-indigo-300 border-indigo-500/40';
+
+                return (
+                  <div
+                    key={c.id}
+                    className={`p-2 rounded-lg border ${borderColor} space-y-1 transition-all text-xs font-mono`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-slate-100">{c.name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded border font-sans font-semibold ${badgeBg}`}>
+                          {c.category || (isCurse ? 'Fluch' : isBlessing ? 'Segen' : 'Zustand')}
+                        </span>
+                        {c.severity && (
+                          <span className="text-[9px] text-slate-400 font-sans">
+                            ({c.severity})
+                          </span>
+                        )}
+                        {c.duration && c.duration !== 'Dauerhaft' && (
+                          <span className="text-[9px] text-slate-500 font-sans">
+                            · {c.duration}
+                          </span>
+                        )}
+                      </div>
+
+                      {!readOnly && (
+                        <div className="flex items-center gap-1 shrink-0 font-sans">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditStatus(c)}
+                            className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded transition-colors cursor-pointer text-[10px]"
+                            title="Status-Veränderung bearbeiten"
+                          >
+                            <i className="fa-solid fa-pen-to-square"></i>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveStatus(c.id)}
+                            className="p-1 hover:bg-red-900/60 text-slate-400 hover:text-red-300 rounded transition-colors cursor-pointer text-[10px]"
+                            title="Status-Veränderung entfernen"
+                          >
+                            <i className="fa-solid fa-trash-can"></i>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {c.description && (
+                      <p className="text-[10.5px] text-slate-300/90 font-sans leading-tight">
+                        {c.description}
+                      </p>
+                    )}
+
+                    {(c.weightModifierKg || c.muscleMassModifier || c.bodyFatModifier || c.healingFactorModifier) && (
+                      <div className="flex items-center gap-2 text-[9px] text-slate-400 pt-1 border-t border-slate-800/50 flex-wrap">
+                        {c.weightModifierKg !== undefined && c.weightModifierKg !== 0 && (
+                          <span>Gewicht: {c.weightModifierKg > 0 ? `+${c.weightModifierKg}` : c.weightModifierKg} kg</span>
+                        )}
+                        {c.muscleMassModifier !== undefined && c.muscleMassModifier !== 0 && (
+                          <span>Muskeln: {c.muscleMassModifier > 0 ? `+${c.muscleMassModifier}` : c.muscleMassModifier}%</span>
+                        )}
+                        {c.bodyFatModifier !== undefined && c.bodyFatModifier !== 0 && (
+                          <span>KFA: {c.bodyFatModifier > 0 ? `+${c.bodyFatModifier}` : c.bodyFatModifier}%</span>
+                        )}
+                        {c.healingFactorModifier !== undefined && c.healingFactorModifier !== 0 && (
+                          <span>Heilung: {c.healingFactorModifier > 0 ? `+${c.healingFactorModifier}` : c.healingFactorModifier} Stufen</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-slate-900/40 border border-slate-800/60 rounded-lg p-2.5 flex items-center justify-between text-[10px] text-slate-400">
+              <span>Keine aktiven Status-Veränderungen vorhanden.</span>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddStatus}
+                  className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <i className="fa-solid fa-plus text-[9px]"></i>
+                  <span>Hinzufügen</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
 
@@ -4453,6 +4735,337 @@ export const BodySilhouette: React.FC<BodySilhouetteProps> = ({
                 <span>Ja, Körpertausch aktivieren</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* STATUS-VERÄNDERUNG HINZUFÜGEN / BEARBEITEN MODAL */}
+      {showStatusModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-sm text-indigo-400">
+                  <i className="fa-solid fa-virus-slash"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-100">
+                    {editingStatusId ? 'Status-Veränderung bearbeiten' : 'Status-Veränderung hinzufügen'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    Definiere einen physischen, mentalen oder magischen Zustand
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowStatusModal(false);
+                  setEditingStatusId(null);
+                }}
+                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors cursor-pointer text-xs"
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStatus} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Name / Bezeichnung <span className="text-amber-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={statusName}
+                  onChange={e => setStatusName(e.target.value)}
+                  placeholder="z. B. Sumpffieber, Giftwirkung, Erschöpfung, Segnung des Lichts"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Kategorie / Art
+                  </label>
+                  <select
+                    value={statusCategory}
+                    onChange={e => {
+                      const selected = STATUS_CATEGORY_OPTIONS.find(o => o.category === e.target.value);
+                      if (selected) {
+                        setStatusCategory(selected.category);
+                        setStatusType(selected.type);
+                      } else {
+                        setStatusCategory(e.target.value);
+                      }
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+                  >
+                    {STATUS_CATEGORY_OPTIONS.map(opt => (
+                      <option key={opt.category} value={opt.category}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                    Schweregrad
+                  </label>
+                  <select
+                    value={statusSeverity}
+                    onChange={e => setStatusSeverity(e.target.value as any)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium cursor-pointer"
+                  >
+                    <option value="leicht">Leicht</option>
+                    <option value="mittel">Mittel</option>
+                    <option value="stark">Stark</option>
+                    <option value="vollständig">Vollständig</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-semibold text-slate-300">
+                    Dauer / Abklingzeit
+                  </label>
+                  <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => setStatusDurationType('permanent')}
+                      className={`px-2 py-0.5 rounded font-semibold transition-colors cursor-pointer ${
+                        statusDurationType === 'permanent'
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Dauerhaft
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusDurationType('timed')}
+                      className={`px-2 py-0.5 rounded font-semibold transition-colors cursor-pointer ${
+                        statusDurationType === 'timed'
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Zeitangabe
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusDurationType('custom')}
+                      className={`px-2 py-0.5 rounded font-semibold transition-colors cursor-pointer ${
+                        statusDurationType === 'custom'
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      Freitext
+                    </button>
+                  </div>
+                </div>
+
+                {statusDurationType === 'timed' && (
+                  <div className="space-y-2 bg-slate-950/70 border border-slate-800 p-2.5 rounded-xl">
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                          Jahre
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={statusYears || ''}
+                          onChange={e => setStatusYears(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          placeholder="0"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-center font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                          Monate
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={statusMonths || ''}
+                          onChange={e => setStatusMonths(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          placeholder="0"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-center font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                          Tage
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={statusDays || ''}
+                          onChange={e => setStatusDays(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          placeholder="0"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-center font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                          Stunden
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={statusHours || ''}
+                          onChange={e => setStatusHours(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          placeholder="0"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-center font-bold"
+                        />
+                      </div>
+                      <div className="col-span-2 sm:col-span-1">
+                        <label className="block text-[10px] font-medium text-slate-400 mb-1">
+                          Minuten
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={statusMinutes || ''}
+                          onChange={e => setStatusMinutes(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                          placeholder="0"
+                          className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono text-center font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] pt-1 text-slate-400 border-t border-slate-800/60 font-mono">
+                      <span>Berechnete Dauer:</span>
+                      <span className="font-bold text-amber-300">
+                        {getFormattedDuration()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {statusDurationType === 'permanent' && (
+                  <div className="bg-slate-950/60 border border-slate-800 p-2.5 rounded-xl flex items-center justify-between text-[11px] text-slate-300 font-mono">
+                    <span className="text-slate-400">Zustand bleibt dauerhaft bestehen</span>
+                    <span className="font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded text-[10px]">
+                      Dauerhaft
+                    </span>
+                  </div>
+                )}
+
+                {statusDurationType === 'custom' && (
+                  <input
+                    type="text"
+                    value={statusCustomDuration}
+                    onChange={e => setStatusCustomDuration(e.target.value)}
+                    placeholder="z. B. 3 Runden, Bis Rast, Bis Sonnenaufgang"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                  Beschreibung &amp; Wirkung
+                </label>
+                <AutoExpandingTextarea
+                  minRows={2}
+                  value={statusDescription}
+                  onChange={e => setStatusDescription(e.target.value)}
+                  placeholder="Beschreibe die körperliche oder mentale Wirkung des Zustands..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-medium"
+                />
+              </div>
+
+              {/* Optional physical modifiers */}
+              <div className="pt-1 border-t border-slate-800/80 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setStatusShowModifiers(!statusShowModifiers)}
+                  className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1.5 cursor-pointer font-medium"
+                >
+                  <i className={`fa-solid fa-chevron-${statusShowModifiers ? 'down' : 'right'} text-[10px]`}></i>
+                  <span>Physische Modifikatoren anpassen (optional)</span>
+                </button>
+
+                {statusShowModifiers && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-1 font-sans">
+                        Gewicht (kg)
+                      </label>
+                      <input
+                        type="number"
+                        value={statusWeightMod || ''}
+                        onChange={e => setStatusWeightMod(parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-1 font-sans">
+                        Muskelmasse (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={statusMuscleMod || ''}
+                        onChange={e => setStatusMuscleMod(parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-1 font-sans">
+                        Körperfett (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={statusFatMod || ''}
+                        onChange={e => setStatusFatMod(parseFloat(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-slate-400 mb-1 font-sans">
+                        Heilfaktor (+/-)
+                      </label>
+                      <input
+                        type="number"
+                        value={statusHealingMod || ''}
+                        onChange={e => setStatusHealingMod(parseInt(e.target.value, 10) || 0)}
+                        placeholder="0"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 justify-end pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStatusModal(false);
+                    setEditingStatusId(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors border border-slate-700 cursor-pointer"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-colors shadow-md cursor-pointer flex items-center gap-1.5"
+                >
+                  <i className="fa-solid fa-check"></i>
+                  <span>{editingStatusId ? 'Änderungen speichern' : 'Status-Veränderung aktivieren'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

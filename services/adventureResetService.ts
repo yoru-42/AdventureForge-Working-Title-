@@ -110,42 +110,81 @@ export class AdventureResetService {
   }
 
   /**
-   * Resets an active adventure back to its initial starting state.
-   * Discards all runtime alterations, dynamic additions, active proposals, tasks, and combat states.
-   * Preserves permanent definitions, codex entries, and initial configuration snapshots.
+   * Resets an active adventure back to its pristine starting runtime state,
+   * while strictly preserving all canonical editor data, additions and chat history.
+   * 
+   * Canonical / Editor data preserved:
+   * - adventure.npcs (all new NPCs, edited NPCs, traits, roles)
+   * - adventure.loreDatabase (all entries, Story & Quests, codex entries, world history)
+   * - adventure.worldStory & adventure.worldStoryMarkers
+   * - adventure.world (new territories, locations, connections, buildings, boundary settings)
+   * - adventure.player (permanent profile: name, gender, race, appearance, profession, abilities, potential, parameters)
+   * - adventure.chatHistory (completely preserved, no messages deleted)
+   * 
+   * Runtime data reset:
+   * - combatState = undefined
+   * - encounterForces = []
+   * - dynamicWorldState = undefined
+   * - pendingPickup = null
+   * - pendingTransfer = null
+   * - emotionState = undefined
+   * - physicalChangeHistory = []
+   * - collectionTasks = []
+   * - temporaryConditions = []
+   * - runtime storyState (activeSituation, activeGoals, runtime discoveries, processedFirstMessage = false)
+   * - player runtime level, xp, power values reset to baseline/start
+   * - worldTime & activeTimeEvents reset to start baseline
    */
   public static resetAdventureToInitialState(adventure: Adventure): Adventure {
     if (!adventure) return adventure;
 
-    // 1. Restore Player to Initial Snapshot (or safe baseline reconstruction for legacy adventures)
-    let resetPlayer: Character;
-    let isLegacyReconstructed = false;
+    // 1. Kanon / Editor-Daten des Spielers behalten, nur Runtime-Fortschritt & temporäre Zustände zurücksetzen
+    let resetPlayer: Character = deepClone(adventure.player || {} as Character);
 
-    if (adventure.initialPlayer) {
-      resetPlayer = deepClone(adventure.initialPlayer);
-    } else {
-      // Legacy fallback: reconstruct player baseline by resetting power levels to configured minimums
-      isLegacyReconstructed = true;
-      resetPlayer = deepClone(adventure.player) || {} as Character;
-      if (resetPlayer.campaignPowerLevels) {
-        const updatedLevels = { ...resetPlayer.campaignPowerLevels };
-        Object.keys(updatedLevels).forEach(key => {
-          const setting = adventure.world?.campaignPowerSettings?.[key];
-          const minVal = typeof setting === 'number' ? setting : (setting?.min ?? 10);
-          updatedLevels[key] = {
-            ...updatedLevels[key],
-            value: minVal,
-            xp: 0
-          };
-        });
-        resetPlayer.campaignPowerLevels = updatedLevels;
-      }
+    // Runtime Power Levels & Attribute auf Startwerte/Minima zurücksetzen, während Definitionen erhalten bleiben
+    if (resetPlayer.campaignPowerLevels) {
+      const updatedLevels = { ...resetPlayer.campaignPowerLevels };
+      Object.keys(updatedLevels).forEach(key => {
+        const initialVal = adventure.initialPlayer?.campaignPowerLevels?.[key]?.value;
+        const worldSetting = adventure.world?.campaignPowerSettings?.[key];
+        const minVal = typeof worldSetting === 'number'
+          ? worldSetting
+          : (worldSetting?.min ?? (initialVal !== undefined ? initialVal : 10));
+
+        const baseVal = initialVal !== undefined ? initialVal : minVal;
+        updatedLevels[key] = {
+          ...updatedLevels[key],
+          value: baseVal,
+          xp: 0
+        };
+      });
+      resetPlayer.campaignPowerLevels = updatedLevels;
     }
 
-    // Clean dynamic runtime states from player
+    if (resetPlayer.attributes) {
+      resetPlayer.attributes = resetPlayer.attributes.map(attr => {
+        const initAttr = adventure.initialPlayer?.attributes?.find(a => a.name === attr.name);
+        return {
+          ...attr,
+          value: initAttr !== undefined ? initAttr.value : attr.value
+        };
+      });
+    }
+
+    // Runtime-Fortschritt (Level, XP, Rang) zurücksetzen
+    resetPlayer.level = adventure.initialPlayer?.level || 1;
+    resetPlayer.xp = adventure.initialPlayer?.xp || 0;
+    resetPlayer.experience = 0;
+    resetPlayer.experiencePoints = 0;
+    resetPlayer.rank = adventure.initialPlayer?.rank || 'F';
+
+    // Temporäre Runtime-Zustände leeren
     resetPlayer.physicalChangeHistory = [];
     resetPlayer.emotionState = undefined;
     resetPlayer.temporaryConditions = [];
+    (resetPlayer as any).combatState = undefined;
+
+    // Aktive Transformation auf Standard/Start zurücksetzen
     if (resetPlayer.appearance) {
       const startTransId = adventure.initialPlayer?.appearance?.activeTransformationId || 'standard';
       resetPlayer.appearance = {
@@ -161,66 +200,96 @@ export class AdventureResetService {
           powerUsage: 0
         };
       }
+      if (resetPlayer.appearance.chibiForm && !adventure.initialPlayer?.appearance?.chibiForm?.enabled) {
+        resetPlayer.appearance.chibiForm = {
+          ...resetPlayer.appearance.chibiForm,
+          enabled: false
+        };
+      }
     }
+
+    // Conditions: temporäre entfernen, persistente Startbedingungen wiederherstellen
+    const baseConditions = adventure.initialPlayer?.activeConditions
+      ? deepClone(adventure.initialPlayer.activeConditions)
+      : (resetPlayer.activeConditions || []);
+
+    resetPlayer.activeConditions = baseConditions.filter(
+      c => !c.id?.startsWith('temp-') && c.duration !== 'Temporär' && (c as any).type !== 'transformation'
+    );
     if (adventure.initialPlayer?.conditions) {
       resetPlayer.conditions = deepClone(adventure.initialPlayer.conditions);
     }
-    if (adventure.initialPlayer?.activeConditions) {
-      resetPlayer.activeConditions = deepClone(adventure.initialPlayer.activeConditions);
-    } else {
-      resetPlayer.activeConditions = [];
-    }
 
-    // 2. Restore World to Initial Snapshot
-    let resetWorld: WorldSetting;
-    if (adventure.initialWorld) {
-      resetWorld = deepClone(adventure.initialWorld);
-    } else {
-      resetWorld = deepClone(adventure.world) || { territories: [], connections: [] } as WorldSetting;
-    }
+    // 2. Kanonische Welt behalten, nur Runtime-Felder zurücksetzen
+    let resetWorld: WorldSetting = deepClone(adventure.world || { territories: [], connections: [] } as WorldSetting);
     resetWorld.dynamicWorldState = undefined;
     resetWorld.encounterForces = undefined;
     resetWorld.currentLocationId = resetWorld.startLocationId || adventure.world?.startLocationId || resetWorld.currentLocationId;
     resetWorld.currentTerritoryId = undefined;
 
-    // 3. Restore NPCs to Initial Snapshot (filter out dynamically created NPCs)
-    let resetNpcs: NPC[];
-    if (adventure.initialNpcs) {
-      resetNpcs = deepClone(adventure.initialNpcs);
-    } else {
-      resetNpcs = (adventure.npcs || [])
-        .filter((n: NPC) => !n.id?.startsWith('dyn-'))
-        .map(n => deepClone(n));
-    }
+    // Weltzeit auf Startzustand zurücksetzen
+    const resetWorldTime: WorldTime = adventure.initialWorldTime
+      ? deepClone(adventure.initialWorldTime)
+      : { day: 1, hour: 8, minute: 0, totalMinutes: 480 };
+    resetWorldTime.totalMinutes = WorldSimulationService.toTotalMinutes(resetWorldTime);
+    resetWorld.worldTime = resetWorldTime;
 
-    // 4. Restore Lore / Codex (Preserve user-saved Codex entries, remove dynamic ones, reset event steps to pending)
-    let resetLoreDatabase: LoreEntry[];
-    if (adventure.initialLoreDatabase) {
-      resetLoreDatabase = deepClone(adventure.initialLoreDatabase);
-    } else {
-      resetLoreDatabase = (adventure.loreDatabase || [])
-        .filter((e: LoreEntry) => !e.id?.startsWith('dyn-'))
-        .map((e: LoreEntry) => {
-          const clone = deepClone(e);
-          if (clone.details?.eventSteps) {
-            clone.details.eventSteps = clone.details.eventSteps.map((s: any) => ({
-              ...s,
-              status: 'pending'
-            }));
-          }
-          return clone;
-        });
-    }
+    // Laufzeit-Ereignisse zurücksetzen
+    const resetActiveTimeEvents = adventure.initialActiveTimeEvents
+      ? deepClone(adventure.initialActiveTimeEvents)
+      : [];
+    resetWorld.activeTimeEvents = resetActiveTimeEvents;
 
-    // 5. Restore Canonical Item Instances, Inventory Entries & Equipment State
+    // Status-Elemente mit Weltzeit synchronisieren
+    let resetStatusElements = adventure.statusElements
+      ? deepClone(adventure.statusElements).map(el => {
+          if (el.label === 'Zeit' || el.label === 'Uhrzeit') return { ...el, value: '08:00' };
+          if (el.label === 'Datum' || el.label === 'Tag') return { ...el, value: 'Tag 1' };
+          if (el.label === 'Ausdauer') return { ...el, value: '100%' };
+          return deepClone(el);
+        })
+      : (adventure.initialStatusElements ? deepClone(adventure.initialStatusElements) : []);
+
+    resetStatusElements = WorldSimulationService.syncStatusElementsWithWorldTime(
+      resetStatusElements,
+      resetWorldTime
+    );
+
+    // 3. Kanonische NPCs behalten: Aktuelle adventure.npcs-Liste ist der kanonische Bestand
+    const resetNpcs: NPC[] = deepClone(adventure.npcs || []).map((n: NPC) => {
+      // Nur echte temporäre Runtime-Zustände zurücksetzen
+      if (n.temporaryConditions) n.temporaryConditions = [];
+      if (n.emotionState) n.emotionState = undefined;
+      if ((n as any).combatState) (n as any).combatState = undefined;
+      return n;
+    });
+
+    // 4. Kanonische Lore & Codex & STORY & QUESTS behalten
+    const resetLoreDatabase: LoreEntry[] = deepClone(adventure.loreDatabase || []).map((e: LoreEntry) => {
+      // Event-Schritte auf 'pending' zurücksetzen, wenn vorhanden
+      if (e.details?.eventSteps) {
+        e.details.eventSteps = e.details.eventSteps.map((s: any) => ({
+          ...s,
+          status: 'pending'
+        }));
+      }
+      return e;
+    });
+
+    // 5. Kanonische Item-Instanzen, Inventar & Ausrüstung
     let resetItemInstances: ItemInstance[];
     if (adventure.initialItemInstances) {
-      resetItemInstances = deepClone(adventure.initialItemInstances);
+      const initialIds = new Set(adventure.initialItemInstances.map(i => i.id));
+      const editorAddedItems = (adventure.itemInstances || []).filter(
+        i => !initialIds.has(i.id) && !i.id?.startsWith('dyn-') && !i.id?.startsWith('loot-')
+      );
+      resetItemInstances = [
+        ...adventure.initialItemInstances.map(i => deepClone(i)),
+        ...editorAddedItems.map(i => deepClone(i))
+      ];
     } else if (adventure.itemInstances) {
-      // Fallback: keep non-dynamic item instances whose owner is player or initial NPCs
-      const validOwnerIds = new Set(['player', ...resetNpcs.map(n => n.id), ...resetNpcs.map(n => n.name)]);
       resetItemInstances = adventure.itemInstances
-        .filter(i => !i.id?.startsWith('dyn-item-') && validOwnerIds.has(i.owner))
+        .filter(i => !i.id?.startsWith('dyn-item-') && !i.id?.startsWith('loot-'))
         .map(i => deepClone(i));
     } else {
       resetItemInstances = [];
@@ -237,10 +306,9 @@ export class AdventureResetService {
     if (adventure.initialEquipmentState) {
       resetEquipmentState = deepClone(adventure.initialEquipmentState);
     } else {
-      resetEquipmentState = [];
+      resetEquipmentState = adventure.equipmentState ? deepClone(adventure.equipmentState) : [];
     }
 
-    // 6. Restore Legacy and Structured Inventories
     let resetInventory: string[];
     if (adventure.initialInventory) {
       resetInventory = deepClone(adventure.initialInventory);
@@ -255,34 +323,45 @@ export class AdventureResetService {
       resetStructuredInventory = adventure.structuredInventory ? deepClone(adventure.structuredInventory) : undefined;
     }
 
-    // 7. Reset Story State (Story-Info, Discovered Entities, First-Message Marker & Fingerprint)
-    let resetStoryState: StoryInfoState;
-    if (adventure.initialStoryState) {
-      resetStoryState = deepClone(adventure.initialStoryState);
-    } else {
-      resetStoryState = {
-        currentLocationName: resetWorld.startLocationId || '',
-        currentTerritoryName: '',
-        activeSituation: '',
-        activeGoals: [],
-        relationships: [],
-        storyEntities: [],
-        lastUpdatedTime: new Date().toISOString()
-      };
-    }
-    // CRITICAL: Clear processedFirstMessage & fingerprint so prologue / firstMessage can be reprocessed
-    resetStoryState.processedFirstMessage = false;
-    resetStoryState.processedFirstMessageFingerprint = '';
+    // 6. Story-State: Dauerhafte Definitionen trennen von Runtime-Zuständen
+    const currentStoryState = adventure.storyState || {} as StoryInfoState;
+    const initialStoryState = adventure.initialStoryState || {} as StoryInfoState;
 
-    // 8. Restore / Reset Character Knowledge
-    let resetCharacterKnowledge: any;
-    if (adventure.initialCharacterKnowledge) {
-      resetCharacterKnowledge = deepClone(adventure.initialCharacterKnowledge);
-    } else {
-      resetCharacterKnowledge = {};
-    }
+    const initialEntityIds = new Set((initialStoryState.storyEntities || []).map(e => e.id));
+    const preservedStoryEntities = (currentStoryState.storyEntities || []).filter(e => {
+      // Immer behalten, wenn in Initial-Snapshot vorhanden
+      if (initialEntityIds.has(e.id)) return true;
+      // Laufzeit-Entdeckungen aus Chat-Nachrichten oder temporäre Story-Schritte entfernen
+      if (e.sourceStoryMessageId) return false;
+      if (e.isNewInStory) return false;
+      if (e.id?.startsWith('dyn-') || e.id?.startsWith('runtime-')) return false;
+      if (e.category === 'Ziele') return false;
+      // Vom Benutzer angelegte/gespeicherte Story-Entities bleiben erhalten
+      return true;
+    });
 
-    // 9. Reset Loot, Drops & Collection Tasks (CollectionTasks are strictly runtime and always reset to [])
+    const resetStoryState: StoryInfoState = {
+      ...deepClone(currentStoryState),
+      currentLocationName: resetWorld.startLocationId || adventure.world?.startLocationId || '',
+      currentTerritoryName: '',
+      activeSituation: initialStoryState.activeSituation || '',
+      activeGoals: initialStoryState.activeGoals ? deepClone(initialStoryState.activeGoals) : [],
+      storyEntities: preservedStoryEntities.map(e => deepClone(e)),
+      relationships: currentStoryState.relationships ? deepClone(currentStoryState.relationships) : [],
+      characterKnowledge: adventure.initialCharacterKnowledge
+        ? deepClone(adventure.initialCharacterKnowledge)
+        : deepClone(adventure.characterKnowledge || {}),
+      processedFirstMessage: false,
+      processedFirstMessageFingerprint: '',
+      activeTargetLocationId: undefined,
+      activeTargetLocationName: undefined,
+      lastUpdatedTime: new Date().toISOString()
+    };
+
+    // 7. CHAT VOLLSTÄNDIG ERHALTEN: Der Chat bleibt beim normalen Reset komplett erhalten!
+    const resetChatHistory: ChatMessage[] = deepClone(adventure.chatHistory || []);
+
+    // 8. Loot, Drops & Tasks zurücksetzen
     const resetLootSources = adventure.initialLootSources 
       ? deepClone(adventure.initialLootSources) 
       : [];
@@ -291,56 +370,14 @@ export class AdventureResetService {
       : [];
     const resetCollectionTasks: CollectionTask[] = [];
 
-    // 10. Restore Status Elements & World Time
-    const resetWorldTime: WorldTime = adventure.initialWorldTime
-      ? deepClone(adventure.initialWorldTime)
-      : { day: 1, hour: 8, minute: 0, totalMinutes: 480 };
-    resetWorldTime.totalMinutes = WorldSimulationService.toTotalMinutes(resetWorldTime);
-
-    let resetStatusElements = adventure.initialStatusElements
-      ? deepClone(adventure.initialStatusElements)
-      : (adventure.statusElements || []).map(el => {
-          if (el.label === 'Zeit' || el.label === 'Uhrzeit') return { ...el, value: '08:00' };
-          if (el.label === 'Datum' || el.label === 'Tag') return { ...el, value: 'Tag 1' };
-          if (el.label === 'Ausdauer') return { ...el, value: '100%' };
-          return deepClone(el);
-        });
-
-    resetStatusElements = WorldSimulationService.syncStatusElementsWithWorldTime(
-      resetStatusElements,
-      resetWorldTime
-    );
-
-    const resetActiveTimeEvents = adventure.initialActiveTimeEvents
-      ? deepClone(adventure.initialActiveTimeEvents)
-      : [];
-    if (resetWorld) {
-      resetWorld.activeTimeEvents = resetActiveTimeEvents;
-      resetWorld.worldTime = resetWorldTime;
-    }
-
-    // 11. Reset Chat History to Baseline Messages
-    const resetMsgs: ChatMessage[] = [
-      {
-        id: 'prologue-msg',
-        role: 'model',
-        text: adventure.prologue || 'Die Reise beginnt...'
-      }
-    ];
-    if (adventure.firstMessage) {
-      resetMsgs.push({
-        id: 'first-msg',
-        role: 'model',
-        text: adventure.firstMessage
-      });
-    }
-
-    // 12. Assemble the Completely Reset Adventure Object
+    // 9. Reset Adventure zusammensetzen
     let resetAdventure: Adventure = {
-      ...adventure,
-      chatHistory: resetMsgs,
+      ...deepClone(adventure),
+      chatHistory: resetChatHistory,
       player: resetPlayer,
       world: resetWorld,
+      worldStory: adventure.worldStory ? deepClone(adventure.worldStory) : undefined,
+      worldStoryMarkers: adventure.worldStoryMarkers ? deepClone(adventure.worldStoryMarkers) : undefined,
       npcs: resetNpcs,
       loreDatabase: resetLoreDatabase,
       inventory: resetInventory,
@@ -349,7 +386,7 @@ export class AdventureResetService {
       inventoryEntries: resetInventoryEntries,
       equipmentState: resetEquipmentState,
       storyState: resetStoryState,
-      characterKnowledge: resetCharacterKnowledge,
+      characterKnowledge: resetStoryState.characterKnowledge,
       currentLocation: adventure.initialCurrentLocation ? deepClone(adventure.initialCurrentLocation) : undefined,
       lootSources: resetLootSources,
       worldDrops: resetWorldDrops,
@@ -372,7 +409,7 @@ export class AdventureResetService {
       lastSaved: new Date().toISOString()
     };
 
-    // 13. Synchronize canonical structured inventory from reset itemInstances & equipmentState
+    // 10. Synchronisiere strukturiertes Inventar
     resetAdventure = EquipmentConditionService.syncStructuredInventory(resetAdventure);
 
     return resetAdventure;

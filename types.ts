@@ -4330,6 +4330,8 @@ export interface Adventure {
   combatState?: CombatState;
   encounterForces?: EncounterForce[];
   dynamicWorldState?: DynamicWorldState;
+  worldStory?: WorldSetting['worldStory'];
+  worldStoryMarkers?: WorldSetting['worldStoryMarkers'];
   storyState?: StoryInfoState;
   characterKnowledge?: CharacterKnowledge;
   lootSources?: LootSource[];

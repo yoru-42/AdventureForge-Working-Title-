@@ -17,7 +17,8 @@ import {
   StoryInfoState,
   CharacterKnowledge,
   WorldSetting,
-  Territory
+  Territory,
+  ChatMessage
 } from '../types';
 
 let testCount = 0;
@@ -41,7 +42,7 @@ function deepClone<T>(obj: T): T {
 }
 
 function runTests() {
-  console.log('=== STARTING ADVENTURE RESET REGRESSION TESTS ===');
+  console.log('=== STARTING ADVENTURE RESET TESTS: KANON BEHALTEN, RUNTIME ZURÜCKSETZEN ===');
 
   const baselinePlayer: Character = {
     id: 'char-player',
@@ -96,7 +97,7 @@ function runTests() {
     isUnlocked: true
   };
 
-  const baselineNpc: NPC = {
+  const baselineNpcA: NPC = {
     id: 'npc-aldric',
     name: 'Aldric',
     role: 'Wirt',
@@ -150,7 +151,11 @@ function runTests() {
     ],
     player: baselinePlayer,
     world: baselineWorld,
-    npcs: [baselineNpc],
+    worldStory: {
+      mainStory: 'Story A: Der König wurde vor 20 Jahren ermordet.',
+      era: 'Heroisch'
+    },
+    npcs: [baselineNpcA],
     loreDatabase: [baselineLoreCodex],
     inventory: ['Eisenschwert'],
     itemInstances: [baselineItemA],
@@ -178,127 +183,357 @@ function runTests() {
   // Ensure initial snapshots
   const adventureWithSnapshots = AdventureResetService.ensureInitialSnapshots(sampleAdventure, true);
 
-  // ==========================================
-  // Test A – Spieler
-  // ==========================================
+  // =========================================================================
+  // ABSCHNITT 12: HAUPT-SPEZIFIKATIONSTESTS (Test A bis Test G + 13. Persistenz)
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // Test A – Neuer NPC bleibt
+  // Initial: A
+  // Editor: A, B
+  // Reset -> Erwartung: A, B
+  // -------------------------------------------------------------------------
   {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const adv = deepClone(adventureWithSnapshots);
+    const npcB: NPC = {
+      id: 'npc-mira',
+      name: 'Mira',
+      role: 'Alchemistin',
+      personality: 'Klug',
+      bio: 'Eine reisende Alchemistin.',
+      appearance: { hairColor: 'Kastanienbraun', eyeColor: 'Grün', age: '24', build: 'Schlank', gender: 'Weiblich' },
+      attributes: [],
+      isHostile: false
+    };
+    adv.npcs.push(npcB);
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.npcs.length === 2, 'Test A: Gesamtzahl NPCs nach Reset beträgt 2');
+    assert(resetAdv.npcs.some(n => n.name === 'Aldric'), 'Test A: Initialer NPC A (Aldric) bleibt vorhanden');
+    assert(resetAdv.npcs.some(n => n.name === 'Mira'), 'Test A: Neuer NPC B (Mira) bleibt nach Reset vorhanden');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test B – NPC-Änderung bleibt
+  // Initial: Aldric – Beruf Wirt
+  // Editor: Aldric – Beruf Händler
+  // Reset -> Erwartung: Aldric – Beruf Händler
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    const aldric = adv.npcs.find(n => n.name === 'Aldric')!;
+    aldric.role = 'Händler';
+    aldric.bio = 'Ein wohlhabender Händler.';
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    const resetAldric = resetAdv.npcs.find(n => n.name === 'Aldric');
+    assert(resetAldric !== undefined, 'Test B: Aldric nach Reset vorhanden');
+    assert(resetAldric?.role === 'Händler', 'Test B: NPC-Rolle bleibt Händler (nicht auf Wirt zurückgesetzt)');
+    assert(resetAldric?.bio === 'Ein wohlhabender Händler.', 'Test B: NPC-Bio-Änderung bleibt erhalten');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test C – Story & Quests bleibt
+  // Initial: Story A
+  // Editor: Story B
+  // Reset -> Erwartung: Story B
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    adv.worldStory = {
+      mainStory: 'Story B: Der König wurde vor 15 Jahren ermordet.',
+      era: 'Düster'
+    };
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(
+      resetAdv.worldStory?.mainStory === 'Story B: Der König wurde vor 15 Jahren ermordet.',
+      'Test C: worldStory bleibt Story B (Änderung bleibt erhalten)'
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Test D – Neuer Story-&-Quests-Eintrag bleibt
+  // Initial: Quest A
+  // Editor: Quest A, Quest B
+  // Reset -> Erwartung: Quest A, Quest B
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    const questA: LoreEntry = {
+      id: 'quest-a',
+      title: 'Quest A: Finde das Amulett',
+      category: 'Story & Quests',
+      description: 'Ein uraltes Amulett soll in der Taverne verborgen sein.',
+      isUnlocked: true
+    };
+    adv.loreDatabase = [questA];
+
+    // Editor adds Quest B
+    const questB: LoreEntry = {
+      id: 'quest-b',
+      title: 'Quest B: Rette das Dorf',
+      category: 'Story & Quests',
+      description: 'Banditen bedrohen die Vororte.',
+      isUnlocked: true
+    };
+    adv.loreDatabase.push(questB);
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.loreDatabase?.length === 2, 'Test D: loreDatabase enthält nach Reset 2 Einträge');
+    assert(resetAdv.loreDatabase?.some(e => e.title === 'Quest A: Finde das Amulett'), 'Test D: Quest A bleibt erhalten');
+    assert(resetAdv.loreDatabase?.some(e => e.title === 'Quest B: Rette das Dorf'), 'Test D: Neuer Story-&-Quests-Eintrag Quest B bleibt nach Reset erhalten');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test E – Chat bleibt vollständig
+  // Erstelle:
+  // Prolog, User 1, Model 1, User 2, Model 2, User 3, Model 3
+  // Reset ausführen.
+  // Erwartung:
+  // resetAdv.chatHistory.length === 7
+  // und jede Message muss dieselbe ID, Rolle, Nachricht, Reihenfolge haben.
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    adv.chatHistory = [
+      { id: 'msg-0-prologue', role: 'model', text: 'Prolog: Die Reise beginnt.' },
+      { id: 'msg-1-user', role: 'user', text: 'User 1: Ich sehe mich in der Taverne um.' },
+      { id: 'msg-2-model', role: 'model', text: 'Model 1: Der Raum ist warm erleuchtet.' },
+      { id: 'msg-3-user', role: 'user', text: 'User 2: Ich spreche mit dem Wirt.' },
+      { id: 'msg-4-model', role: 'model', text: 'Model 2: Aldric nickt dir freundlich zu.' },
+      { id: 'msg-5-user', role: 'user', text: 'User 3: Ich bestelle ein Bier.' },
+      { id: 'msg-6-model', role: 'model', text: 'Model 3: Er zapft dir ein frisches Ale.' }
+    ];
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.chatHistory.length === 7, 'Test E: Chatverlauf hat nach Reset exakt 7 Nachrichten');
+    
+    let allMessagesIdentical = true;
+    for (let i = 0; i < adv.chatHistory.length; i++) {
+      const orig = adv.chatHistory[i];
+      const reset = resetAdv.chatHistory[i];
+      if (!reset || reset.id !== orig.id || reset.role !== orig.role || reset.text !== orig.text) {
+        allMessagesIdentical = false;
+        break;
+      }
+    }
+    assert(allMessagesIdentical, 'Test E: Jede Nachricht hat dieselbe ID, Rolle, Text und Reihenfolge (keine Nachrichten gelöscht)');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test F – Runtime wird trotzdem zurückgesetzt
+  // Vor Reset:
+  // combatState vorhanden
+  // pendingPickup vorhanden
+  // collectionTasks vorhanden
+  // emotionState vorhanden
+  // physicalChangeHistory vorhanden
+  // Nach Reset:
+  // combatState === undefined
+  // pendingPickup === null
+  // collectionTasks === []
+  // emotionState === undefined
+  // physicalChangeHistory === []
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    adv.combatState = {
+      round: 3,
+      enemies: [{ id: 'goblin-1', name: 'Goblin', hp: 10, maxHp: 20 }]
+    } as any;
+    adv.pendingPickup = {
+      id: 'pickup-test',
+      sourceTitle: 'Truhe',
+      sourceType: 'chest',
+      items: [{ id: 'item-gold', itemDefinitionId: 'def-gold', name: 'Gold', quantity: 50 }],
+      requiresExplicitConfirmation: true
+    };
+    adv.collectionTasks = [
+      { id: 'task-herbs', title: 'Kräutersammeln', targetQuantity: 5, collectedQuantity: 2, status: 'active' }
+    ];
+    adv.player.emotionState = { emotion: 'panisch', intensity: 'stark' } as any;
+    adv.player.physicalChangeHistory = [
+      { id: 'change-1', timestamp: '2026-10-02T12:00:00Z', stageName: 'Mutation', changes: [], summary: 'Arm mutiert', transformationIntensity: 20 }
+    ];
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.combatState === undefined, 'Test F: combatState ist undefined');
+    assert(resetAdv.pendingPickup === null, 'Test F: pendingPickup ist null');
+    assert(Array.isArray(resetAdv.collectionTasks) && resetAdv.collectionTasks.length === 0, 'Test F: collectionTasks ist []');
+    assert(resetAdv.player.emotionState === undefined, 'Test F: emotionState ist undefined');
+    assert(Array.isArray(resetAdv.player.physicalChangeHistory) && resetAdv.player.physicalChangeHistory.length === 0, 'Test F: physicalChangeHistory ist []');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test G – Kanon + Runtime gleichzeitig (Zentraler Integrationstest)
+  // Vor Reset:
+  // NPC B hinzugefügt
+  // Story B gespeichert
+  // combatState aktiv
+  // collectionTask aktiv
+  // Chat mit 10 Nachrichten
+  // Reset:
+  // NPC B          → bleibt
+  // Story B        → bleibt
+  // Chat 10 msgs   → bleibt
+  // combatState    → weg
+  // collectionTask → weg
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+
+    // Kanon additions
+    const npcB: NPC = {
+      id: 'npc-b',
+      name: 'NPC B',
+      role: 'Wächter',
+      personality: 'Streng',
+      bio: 'Wacht am Tor.',
+      appearance: { hairColor: 'Blond', eyeColor: 'Blau', age: '35', build: 'Kräftig', gender: 'Männlich' },
+      attributes: [],
+      isHostile: false
+    };
+    adv.npcs.push(npcB);
+
+    adv.worldStory = {
+      mainStory: 'Story B: Das Königreich steht am Abgrund.',
+      era: 'Episch'
+    };
+
+    // Chat with 10 messages
+    const tenMessages: ChatMessage[] = [];
+    for (let i = 1; i <= 10; i++) {
+      tenMessages.push({
+        id: `chat-${i}`,
+        role: i % 2 === 1 ? 'user' : 'model',
+        text: `Nachricht ${i}`
+      });
+    }
+    adv.chatHistory = tenMessages;
+
+    // Runtime additions
+    adv.combatState = {
+      round: 5,
+      activeFighterId: 'char-player'
+    } as any;
+    adv.collectionTasks = [
+      { id: 'task-active', title: 'Sammelaufgabe', targetQuantity: 10, collectedQuantity: 3, status: 'active' }
+    ];
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+
+    // Kanon assertions
+    assert(resetAdv.npcs.some(n => n.name === 'NPC B'), 'Test G: NPC B bleibt erhalten');
+    assert(resetAdv.worldStory?.mainStory === 'Story B: Das Königreich steht am Abgrund.', 'Test G: Story B bleibt gespeichert');
+    assert(resetAdv.chatHistory.length === 10, 'Test G: Chat mit 10 Nachrichten bleibt vollständig erhalten');
+
+    // Runtime assertions
+    assert(resetAdv.combatState === undefined, 'Test G: combatState ist weg (undefined)');
+    assert(Array.isArray(resetAdv.collectionTasks) && resetAdv.collectionTasks.length === 0, 'Test G: collectionTask ist weg ([])');
+  }
+
+  // -------------------------------------------------------------------------
+  // 13. Persistence-Test
+  // Danach:
+  // const stored = JSON.stringify(resetAdventure);
+  // const loaded = JSON.parse(stored);
+  // prüfen:
+  // NPC bleibt
+  // Story bleibt
+  // Chat bleibt
+  // Runtime bleibt gelöscht
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    // Setup kanon
+    adv.npcs.push({
+      id: 'npc-persistent',
+      name: 'Gareth',
+      role: 'Schmied',
+      personality: 'Fleißig',
+      bio: 'Schmiedet feine Klingen.',
+      appearance: { hairColor: 'Braun', eyeColor: 'Braun', age: '40', build: 'Breit', gender: 'Männlich' },
+      attributes: [],
+      isHostile: false
+    });
+    adv.worldStory = {
+      mainStory: 'Dauerhafte Weltgeschichte',
+      era: 'Mittelalter'
+    };
+    adv.chatHistory = [
+      { id: 'p1', role: 'model', text: 'Prolog' },
+      { id: 'u1', role: 'user', text: 'Hallo Welt' },
+      { id: 'm1', role: 'model', text: 'Willkommen!' }
+    ];
+
+    // Setup runtime
+    adv.combatState = { round: 2 } as any;
+    adv.collectionTasks = [{ id: 'task-p', title: 'Erz', targetQuantity: 4, collectedQuantity: 1, status: 'active' }];
+    adv.pendingPickup = { id: 'p-1', sourceTitle: 'Kiste', sourceType: 'chest', items: [], requiresExplicitConfirmation: true };
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+
+    // Serialize and reload
+    const stored = JSON.stringify(resetAdv);
+    const loaded: Adventure = JSON.parse(stored);
+
+    assert(loaded.npcs.some(n => n.name === 'Gareth'), '13. Persistence-Test: NPC bleibt nach Speichern/Laden erhalten');
+    assert(loaded.worldStory?.mainStory === 'Dauerhafte Weltgeschichte', '13. Persistence-Test: Story bleibt nach Speichern/Laden erhalten');
+    assert(loaded.chatHistory.length === 3, '13. Persistence-Test: Chat bleibt nach Speichern/Laden vollständig erhalten');
+    assert(loaded.combatState === undefined, '13. Persistence-Test: Runtime combatState bleibt nach Speichern/Laden gelöscht');
+    assert(loaded.collectionTasks?.length === 0, '13. Persistence-Test: Runtime collectionTasks bleibt nach Speichern/Laden leer');
+    assert(loaded.pendingPickup === null, '13. Persistence-Test: Runtime pendingPickup bleibt nach Speichern/Laden null');
+  }
+
+  // =========================================================================
+  // ABSCHNITT 2: REGRESSIONS- & SYSTEMTESTS
+  // =========================================================================
+
+  // Test R1 – Spieler: Editordaten bleiben, Runtimelevel & temporäre Zustände werden zurückgesetzt
+  {
+    const adv = deepClone(adventureWithSnapshots);
     adv.player.name = 'Veränderter Eldrin';
     adv.player.campaignPowerLevels['Stärke'].value = 999;
     adv.player.physicalChangeHistory = [{ id: 'p1', timestamp: 'now', stageName: 'Metamorphose', changes: [], summary: 'Verwandelt', transformationIntensity: 50 }];
-    adv.player.emotionState = { emotion: 'panisch', intensity: 'stark' };
+    adv.player.emotionState = { emotion: 'panisch', intensity: 'stark' } as any;
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.player.name === 'Eldrin', 'Test A: Spielername auf Initialwert zurückgesetzt');
-    assert(resetAdv.player.campaignPowerLevels?.['Stärke']?.value === 50, 'Test A: Spieler-Stärke auf Initialwert zurückgesetzt');
-    assert(resetAdv.player.physicalChangeHistory?.length === 0, 'Test A: Physische Änderungshistorie geleert');
-    assert(resetAdv.player.emotionState === undefined, 'Test A: Emotionszustand zurückgesetzt');
+    assert(resetAdv.player.name === 'Veränderter Eldrin', 'Test R1: Spielername bleibt bei Editor-Änderung erhalten');
+    assert(resetAdv.player.campaignPowerLevels?.['Stärke']?.value === 50, 'Test R1: Spieler-Stärke auf Initialwert zurückgesetzt');
+    assert(resetAdv.player.physicalChangeHistory?.length === 0, 'Test R1: Physische Änderungshistorie geleert');
+    assert(resetAdv.player.emotionState === undefined, 'Test R1: Emotionszustand zurückgesetzt');
   }
 
-  // ==========================================
-  // Test B – Welt
-  // ==========================================
+  // Test R2 – Welt: Neue Orte/Territorien bleiben, Runtimezustand wird zurückgesetzt
   {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const adv = deepClone(adventureWithSnapshots);
     adv.world.currentLocationId = 'loc-dungeon';
-    adv.world.dynamicWorldState = { destroyedBuildings: ['loc-tavern'] };
-    adv.dynamicWorldState = { custom: true };
+    adv.world.dynamicWorldState = { activeThreats: ['loc-tavern-threat'] } as any;
+    adv.dynamicWorldState = { activeThreats: ['global-threat'] } as any;
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.world.currentLocationId === 'loc-tavern', 'Test B: Startort der Welt wiederhergestellt');
-    assert(resetAdv.world.dynamicWorldState === undefined, 'Test B: world.dynamicWorldState geleert');
-    assert(resetAdv.dynamicWorldState === undefined, 'Test B: adventure.dynamicWorldState geleert');
+    assert(resetAdv.world.currentLocationId === 'loc-tavern', 'Test R2: Startort der Welt wiederhergestellt');
+    assert(resetAdv.world.dynamicWorldState === undefined, 'Test R2: world.dynamicWorldState geleert');
+    assert(resetAdv.dynamicWorldState === undefined, 'Test R2: adventure.dynamicWorldState geleert');
   }
 
-  // ==========================================
-  // Test C – NPC
-  // ==========================================
+  // Test R3 – First Message Flow: processedFirstMessage wird zurückgesetzt, Chat bleibt erhalten
   {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    adv.npcs[0].personality = 'Feindselig';
-    adv.npcs.push({
-      id: 'dyn-npc-bandit',
-      name: 'Räuber',
-      role: 'Gegner',
-      personality: 'Aggressiv',
-      bio: 'Ein Bandit.',
-      appearance: { hairColor: 'Braun', eyeColor: 'Braun', age: '30', build: 'Mittel', gender: 'Männlich' },
-      attributes: [],
-      isHostile: true
-    });
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.npcs.length === 1, 'Test C: Dynamischer NPC entfernt');
-    assert(resetAdv.npcs[0].name === 'Aldric', 'Test C: Initialer NPC vorhanden');
-    assert(resetAdv.npcs[0].personality === 'Freundlich', 'Test C: Initialer NPC-Zustand wiederhergestellt');
-  }
-
-  // ==========================================
-  // Test D – Lore
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    adv.loreDatabase.push({
-      id: 'dyn-lore-secret',
-      title: 'Geheimgang',
-      category: 'Orte',
-      description: 'Hinter dem Fass.',
-      isUnlocked: true
-    });
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.loreDatabase?.length === 1, 'Test D: Dynamischer Lore-Eintrag entfernt');
-    assert(resetAdv.loreDatabase?.[0]?.id === 'lore-kingdom', 'Test D: Permanenter Codex-Eintrag erhalten');
-  }
-
-  // ==========================================
-  // Test E – StoryState
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    adv.storyState.storyEntities = [
-      { id: 'entity-1', category: 'Charaktere', title: 'Finsterer Magier', description: 'Gefährlich' }
-    ];
-    adv.storyState.activeGoals = [{ id: 'goal-1', title: 'Fliehe aus Kerker', status: 'active' }];
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.storyState?.storyEntities?.length === 0, 'Test E: Dynamische StoryEntities entfernt');
-    assert(resetAdv.storyState?.activeGoals?.length === 0, 'Test E: Dynamische Story-Ziele entfernt');
-  }
-
-  // ==========================================
-  // Test F – First Message
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const adv = deepClone(adventureWithSnapshots);
     const fingerprint = AIStoryStateProcessor.computeMessageFingerprint(adv.firstMessage);
     adv.storyState.processedFirstMessage = true;
     adv.storyState.processedFirstMessageFingerprint = fingerprint;
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.storyState?.processedFirstMessage === false, 'Test F: processedFirstMessage auf false zurückgesetzt');
-    assert(resetAdv.storyState?.processedFirstMessageFingerprint === '', 'Test F: First-Message-Fingerprint geleert');
+    assert(resetAdv.storyState?.processedFirstMessage === false, 'Test R3: processedFirstMessage auf false zurückgesetzt');
+    assert(resetAdv.storyState?.processedFirstMessageFingerprint === '', 'Test R3: First-Message-Fingerprint geleert');
+    assert(resetAdv.chatHistory.length === 2, 'Test R3: Chat-History bleibt unberührt');
   }
 
-  // ==========================================
-  // Test G – Character Knowledge
-  // ==========================================
+  // Test R4 – ItemInstances & Equipment: Dynamischer Loot/Drops entfernt, Initialbestand/Editorbestand bleibt
   {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    adv.characterKnowledge = {
-      knownCharacters: ['npc-aldric', 'npc-unknown-mage'],
-      knownLocations: ['loc-tavern', 'loc-secret-dungeon']
-    };
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(JSON.stringify(resetAdv.characterKnowledge) === JSON.stringify(adv.initialCharacterKnowledge), 'Test G: Character Knowledge auf Initialzustand zurückgesetzt');
-  }
-
-  // ==========================================
-  // Test H – ItemInstance
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const adv = deepClone(adventureWithSnapshots);
     const newItemB: ItemInstance = {
       id: 'dyn-item-potion',
       itemDefinitionId: 'def-heal-pot',
@@ -310,46 +545,13 @@ function runTests() {
     adv.itemInstances.push(newItemB);
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.itemInstances?.length === 1, 'Test H: Dynamisch erstelltes Item B nicht mehr vorhanden');
-    assert(resetAdv.itemInstances?.[0]?.id === 'item-sword-start', 'Test H: Initiales Startitem A vorhanden');
-    assert(resetAdv.itemInstances?.[0]?.owner === 'player', 'Test H: Startitem gehört dem Spieler');
+    assert(resetAdv.itemInstances?.length === 1, 'Test R4: Dynamisch erstelltes Item nicht mehr vorhanden');
+    assert(resetAdv.itemInstances?.[0]?.id === 'item-sword-start', 'Test R4: Initiales Startitem vorhanden');
   }
 
-  // ==========================================
-  // Test I – Equipment
-  // ==========================================
+  // Test R5 – BodyCondition: Temporäre Conditions entfernt
   {
-    let adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    // Equip another item during gameplay
-    const helmet: ItemInstance = {
-      id: 'dyn-item-helm',
-      itemDefinitionId: 'def-helm',
-      name: 'Eisenhelm',
-      owner: 'player',
-      quantity: 1,
-      weightKg: 2
-    };
-    adv.itemInstances.push(helmet);
-    adv.equipmentState.push({
-      itemInstanceId: 'dyn-item-helm',
-      itemDefinitionId: 'def-helm',
-      itemName: 'Eisenhelm',
-      ownerId: 'player',
-      equipped: true,
-      slot: 'head',
-      bodyAreas: ['head']
-    });
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.equipmentState?.length === 1, 'Test I: Equipment auf initiale Ausrüstung zurückgesetzt');
-    assert(resetAdv.equipmentState?.[0]?.itemInstanceId === 'item-sword-start', 'Test I: Nur initiales Startschwert angelegt');
-  }
-
-  // ==========================================
-  // Test J – BodyCondition
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const adv = deepClone(adventureWithSnapshots);
     adv.player.activeConditions = [
       {
         id: 'cond-shackles',
@@ -358,19 +560,18 @@ function runTests() {
         bodyAreas: ['hands'],
         sourceItemInstanceId: 'item-shackles-101',
         description: 'Schwere Fesseln',
-        isActive: true
+        isActive: true,
+        duration: 'Temporär'
       }
     ];
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert((resetAdv.player.activeConditions || []).length === 0, 'Test J: Temporäre Fesselung/BodyCondition nach Reset entfernt');
+    assert((resetAdv.player.activeConditions || []).length === 0, 'Test R5: Temporäre Fesselung/BodyCondition nach Reset entfernt');
   }
 
-  // ==========================================
-  // Test K – Transfer
-  // ==========================================
+  // Test R6 – Proposals (Pending Transfer & Pickup)
   {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const adv = deepClone(adventureWithSnapshots);
     const pendingTransferProposal: PendingItemTransferProposal = {
       id: 'trans-123',
       itemInstanceId: 'item-npc-dagger',
@@ -383,313 +584,47 @@ function runTests() {
       createdAt: Date.now()
     };
     adv.pendingTransfer = pendingTransferProposal;
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.pendingTransfer === null, 'Test K: pendingTransfer Proposal auf null zurückgesetzt');
-  }
-
-  // ==========================================
-  // Test L – Pickup
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    const pendingPickupProposal: PendingPickupProposal = {
+    adv.pendingPickup = {
       id: 'pickup-456',
       sourceTitle: 'Schatztruhe',
       sourceType: 'chest',
-      items: [
-        {
-          id: 'inst-ruby',
-          itemDefinitionId: 'def-ruby',
-          name: 'Rubin',
-          quantity: 1,
-          weightKg: 0.1
-        }
-      ],
+      items: [{ id: 'inst-ruby', itemDefinitionId: 'def-ruby', name: 'Rubin', quantity: 1, weightKg: 0.1 }],
       requiresExplicitConfirmation: true
     };
-    adv.pendingPickup = pendingPickupProposal;
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.pendingPickup === null, 'Test L: pendingPickup Proposal auf null zurückgesetzt');
+    assert(resetAdv.pendingTransfer === null, 'Test R6: pendingTransfer auf null zurückgesetzt');
+    assert(resetAdv.pendingPickup === null, 'Test R6: pendingPickup auf null zurückgesetzt');
   }
 
-  // ==========================================
-  // Test M – CollectionTask (Single)
-  // ==========================================
+  // Test R7 – StatusElements & Weltzeit
   {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    const task: CollectionTask = {
-      id: 'task-wood',
-      title: 'Holzsammeln',
-      targetQuantity: 10,
-      collectedQuantity: 4,
-      status: 'active'
-    };
-    adv.collectionTasks = [task];
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(Array.isArray(resetAdv.collectionTasks) && resetAdv.collectionTasks.length === 0, 'Test M: Einzelner CollectionTask nach Reset entfernt (collectionTasks === [])');
-  }
-
-  // ==========================================
-  // Test M2 – Mehrere CollectionTasks
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    const taskA: CollectionTask = {
-      id: 'task-a',
-      title: 'Kräuter sammeln',
-      targetQuantity: 5,
-      collectedQuantity: 2,
-      status: 'active'
-    };
-    const taskB: CollectionTask = {
-      id: 'task-b',
-      title: 'Erz abbauen',
-      targetQuantity: 3,
-      collectedQuantity: 3,
-      status: 'completed'
-    };
-    const taskC: CollectionTask = {
-      id: 'task-c',
-      title: 'Wasser holen',
-      targetQuantity: 1,
-      collectedQuantity: 0,
-      status: 'active'
-    };
-    adv.collectionTasks = [taskA, taskB, taskC];
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(Array.isArray(resetAdv.collectionTasks) && resetAdv.collectionTasks.length === 0, 'Test M2: Mehrere CollectionTasks (A, B, C) nach Reset komplett geleert');
-  }
-
-  // ==========================================
-  // Test N – Loot
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    const dynLoot: LootSource = {
-      id: 'loot-dead-wolf',
-      type: 'monster_body',
-      title: 'Erlegter Wolf',
-      items: []
-    };
-    const dynDrop: WorldDropItem = {
-      id: 'drop-gold',
-      itemInstance: {
-        id: 'inst-gold-coins',
-        itemDefinitionId: 'def-gold',
-        name: 'Goldmünzen',
-        quantity: 20
-      }
-    };
-    adv.lootSources = [dynLoot];
-    adv.worldDrops = [dynDrop];
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert((resetAdv.lootSources || []).length === 0, 'Test N: Dynamische LootSource nach Reset entfernt');
-    assert((resetAdv.worldDrops || []).length === 0, 'Test N: Dynamischer WorldDrop nach Reset entfernt');
-  }
-
-  // ==========================================
-  // Test O – Weltzeit
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const adv = deepClone(adventureWithSnapshots);
     adv.worldTime = { day: 14, hour: 23, minute: 45 };
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.worldTime?.day === 1, 'Test O: Tag auf 1 zurückgesetzt');
-    assert(resetAdv.worldTime?.hour === 8, 'Test O: Stunde auf 8 zurückgesetzt');
-    assert(resetAdv.worldTime?.minute === 0, 'Test O: Minute auf 0 zurückgesetzt');
+    assert(resetAdv.worldTime?.day === 1, 'Test R7: Tag auf 1 zurückgesetzt');
+    assert(resetAdv.worldTime?.hour === 8, 'Test R7: Stunde auf 8 zurückgesetzt');
+    assert(resetAdv.worldTime?.minute === 0, 'Test R7: Minute auf 0 zurückgesetzt');
+    const timeEl = resetAdv.statusElements?.find(e => e.label === 'Zeit');
+    assert(timeEl?.value === '08:00', 'Test R7: StatusElement Zeit auf 08:00 synchronisiert');
   }
 
-  // ==========================================
-  // Test P – Persistenz
-  // ==========================================
+  // Test R8 – Snapshot Immutability: initialPlayer und initialWorld werden durch Reset nicht mutiert
   {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    adv.player.name = 'Veränderter Held';
-    adv.worldTime = { day: 5, hour: 12, minute: 0 };
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    // Simulate JSON storage serialize & reload
-    const storedJson = JSON.stringify(resetAdv);
-    const reloadedAdv: Adventure = JSON.parse(storedJson);
-
-    assert(reloadedAdv.player.name === 'Eldrin', 'Test P: Nach Serialisierung und Reload bleibt Initialspieler erhalten');
-    assert(reloadedAdv.worldTime?.day === 1, 'Test P: Nach Serialisierung und Reload bleibt Initialzeit erhalten');
-  }
-
-  // ==========================================
-  // Test Q – Initiale Daten bleiben erhalten
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
+    const adv = deepClone(adventureWithSnapshots);
     const initialPlayerSnapshot = JSON.stringify(adv.initialPlayer);
     const initialWorldSnapshot = JSON.stringify(adv.initialWorld);
 
-    // Gameplay mutations
     adv.player.campaignPowerLevels['Stärke'].value = 80;
     adv.world.currentLocationId = 'loc-dungeon';
 
-    // Perform reset
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-
-    assert(JSON.stringify(resetAdv.initialPlayer) === initialPlayerSnapshot, 'Test Q: initialPlayer Snapshot wurde nicht versehentlich mutiert');
-    assert(JSON.stringify(resetAdv.initialWorld) === initialWorldSnapshot, 'Test Q: initialWorld Snapshot wurde nicht versehentlich mutiert');
+    assert(JSON.stringify(resetAdv.initialPlayer) === initialPlayerSnapshot, 'Test R8: initialPlayer Snapshot bleibt unverändert');
+    assert(JSON.stringify(resetAdv.initialWorld) === initialWorldSnapshot, 'Test R8: initialWorld Snapshot bleibt unverändert');
   }
 
-  // ==========================================
-  // Test R – Codex bleibt erhalten
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    // User manually saved a new codex entry (not dyn-)
-    adv.loreDatabase.push({
-      id: 'lore-user-codex-entry',
-      title: 'Das Buch der Ahnen',
-      category: 'Gegenstände',
-      description: 'Vom Spieler bewusst in den Codex eingetragen.',
-      isUnlocked: true
-    });
-    // Ensure this entry is in initial or permanent lore database
-    adv.initialLoreDatabase = JSON.parse(JSON.stringify(adv.loreDatabase));
-
-    // Now during gameplay, a dynamic lore entry is added
-    adv.loreDatabase.push({
-      id: 'dyn-lore-temporary-rumor',
-      title: 'Flüchtiges Gerücht',
-      category: 'Weltregeln',
-      description: 'Jemand hat etwas gesehen.',
-      isUnlocked: true
-    });
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.loreDatabase?.some((l: LoreEntry) => l.id === 'lore-user-codex-entry') === true, 'Test R: Vom Spieler gespeicherter Codex-Eintrag bleibt nach Reset erhalten');
-    assert(resetAdv.loreDatabase?.some((l: LoreEntry) => l.id === 'dyn-lore-temporary-rumor') === false, 'Test R: Dynamisches Gerücht wurde entfernt');
-  }
-
-  // ==========================================
-  // Test A – StatusElements (Legacy Protection & Baseline Reset)
-  // ==========================================
-  {
-    const playedLegacyAdventure: Adventure = {
-      id: 'adv-legacy-status',
-      authorId: 'user-1',
-      isPublic: false,
-      prologue: 'Prolog...',
-      chatHistory: [
-        { id: '1', role: 'model', text: 'Prolog...' },
-        { id: '2', role: 'user', text: 'Ich bin erschöpft nach dem Kampf.' }
-      ],
-      player: deepClone(baselinePlayer),
-      world: deepClone(baselineWorld),
-      npcs: [],
-      inventory: [],
-      loreDatabase: [],
-      statusElements: [
-        { id: 'st-time', label: 'Zeit', value: '23:45' },
-        { id: 'st-stam', label: 'Ausdauer', value: '12%' }
-      ],
-      worldTime: { day: 10, hour: 23, minute: 45 }
-    };
-
-    const snapshotted = AdventureResetService.ensureInitialSnapshots(playedLegacyAdventure, false);
-    assert(snapshotted.initialStatusElements === undefined, 'Test A1: ensureInitialSnapshots deklariert veränderten statusElements-Zustand eines Legacy-Abenteuers NICHT als initialStatusElements');
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(playedLegacyAdventure);
-    const timeEl = resetAdv.statusElements?.find(e => e.label === 'Zeit');
-    const stamEl = resetAdv.statusElements?.find(e => e.label === 'Ausdauer');
-    assert(timeEl?.value === '08:00', 'Test A2: StatusElement Zeit wird beim Reset sicher auf 08:00 zurückgesetzt');
-    assert(stamEl?.value === '100%', 'Test A3: StatusElement Ausdauer wird beim Reset sicher auf 100% zurückgesetzt');
-  }
-
-  // ==========================================
-  // Test B – WorldTime (Legacy Protection & Fallback Reset)
-  // ==========================================
-  {
-    const playedLegacyAdventure: Adventure = {
-      id: 'adv-legacy-time',
-      authorId: 'user-1',
-      isPublic: false,
-      prologue: 'Prolog...',
-      chatHistory: [
-        { id: '1', role: 'model', text: 'Prolog...' },
-        { id: '2', role: 'user', text: 'Es vergehen viele Tage.' }
-      ],
-      player: deepClone(baselinePlayer),
-      world: deepClone(baselineWorld),
-      npcs: [],
-      inventory: [],
-      loreDatabase: [],
-      statusElements: [],
-      worldTime: { day: 15, hour: 22, minute: 30 }
-    };
-
-    const snapshotted = AdventureResetService.ensureInitialSnapshots(playedLegacyAdventure, false);
-    assert(snapshotted.initialWorldTime === undefined, 'Test B1: ensureInitialSnapshots deklariert veränderte Weltzeit eines Legacy-Abenteuers NICHT als initialWorldTime');
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(playedLegacyAdventure);
-    assert(resetAdv.worldTime?.day === 1, 'Test B2: Fallback-Weltzeit Tag wird sicher auf 1 zurückgesetzt');
-    assert(resetAdv.worldTime?.hour === 8, 'Test B3: Fallback-Weltzeit Stunde wird sicher auf 8 zurückgesetzt');
-    assert(resetAdv.worldTime?.minute === 0, 'Test B4: Fallback-Weltzeit Minute wird sicher auf 0 zurückgesetzt');
-  }
-
-  // ==========================================
-  // Test C – CollectionTasks (Single Task)
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    const task: CollectionTask = {
-      id: 'task-wood',
-      title: 'Holzsammeln',
-      targetQuantity: 10,
-      collectedQuantity: 4,
-      status: 'active'
-    };
-    adv.collectionTasks = [task];
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(Array.isArray(resetAdv.collectionTasks) && resetAdv.collectionTasks.length === 0, 'Test C: 1 CollectionTask nach Reset entfernt (collectionTasks === [])');
-  }
-
-  // ==========================================
-  // Test D – mehrere CollectionTasks
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    const taskA: CollectionTask = {
-      id: 'task-a',
-      title: 'Kräuter sammeln',
-      targetQuantity: 5,
-      collectedQuantity: 2,
-      status: 'active'
-    };
-    const taskB: CollectionTask = {
-      id: 'task-b',
-      title: 'Erz abbauen',
-      targetQuantity: 3,
-      collectedQuantity: 3,
-      status: 'completed'
-    };
-    const taskC: CollectionTask = {
-      id: 'task-c',
-      title: 'Wasser holen',
-      targetQuantity: 1,
-      collectedQuantity: 0,
-      status: 'active'
-    };
-    adv.collectionTasks = [taskA, taskB, taskC];
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(Array.isArray(resetAdv.collectionTasks) && resetAdv.collectionTasks.length === 0, 'Test D: Mehrere CollectionTasks nach Reset komplett geleert (collectionTasks === [])');
-  }
-
-  // ==========================================
-  // Test E – Legacy Snapshot Protection
-  // ==========================================
+  // Test R9 – Legacy Adventure Protection: Bereits gespielte Abenteuer überschreiben Snapshots nicht versehentlich
   {
     const playedLegacyAdventure: Adventure = {
       id: 'adv-legacy-played',
@@ -728,424 +663,63 @@ function runTests() {
           'Ausdauer': { min: 15, max: 100, levelUpLogic: 'xp_threshold' }
         }
       },
-      npcs: [{ id: 'dyn-npc-1', name: 'Zufalls-NPC', role: 'Wanderer', personality: 'Ruhig', bio: '', appearance: { hairColor: '', eyeColor: '', age: '30', build: '', gender: '' }, attributes: [], isHostile: false }],
-      loreDatabase: [{ id: 'dyn-lore-1', title: 'Altes Gerücht', category: 'Weltregeln', description: '', isUnlocked: true }],
-      inventory: ['Altes Schwert'],
-      itemInstances: [{ id: 'dyn-item-1', itemDefinitionId: 'def-1', name: 'Schwert', owner: 'player', quantity: 1, weightKg: 2 }],
-      inventoryEntries: [{ id: 'entry-1', itemDefinitionId: 'def-1', itemInstanceId: 'dyn-item-1' }],
-      equipmentState: [{ itemInstanceId: 'dyn-item-1', itemDefinitionId: 'def-1', itemName: 'Schwert', ownerId: 'player', equipped: true, slot: 'weapon', bodyAreas: ['hands'] }],
-      structuredInventory: { weapons: [], customItems: [] },
-      storyState: { currentLocationName: 'Alte Höhle', currentTerritoryName: '', activeSituation: '', activeGoals: [], relationships: [], storyEntities: [], lastUpdatedTime: '' },
-      characterKnowledge: { knownCharacters: ['npc-1'], knownLocations: ['loc-1'] },
-      currentLocation: { locationId: 'loc-cave' },
-      lootSources: [{ id: 'loot-1', type: 'monster_body', title: 'Beute', items: [] }],
-      worldDrops: [{ id: 'drop-1', itemInstance: { id: 'inst-1', itemDefinitionId: 'def-1', name: 'Gold', quantity: 10 } }]
+      npcs: [],
+      inventory: [],
+      loreDatabase: []
     };
 
     const snapshotted = AdventureResetService.ensureInitialSnapshots(playedLegacyAdventure, false);
-    assert(snapshotted.initialPlayer === undefined, 'Test E1: initialPlayer bleibt undefined');
-    assert(snapshotted.initialWorld === undefined, 'Test E2: initialWorld bleibt undefined');
-    assert(snapshotted.initialLoreDatabase === undefined, 'Test E3: initialLoreDatabase bleibt undefined');
-    assert(snapshotted.initialNpcs === undefined, 'Test E4: initialNpcs bleibt undefined');
-    assert(snapshotted.initialInventory === undefined, 'Test E5: initialInventory bleibt undefined');
-    assert(snapshotted.initialItemInstances === undefined, 'Test E6: initialItemInstances bleibt undefined');
-    assert(snapshotted.initialInventoryEntries === undefined, 'Test E7: initialInventoryEntries bleibt undefined');
-    assert(snapshotted.initialEquipmentState === undefined, 'Test E8: initialEquipmentState bleibt undefined');
-    assert(snapshotted.initialStructuredInventory === undefined, 'Test E9: initialStructuredInventory bleibt undefined');
-    assert(snapshotted.initialStoryState === undefined, 'Test E10: initialStoryState bleibt undefined');
-    assert(snapshotted.initialCharacterKnowledge === undefined, 'Test E11: initialCharacterKnowledge bleibt undefined');
-    assert(snapshotted.initialCurrentLocation === undefined, 'Test E12: initialCurrentLocation bleibt undefined');
-    assert(snapshotted.initialLootSources === undefined, 'Test E13: initialLootSources bleibt undefined');
-    assert(snapshotted.initialWorldDrops === undefined, 'Test E14: initialWorldDrops bleibt undefined');
-    assert(snapshotted.initialStatusElements === undefined, 'Test E15: initialStatusElements bleibt undefined');
-    assert(snapshotted.initialWorldTime === undefined, 'Test E16: initialWorldTime bleibt undefined');
-
-    // Safe fallback reset
+    assert(snapshotted.initialPlayer === undefined, 'Test R9: ensureInitialSnapshots erzeugt keinen versehentlichen initialPlayer für gespielte Abenteuer');
+    
     const resetLegacy = AdventureResetService.resetAdventureToInitialState(playedLegacyAdventure);
-    assert(resetLegacy.player.campaignPowerLevels?.['Stärke']?.value === 10, 'Test E17: Legacy-Spieler Stärke wird sicher auf Minimum (10) zurückgesetzt');
-    assert(resetLegacy.player.campaignPowerLevels?.['Ausdauer']?.value === 15, 'Test E18: Legacy-Spieler Ausdauer wird sicher auf Minimum (15) zurückgesetzt');
+    assert(resetLegacy.player.campaignPowerLevels?.['Stärke']?.value === 10, 'Test R9: Fallback-Reset setzt Stärke sicher auf Minimum (10)');
   }
 
-  // ==========================================
-  // Test F – Vollständiger Reset (Multi-System Synchronisation)
-  // ==========================================
+  // Test R10 – Transformation Reset: activeTransformationId wird zurückgesetzt, Aussehen bleibt kanonisch
   {
-    const initialAdv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-
-    // Dynamic mutations across all game systems:
-    initialAdv.player.name = 'Mutierter Spieler';
-    initialAdv.player.campaignPowerLevels['Stärke'].value = 350;
-    initialAdv.player.physicalChangeHistory = [{ id: 'p1', timestamp: 'now', stageName: 'Metamorphose', changes: [], summary: 'Verwandelt', transformationIntensity: 50 }];
-    initialAdv.player.emotionState = { emotion: 'panisch', intensity: 'stark' };
-    initialAdv.player.activeConditions = [{ id: 'cond-1', name: 'Gefesselt', type: 'restraint', bodyAreas: ['hands'], sourceItemInstanceId: 'inst-shackles', description: 'Fesseln', isActive: true }];
-    initialAdv.world.currentLocationId = 'loc-dungeon';
-    initialAdv.world.dynamicWorldState = { destroyedBuildings: ['loc-tavern'] };
-    initialAdv.dynamicWorldState = { custom: true };
-    initialAdv.npcs.push({ id: 'dyn-npc-bandit', name: 'Räuber', role: 'Gegner', personality: 'Aggressiv', bio: '', appearance: { hairColor: '', eyeColor: '', age: '30', build: '', gender: '' }, attributes: [] });
-    initialAdv.loreDatabase.push({ id: 'dyn-lore-secret', title: 'Geheimgang', category: 'Orte', description: '', isUnlocked: true });
-    initialAdv.itemInstances.push({ id: 'dyn-item-dragon-gem', itemDefinitionId: 'def-gem', name: 'Drachenjuwel', owner: 'player', quantity: 1, weightKg: 0.5 });
-    initialAdv.equipmentState.push({ itemInstanceId: 'dyn-item-dragon-gem', itemDefinitionId: 'def-gem', itemName: 'Drachenjuwel', ownerId: 'player', equipped: true, slot: 'ring_1', bodyAreas: ['hands'] });
-    initialAdv.storyState.storyEntities.push({ id: 'entity-boss', title: 'Drache', category: 'Gegner', description: 'Mächtiges Monster' });
-    initialAdv.storyState.activeGoals.push({ id: 'goal-1', title: 'Fliehe aus Kerker', status: 'active' });
-    initialAdv.characterKnowledge.knownLocations = ['loc-tavern', 'loc-secret-boss'];
-    initialAdv.pendingPickup = { id: 'pick-1', sourceTitle: 'Schatztruhe', sourceType: 'chest', items: [{ id: 'gem', itemDefinitionId: 'def-gem', name: 'Juwel', quantity: 1, weightKg: 0.1 }], requiresExplicitConfirmation: true };
-    initialAdv.pendingTransfer = { id: 'trans-1', itemInstanceId: 'gem', itemName: 'Juwel', quantity: 1, fromOwnerId: 'npc-aldric', fromOwnerName: 'Aldric', toOwnerId: 'player', toOwnerName: 'Spieler', createdAt: Date.now() };
-    initialAdv.lootSources = [{ id: 'loot-dead-wolf', type: 'monster_body', title: 'Erlegter Wolf', items: [] }];
-    initialAdv.worldDrops = [{ id: 'drop-gold', itemInstance: { id: 'inst-gold-coins', itemDefinitionId: 'def-gold', name: 'Goldmünzen', quantity: 20 } }];
-    initialAdv.collectionTasks = [{ id: 'col-1', title: 'Holz', targetQuantity: 10, collectedQuantity: 5, status: 'active' }];
-    initialAdv.worldTime = { day: 12, hour: 18, minute: 30 };
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(initialAdv);
-
-    assert(resetAdv.player.name === 'Eldrin', 'Test F1: Spielername zurückgesetzt');
-    assert(resetAdv.player.campaignPowerLevels?.['Stärke']?.value === 50, 'Test F2: Spieler-Stärke zurückgesetzt');
-    assert((resetAdv.player.activeConditions || []).length === 0, 'Test F3: Spieler ActiveConditions zurückgesetzt');
-    assert(resetAdv.player.physicalChangeHistory?.length === 0, 'Test F4: Physische Änderungshistorie geleert');
-    assert(resetAdv.player.emotionState === undefined, 'Test F5: Emotionszustand zurückgesetzt');
-    assert(resetAdv.world.currentLocationId === 'loc-tavern', 'Test F6: Weltort zurückgesetzt');
-    assert(resetAdv.world.dynamicWorldState === undefined, 'Test F7: world.dynamicWorldState geleert');
-    assert(resetAdv.npcs.length === 1 && resetAdv.npcs[0].name === 'Aldric', 'Test F8: NPCs auf initiale Liste zurückgesetzt');
-    assert(resetAdv.loreDatabase?.length === 1 && resetAdv.loreDatabase[0].id === 'lore-kingdom', 'Test F9: LoreDatabase auf initialen Stand zurückgesetzt');
-    assert(resetAdv.itemInstances?.length === 1 && resetAdv.itemInstances[0].id === 'item-sword-start', 'Test F10: ItemInstances auf Initialbestand zurückgesetzt');
-    assert(resetAdv.equipmentState?.length === 1 && resetAdv.equipmentState[0].itemInstanceId === 'item-sword-start', 'Test F11: EquipmentState auf Initialausrüstung zurückgesetzt');
-    assert(resetAdv.storyState?.storyEntities?.length === 0, 'Test F12: StoryEntities geleert');
-    assert(resetAdv.storyState?.activeGoals?.length === 0, 'Test F13: ActiveGoals geleert');
-    assert(JSON.stringify(resetAdv.characterKnowledge) === JSON.stringify(adventureWithSnapshots.initialCharacterKnowledge), 'Test F14: CharacterKnowledge zurückgesetzt');
-    assert(resetAdv.pendingPickup === null, 'Test F15: pendingPickup ist null');
-    assert(resetAdv.pendingTransfer === null, 'Test F16: pendingTransfer ist null');
-    assert(resetAdv.lootSources?.length === 0, 'Test F17: lootSources geleert');
-    assert(resetAdv.worldDrops?.length === 0, 'Test F18: worldDrops geleert');
-    assert(resetAdv.collectionTasks?.length === 0, 'Test F19: collectionTasks geleert');
-    assert(resetAdv.worldTime?.day === 1 && resetAdv.worldTime?.hour === 8 && resetAdv.worldTime?.minute === 0, 'Test F20: worldTime zurückgesetzt');
-  }
-
-  // ==========================================
-  // Test G – Persistence (Reset -> Stringify -> Parse -> Verify)
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    adv.player.name = 'Veränderter Held';
-    adv.worldTime = { day: 5, hour: 12, minute: 0 };
-    adv.collectionTasks = [{ id: 'col-pers', title: 'Pflanzen', targetQuantity: 3, collectedQuantity: 1, status: 'active' }];
-
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    const storedJson = JSON.stringify(resetAdv);
-    const reloadedAdv: Adventure = JSON.parse(storedJson);
-
-    assert(reloadedAdv.player.name === 'Eldrin', 'Test G1: Nach Serialisierung und Reload bleibt Initialspieler erhalten');
-    assert(reloadedAdv.worldTime?.day === 1 && reloadedAdv.worldTime?.hour === 8, 'Test G2: Nach Serialisierung und Reload bleibt Initialzeit erhalten');
-    assert(reloadedAdv.collectionTasks?.length === 0, 'Test G3: Nach Serialisierung und Reload bleibt collectionTasks leer');
-    assert(reloadedAdv.itemInstances?.length === 1 && reloadedAdv.itemInstances[0].id === 'item-sword-start', 'Test G4: Nach Reload bleibt ItemInstances-Zustand korrekt');
-  }
-
-  // ==========================================
-  // Test H – First Message Flow (Single Execution & Reset Re-run)
-  // ==========================================
-  {
-    const adv = JSON.parse(JSON.stringify(adventureWithSnapshots));
-    const firstMsgText = adv.firstMessage;
-    const fp = AIStoryStateProcessor.computeMessageFingerprint(firstMsgText);
-
-    // Run 1: First message processed
-    adv.storyState.processedFirstMessage = true;
-    adv.storyState.processedFirstMessageFingerprint = fp;
-
-    // Reset occurs
-    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.storyState?.processedFirstMessage === false, 'Test H1: Reset setzt processedFirstMessage auf false');
-    assert(resetAdv.storyState?.processedFirstMessageFingerprint === '', 'Test H2: Reset leert processedFirstMessageFingerprint');
-
-    // Run 2: First message can be processed again
-    const parseResult = AIStoryStateProcessor.parseAndProcessAiResponse(
-      firstMsgText,
-      resetAdv
-    );
-    const reprocessedAdv = parseResult.updatedAdventure;
-    const reprocessedFp = AIStoryStateProcessor.computeMessageFingerprint(firstMsgText);
-    reprocessedAdv.storyState!.processedFirstMessage = true;
-    reprocessedAdv.storyState!.processedFirstMessageFingerprint = reprocessedFp;
-
-    assert(reprocessedAdv.storyState?.processedFirstMessage === true, 'Test H3: Nach Reset kann First Message erneut verarbeitet werden');
-    assert(reprocessedAdv.storyState?.processedFirstMessageFingerprint === fp, 'Test H4: Fingerprint stimmt deterministisch überein');
-
-    // Secondary reset clears it again
-    const secondResetAdv = AdventureResetService.resetAdventureToInitialState(reprocessedAdv);
-    assert(secondResetAdv.storyState?.processedFirstMessage === false, 'Test H5: Zweiter Reset setzt processedFirstMessage wieder auf false');
-    assert(secondResetAdv.storyState?.processedFirstMessageFingerprint === '', 'Test H6: Zweiter Reset leert processedFirstMessageFingerprint erneut');
-  }
-
-  // ==========================================
-  // Section: Initial Snapshot Immutability Lifecycle Tests (A - G)
-  // ==========================================
-
-  // Test A – Neues Adventure: Baseline A -> current edits B -> initial bleibt A, current ist B
-  {
-    const startPlayerA: Character = {
-      id: 'char-a',
-      name: 'Player A',
+    const playerWithTrans: Character = {
+      id: 'char-trans',
+      name: 'Held',
       role: 'Krieger',
-      bio: 'Startcharakter A',
-      personality: 'Mutig',
-      appearance: { hairColor: 'Blond', eyeColor: 'Blau', age: '20', build: 'Normal', gender: 'Männlich' },
-      attributes: [{ name: 'Stärke', value: 10, max: 100 }],
-      activeConditions: []
-    };
-    const startWorldA: WorldSetting = {
-      title: 'Welt A',
-      description: 'Startwelt A',
-      era: 'Antike',
-      tone: 'Heroisch',
-      isHeroic: true,
-      dramaLevel: 'Niedrig',
-      regionMarkers: [],
-      civilizationMarkers: [],
-      placeMarkers: [],
-      terrains: [],
-      borders: []
-    };
-    const startInventoryA = ['Starter-Schwert', 'Brot'];
-
-    const newAdv: any = {
-      id: 'adv-lifecycle-new',
-      authorId: 'user-1',
-      isPublic: false,
-      world: deepClone(startWorldA),
-      player: deepClone(startPlayerA),
-      npcs: [],
-      loreDatabase: [],
-      inventory: deepClone(startInventoryA),
-      initialPlayer: deepClone(startPlayerA),
-      initialWorld: deepClone(startWorldA),
-      initialInventory: deepClone(startInventoryA)
-    };
-
-    // User modifies adventure
-    newAdv.player.name = 'Player B';
-    newAdv.player.appearance.hairColor = 'Rot';
-    newAdv.world.title = 'Welt B';
-    newAdv.inventory = ['Dunkelklinge', 'Drachenblut'];
-
-    // Simulated Auto-Save payload (preserving initial snapshots)
-    const autoSavedAdv = {
-      ...newAdv,
-      initialPlayer: deepClone(startPlayerA),
-      initialWorld: deepClone(startWorldA),
-      initialInventory: deepClone(startInventoryA)
-    };
-
-    assert(autoSavedAdv.initialPlayer.name === 'Player A', 'Test A1: initialPlayer bleibt A');
-    assert(autoSavedAdv.initialPlayer.appearance.hairColor === 'Blond', 'Test A2: initialPlayer Aussehen bleibt A');
-    assert(autoSavedAdv.initialWorld.title === 'Welt A', 'Test A3: initialWorld bleibt A');
-    assert(autoSavedAdv.initialInventory[0] === 'Starter-Schwert', 'Test A4: initialInventory bleibt A');
-    assert(autoSavedAdv.player.name === 'Player B', 'Test A5: aktueller Player ist B');
-    assert(autoSavedAdv.world.title === 'Welt B', 'Test A6: aktuelle World ist B');
-    assert(autoSavedAdv.inventory[0] === 'Dunkelklinge', 'Test A7: aktuelles Inventory ist B');
-  }
-
-  // Test B – Mehrere Änderungen vor dem ersten Auto-Save
-  {
-    const startPlayerA: Character = {
-      id: 'char-a',
-      name: 'Start A',
-      role: 'Magier',
-      bio: 'Start B',
+      bio: '',
       personality: 'Ruhig',
-      appearance: { hairColor: 'Silber', eyeColor: 'Grün', age: '20', build: 'Normal', gender: 'Weiblich' },
-      attributes: [{ name: 'Intelligenz', value: 20, max: 100 }],
-      activeConditions: []
-    };
-
-    const initialSnapshotA = deepClone(startPlayerA);
-
-    // Edit step 1: B
-    let runningPlayer = deepClone(startPlayerA);
-    runningPlayer.name = 'Bearbeitung B';
-    runningPlayer.attributes[0].value = 30;
-
-    // Edit step 2: C
-    runningPlayer.name = 'Bearbeitung C';
-    runningPlayer.attributes[0].value = 40;
-
-    // Auto-Save arrives with frozen initial snapshot
-    const saved = {
-      player: runningPlayer,
-      initialPlayer: initialSnapshotA
-    };
-
-    assert(saved.initialPlayer.name === 'Start A', 'Test B1: Snapshot entspricht trotz mehrerer Edits Start A');
-    assert(saved.initialPlayer.attributes[0].value === 20, 'Test B2: Snapshot-Attribute bleiben 20');
-    assert(saved.player.name === 'Bearbeitung C', 'Test B3: Aktueller Zustand ist C');
-  }
-
-  // Test C – Mehrfaches Auto-Save (Start A -> B -> Save -> C -> Save -> D -> Save)
-  {
-    const startPlayerA: Character = {
-      id: 'char-a',
-      name: 'Start A',
-      role: 'Schurke',
-      bio: '',
-      personality: 'Schlau',
-      appearance: { hairColor: 'Braun', eyeColor: 'Braun', age: '20', build: 'Normal', gender: 'Männlich' },
-      attributes: [],
-      activeConditions: []
-    };
-    const immutableSnapshot = deepClone(startPlayerA);
-
-    let state = { player: deepClone(startPlayerA), initialPlayer: immutableSnapshot };
-
-    // Change B & Save
-    state.player.name = 'Zustand B';
-    let save1 = { ...state, player: deepClone(state.player), initialPlayer: immutableSnapshot };
-    assert(save1.initialPlayer.name === 'Start A' && save1.player.name === 'Zustand B', 'Test C1: Nach Save 1 ist initial A und current B');
-
-    // Change C & Save
-    state.player.name = 'Zustand C';
-    let save2 = { ...state, player: deepClone(state.player), initialPlayer: immutableSnapshot };
-    assert(save2.initialPlayer.name === 'Start A' && save2.player.name === 'Zustand C', 'Test C2: Nach Save 2 ist initial A und current C');
-
-    // Change D & Save
-    state.player.name = 'Zustand D';
-    let save3 = { ...state, player: deepClone(state.player), initialPlayer: immutableSnapshot };
-    assert(save3.initialPlayer.name === 'Start A' && save3.player.name === 'Zustand D', 'Test C3: Nach Save 3 ist initial A und current D');
-  }
-
-  // Test D – Bestehendes Adventure (initial = A, current = B -> Speichern -> initial = A, current = B)
-  {
-    const existingAdv: any = {
-      id: 'adv-existing',
-      authorId: 'user-1',
-      isPublic: false,
-      world: { title: 'Welt B', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
-      player: { id: 'p1', name: 'Spieler B', role: '', bio: '', personality: '', appearance: { hairColor: '', eyeColor: '', age: '20', build: 'Normal', gender: '' }, attributes: [], activeConditions: [] },
-      npcs: [],
-      initialPlayer: { id: 'p1', name: 'Spieler A (Initial)', role: '', bio: '', personality: '', appearance: { hairColor: '', eyeColor: '', age: '20', build: 'Normal', gender: '' }, attributes: [], activeConditions: [] },
-      initialWorld: { title: 'Welt A (Initial)', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] }
-    };
-
-    const validated = AdventureResetService.ensureInitialSnapshots(existingAdv, false);
-    assert(validated.initialPlayer?.name === 'Spieler A (Initial)', 'Test D1: Bestehender initialPlayer bleibt erhalten');
-    assert(validated.initialWorld?.title === 'Welt A (Initial)', 'Test D2: Bestehende initialWorld bleibt erhalten');
-    assert(validated.player.name === 'Spieler B', 'Test D3: Aktueller Spieler bleibt B');
-  }
-
-  // Test E – handleFinish() mit Vorab-Änderungen (Start = A, Edits = B, C -> Finish -> initial = A, current = C)
-  {
-    const startPlayerA: Character = {
-      id: 'char-finish',
-      name: 'Start A',
-      role: 'Paladin',
-      bio: '',
-      personality: 'Treuer Held',
-      appearance: { hairColor: 'Gold', eyeColor: 'Blau', age: '20', build: 'Normal', gender: 'Divers' },
-      attributes: [{ name: 'Heiligkraft', value: 100, max: 100 }],
-      activeConditions: []
-    };
-    const initialSnapshotRef = deepClone(startPlayerA);
-
-    // Edit B
-    let workingPlayer = { ...startPlayerA, name: 'Edit B' };
-    // Edit C
-    workingPlayer = { ...workingPlayer, name: 'Final C' };
-
-    // Simulated handleFinish using initialSnapshotsRef
-    const finalAdv: any = {
-      id: 'adv-finish-test',
-      authorId: 'user-1',
-      isPublic: true,
-      world: { title: 'Welt', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
-      player: workingPlayer,
-      npcs: [],
-      initialPlayer: deepClone(initialSnapshotRef)
-    };
-
-    assert(finalAdv.initialPlayer?.name === 'Start A', 'Test E1: initialPlayer nach Finish entspricht Start A');
-    assert(finalAdv.player.name === 'Final C', 'Test E2: player nach Finish entspricht Final C');
-  }
-
-  // Test F – Reset stellt ursprünglichen Zustand A aus Zustand D wieder her
-  {
-    const startPlayerA: Character = {
-      id: 'char-reset-f',
-      name: 'Held A',
-      role: 'Barde',
-      bio: '',
-      personality: 'Frohgemut',
-      appearance: { hairColor: 'Kastanienbraun', eyeColor: 'Haselnuss', age: '20', build: 'Normal', gender: 'Männlich' },
-      attributes: [{ name: 'Charisma', value: 80, max: 100 }],
-      activeConditions: []
-    };
-
-    const adv: any = {
-      id: 'adv-reset-flow',
-      authorId: 'user-1',
-      isPublic: false,
-      world: { title: 'Startort', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
-      player: {
-        id: 'char-reset-f',
-        name: 'Transformierter Zustand D',
-        role: 'Schattenfürst',
-        bio: '',
-        personality: 'Düster',
-        appearance: { hairColor: 'Pechschwarz', eyeColor: 'Glühend Rot', age: '20', build: 'Normal', gender: 'Männlich' },
-        attributes: [{ name: 'Charisma', value: 10, max: 100 }],
-        activeConditions: [{ id: 'cond-shadow', label: 'Schattengestalt', type: 'transformation', intensity: 'extrem' } as any]
+      appearance: {
+        hairColor: 'Schwarz',
+        eyeColor: 'Blau',
+        age: '20',
+        build: 'Normal',
+        gender: 'Männlich',
+        activeTransformationId: 'trans-dragon-form',
+        transformationState: {
+          activeTransformationId: 'trans-dragon-form',
+          currentIntensity: 80,
+          metamorphosisProgress: 50,
+          powerUsage: 100
+        } as any
       },
-      npcs: [],
-      initialPlayer: deepClone(startPlayerA)
+      attributes: [],
+      activeConditions: [
+        { id: 'cond-trans', name: 'Drachenform', description: 'Drachenform', type: 'magical_mutation', duration: 'Temporär', isActive: true }
+      ]
+    };
+
+    const adv: Adventure = {
+      ...deepClone(adventureWithSnapshots),
+      player: playerWithTrans,
+      initialPlayer: {
+        ...deepClone(playerWithTrans),
+        appearance: {
+          ...deepClone(playerWithTrans.appearance!),
+          activeTransformationId: 'standard',
+          transformationState: undefined
+        }
+      }
     };
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
-    assert(resetAdv.player.name === 'Held A', 'Test F1: Reset stellt Namen Held A wieder her');
-    assert(resetAdv.player.role === 'Barde', 'Test F2: Reset stellt Rolle Barde wieder her');
-    assert(resetAdv.player.appearance.hairColor === 'Kastanienbraun', 'Test F3: Reset stellt Haarfarbe wieder her');
-    assert((resetAdv.player.activeConditions || []).length === 0, 'Test F4: Reset entfernt temporäre Transformation');
-  }
-
-  // Test G – Transformation verlässt Normalform, wird gespeichert, Reset bringt Normalform zurück
-  {
-    const normalPlayer: Character = {
-      id: 'char-trans-g',
-      name: 'Normaler Mensch',
-      role: 'Novize',
-      bio: '',
-      personality: 'Ruhig',
-      appearance: { hairColor: 'Schwarz', eyeColor: 'Blau', age: '20', build: 'Normal', gender: 'Weiblich', activeTransformationId: 'standard' },
-      attributes: [{ name: 'Psi', value: 0, max: 100 }],
-      activeConditions: []
-    };
-
-    const transAdv: any = {
-      id: 'adv-trans-g',
-      authorId: 'user-1',
-      isPublic: true,
-      world: { title: 'Psi-Akademie', description: '', era: '', tone: '', isHeroic: true, dramaLevel: 'Mittel', regionMarkers: [], civilizationMarkers: [], placeMarkers: [], terrains: [], borders: [] },
-      player: {
-        ...deepClone(normalPlayer),
-        appearance: {
-          ...normalPlayer.appearance,
-          activeTransformationId: 'trans-esper-awakened',
-          hairColor: 'Leuchtendes Violett',
-          eyeColor: 'Silber'
-        },
-        activeConditions: [
-          { id: 'trans-esper', label: 'Erwachte Esper', type: 'transformation', intensity: 'hoch' } as any
-        ]
-      },
-      npcs: [],
-      initialPlayer: deepClone(normalPlayer)
-    };
-
-    // Auto-save / persistence check
-    const saved = JSON.parse(JSON.stringify(transAdv));
-    assert(saved.initialPlayer.appearance.activeTransformationId === 'standard', 'Test G1: Im Speicherstand bleibt initialPlayer auf standard');
-    assert(saved.player.appearance.activeTransformationId === 'trans-esper-awakened', 'Test G2: Im Speicherstand ist player aktuell auf trans-esper-awakened');
-
-    // Reset back to baseline
-    const reverted = AdventureResetService.resetAdventureToInitialState(saved);
-    assert(reverted.player.name === 'Normaler Mensch', 'Test G3: Nach Reset ist Spieler wieder Normaler Mensch');
-    assert(reverted.player.appearance.activeTransformationId === 'standard', 'Test G4: Nach Reset ist activeTransformationId standard');
-    assert(reverted.player.appearance.hairColor === 'Schwarz', 'Test G5: Nach Reset ist Haarfarbe Schwarz');
-    assert((reverted.player.activeConditions || []).length === 0, 'Test G6: Nach Reset sind aktive Bedingungen geleert');
+    assert(resetAdv.player.appearance?.activeTransformationId === 'standard', 'Test R10: activeTransformationId wird auf standard zurückgesetzt');
+    assert(resetAdv.player.appearance?.transformationState?.currentIntensity === 0, 'Test R10: transformationState Intensität auf 0 zurückgesetzt');
+    assert((resetAdv.player.activeConditions || []).length === 0, 'Test R10: Temporäre Transformations-Condition entfernt');
   }
 
   console.log('\n=== TEST RUN COMPLETE ===');
