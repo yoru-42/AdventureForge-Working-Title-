@@ -141,42 +141,32 @@ export class AdventureResetService {
     // 1. Kanon / Editor-Daten des Spielers behalten, nur Runtime-Fortschritt & temporäre Zustände zurücksetzen
     let resetPlayer: Character = deepClone(adventure.player || {} as Character);
 
-    // Runtime Power Levels & Attribute auf Startwerte/Minima zurücksetzen, während Definitionen erhalten bleiben
+    // CampaignPowerLevels: Aktuelle Editor-Werte als Basis behalten (Wert, Potential, Maximum, etc.), nur Runtime-XP leeren
     if (resetPlayer.campaignPowerLevels) {
       const updatedLevels = { ...resetPlayer.campaignPowerLevels };
       Object.keys(updatedLevels).forEach(key => {
-        const initialVal = adventure.initialPlayer?.campaignPowerLevels?.[key]?.value;
-        const worldSetting = adventure.world?.campaignPowerSettings?.[key];
-        const minVal = typeof worldSetting === 'number'
-          ? worldSetting
-          : (worldSetting?.min ?? (initialVal !== undefined ? initialVal : 10));
-
-        const baseVal = initialVal !== undefined ? initialVal : minVal;
+        const currentParam = resetPlayer.campaignPowerLevels![key];
         updatedLevels[key] = {
-          ...updatedLevels[key],
-          value: baseVal,
+          ...currentParam,
+          // Der definierte Editor-Basiswert und alle Parametergrenzen bleiben erhalten
+          value: currentParam.value,
           xp: 0
         };
       });
       resetPlayer.campaignPowerLevels = updatedLevels;
     }
 
+    // Attribute: Aktuelle Editor-Attribute aus adventure.player.attributes bleiben erhalten
     if (resetPlayer.attributes) {
-      resetPlayer.attributes = resetPlayer.attributes.map(attr => {
-        const initAttr = adventure.initialPlayer?.attributes?.find(a => a.name === attr.name);
-        return {
-          ...attr,
-          value: initAttr !== undefined ? initAttr.value : attr.value
-        };
-      });
+      resetPlayer.attributes = deepClone(resetPlayer.attributes);
     }
 
     // Runtime-Fortschritt (Level, XP, Rang) zurücksetzen
-    resetPlayer.level = adventure.initialPlayer?.level || 1;
-    resetPlayer.xp = adventure.initialPlayer?.xp || 0;
+    resetPlayer.level = 1;
+    resetPlayer.xp = 0;
     resetPlayer.experience = 0;
     resetPlayer.experiencePoints = 0;
-    resetPlayer.rank = adventure.initialPlayer?.rank || 'F';
+    resetPlayer.rank = 'F';
 
     // Temporäre Runtime-Zustände leeren
     resetPlayer.physicalChangeHistory = [];
@@ -186,7 +176,7 @@ export class AdventureResetService {
 
     // Aktive Transformation auf Standard/Start zurücksetzen
     if (resetPlayer.appearance) {
-      const startTransId = adventure.initialPlayer?.appearance?.activeTransformationId || 'standard';
+      const startTransId = 'standard';
       resetPlayer.appearance = {
         ...resetPlayer.appearance,
         activeTransformationId: startTransId
@@ -200,7 +190,7 @@ export class AdventureResetService {
           powerUsage: 0
         };
       }
-      if (resetPlayer.appearance.chibiForm && !adventure.initialPlayer?.appearance?.chibiForm?.enabled) {
+      if (resetPlayer.appearance.chibiForm) {
         resetPlayer.appearance.chibiForm = {
           ...resetPlayer.appearance.chibiForm,
           enabled: false
@@ -208,24 +198,90 @@ export class AdventureResetService {
       }
     }
 
-    // Conditions: temporäre entfernen, persistente Startbedingungen wiederherstellen
-    const baseConditions = adventure.initialPlayer?.activeConditions
-      ? deepClone(adventure.initialPlayer.activeConditions)
-      : (resetPlayer.activeConditions || []);
-
+    // Conditions: dauerhafte Editor-Bedingungen bleiben erhalten, temporäre und Transformations-Bedingungen entfernen
+    const baseConditions = resetPlayer.activeConditions || [];
     resetPlayer.activeConditions = baseConditions.filter(
       c => !c.id?.startsWith('temp-') && c.duration !== 'Temporär' && (c as any).type !== 'transformation'
     );
-    if (adventure.initialPlayer?.conditions) {
-      resetPlayer.conditions = deepClone(adventure.initialPlayer.conditions);
+    if (resetPlayer.conditions) {
+      resetPlayer.conditions = resetPlayer.conditions.filter(
+        c => !c.id?.startsWith('temp-') && c.duration !== 'Temporär' && (c as any).type !== 'transformation'
+      );
     }
 
     // 2. Kanonische Welt behalten, nur Runtime-Felder zurücksetzen
     let resetWorld: WorldSetting = deepClone(adventure.world || { territories: [], connections: [] } as WorldSetting);
     resetWorld.dynamicWorldState = undefined;
     resetWorld.encounterForces = undefined;
-    resetWorld.currentLocationId = resetWorld.startLocationId || adventure.world?.startLocationId || resetWorld.currentLocationId;
-    resetWorld.currentTerritoryId = undefined;
+
+    const startLocationId = resetWorld.startLocationId || adventure.world?.startLocationId || resetWorld.currentLocationId || '';
+    resetWorld.currentLocationId = startLocationId;
+
+    // Startort anhand seiner ID in den vorhandenen Datenstrukturen der Welt auflösen (Location-ID vs. Name trennen)
+    let startLocationName = resetWorld.startLocationName || adventure.world?.startLocationName || '';
+    let startTerritoryName = '';
+    let startTerritoryId: string | undefined = undefined;
+
+    // 2.1 Suche in resetWorld.locations (WorldLocationReference[])
+    if (startLocationId && resetWorld.locations) {
+      const locRef = resetWorld.locations.find(l => l.id === startLocationId);
+      if (locRef) {
+        if (!startLocationName) startLocationName = locRef.name;
+        if (locRef.territoryId) {
+          startTerritoryId = locRef.territoryId;
+          const terr = resetWorld.territories?.find(t => t.id === locRef.territoryId);
+          if (terr) {
+            startTerritoryName = terr.name;
+          }
+        }
+      }
+    }
+
+    // 2.2 Suche in resetWorld.territories (Territory[])
+    if (startLocationId && resetWorld.territories) {
+      const terrMatch = resetWorld.territories.find(t => t.id === startLocationId);
+      if (terrMatch) {
+        if (!startLocationName) startLocationName = terrMatch.name;
+        if (terrMatch.parentId) {
+          const parentTerr = resetWorld.territories.find(t => t.id === terrMatch.parentId);
+          if (parentTerr) {
+            startTerritoryId = parentTerr.id;
+            startTerritoryName = parentTerr.name;
+          }
+        } else {
+          startTerritoryId = terrMatch.id;
+          if (!startTerritoryName && (terrMatch.type === 'region' || terrMatch.type === 'land' || terrMatch.type === 'koenigreich')) {
+            startTerritoryName = terrMatch.name;
+          }
+        }
+      }
+    }
+
+    // 2.3 Suche in resetWorld.placeMarkers (falls vorhanden)
+    if (startLocationId && !startLocationName && (resetWorld as any).placeMarkers) {
+      const marker = (resetWorld as any).placeMarkers.find((p: any) => p.id === startLocationId);
+      if (marker) {
+        startLocationName = marker.name;
+      }
+    }
+
+    // 2.4 Falls startTerritoryId gesetzt ist, aber der Name noch fehlt, aus territories ermitteln
+    if (startTerritoryId && !startTerritoryName && resetWorld.territories) {
+      const terr = resetWorld.territories.find(t => t.id === startTerritoryId);
+      if (terr) {
+        startTerritoryName = terr.name;
+      }
+    }
+
+    // 2.5 Fallback: Falls kein Name gefunden wurde, aber storyState einen echten (nicht-ID) Namen hatte
+    if (!startLocationName && adventure.storyState?.currentLocationName && adventure.storyState.currentLocationName !== startLocationId) {
+      startLocationName = adventure.storyState.currentLocationName;
+    }
+    if (!startTerritoryName && adventure.storyState?.currentTerritoryName) {
+      startTerritoryName = adventure.storyState.currentTerritoryName;
+    }
+
+    resetWorld.currentTerritoryId = startTerritoryId;
 
     // Weltzeit auf Startzustand zurücksetzen
     const resetWorldTime: WorldTime = adventure.initialWorldTime
@@ -277,50 +333,78 @@ export class AdventureResetService {
     });
 
     // 5. Kanonische Item-Instanzen, Inventar & Ausrüstung
-    let resetItemInstances: ItemInstance[];
-    if (adventure.initialItemInstances) {
-      const initialIds = new Set(adventure.initialItemInstances.map(i => i.id));
-      const editorAddedItems = (adventure.itemInstances || []).filter(
-        i => !initialIds.has(i.id) && !i.id?.startsWith('dyn-') && !i.id?.startsWith('loot-')
-      );
-      resetItemInstances = [
-        ...adventure.initialItemInstances.map(i => deepClone(i)),
-        ...editorAddedItems.map(i => deepClone(i))
-      ];
-    } else if (adventure.itemInstances) {
-      resetItemInstances = adventure.itemInstances
-        .filter(i => !i.id?.startsWith('dyn-item-') && !i.id?.startsWith('loot-'))
-        .map(i => deepClone(i));
-    } else {
-      resetItemInstances = [];
-    }
+    // Regel: Aktueller Itembestand aus dem Editor bleibt erhalten.
+    // Nur echte Runtime-Loot-Items (dyn-..., loot-..., runtime-...) werden entfernt.
+    const isRuntimeLootItem = (item: ItemInstance): boolean => {
+      if (!item || !item.id) return false;
+      const idLower = item.id.toLowerCase();
+      return idLower.startsWith('dyn-') || idLower.startsWith('loot-') || idLower.startsWith('runtime-');
+    };
 
-    let resetInventoryEntries: InventoryEntry[] | undefined;
-    if (adventure.initialInventoryEntries) {
-      resetInventoryEntries = deepClone(adventure.initialInventoryEntries);
-    } else {
-      resetInventoryEntries = adventure.inventoryEntries ? deepClone(adventure.inventoryEntries) : undefined;
-    }
+    const resetItemInstances: ItemInstance[] = deepClone(adventure.itemInstances || [])
+      .filter(i => !isRuntimeLootItem(i));
+    const validItemInstanceIds = new Set(resetItemInstances.map(i => i.id));
 
-    let resetEquipmentState: EquipmentState[];
-    if (adventure.initialEquipmentState) {
-      resetEquipmentState = deepClone(adventure.initialEquipmentState);
-    } else {
-      resetEquipmentState = adventure.equipmentState ? deepClone(adventure.equipmentState) : [];
-    }
+    // InventoryEntries: Nur behalten, wenn nicht dyn-/loot- und falls an ItemInstance gebunden, diese noch existiert
+    const resetInventoryEntries: InventoryEntry[] | undefined = adventure.inventoryEntries
+      ? deepClone(adventure.inventoryEntries).filter(entry => {
+          if (entry.id?.toLowerCase().startsWith('dyn-') || entry.id?.toLowerCase().startsWith('loot-')) {
+            return false;
+          }
+          if (entry.itemInstanceId && !validItemInstanceIds.has(entry.itemInstanceId)) {
+            return false;
+          }
+          return true;
+        })
+      : undefined;
 
-    let resetInventory: string[];
-    if (adventure.initialInventory) {
-      resetInventory = deepClone(adventure.initialInventory);
-    } else {
-      resetInventory = adventure.inventory ? deepClone(adventure.inventory) : [];
-    }
+    // EquipmentState: Aktuelle Editor-Ausrüstung behalten, nur gelöschte Runtime-Loot-Referenzen entfernen
+    const resetEquipmentState: EquipmentState[] = deepClone(adventure.equipmentState || [])
+      .filter(eq => {
+        if (eq.itemInstanceId && !validItemInstanceIds.has(eq.itemInstanceId)) {
+          return false;
+        }
+        if (eq.itemInstanceId?.toLowerCase().startsWith('dyn-') || eq.itemInstanceId?.toLowerCase().startsWith('loot-')) {
+          return false;
+        }
+        return true;
+      });
 
-    let resetStructuredInventory: StructuredInventory | undefined;
-    if (adventure.initialStructuredInventory) {
-      resetStructuredInventory = deepClone(adventure.initialStructuredInventory);
-    } else {
-      resetStructuredInventory = adventure.structuredInventory ? deepClone(adventure.structuredInventory) : undefined;
+    // Inventar: Aktuellen Bestand behalten, außer eindeutig als Runtime-Loot markierte Einträge
+    const resetInventory: string[] = deepClone(adventure.inventory || []).filter(itemStr => {
+      if (!itemStr) return false;
+      const lower = itemStr.toLowerCase();
+      if (lower.startsWith('dyn-') || lower.startsWith('loot-')) {
+        return false;
+      }
+      return true;
+    });
+
+    // StructuredInventory: Aktuellen Stand behalten, nur gelöschte Runtime-Loot-Referenzen entfernen
+    let resetStructuredInventory: StructuredInventory | undefined = adventure.structuredInventory
+      ? deepClone(adventure.structuredInventory)
+      : undefined;
+
+    if (resetStructuredInventory) {
+      if (resetStructuredInventory.weapons) {
+        resetStructuredInventory.weapons = resetStructuredInventory.weapons.filter(
+          w => !w.toLowerCase().startsWith('dyn-') && !w.toLowerCase().startsWith('loot-')
+        );
+      }
+      if (resetStructuredInventory.armor) {
+        const armor = resetStructuredInventory.armor;
+        (['head', 'chest', 'hands', 'legs', 'feet'] as const).forEach(slot => {
+          const val = armor[slot];
+          if (val && (val.toLowerCase().startsWith('dyn-') || val.toLowerCase().startsWith('loot-'))) {
+            delete armor[slot];
+          }
+        });
+      }
+      if (resetStructuredInventory.customItems) {
+        resetStructuredInventory.customItems = resetStructuredInventory.customItems.filter(
+          c => !c.id?.toLowerCase().startsWith('dyn-') && !c.id?.toLowerCase().startsWith('loot-')
+        );
+      }
     }
 
     // 6. Story-State: Dauerhafte Definitionen trennen von Runtime-Zuständen
@@ -342,8 +426,8 @@ export class AdventureResetService {
 
     const resetStoryState: StoryInfoState = {
       ...deepClone(currentStoryState),
-      currentLocationName: resetWorld.startLocationId || adventure.world?.startLocationId || '',
-      currentTerritoryName: '',
+      currentLocationName: startLocationName,
+      currentTerritoryName: startTerritoryName,
       activeSituation: initialStoryState.activeSituation || '',
       activeGoals: initialStoryState.activeGoals ? deepClone(initialStoryState.activeGoals) : [],
       storyEntities: preservedStoryEntities.map(e => deepClone(e)),
@@ -387,7 +471,14 @@ export class AdventureResetService {
       equipmentState: resetEquipmentState,
       storyState: resetStoryState,
       characterKnowledge: resetStoryState.characterKnowledge,
-      currentLocation: adventure.initialCurrentLocation ? deepClone(adventure.initialCurrentLocation) : undefined,
+      currentLocation: {
+        ...(adventure.initialCurrentLocation ? deepClone(adventure.initialCurrentLocation) : {}),
+        locationId: startLocationId || undefined,
+        locationName: startLocationName || undefined,
+        territoryId: startTerritoryId || undefined,
+        territoryName: startTerritoryName || undefined,
+        worldName: resetWorld.title || undefined
+      },
       lootSources: resetLootSources,
       worldDrops: resetWorldDrops,
       collectionTasks: resetCollectionTasks,

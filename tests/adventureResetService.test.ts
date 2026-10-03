@@ -500,7 +500,8 @@ function runTests() {
 
     const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
     assert(resetAdv.player.name === 'Veränderter Eldrin', 'Test R1: Spielername bleibt bei Editor-Änderung erhalten');
-    assert(resetAdv.player.campaignPowerLevels?.['Stärke']?.value === 50, 'Test R1: Spieler-Stärke auf Initialwert zurückgesetzt');
+    assert(resetAdv.player.campaignPowerLevels?.['Stärke']?.value === 999, 'Test R1: Spieler-Stärke aus Editor bleibt erhalten');
+    assert(resetAdv.player.campaignPowerLevels?.['Stärke']?.xp === 0, 'Test R1: Laufzeit-XP der Stärke wird auf 0 geleert');
     assert(resetAdv.player.physicalChangeHistory?.length === 0, 'Test R1: Physische Änderungshistorie geleert');
     assert(resetAdv.player.emotionState === undefined, 'Test R1: Emotionszustand zurückgesetzt');
   }
@@ -672,7 +673,8 @@ function runTests() {
     assert(snapshotted.initialPlayer === undefined, 'Test R9: ensureInitialSnapshots erzeugt keinen versehentlichen initialPlayer für gespielte Abenteuer');
     
     const resetLegacy = AdventureResetService.resetAdventureToInitialState(playedLegacyAdventure);
-    assert(resetLegacy.player.campaignPowerLevels?.['Stärke']?.value === 10, 'Test R9: Fallback-Reset setzt Stärke sicher auf Minimum (10)');
+    assert(resetLegacy.player.campaignPowerLevels?.['Stärke']?.value === 999, 'Test R9: Spieler-Stärke aus Editor bleibt erhalten (999)');
+    assert(resetLegacy.player.campaignPowerLevels?.['Stärke']?.xp === 0, 'Test R9: Spieler-Stärke XP wird auf 0 geleert');
   }
 
   // Test R10 – Transformation Reset: activeTransformationId wird zurückgesetzt, Aussehen bleibt kanonisch
@@ -720,6 +722,193 @@ function runTests() {
     assert(resetAdv.player.appearance?.activeTransformationId === 'standard', 'Test R10: activeTransformationId wird auf standard zurückgesetzt');
     assert(resetAdv.player.appearance?.transformationState?.currentIntensity === 0, 'Test R10: transformationState Intensität auf 0 zurückgesetzt');
     assert((resetAdv.player.activeConditions || []).length === 0, 'Test R10: Temporäre Transformations-Condition entfernt');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R11 – Spieler-Editorwerte bleiben
+  // Vor Reset:
+  // adv.player.name = 'Neuer Name';
+  // adv.player.campaignPowerLevels['Stärke'].value = 65;
+  // adv.player.campaignPowerLevels['Stärke'].potentialMax = 120;
+  // Nach Reset:
+  // player.name === 'Neuer Name'
+  // player.campaignPowerLevels['Stärke'].value === 65
+  // player.campaignPowerLevels['Stärke'].potentialMax === 120
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    adv.player.name = 'Neuer Name';
+    adv.player.campaignPowerLevels = {
+      'Stärke': { value: 65, potentialMax: 120, xp: 200 }
+    };
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.player.name === 'Neuer Name', 'Test R11: Spielername bleibt nach Reset erhalten');
+    assert(resetAdv.player.campaignPowerLevels?.['Stärke']?.value === 65, 'Test R11: Stärke-Basiswert 65 bleibt nach Reset erhalten');
+    assert(resetAdv.player.campaignPowerLevels?.['Stärke']?.potentialMax === 120, 'Test R11: Stärke-Potential 120 bleibt nach Reset erhalten');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R12 – Runtime-Progression wird trotzdem entfernt
+  // Vor Reset:
+  // adv.player.xp = 5000;
+  // adv.player.experience = 5000;
+  // adv.player.experiencePoints = 5000;
+  // adv.player.emotionState = ...
+  // adv.player.physicalChangeHistory = [...]
+  // Nach Reset:
+  // xp === 0, experience === 0, experiencePoints === 0
+  // emotionState === undefined, physicalChangeHistory.length === 0
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    adv.player.xp = 5000;
+    adv.player.experience = 5000;
+    adv.player.experiencePoints = 5000;
+    adv.player.emotionState = { emotion: 'erregt', intensity: 'stark' } as any;
+    adv.player.physicalChangeHistory = [
+      { id: 'p1', timestamp: 'now', stageName: 'Metamorphose', changes: [], summary: 'Verwandelt', transformationIntensity: 50 }
+    ];
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.player.xp === 0, 'Test R12: xp ist 0');
+    assert(resetAdv.player.experience === 0, 'Test R12: experience ist 0');
+    assert(resetAdv.player.experiencePoints === 0, 'Test R12: experiencePoints ist 0');
+    assert(resetAdv.player.emotionState === undefined, 'Test R12: emotionState ist undefined');
+    assert(Array.isArray(resetAdv.player.physicalChangeHistory) && resetAdv.player.physicalChangeHistory.length === 0, 'Test R12: physicalChangeHistory ist leer');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R13 – Startlocation verwendet Namen
+  // Wenn:
+  // startLocationId = 'loc-tavern'
+  // und die Location: { id: 'loc-tavern', name: 'Alte Taverne' } ist,
+  // muss nach Reset gelten:
+  // storyState.currentLocationName === 'Alte Taverne' und niemals 'loc-tavern'
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    adv.world.startLocationId = 'loc-tavern';
+    adv.world.locations = [
+      {
+        id: 'loc-tavern',
+        name: 'Alte Taverne',
+        type: 'gebäude',
+        territoryId: 'terr-1'
+      }
+    ];
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.storyState?.currentLocationName === 'Alte Taverne', 'Test R13: storyState.currentLocationName verwendet Namen "Alte Taverne"');
+    assert(resetAdv.storyState?.currentLocationName !== 'loc-tavern', 'Test R13: storyState.currentLocationName ist niemals ID "loc-tavern"');
+    assert(resetAdv.storyState?.currentTerritoryName === 'Tal der Nebel', 'Test R13: storyState.currentTerritoryName ermittelt zugehöriges Territorium "Tal der Nebel"');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R14 – Editor-Item bleibt
+  // Vor Reset ein neues dauerhaftes Item hinzufügen:
+  // { id: 'editor-sword-2', ... }
+  // Nach Reset: editor-sword-2 muss weiterhin vorhanden sein.
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    const editorSword2: ItemInstance = {
+      id: 'editor-sword-2',
+      itemDefinitionId: 'def-sword-2',
+      name: 'Drachentöter',
+      owner: 'player',
+      quantity: 1,
+      weightKg: 4
+    };
+    adv.itemInstances.push(editorSword2);
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.itemInstances?.some(i => i.id === 'editor-sword-2'), 'Test R14: editor-sword-2 bleibt nach Reset vorhanden');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R15 – Runtime-Loot verschwindet
+  // Vor Reset: dyn-item-potion, loot-item-gold hinzufügen.
+  // Nach Reset: Diese Runtime-Items dürfen nicht mehr vorhanden sein.
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    adv.itemInstances.push(
+      {
+        id: 'dyn-item-potion',
+        itemDefinitionId: 'def-pot',
+        name: 'Heiltrank',
+        owner: 'player',
+        quantity: 2
+      },
+      {
+        id: 'loot-item-gold',
+        itemDefinitionId: 'def-gold',
+        name: 'Goldsäckchen',
+        owner: 'player',
+        quantity: 1
+      }
+    );
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(!resetAdv.itemInstances?.some(i => i.id === 'dyn-item-potion'), 'Test R15: dyn-item-potion verschwindet nach Reset');
+    assert(!resetAdv.itemInstances?.some(i => i.id === 'loot-item-gold'), 'Test R15: loot-item-gold verschwindet nach Reset');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R16 – Editor-Ausrüstung bleibt
+  // Eine neue Ausrüstung im Editor setzen.
+  // Nach Reset: Diese Ausrüstung muss weiterhin vorhanden sein.
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    const editorHelmet: ItemInstance = {
+      id: 'editor-item-helm',
+      itemDefinitionId: 'def-helm',
+      name: 'Ritterhelm',
+      owner: 'player',
+      quantity: 1
+    };
+    adv.itemInstances.push(editorHelmet);
+    adv.equipmentState.push({
+      itemInstanceId: 'editor-item-helm',
+      itemDefinitionId: 'def-helm',
+      itemName: 'Ritterhelm',
+      ownerId: 'player',
+      equipped: true,
+      slot: 'head',
+      bodyAreas: ['head']
+    });
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    assert(resetAdv.equipmentState?.some(eq => eq.itemInstanceId === 'editor-item-helm'), 'Test R16: Editor-Ausrüstung Ritterhelm bleibt erhalten');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test R17 – Editor-Progressionsdefinition bleibt
+  // Potential: 85 %, Charakter-Maximum: 120, Entwicklungsrate: 1.35, Basis-Wachstum pro Level: 4
+  // Nach Reset müssen diese Werte identisch sein.
+  // Nur der tatsächliche Laufzeitfortschritt wird zurückgesetzt.
+  // -------------------------------------------------------------------------
+  {
+    const adv = deepClone(adventureWithSnapshots);
+    (adv.player.campaignPowerLevels as any)['Stärke'] = {
+      value: 65,
+      potentialMax: 120,
+      potentialPercent: 85,
+      growthRate: 1.35,
+      baseGrowthPerLevel: 4,
+      xp: 1500
+    };
+
+    const resetAdv = AdventureResetService.resetAdventureToInitialState(adv);
+    const param = (resetAdv.player.campaignPowerLevels as any)['Stärke'];
+    assert(param.value === 65, 'Test R17: value bleibt 65');
+    assert(param.potentialMax === 120, 'Test R17: potentialMax bleibt 120');
+    assert(param.potentialPercent === 85, 'Test R17: potentialPercent bleibt 85');
+    assert(param.growthRate === 1.35, 'Test R17: growthRate bleibt 1.35');
+    assert(param.baseGrowthPerLevel === 4, 'Test R17: baseGrowthPerLevel bleibt 4');
+    assert(param.xp === 0, 'Test R17: Laufzeit-XP wird auf 0 zurückgesetzt');
   }
 
   console.log('\n=== TEST RUN COMPLETE ===');
